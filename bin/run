@@ -1,0 +1,20 @@
+#!/bin/sh
+# scx 自举入口（macOS / Linux / WSL）：
+# 自动检测本平台二进制：缺失或源码更新时自动构建，然后原样转发全部参数。
+# 无需手工准备二进制，无需跨平台同步产物；本机有 Rust 即可（没有会给出安装指引）。
+set -e
+DIR="$(cd "$(dirname "$0")" && pwd)"
+SKILL="$(dirname "$DIR")"
+BIN="$DIR/scx"
+SRC="$SKILL/rs/src/main.rs"
+if [ ! -x "$BIN" ] || { [ -f "$SRC" ] && [ "$SRC" -nt "$BIN" ]; }; then
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "scx: 未找到 cargo。请先安装 Rust（macOS: brew install rust 或 https://rustup.rs），再重试。" >&2
+    exit 3
+  fi
+  TD="${SCX_TARGET_DIR:-${TMPDIR:-/tmp}/scx-cargo-target}"
+  cargo build --release --manifest-path "$SKILL/rs/Cargo.toml" --target-dir "$TD" >&2
+  cp "$TD/release/scx" "$BIN"
+  chmod +x "$BIN"
+fi
+exec "$BIN" "$@"

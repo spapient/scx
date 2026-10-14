@@ -1,0 +1,3 @@
+# 编译产物：跨机器只携带源码，二进制各平台本机构建（见 README）
+bin/scx
+bin/scx.exe

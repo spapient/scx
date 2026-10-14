@@ -1,0 +1,12 @@
+[package]
+name = "scx"
+version = "0.3.9"
+edition = "2021"
+description = "Local query-aware evidence-selection compressor for agent contexts (seed-region gated optional layer, structural seed invariant, deterministic, offline, zero deps)"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
