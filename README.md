@@ -50,8 +50,9 @@
 Windows：
 
 ```powershell
-cargo build --release --manifest-path "$env:USERPROFILE/.claude/skills/scx/rs/Cargo.toml" --target-dir "$env:TEMP/scx-rs-target"
-Copy-Item "$env:TEMP/scx-rs-target/release/scx.exe" "$env:USERPROFILE/.claude/skills/scx/bin/scx.exe" -Force
+$scxHome = "$env:USERPROFILE\.codex\skills\scx"   # 装于 Claude 时把 .codex 换成 .claude
+cargo build --release --manifest-path "$scxHome/rs/Cargo.toml" --target-dir "$env:TEMP/scx-rs-target"
+Copy-Item "$env:TEMP/scx-rs-target/release/scx.exe" "$scxHome/bin/scx.exe" -Force
 ```
 
 macOS / Linux：

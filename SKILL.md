@@ -15,9 +15,10 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 # 1) 大输出先落盘，不要让整段进入上下文
 <命令> > /tmp/out.txt 2>&1
 # 2) 按当前问题的关键词压缩，只把压缩结果读进来；入口是技能目录 bin 下的自举脚本
-#    Windows：      "%USERPROFILE%/.claude/skills/scx/bin/run.cmd" --query "问题关键词" --ratio 0.35 /tmp/out.txt
-#    macOS / Linux： ~/.claude/skills/scx/bin/run --query "问题关键词" --ratio 0.35 /tmp/out.txt
-#    首次调用自动识别本机并构建；权限不足时用 sh ~/.claude/skills/scx/bin/run 或 chmod +x。
+#    Windows：      "%USERPROFILE%/.codex/skills/scx/bin/run.cmd" --query "问题关键词" --ratio 0.35 /tmp/out.txt
+#    macOS / Linux： ~/.codex/skills/scx/bin/run --query "问题关键词" --ratio 0.35 /tmp/out.txt
+#    路径按实际安装位置替换：装于 Claude 时把 .codex 换成 .claude（Windows 为 %USERPROFILE%/.claude/skills/scx）。
+#    首次调用自动识别本机并构建；权限不足时用 sh <技能目录>/bin/run 或 chmod +x。
 ```
 
 参数（两平台一致）：
