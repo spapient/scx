@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --manifest-path rs/Cargo.toml -- --check
+      - name: Clippy
+        run: cargo clippy --manifest-path rs/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --manifest-path rs/Cargo.toml --locked
+      - name: Release build
+        run: cargo build --manifest-path rs/Cargo.toml --release --locked
+      - name: CLI smoke (Unix)
+        if: runner.os != 'Windows'
+        run: sh bin/run --version
+      - name: CLI smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: bin\run.cmd --version
