@@ -21,6 +21,18 @@ param(
 $ErrorActionPreference = "Stop"
 $Bin = Join-Path (Split-Path -Parent $PSScriptRoot) "rs\target\release\scx.exe"
 
+function Resolve-Relative([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $Path }
+    $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
+
+# 相对路径按调用者当前目录解析为绝对路径（[IO.File]::WriteAllText 用进程 CWD，
+# 与 PowerShell 的 provider 位置可能不同，直接写相对路径会写到错误目录）。
+$Baseline = Resolve-Relative $Baseline
+$MemDir = Resolve-Relative $MemDir
+$Out = Resolve-Relative $Out
+if ($Import) { $Import = Resolve-Relative $Import }
+
 function Get-Baseline([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { throw "missing baseline: $Path" }
     (Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json).cases
