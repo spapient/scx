@@ -69,6 +69,14 @@ pub(crate) const PAIRS: &[(&str, &str)] = &[
 /// 不使用 `db/database`、`error/错误`、`timeout/超时` 这类高频宽词：
 /// 它们会把 `db write` 扩成 `database`，让 database connection pool case
 /// 反超真正的 db write 目标（104 条截断诊断中已实测 literal MRR 退化）。
+///
+/// 中英对只收领域名词（`内存/memory`、`磁盘/disk` 等）：CJK 词表本身带
+/// bigram/trigram，中文查询按 2 字词扩展即可桥到英文 case；不收 `错误/error`
+/// 这类泛词，避免中文泛查询把整库失败 case 拉进候选。
+///
+/// 宽泛→具体的对可以单向（`memory→gc`、`disk→filesystem`）：反向扩展会把
+/// 具体查询（`gc`、`filesystem`）稀释成整类，实测让 `gc` 查询的 OOM case
+/// 反超目标。宽泛词扩展、具体词不反向扩展。
 const RECALL_PAIRS: &[(&str, &str)] = &[
     ("replication", "replica"),
     ("replica", "replication"),
@@ -94,6 +102,28 @@ const RECALL_PAIRS: &[(&str, &str)] = &[
     ("authentication", "auth"),
     ("conn", "connection"),
     ("connection", "conn"),
+    ("内存", "memory"),
+    ("memory", "内存"),
+    ("memory", "gc"),
+    ("disk", "filesystem"),
+    ("存储", "storage"),
+    ("storage", "存储"),
+    ("队列", "queue"),
+    ("queue", "队列"),
+    ("连接", "connection"),
+    ("connection", "连接"),
+    ("连接池", "pool"),
+    ("pool", "连接池"),
+    ("崩溃", "crash"),
+    ("crash", "崩溃"),
+    ("配置", "config"),
+    ("config", "配置"),
+    ("部署", "deploy"),
+    ("deploy", "部署"),
+    ("权限", "permission"),
+    ("permission", "权限"),
+    ("线程", "thread"),
+    ("thread", "线程"),
 ];
 
 /// 对每个精确命中的 token 追加召回用同义 token，并去重保序。
@@ -132,5 +162,22 @@ mod tests {
         assert_eq!(got.iter().filter(|t| *t == "memory").count(), 1);
         assert_eq!(got.iter().filter(|t| *t == "heap").count(), 1);
         assert!(got.contains(&"oom".to_string()));
+    }
+
+    #[test]
+    fn expands_cjk_domain_terms_to_english() {
+        let got = expand_terms(&["内存".into(), "存储".into()]);
+        assert!(got.contains(&"memory".to_string()));
+        assert!(got.contains(&"storage".to_string()));
+    }
+
+    #[test]
+    fn broad_terms_expand_one_way_only() {
+        let broad = expand_terms(&["memory".into(), "disk".into()]);
+        assert!(broad.contains(&"gc".to_string()));
+        assert!(broad.contains(&"filesystem".to_string()));
+        let specific = expand_terms(&["gc".into(), "filesystem".into()]);
+        assert!(!specific.contains(&"memory".to_string()));
+        assert!(!specific.contains(&"disk".to_string()));
     }
 }

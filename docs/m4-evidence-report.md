@@ -294,3 +294,40 @@ A 的召回提升来自同义词扩展补到 pytest 等零字面重叠目标；�
 代码门禁：`cargo test --locked --quiet` 114 库 + 8 CLI + 5 集成全绿，
 golden 1 passed / 1 ignored；`cargo clippy --all-targets -- -D warnings`
 零告警。
+
+### 12.1 中英领域召回桥（同轮实验，2026-10-23）
+
+104 条截断诊断里，语义层剩余漏召主要是**中英词面完全不相交**：中文查询
+`进程内存耗尽` 与英文 case `out of memory heap` 没有共同 token。CJK 词表
+已带 bigram/trigram，因此按 2 字词加中英领域对即可桥接，不需要 embedding：
+
+- 名词对：`内存↔memory`、`存储↔storage`、`队列↔queue`、
+  `连接↔connection`、`连接池↔pool`、`线程↔thread`、`崩溃↔crash`、
+  `配置↔config`、`部署↔deploy`、`权限↔permission`；
+- 宽泛→具体单向对：`memory→gc`、`disk→filesystem`。反向扩展实测有害：
+  双向 `gc↔memory` 会让查询 `垃圾回收 gc…` 的 OOM case 反超 GC 目标，
+  40 组门禁 semantic MRR 从 1.000 掉到 0.962（gate FAIL），故只保留单向；
+- 不加入 `磁盘↔disk`：golden paraphrase `磁盘连接超时 conn_id 池` 的
+  disk case 会以扩展词反超原词 `conn_id` 目标（MRR 1.000→0.500）。试过给
+  扩展词统一半权可修复，但 L1 无收益且多一层机制，最终回退为删除该词对；
+- 不加入 `证书↔certificate`：实测把 `ssl certificate expired` 抬到
+  `tls handshake cert expired` 之前，semantic MRR 掉到 0.962；该中文查询
+  已有 `tls` 字面桥，无需扩；
+- 仍不收 `错误↔error`、`超时↔timeout`、`db↔database` 这类泛词。
+
+同一 104 条诊断前后对比（A 管线；B 基线不变）：
+
+```text
+semantic  前: r@10=0.933 mrr=0.933 ndcg=0.933
+          后: r@10=0.967 mrr=0.967 ndcg=0.967
+literal   前/后: 1.000 / 1.000（无回归）
+paraphrase 前/后: 1.000 / 1.000（无回归）
+```
+
+唯一剩余漏召回是截断产物 `return value`（目标 `rust mismatched types`
+在“return/value”上无语义证据），不再为它加特例。10 条合成多相关诊断
+同时改善：A r@10 0.867→0.900、NDCG 0.895→0.909；`memory` 现在能同时
+召回 OOM、oom-killer 与 GC 三个目标。40 组门禁仍为三层全 1.000、exit 0。
+
+结论边界不变：这是机制回归证据，不是独立人工质量证据；M4 的
+“全 rel=2 / 单裁决人 / 合成语料”仍未闭环。
