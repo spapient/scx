@@ -13,7 +13,7 @@
 - 分析缓冲会剥离 ANSI 转义并把裸 `\r` 视为空白，避免彩色日志/进度条污染词面；筛选输出仍写原始行。
 - 单次输入上限 64 MiB（CLI 层，含多文件合计）；超出时明确报错，需先分段，避免一次性读入和筛选向量挤爆内存。
 - 统计行字段：`kept/total`、`chars`、`dup`、`seeds/evidence`（恒等，可断言）、`risk`、`guarded`、`regions`、`window`、`terms`、`forced`、`mode`。
-- **记忆知识库（RAG，P1–P4.3 增量 + P4.4 评审处置 + P4.4+ --fix 本地直答，默认关）**：`--store 1` 沉淀证据块（≤1 MiB/case，可配 `--fix "修复结论"` 记录"上次怎么解决"）→ `--recall K` 旁路召回（mem: 段不进正文；`--recall-detail` 输出 `summary:` 错误摘要 + `fix:` 修复结论，L1 本地直答；`--recall-only` 只读查看、不污染库状态）→ `--rate good|bad <case-id>` 反馈闭环（代际失效：改动立即影响同 query 召回排序）；召回 = 自研统计向量（词面匹配 + 结构化字段加权 + 时间衰减 + MMR + 词级调权 + 场景桶 + 实体边一跳，tf 恒 1 去重词表口径），非 embedding；`--eval <baseline.json>` 冻结标注集出 A/B 对拍表 + `l1:` 直答命中率（工具就绪、M4 证据门待 30–50 组人工标注），`--l1-hist` 出运行期命中分布；`--rebuild/--gc/--delete` 维护（id 白名单防路径穿越）；全部零依赖、离线、确定性。设计 `docs/memory-rag-design.md`，计划 `docs/rag-implementation-plan.md`（含 §11 评审处置记录），标注采集 `docs/eval-baseline-template.md`。
+- **记忆知识库（RAG，P1–P4.3 增量 + P4.4 评审处置 + P4.4+ --fix 本地直答与 --stats 库盘点，默认关）**：`--store 1` 沉淀证据块（≤1 MiB/case，可配 `--fix "修复结论"` 记录"上次怎么解决"）→ `--recall K` 旁路召回（mem: 段不进正文；case 带 fix 时**主流程即无条件输出 `fix:` 行**，`--recall-detail` 再加 `summary:` 错误摘要，L1 本地直答；`--recall-only` 只读查看、不污染库状态）→ `--rate good|bad <case-id>` 反馈闭环（代际失效：改动立即影响同 query 召回排序）；`--stats` 库盘点（case 数/桶分布/状态分布/fix 覆盖率/质量均值/磁盘 KiB）；召回 = 自研统计向量（词面匹配 + 结构化字段加权 + 时间衰减 + MMR + 词级调权 + 场景桶 + 实体边一跳，tf 恒 1 去重词表口径），非 embedding；`--eval <baseline.json>` 冻结标注集出 A/B 对拍表 + `l1:` 直答命中率（工具就绪、M4 证据门待 30–50 组人工标注），`--l1-hist` 出运行期命中分布；`--rebuild/--gc/--delete` 维护（id 白名单防路径穿越）；全部零依赖、离线、确定性。设计 `docs/memory-rag-design.md`，计划 `docs/rag-implementation-plan.md`（含 §11 评审处置记录、§14 优化②），标注采集 `docs/eval-baseline-template.md`。
 
 ## 削减率的物理极限（98.99% 目标核算，2026-10-14）
 
@@ -30,8 +30,8 @@
 ## 架构与复用
 
 - **库 + CLI 分离**：筛选引擎是纯函数库 `src/lib.rs` 的 `scx::compress(&text, &query, &Config) -> Outcome`（零文件、环境与进程 I/O，无随机源）；`src/main.rs` 仅是外壳（参数、输入、统计与 JSON 格式化）。
-- **模块划分**：`src/terms.rs`（词面/切词/估算）、`src/classify.rs`（错误/标记/结构分类）、`src/norm.rs`（归一化/ANSI 剥离）是独立纯函数层（`pub(crate)`），可供记忆库等外部复用；`src/lib.rs` 保留 Config/Outcome/compress 与测试，单文件 <500 行；`src/memory/` 为记忆知识库（store/recall/feedback/eval/edge 等 20+ 文件，各 <500 行）。
-- **复用**：任何程序或脚本可直接 `use scx::compress`；`cargo test` 当前含 71 个库测试 + 8 个 CLI 单元测试 + 4 个 CLI 集成测试 + 1 个 golden 差分门（25 例冻结基线、75 个 expected 文件），覆盖种子不变量、空结果回退、`--force` 重复行、配置边界、CJK 词面、ANSI/CR 分析、diff 正文识别、输入上限边界、CRLF 与确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放与字节级回归。
+- **模块划分**：`src/terms.rs`（词面/切词/估算）、`src/classify.rs`（错误/标记/结构分类）、`src/norm.rs`（归一化/ANSI 剥离）是独立纯函数层（`pub(crate)`），可供记忆库等外部复用；`src/lib.rs` 保留 Config/Outcome/compress 与测试，单文件 <500 行；`src/memory/` 为记忆知识库（store/recall/feedback/eval/edge/stats 等 20+ 文件，各 <500 行）。
+- **复用**：任何程序或脚本可直接 `use scx::compress`；`cargo test` 当前含 73 个库测试 + 8 个 CLI 单元测试 + 4 个 CLI 集成测试 + 1 个 golden 差分门（27 例冻结基线、81 个 expected 文件），覆盖种子不变量、空结果回退、`--force` 重复行、配置边界、CJK 词面、ANSI/CR 分析、diff 正文识别、输入上限边界、CRLF 与确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放/库盘点与字节级回归。
 - **golden 差分门**：`tests/golden.rs` 将 25 个代表性用例的 stdout/stderr/退出码与冻结基线（`tests/golden/expected/`）逐字节对比；有意变更语义时重冻基线：`cargo test --test golden update_baselines -- --ignored --nocapture`，并人工审查基线明细。CI 当前执行格式、clippy、单测、golden 和 release 构建。
 - **零依赖性能基准**：`examples/bench.rs`（50k 行约 2.5MB 全流程中位耗时，`std::time::Instant`，5 次采样取中位），防无声性能退化。运行：`cargo run --release --example bench --locked --target-dir "$TEMP/scx-cargo-target"`。
 
@@ -46,14 +46,17 @@ powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
 脚本用临时库（`$TEMP\scx-demo-mem`）沉淀 16 个真实感问题 case 并跑全链路；演示 case 同时是人工标注（`docs/eval-baseline-template.md`）的现成素材。手动体验的最短路径：
 
 ```bash
-# 1) 沉淀经验（日志/报错先经 scx 压缩再入库）
-scx --query "db timeout" --store 1 --mem-dir D:\scx-mem err.log
-# 2) 同类问题二次遇到：本地召回直答（--recall-only 看真实 top-k；--recall-detail 带要点行）
-scx --query "数据库连接池超时" --recall 3 --recall-detail --mem-dir D:\scx-mem
+# 1) 沉淀经验（日志/报错先经 scx 压缩再入库；--fix 记录"上次怎么解决"）
+scx --query "db timeout" --store 1 --fix "enlarge pool, restart daemon" --mem-dir D:\scx-mem err.log
+# 2) 同类问题二次遇到：本地召回直答（主流程直接出 fix: 行；--recall-detail 加 summary:）
+scx --query "数据库连接池超时" --recall 3 --mem-dir D:\scx-mem
+# 3) 库盘点：case 数 / 场景桶 / 状态 / fix 覆盖率 / 质量均值 / 磁盘占用
+scx --stats --mem-dir D:\scx-mem
 ```
 
 ## 版本变动
 
+- **0.4.1 + P4.4+ 优化（--fix 本地直答 / --stats 库盘点 / 桶判定精度，2026-10-22）**：主流程召回命中即无条件输出 `fix:` 修复结论（L1 直答不再依赖 --recall-detail）；新增 `--stats` 库盘点（case 数/场景桶/状态分布/fix 覆盖率/质量均值/磁盘 KiB，豁免 --query，维护命令线性全扫）；裸 "db" 场景桶判定改词级精确匹配（修 query "db timeout" 漏召，同时避免 "db.java:4" 文件实体把编译场景误归 db 桶——stats 单测暴露的桶误判）；门禁 73 库 + 8 CLI + 4 集成 + golden 27 例全绿，fmt/clippy 0。
 - **0.4.1 + 记忆库（P1–P4.3，2026-10-22）**：`scx::memory` 知识库落地——存储/摄取/召回（自研统计向量：BM25+字段加权+时间衰减+MMR+词级调权+场景桶+实体边一跳）、qmap 记忆图、反馈双环、倒排索引（mmap+坏段自愈）、库维护（rebuild/gc/delete）、评估系统（--eval A/B 对拍 + l1 命中率 + --l1-hist）、要点摘要（--recall-detail）；门禁终态 71 库 + 8 CLI + 4 集成 + golden 25 例全绿，1 万条库召回中位 2.1ms。设计/计划/标注模板见 docs/。
 - **0.4.1**：新增 `--lineno 1` 保留行行号溯源；lib.rs 模块化拆分（terms/classify/norm，过 500 行门禁，行为逐字节不变，由 golden 门证明）；新增 golden 差分门（16 用例冻结基线）与零依赖性能基准（50k 行中位 44 ms）；SKILL/README 补 0.4.1 用法与验证记录。
 - **0.4.0**：空结果回退 `passthrough:no-kept`；`--force` 命中行不再被重复行折叠；配置在库入口规范化（负数/超范围 `window`、`context`、`ratio` 不再触发溢出或超大循环）；预算只约束可选内容；小输入阈值改为“行数少且 token 少”；CJK 应用 STOP、补齐尾词并扩展字符范围；`is_frame` 扩展名扫描设上限；分析缓冲剥离 ANSI 转义并折叠裸 CR（输出仍为原文）；统一 diff 的 `+code`/`-code` 正文行参与排序；CLI 严格拒绝未知选项/非法值，新增 `--no-stats`、`--flag=value` 和 64 MiB 输入上限；入口脚本检查全部源码与清单；新增三平台 CI 与 MIT 许可证。

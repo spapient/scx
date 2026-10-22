@@ -64,7 +64,7 @@
 - [x] 默认不自动存储：无 `--mem-dir`/`--store` 时 memory 零路径。
 - [x] delete(root,id) 物理删除 + case_count 重算（P4.4：入口 valid_id 白名单）。
 - [x] **P4.4 边界说明（诚实口径）**：`--store` 存的是**压缩结果**（Outcome.text：当前 query 命中的保留行，可能含 `...` 省略标记与 `--lineno` 的 `N:` 前缀），**不含用户真正的修复动作/结论**。因此 L1 返回的 `summary:` 是"错误行摘要"而非"上次怎么解决的"——它支撑案例召回（"上次这问题长这样、怎么处理过"），但兑现不了"L1 本地直答、不再问模型"的北极星；要完整直答需 `--store` 额外保存修复结论（后续可选增强，非本期）。
-- [x] **P4.4+ 优化（--fix 本地直答，北极星缺口补全）**：`--store 1` 可配 `--fix "修复结论"`，把"上次怎么解决"写入 `case.fix`（≤4 KiB）；`--recall-detail` 在 `summary:` 后追加 `fix:` 行——L1 从"案例召回"升级为"本地直答"。同指纹重复摄取不覆盖既有 fix（保留首条结论）；旧 case 无 fix 键按空处理（向后兼容，不输出 fix 行）。实测：`store --fix "enlarge pool to 64 conns, restart daemon"` → `recall-detail` 输出 `fix: enlarge pool to 64 conns, restart daemon`（golden `memory_fix` 用例）。
+- [x] **P4.4+ 优化（--fix 本地直答，北极星缺口补全）**：`--store 1` 可配 `--fix "修复结论"`，把"上次怎么解决"写入 `case.fix`（≤4 KiB）；case 带 fix 时**主流程 `--recall` 与 `--recall-detail` 均无条件输出 `fix:` 行**（P4.4+ 优化② 把 fix 行移出 detail 分支）——L1 从"案例召回"升级为"本地直答"，默认路径即生效。同指纹重复摄取不覆盖既有 fix（保留首条结论）；旧 case 无 fix 键按空处理（向后兼容，不输出 fix 行）。实测：`store --fix "enlarge pool to 64 conns, restart daemon"` → 主流程 `--recall 1`（无 detail）直接输出 `fix: enlarge pool to 64 conns, restart daemon`（golden `memory_fix` 用例）。
 - [x] **P4.4 大小上限**：单 case 文本 ≤1 MiB（`MAX_CASE_TEXT`），超限拒绝（实测 1.2 MB 输入 → `case text too large: 1200000 bytes > 1048576`，exit 2，不落盘）。
 - **验证**：`ingest_dedup_by_fingerprint`（同指纹保持 1、变体新增到 2）+ `fingerprint_is_deterministic_and_sensitive` + `delete_removes_case_and_meta` + size cap 拒绝；CLI 冒烟：库目录 1 个 case、重复再存不变。
 
@@ -341,7 +341,18 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 | P2 | 2-3 天 | qmap + 反馈双环较重；P2.2-2.5 并行 |
 | P3 | 2-3 天 | mmap + 自愈 + 倒排编码 |
 | P4 | 2-3 天 | 评估系统 + 可选增强按触发条件 |
+| P4.4+ 优化② | 半天 | 主流程 fix 行无条件输出 + --stats 库盘点 + 裸 "db" 桶判定词级化 |
 
 合计约 **7-11 个工作日**；P1-P3 为必要主线，P4.3-4.5 可选。
 
-**下一步**：确认 D1/D2 后，从 P1.1（memory 模块骨架 + 自研序列化）开工。
+## 15. P4.4+ 优化②实施记录（2026-10-22，已提交）
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| 主流程直答 | `write_mem_lines` 的 `fix:` 行改为**无条件输出**（case 带 fix 即出，不依赖 `--recall-detail`）——L1 北极星"本地直答"在默认路径生效 | 端到端：`--query ... --recall 1`（无 detail）输出 `mem:` + `  fix: enlarge pool to 64 conns, restart daemon`；旧 case 无 fix 不输出 fix 行（golden 零漂移） |
+| `--stats` 库盘点 | 新建 `rs/src/memory/stats.rs`（144 行）：`stats: cases=N gen=M` + `bucket:`/`status:`（key 字典序）/`fix: n/N (pct)`/`quality: mean=`/`disk: X.X KiB`（case 目录递归大小）；`mod.rs` 门面 `stats_table`；`cli_args --stats` 豁免 `--query`（含单测）；`main.rs` 接线（--l1-hist 后、--rate 前） | 单测 `table_reports_counts_and_coverage`（ingest + ingest_with_fix 造 2 case）；golden `memory_stats` 第 27 例（db + disk 两桶隔离日志，fix 1/2）；端到端 3 case 实测 |
+| 桶判定精度 | stats 单测暴露裸 "db" 子串误判：`Db.java:4` 文件实体被归 db 桶 → compile 场景误归类、query "compile fail" 漏召。修复：FAMILIES db 家族**移除裸 "db" 子串**；`bucket_of` 对 terms 词级 `t == "db"`、`candidate_buckets` 对 `split_whitespace` 词级 `w == "db"`（宁多勿漏但别乱扩桶——"kubectl/obd" 不误扩） | bucket.rs 单测：`bucket_of(["db.java:4"], "compile fail") == "build"`、`candidate_buckets("kubectl get pods")` 不含 db；干净 compile 场景端到端 `bucket: build=1` |
+
+**门禁终态**：73 库 + 8 CLI + 4 集成 + golden 27 例全绿；fmt/clippy 0；行数门禁（stats.rs 144 / bucket.rs 160 行）通过。
+**遗留口径**：failopen 全文保留会把无关家族词带进 case.text → 桶归属随压缩结果变化（与 §11 评审④"text 是压缩结果"边界一致，非 bug）。
+
