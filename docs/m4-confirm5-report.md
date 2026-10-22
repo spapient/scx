@@ -140,6 +140,22 @@ literal 与 semantic 均无单边漏召。
 `all` 的 `advantage=False` 是因为点估计 0.0425 低于 MDE 0.05；主判定层是
 预注册的 `tier:hard`，该层五项条件全部满足。
 
+### 5.1 聚类敏感性（事后稳健性，不替代预注册）
+
+每起事故贡献 5 个兄弟 case，case 级 bootstrap 可能低估同事故内的相关性。
+因此另外做了一次**按事故聚类**的敏感性分析：以事故为抽样单位（30 个 cluster）
+做 10,000 次 bootstrap，并按 cluster 整体做 10,000 次符号置换。该分析不改变
+预注册主判定，只检查结论是否依赖“把兄弟 case 当独立样本”的假设。
+
+| 组 | case / cluster | A MRR | B MRR | Δ | 95% CI | p | 优势 |
+|---|---:|---:|---:|---:|---|---:|---|
+| `tier:hard:cluster` | 69 / 30 | 0.3425 | 0.2757 | +0.0669 | **[0.0273, 0.1138]** | **0.0038** | 是 |
+
+复现：`eval-real/cluster-significance.ps1`，输出
+`eval-real/confirm5-significance-cluster.csv`。结论：在更保守的按事故重采样口径下，
+hard 层优势仍然成立；但优势仍主要来自 A 对部分语义兄弟 case 的排序改善，不能
+外推为所有事故类型都稳定领先。
+
 ## 6. 证据边界
 
 1. **机械标签**：confirm5 的 rel 由目标 case 机械确定，不是人工相关性盲审；

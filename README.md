@@ -56,7 +56,7 @@ scx --stats --mem-dir D:\scx-mem
 
 ## 版本变动
 
-- **2026-10-23 confirm5 独立质量确认**：在 30 起未参与调参的公开事故、150 条查询（literal 60 / paraphrase 60 / semantic 30）上完成预注册确认。主判定层 `tier:hard` 的实际 n=69，A MRR@10 0.3425 vs B 0.2757，**Δ=+0.0669，paired bootstrap 95% CI [0.0238, 0.1176]，permutation p=0.0020**，`--gate` exit 0，literal 层 A=B=1.000；目标排序质量优势成立。完整语料、哈希、复现命令与限制见 `docs/m4-confirm5-report.md`。该结论使用机械 target 标签，证明的是目标排序泛化，不外推为人工弱相关/负例已闭环，也不外推为对 embedding/任意 RAG 系统的优势。
+- **2026-10-23 confirm5 独立质量确认**：在 30 起未参与调参的公开事故、150 条查询（literal 60 / paraphrase 60 / semantic 30）上完成预注册确认。主判定层 `tier:hard` 的实际 n=69，A MRR@10 0.3425 vs B 0.2757，**Δ=+0.0669，paired bootstrap 95% CI [0.0238, 0.1176]，permutation p=0.0020**，`--gate` exit 0，literal 层 A=B=1.000；目标排序质量优势成立。按事故聚类的保守敏感性分析仍为 **CI [0.0273, 0.1138]，p=0.0038**。完整语料、哈希、复现命令与限制见 `docs/m4-confirm5-report.md`。该结论使用机械 target 标签，证明的是目标排序泛化，不外推为人工弱相关/负例已闭环，也不外推为对 embedding/任意 RAG 系统的优势。
 
 - **2026-10-23 召回桶/零分/同义词修复**：`bucket::lower` 现在真正做 Unicode 小写（此前 `Jdbc.java` 匹配不到 `jdbc`）；`network` 桶降到 `disk/build/runtime` 之后，`disk/storage ... timeout` 不再被通用 `timeout` 吞掉；A/B 都过滤零词面/字段/实体支持度候选，不再靠库顺序零分“碰巧命中”；A 管线增加高精度领域同义词扩展（`replication→replica`、`delay→lag`、`memory→heap` 等），B 保持纯词面。104 条截断诊断：literal 1.000/1.000，paraphrase **A 1.000 vs B 0.949**，semantic 0.933/0.933；10 条合成多相关诊断：A r@10 **0.867 vs B 0.700**。均为诊断集，不是独立人工证据；原始 40 组 gate 仍为 A=B=1.000、全 rel=2。
 

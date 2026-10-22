@@ -12,6 +12,9 @@
 - confirm5 为修复后新建的 30 起事故独立确认集；单次运行 gate PASS、exit 0。
 - 预注册主判定：hard 层 n=69，A MRR 0.3425、B MRR 0.2757，
   **Δ=+0.0669，95% CI [0.0238, 0.1176]，permutation p=0.0020**。
+- 按事故聚类的敏感性复算（30 个 cluster、10,000 次）仍成立：
+  **95% CI [0.0273, 0.1138]，p=0.0038**；见
+  `eval-real/confirm5-significance-cluster.csv`。
 - 因此“A 在 hard 层优于 B”在 confirm5 口径下成立；限制与完整哈希见
   `docs/m4-confirm5-report.md`。
 
