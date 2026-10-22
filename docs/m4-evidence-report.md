@@ -286,7 +286,7 @@ semantic: n=10 A r@10=0.867 mrr=0.950 ndcg=0.895
 
 A 的召回提升来自同义词扩展补到 pytest 等零字面重叠目标；但 A 仍会在
 `test failure` 中插入低相关候选，不能把该诊断当成质量优势的最终证据。
-复现：`pwsh -NoProfile -File scripts/recall-probe.ps1`。
+复现：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\recall-probe.ps1`。
 
 结论边界：这些数字支持“同义词扩展 + 零支持度过滤 + 桶修复”是有效机制，
 不构成 M4 独立人工证据；M4 的 rel=2 饱和、单一裁决人、真实来源缺失仍未解决。

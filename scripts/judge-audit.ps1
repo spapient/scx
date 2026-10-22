@@ -3,9 +3,9 @@
 # 用 -Import 把填好的包合并回 baseline（rel 字典 + judge 元数据）。
 #
 # 用法：
-#   1) 生成盲测包：pwsh -NoProfile -File scripts\judge-audit.ps1 -Baseline eval-real\baseline.json -MemDir eval-real\mem -Out eval-real\judge-packet.tsv
+#   1) 生成盲测包：powershell -NoProfile -ExecutionPolicy Bypass -File scripts\judge-audit.ps1 -Baseline eval-real\baseline.json -MemDir eval-real\mem -Out eval-real\judge-packet.tsv
 #   2) 人工填 rel 列（2/1/0/s，s 或缺省=跳过）
-#   3) 回填：pwsh -NoProfile -File scripts\judge-audit.ps1 -Import eval-real\judge-packet.tsv -Baseline eval-real\baseline.json -Judge <姓名>
+#   3) 回填：powershell -NoProfile -ExecutionPolicy Bypass -File scripts\judge-audit.ps1 -Import eval-real\judge-packet.tsv -Baseline eval-real\baseline.json -Judge <姓名>
 #
 # 盲测纪律：包内不出现 target id、不出现 A/B 分数；只有 query + 候选摘要 + fix。
 # 第二裁决人：另一人用同一 -Baseline 的 judge:null 副本独立生成/填写，再用 judge-agreement.ps1 比对。
@@ -93,8 +93,8 @@ if ($Import) {
             continue
         }
         $cases[$i] | Add-Member -NotePropertyName rel -NotePropertyValue $rel -Force
-        $judge = [ordered]@{ by = $Judge; date = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ") }
-        $cases[$i] | Add-Member -NotePropertyName judge -NotePropertyValue $judge -Force
+        $judgeMeta = [ordered]@{ by = [string]$Judge; date = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ") }
+        $cases[$i] | Add-Member -NotePropertyName judge -NotePropertyValue $judgeMeta -Force
         foreach ($k in @($rel.Keys)) { $dist[[int]$rel[$k]]++ }
     }
     Write-Baseline $Baseline $cases
@@ -124,4 +124,4 @@ $dir = Split-Path -Parent $Out
 if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
 [IO.File]::WriteAllText($Out, $sb.ToString(), (New-Object Text.UTF8Encoding $false))
 Write-Output ("judge-audit: wrote {0} rows to {1} (blind: no target id, no A/B score)" -f ($row - 1), $Out)
-Write-Output "fill rel column (2/1/0/s), then: pwsh -NoProfile -File scripts\judge-audit.ps1 -Import $Out -Baseline $Baseline -Judge <姓名>"
+Write-Output "fill rel column (2/1/0/s), then: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\judge-audit.ps1 -Import $Out -Baseline $Baseline -Judge <姓名>"

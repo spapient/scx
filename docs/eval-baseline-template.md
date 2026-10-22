@@ -87,7 +87,7 @@ gate 会一直告警 `all labels are 2`。要补弱相关/负例并支持第二�
 1. 生成盲测候选包（隐藏 target id 与 A/B 分数，只有 query + 候选摘要 + fix）：
 
    ```powershell
-   pwsh -NoProfile -File scripts\judge-audit.ps1 -Baseline eval-real\baseline.json -MemDir eval-real\mem -Out eval-real\judge-packet.tsv
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\judge-audit.ps1 -Baseline eval-real\baseline.json -MemDir eval-real\mem -Out eval-real\judge-packet.tsv
    ```
 
 2. 人工在 `rel` 列逐候选填 `2/1/0`（或 `s` 跳过）。这是唯一产出弱相关/负例的诚实途径：
@@ -95,13 +95,13 @@ gate 会一直告警 `all labels are 2`。要补弱相关/负例并支持第二�
 3. 回填（写入 rel 字典 + judge.by/date）：
 
    ```powershell
-   pwsh -NoProfile -File scripts\judge-audit.ps1 -Import eval-real\judge-packet.tsv -Baseline eval-real\baseline.json -Judge <姓名>
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\judge-audit.ps1 -Import eval-real\judge-packet.tsv -Baseline eval-real\baseline.json -Judge <姓名>
    ```
 
 4. 第二裁决人：用同一 `judge:null` 副本独立执行 1–3（不同 `-Judge` 姓名），然后比对一致性：
 
    ```powershell
-   pwsh -NoProfile -File scripts\judge-agreement.ps1 -A first.json -B second.json
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\judge-agreement.ps1 -A first.json -B second.json
    ```
 
    输出共同候选数、原始一致率、Cohen's kappa（0/1/2 三类）与逐条分歧；分歧项需人工仲裁，

@@ -1,6 +1,6 @@
 # 双裁决人一致性：比对两个已回填 baseline（两名裁决人、同一 query/候选池）。
 # 输出：共同候选数、原始一致率、Cohen's kappa（0/1/2 三类）、逐条分歧清单。
-# 用法：pwsh -NoProfile -File scripts\judge-agreement.ps1 -A a.json -B b.json
+# 用法：powershell -NoProfile -ExecutionPolicy Bypass -File scripts\judge-agreement.ps1 -A a.json -B b.json
 param(
     [Parameter(Mandatory = $true)][string]$A,
     [Parameter(Mandatory = $true)][string]$B
