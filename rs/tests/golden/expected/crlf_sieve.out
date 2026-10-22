@@ -1,0 +1,8 @@
+INFO line 0 heartbeat ok filler padding
+INFO line 1 heartbeat ok filler padding
+...
+INFO line 99 heartbeat ok filler padding
+ERROR db timeout pool exhausted conn_id=9f2a
+INFO line 101 heartbeat ok filler padding
+...
+compressed: kept=5/200 lines chars=8491->215 (97.5% cut) dup=197 seeds=1 evidence=1 risk=LOW guarded=0 regions=1 window=2 terms=2 forced=0 mode=sieve

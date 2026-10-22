@@ -1,0 +1,16 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 1389ef2..f5c5c61 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,6 +1,9 @@
+ //! scx 引擎
++use std::collections::HashMap;
++const DEFAULT_RATIO: f64 = 0.35;
+-pub const VERSION: &str = "0.3.9";
++pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+ fn is_cjk(c: char) -> bool {
++    let u = c as u32;
+ filler line
+ filler line
+ filler line
+compressed: kept=15/15 lines chars=376->376 (0.0% cut) dup=0 seeds=0 evidence=0 risk=LOW guarded=0 regions=0 window=2 terms=2 forced=0 mode=passthrough:small

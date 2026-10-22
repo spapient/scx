@@ -1,95 +1,28 @@
 //! scx 引擎：本地查询感知证据筛选压缩（纯函数、无 I/O、零依赖、确定性）。
 //!
-//! 语义（v0.4）：种子不变量（证据行与 ±context（默认 1，可设 0）最小邻域无条件保留，`ratio` 只删可选）；证据仅
+//! 语义（v0.4.1）：种子不变量（证据行与 ±context（默认 1，可设 0）最小邻域无条件保留，`ratio` 只删可选）；证据仅
 //! 来自 IDF 加权查询命中与 `forces`；种子区域门控（可选预算只填种子邻域区域：±window
 //! 扩展，间隔 <= window*3 合并；种子为零回退全图）；邻域权重只排序；context=0 完全跳过可选填充（针尖模式）；无信号 fail-open；
-//! `risk_gate` 在风险 HIGH 时保护失败级错误行(warn/警告 级除外)与事故标记行(root cause / fix hint / mitigation / recommendation / action / assertionerror)。只删不改、保留行逐字原文；省略以单行 "..." 标记。实现注：无 CR 输入零拷贝行切片；按行归一化与大小写折叠复用缓冲，无逐行分配。
-use std::collections::HashMap;
+//! `risk_gate` 在风险 HIGH 时保护失败级错误行(warn/警告 级除外)与事故标记行(root cause / fix hint / mitigation / recommendation / action / assertionerror)。只删不改、保留行逐字原文；省略以单行 "..." 标记；`lineno` 可为保留行附加原文行号前缀。
+//!
+//! 模块划分：`terms`（词面/切词/估算）、`classify`（错误/标记/结构分类）、`norm`（归一化/ANSI 剥离）、
+//! `compress`（压缩算法主体）为独立纯函数层，可供记忆库等外部复用；本文件只保留公共
+//! 类型（Config/Outcome）、模块声明与测试，维持单文件 <500 行门禁。
+mod classify;
+mod compress;
+mod norm;
+mod terms;
+
+/// 记忆知识库（旁路，默认不启用）：I/O 侧模块，与纯函数 `compress` 完全隔离。
+pub mod memory;
+
+pub use compress::compress;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-const DEFAULT_RATIO: f64 = 0.35;
-const MIN_RATIO: f64 = 0.02;
-const MAX_CONTEXT: i64 = 4;
-const MAX_WINDOW: i64 = 8;
-const MAX_QUERY_TERMS: usize = 256;
-const MAX_FRAME_EXT_CHARS: usize = 8;
-const STOP: &[&str] = &[
-    "the", "and", "for", "with", "that", "this", "from", "your", "are", "was", "were", "not",
-    "you", "use", "using", "的", "了", "是", "在", "和", "与", "或", "把", "被", "我", "你", "请",
-    "帮", "一下", "一个", "这个", "那个", "怎么", "如何", "什么",
-];
-const ERR_NEEDLES: &[&str] = &[
-    "error",
-    "fail",
-    "failed",
-    "failure",
-    "exception",
-    "panic",
-    "assert",
-    "denied",
-    "refused",
-    "timeout",
-    "timed out",
-    "cannot",
-    "unable",
-    "undefined",
-    "segfault",
-    "fatal",
-    "warn",
-    "traceback",
-    "npm err",
-    "✗",
-    "❌",
-    "错误",
-    "失败",
-    "报错",
-    "异常",
-    "超时",
-    "崩溃",
-    "警告",
-];
-const INCIDENT_MARKERS: &[&str] = &[
-    "root cause:",
-    "fix hint:",
-    "mitigation:",
-    "recommendation:",
-    "action:",
-    "assertionerror:",
-];
-// 守卫专用错误判据:失败级(与 ERR_NEEDLES 同表,唯去 warn/警告)。warn 级行在噪声日志中常成批出现,
-// 风险守卫不应整批保留;行内另有失败级词面者仍受守护。评分/折叠仍用含 warn 的 ERR_NEEDLES。
-const GUARD_NEEDLES: &[&str] = &[
-    "error",
-    "fail",
-    "failed",
-    "failure",
-    "exception",
-    "panic",
-    "assert",
-    "denied",
-    "refused",
-    "timeout",
-    "timed out",
-    "cannot",
-    "unable",
-    "undefined",
-    "segfault",
-    "fatal",
-    "traceback",
-    "npm err",
-    "✗",
-    "❌",
-    "错误",
-    "失败",
-    "报错",
-    "异常",
-    "超时",
-    "崩溃",
-];
-const EXTS: &[&str] = &[
-    "c", "cc", "cpp", "h", "hpp", "cu", "cuh", "rs", "py", "js", "ts", "go", "java", "mm", "m",
-    "swift", "zig",
-];
+pub(crate) const DEFAULT_RATIO: f64 = 0.35;
+pub(crate) const MIN_RATIO: f64 = 0.02;
+pub(crate) const MAX_CONTEXT: i64 = 4;
+pub(crate) const MAX_WINDOW: i64 = 8;
 
 /// 引擎配置。`ratio` 为可选内容预算占输入 token 估算的比例；入口会做边界规范化。
 pub struct Config {
@@ -98,6 +31,8 @@ pub struct Config {
     pub window: i64,
     pub elide: bool,
     pub risk_gate: bool,
+    /// 保留行输出时附加原文行号前缀（grep -n 风格 `N: `）；passthrough/fail-open 返回原文时不附加。
+    pub lineno: bool,
     /// `--force` 值按 `|` 拆分后的原始子串（大小写不敏感字面匹配）。
     pub forces: Vec<String>,
 }
@@ -110,6 +45,7 @@ impl Default for Config {
             window: 2,
             elide: true,
             risk_gate: true,
+            lineno: false,
             forces: Vec::new(),
         }
     }
@@ -136,743 +72,29 @@ pub struct Outcome {
     pub mode: &'static str,
 }
 
-fn is_cjk(c: char) -> bool {
-    let u = c as u32;
-    (0x3400..=0x4DBF).contains(&u)
-        || (0x4E00..=0x9FFF).contains(&u)
-        || (0x3040..=0x30FF).contains(&u)
-        || (0xAC00..=0xD7AF).contains(&u)
-        || (0x20000..=0x2FA1F).contains(&u)
-}
-fn is_cjk_or_fullwidth(c: char) -> bool {
-    let u = c as u32;
-    is_cjk(c) || (0x3000..=0x303F).contains(&u) || (0xFF00..=0xFFEF).contains(&u)
-}
-
-fn build_terms(query: &str) -> Vec<String> {
-    let stop = |s: &str| STOP.contains(&s);
-    let is_tok = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || "_./\\:@-".contains(c);
-    let mut terms: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    for c in query.to_lowercase().chars() {
-        if is_tok(c) {
-            cur.push(c);
-            continue;
-        }
-        if cur.chars().count() >= 2 && !stop(&cur) {
-            terms.push(cur.clone());
-        }
-        cur.clear();
-    }
-    if cur.chars().count() >= 2 && !stop(&cur) {
-        terms.push(cur);
-    }
-    let mut run = String::new();
-    let mut runs: Vec<String> = Vec::new();
-    for c in query.chars() {
-        if is_cjk(c) {
-            run.push(c);
-            continue;
-        }
-        if run.chars().count() >= 2 {
-            runs.push(run.clone());
-        }
-        run.clear();
-    }
-    if run.chars().count() >= 2 {
-        runs.push(run);
-    }
-    for r in runs {
-        // CJK 没有空格分词：保留整段，并保证尾部不因 6 字切块而丢掉单字。
-        if stop(&r) {
-            continue;
-        }
-        let chars: Vec<char> = r.chars().collect();
-        if chars.len() <= 6 {
-            if chars.len() >= 2 {
-                terms.push(r);
-            }
-            continue;
-        }
-        let mut start = 0;
-        while start < chars.len() {
-            let end = (start + 6).min(chars.len());
-            if end - start >= 2 {
-                terms.push(chars[start..end].iter().collect());
-            }
-            start += 6;
-        }
-        if chars.len() % 6 == 1 {
-            terms.push(chars[chars.len() - 2..].iter().collect());
-        }
-    }
-    let mut uniq: Vec<String> = Vec::new();
-    for t in terms {
-        if uniq.len() >= MAX_QUERY_TERMS {
+// 零分配 u64→十进制行号写入（`N: ` 前缀，grep -n 风格；供 --lineno 使用）。
+pub(crate) fn push_lineno(out: &mut String, n: usize) {
+    let mut buf = [0u8; 20];
+    let mut m = n;
+    let mut i = buf.len();
+    loop {
+        i -= 1;
+        buf[i] = b'0' + (m % 10) as u8;
+        m /= 10;
+        if m == 0 {
             break;
         }
-        if !uniq.contains(&t) {
-            uniq.push(t);
-        }
     }
-    uniq
-}
-
-fn token_est(s: &str) -> f64 {
-    if s.is_ascii() {
-        return s.len() as f64 / 4.0 + 1.0;
-    }
-    let mut cjk = 0usize;
-    let mut len = 0usize;
-    for c in s.chars() {
-        len += 1;
-        if is_cjk_or_fullwidth(c) {
-            cjk += 1;
-        }
-    }
-    (len - cjk) as f64 / 4.0 + cjk as f64 * 0.6 + 1.0
-}
-
-// 单趟归一化：8+ 位十六进制串折叠为 '#'；其余数字段折叠为 '#'；空白段折叠为单空格；首尾去空。
-// 单趟归一化（零分配版，输出写入调用方缓冲）：8+ 位十六进制串折叠为 '#';
-// 其余数字段折叠为 '#';空白段折叠为单空格并延后写出(天然实现首尾去空);run 为复用的十六进制
-// 串中转缓冲。语义与旧版逐字节等价。
-fn norm_into(s: &str, out: &mut String, run: &mut String) {
-    let mut pending_space = false;
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        if c.is_ascii_hexdigit() {
-            run.clear();
-            run.push(c);
-            while it.peek().is_some_and(|&n| n.is_ascii_hexdigit()) {
-                run.push(it.next().unwrap());
-            }
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
-            if run.chars().count() >= 8 {
-                out.push('#');
-            } else {
-                let mut ri = run.chars().peekable();
-                while let Some(rc) = ri.next() {
-                    if rc.is_ascii_digit() {
-                        while ri.peek().is_some_and(|&n| n.is_ascii_digit()) {
-                            ri.next();
-                        }
-                        out.push('#');
-                    } else {
-                        out.push(rc);
-                    }
-                }
-            }
-        } else if c.is_ascii_digit() {
-            while it.peek().is_some_and(|&n| n.is_ascii_digit()) {
-                it.next();
-            }
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
-            out.push('#');
-        } else if c.is_whitespace() {
-            while it.peek().is_some_and(|&n| n.is_whitespace()) {
-                it.next();
-            }
-            pending_space = true;
-        } else {
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
-            out.push(c);
-        }
-    }
-}
-
-fn is_err(ll: &str) -> bool {
-    ERR_NEEDLES.iter().any(|n| ll.contains(n))
-}
-// 事故诊断标记行(行首、大小写不敏感):risk HIGH 且 risk_gate 时与错误行一同受守卫;不参与种子判定。
-fn is_incident_marker(ll: &str) -> bool {
-    let t = ll.trim_start();
-    INCIDENT_MARKERS.iter().any(|m| t.starts_with(m))
-}
-fn is_guardable(ll: &str) -> bool {
-    GUARD_NEEDLES.iter().any(|n| ll.contains(n))
-}
-fn is_heading(s: &str) -> bool {
-    let t = s.trim_start();
-    if t.is_empty() {
-        return false;
-    }
-    let hashes = t.chars().take_while(|&c| c == '#').count();
-    if (1..=6).contains(&hashes) && t.chars().nth(hashes).is_some_and(|c| c.is_whitespace()) {
-        return true;
-    }
-    if t.starts_with("===") || t.starts_with("---") || t.starts_with("***") {
-        return true;
-    }
-    t.starts_with('>') && t.chars().nth(1).is_some_and(|c| c.is_whitespace())
-}
-fn is_diffmeta(s: &str) -> bool {
-    s.starts_with("@@")
-        || s.starts_with("+++")
-        || s.starts_with("---")
-        || s.starts_with("diff --git")
-        || s.starts_with("index ")
-}
-fn is_diffline(s: &str) -> bool {
-    // 统一 diff 的正文行是 "+code" / "-code"，而不是只有第二个字符为空白才成立；
-    // 三个相同前缀分别是文件头，交给 is_diffmeta 处理。
-    (s.starts_with('+') && !s.starts_with("+++")) || (s.starts_with('-') && !s.starts_with("---"))
-}
-
-// 分析用小写缓冲：剥离 ANSI 转义并折叠裸 CR。输出仍保留原始行，因此只影响匹配/排序，
-// 不影响“保留行逐字原文”的承诺。进度条常用裸 \r 回写，按空白处理避免污染词面。
-fn push_analysis_lower(s: &str, out: &mut String) {
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        if c == '\u{1b}' {
-            match it.peek().copied() {
-                Some('[') => {
-                    it.next();
-                    for esc in it.by_ref() {
-                        if ('@'..='~').contains(&esc) {
-                            break;
-                        }
-                    }
-                }
-                Some(']') => {
-                    it.next();
-                    while let Some(esc) = it.next() {
-                        if esc == '\u{7}' {
-                            break;
-                        }
-                        if esc == '\u{1b}' && it.peek() == Some(&'\\') {
-                            it.next();
-                            break;
-                        }
-                    }
-                }
-                Some(_) => {
-                    it.next();
-                }
-                None => {}
-            }
-            continue;
-        }
-        if c == '\r' {
-            out.push(' ');
-            continue;
-        }
-        for lc in c.to_lowercase() {
-            out.push(lc);
-        }
-    }
-}
-// 带前导空白的行且形如堆栈帧：at ...／File "／#N ／含 path.ext:line。
-fn is_frame(s: &str) -> bool {
-    let t = s.trim_start();
-    if t.len() == s.len() {
-        return false;
-    }
-    if t.starts_with("at ") || t.starts_with("File \"") {
-        return true;
-    }
-    let hashes = t.chars().take_while(|&c| c == '#').count();
-    if hashes >= 1
-        && t.chars().nth(hashes).is_some_and(|c| c.is_ascii_digit())
-        && t.chars().skip(hashes).any(|c| c.is_whitespace())
-    {
-        return true;
-    }
-    let cs: Vec<char> = t.chars().collect();
-    for i in 1..cs.len() {
-        if cs[i] == '.' && !cs[i - 1].is_whitespace() {
-            let mut j = i + 1;
-            let limit = (i + 1 + MAX_FRAME_EXT_CHARS).min(cs.len());
-            while j < limit && !cs[j].is_whitespace() && cs[j] != ':' {
-                j += 1;
-            }
-            if j < cs.len() && cs[j] == ':' {
-                let ext = &cs[i + 1..j];
-                if EXTS.iter().any(|e| e.chars().eq(ext.iter().copied()))
-                    && j + 1 < cs.len()
-                    && cs[j + 1].is_ascii_digit()
-                {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
-fn is_lineref(s: &str) -> bool {
-    let mut it = s.chars().rev();
-    let mut cur = it.next();
-    if cur == Some(')') {
-        cur = it.next();
-    }
-    let mut digits = 0usize;
-    while cur.is_some_and(|c| c.is_ascii_digit()) {
-        digits += 1;
-        cur = it.next();
-    }
-    digits > 0 && cur == Some(':')
-}
-
-/// 对 `text` 按 `query` 做证据筛选压缩。纯函数：无文件、环境与进程 I/O。
-pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
-    // 库是公开接口：配置在入口统一规范化，避免 CLI 之外的调用触发溢出或超大循环。
-    let ratio = if cfg.ratio.is_nan() {
-        DEFAULT_RATIO
-    } else {
-        cfg.ratio.clamp(MIN_RATIO, 1.0)
-    };
-    let context = cfg.context.clamp(0, MAX_CONTEXT);
-    let window = if cfg.window <= 0 {
-        1
-    } else {
-        cfg.window.min(MAX_WINDOW)
-    };
-
-    // 分析使用 LF 归一化文本；passthrough/fail-open 返回输入原文，保持“原样保留”语义。
-    let original = text;
-    // 零拷贝快路径：无 CR 时直接借用原文本；行以 &str 切片保存，避免整文复制与逐行分配。
-    let normalized;
-    let text: &str = if original.contains('\r') {
-        normalized = original.replace("\r\n", "\n");
-        normalized.as_str()
-    } else {
-        original
-    };
-    let mut lines: Vec<&str> = text.split('\n').collect();
-    if lines.last().is_some_and(|l| l.is_empty()) {
-        lines.pop();
-    }
-    let uniq_terms = build_terms(query);
-    let mut force_subs: Vec<String> = Vec::new();
-    for f in &cfg.forces {
-        for part in f.split('|') {
-            let p = part.trim().to_lowercase();
-            if !p.is_empty() {
-                force_subs.push(p);
-            }
-        }
-    }
-    let chars_a = original.chars().count();
-    let total = lines.len();
-    let tok_v: Vec<f64> = lines.iter().map(|s| token_est(s)).collect();
-    let total_tok: f64 = tok_v.iter().sum();
-
-    let mk = |text_owned: String,
-              kept: usize,
-              chars_b: usize,
-              cut: f64,
-              dup: usize,
-              seeds: usize,
-              risk: &'static str,
-              guarded: u8,
-              regions: usize,
-              mode: &'static str|
-     -> Outcome {
-        Outcome {
-            text: text_owned,
-            kept,
-            total,
-            chars_in: chars_a,
-            chars_out: chars_b,
-            cut_pct: cut,
-            dup,
-            seeds,
-            evidence: seeds,
-            risk,
-            guarded,
-            regions,
-            window,
-            terms: uniq_terms.len(),
-            forced: force_subs.len(),
-            mode,
-        }
-    };
-
-    if total < 40 && total_tok < 1200.0 {
-        return mk(
-            original.to_string(),
-            total,
-            chars_a,
-            0.0,
-            0,
-            0,
-            "LOW",
-            0,
-            0,
-            "passthrough:small",
-        );
-    }
-    if lines.iter().any(|s| s.chars().count() > 100000) {
-        return mk(
-            original.to_string(),
-            total,
-            chars_a,
-            0.0,
-            0,
-            0,
-            "LOW",
-            0,
-            0,
-            "passthrough:longline",
-        );
-    }
-
-    // 一次逐行×逐词扫描出命中位掩码；错误/标记/守卫/force 判定复用同一小写缓冲（无逐行分配）。
-    let words = uniq_terms.len().div_ceil(64).max(1);
-    let mut mask_v = vec![0u64; total * words];
-    let mut err_v = vec![false; total];
-    let mut marker_v = vec![false; total];
-    let mut guard_v = vec![false; total];
-    let mut force_v = vec![false; total];
-    let mut low = String::new();
-    for i in 0..total {
-        low.clear();
-        push_analysis_lower(lines[i], &mut low);
-        let ll = low.as_str();
-        err_v[i] = is_err(ll);
-        marker_v[i] = is_incident_marker(ll);
-        guard_v[i] = is_guardable(ll);
-        force_v[i] = force_subs.iter().any(|p| ll.contains(p.as_str()));
-        let base = i * words;
-        for (k, t) in uniq_terms.iter().enumerate() {
-            if ll.contains(t.as_str()) {
-                mask_v[base + k / 64] |= 1u64 << (k % 64);
-            }
-        }
-    }
-    let has_hit = |i: usize| (0..words).any(|w| mask_v[i * words + w] != 0);
-
-    // 去重：归一化后第 3 次起的重复行折叠（除非含查询命中或错误行）。
-    let mut seen_count: HashMap<String, usize> = HashMap::new();
-    let mut dup = vec![false; total];
-    let mut dup_n = 0usize;
-    let mut key = String::new();
-    let mut run = String::new();
-    for i in 0..total {
-        key.clear();
-        norm_into(lines[i], &mut key, &mut run);
-        if key.chars().count() < 6 {
-            continue;
-        }
-        if let Some(n) = seen_count.get_mut(key.as_str()) {
-            *n += 1;
-            if *n > 2 && !has_hit(i) && !err_v[i] && !force_v[i] {
-                dup[i] = true;
-                dup_n += 1;
-            }
-        } else {
-            seen_count.insert(key.clone(), 1);
-        }
-    }
-
-    // 词频（df）与 IDF 权重：只统计非折叠行。
-    let live: usize = (0..total).filter(|&i| !dup[i]).count();
-    let n_live = live.max(1) as f64;
-    let mut df = vec![0usize; uniq_terms.len()];
-    for (i, &is_dup) in dup.iter().enumerate() {
-        if is_dup {
-            continue;
-        }
-        let base = i * words;
-        for w in 0..words {
-            let mut bits = mask_v[base + w];
-            while bits != 0 {
-                let k = w * 64 + bits.trailing_zeros() as usize;
-                bits &= bits - 1;
-                if k < uniq_terms.len() {
-                    df[k] += 1;
-                }
-            }
-        }
-    }
-    let weights: Vec<f64> = df
-        .iter()
-        .map(|&d| (1.0 + n_live / (1.0 + d as f64)).ln())
-        .collect();
-    let rare_thr = (live / 5).max(1);
-
-    // 逐行证据判定：种子只来自查询证据（≥2 命中或稀有单词命中）与 --force。
-    let mut hits_v = vec![0usize; total];
-    let mut sumw_v = vec![0.0f64; total];
-    let mut seed = vec![false; total];
-    let mut hit_lines = 0usize;
-    let mut force_any = false;
-    for i in 0..total {
-        if dup[i] {
-            continue;
-        }
-        let base = i * words;
-        let mut hits = 0usize;
-        let mut sumw = 0.0f64;
-        let mut lone = usize::MAX;
-        for w in 0..words {
-            let mut bits = mask_v[base + w];
-            while bits != 0 {
-                let k = w * 64 + bits.trailing_zeros() as usize;
-                bits &= bits - 1;
-                if k >= uniq_terms.len() {
-                    continue;
-                }
-                hits += 1;
-                sumw += weights[k];
-                lone = if hits == 1 { k } else { usize::MAX };
-            }
-        }
-        let fm = force_v[i];
-        force_any |= fm;
-        hits_v[i] = hits;
-        sumw_v[i] = sumw;
-        seed[i] = hits >= 2 || (hits == 1 && lone != usize::MAX && df[lone] <= rare_thr) || fm;
-        if hits > 0 {
-            hit_lines += 1;
-        }
-    }
-    let seeds_total = (0..total).filter(|&i| seed[i]).count();
-
-    // 无信号 fail-open：零命中且无 --force 命中 => 原样保留。
-    if hit_lines == 0 && !force_any {
-        return mk(
-            original.to_string(),
-            total,
-            chars_a,
-            0.0,
-            dup_n,
-            seeds_total,
-            "LOW",
-            0,
-            0,
-            "failopen:zero-signal",
-        );
-    }
-
-    // 种子区域：±window 扩展，间隔 <= window*3 合并；区域外素材不参与可选预算。
-    let w = window as usize;
-    let maxgap = (window * 3).max(2) as usize;
-    let seed_idx: Vec<usize> = (0..total).filter(|&i| seed[i]).collect();
-    let mut in_region = vec![false; total];
-    let mut region_count = 0usize;
-    if !seed_idx.is_empty() {
-        let mut a = seed_idx[0].saturating_sub(w);
-        let mut b = (seed_idx[0] + w).min(total - 1);
-        for &s in &seed_idx[1..] {
-            if s <= b + maxgap {
-                b = (s + w).min(total - 1);
-            } else {
-                for slot in in_region.iter_mut().take(b + 1).skip(a) {
-                    *slot = true;
-                }
-                region_count += 1;
-                a = s.saturating_sub(w);
-                b = (s + w).min(total - 1);
-            }
-        }
-        for slot in in_region.iter_mut().take(b + 1).skip(a) {
-            *slot = true;
-        }
-        region_count += 1;
-    }
-    let region_gate = !seed_idx.is_empty();
-
-    // 逐行打分：基础 = IDF 加权命中；结构加分只提升排序价值。
-    let mut scores = vec![0.0f64; total];
-    for i in 0..total {
-        if dup[i] {
-            continue;
-        }
-        let s = lines[i];
-        let mut sc = sumw_v[i] * 3.0;
-        if hits_v[i] >= 2 {
-            sc += 2.0;
-        }
-        if err_v[i] {
-            sc += 4.0;
-        }
-        if is_heading(s) {
-            sc += 1.0;
-        }
-        if is_diffmeta(s) {
-            sc += 2.0;
-        }
-        if is_diffline(s) && hits_v[i] > 0 {
-            sc += 2.0;
-        }
-        if is_frame(s) || is_lineref(s) {
-            sc += 2.0;
-        }
-        if force_v[i] {
-            sc += 100.0;
-        }
-        if i < 2 || i >= total.saturating_sub(3) {
-            sc += 2.0;
-        }
-        scores[i] = sc;
-    }
-    // 邻域权重：±window 范围内的高分给排序加权（不授予独立入选资格）。
-    let mut boost = vec![0.0f64; total];
-    for (i, b) in boost.iter_mut().enumerate() {
-        let mut m = 0.0f64;
-        for d in -window..=window {
-            let j = i as i64 + d;
-            if j >= 0 && (j as usize) < total && !dup[j as usize] {
-                m = m.max(scores[j as usize]);
-            }
-        }
-        *b = (m / 4.0).min(3.0);
-    }
-
-    // 先落种子与最小可读邻域；预算只约束其后的可选内容。
-    let mut keep = vec![false; total];
-    let mut keep_count = 0usize;
-    for (i, &is_seed) in seed.iter().enumerate() {
-        if !is_seed {
-            continue;
-        }
-        for d in -context..=context {
-            let j = i as i64 + d;
-            if j >= 0 && (j as usize) < total && !keep[j as usize] {
-                keep[j as usize] = true;
-                keep_count += 1;
-            }
-        }
-    }
-
-    // 预算选择：种子区域门控（首两行身份行除外）；独立入选须真实得分（scores > 0）。
-    // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
-    if context != 0 {
-        let budget = (total_tok * ratio).max(200.0);
-        let mut order: Vec<usize> = (0..total).filter(|&i| !dup[i] && !keep[i]).collect();
-        order.sort_by(|&a, &b| {
-            let ka = scores[a] + boost[a];
-            let kb = scores[b] + boost[b];
-            if kb != ka {
-                kb.partial_cmp(&ka).unwrap_or(std::cmp::Ordering::Equal)
-            } else {
-                a.cmp(&b)
-            }
-        });
-        let mut used = 0.0f64;
-        for &i in &order {
-            if (region_gate && !in_region[i] && i >= 2) || scores[i] <= 0.0 {
-                continue;
-            }
-            let t = tok_v[i];
-            if used + t > budget {
-                continue;
-            }
-            if !keep[i] {
-                keep[i] = true;
-                keep_count += 1;
-            }
-            used += t;
-        }
-    }
-
-    // 风险审计与错误行保护（guarded）。
-    let mut err_dropped = 0usize;
-    let mut hit_dropped = 0usize;
-    for i in 0..total {
-        if keep[i] {
-            continue;
-        }
-        if err_v[i] {
-            err_dropped += 1;
-        }
-        if hits_v[i] > 0 {
-            hit_dropped += 1;
-        }
-    }
-    let risk_raw = (err_dropped + hit_dropped * 3) as f64 / keep_count.max(1) as f64;
-    let risk = if risk_raw >= 0.35 {
-        "HIGH"
-    } else if risk_raw >= 0.1 {
-        "MED"
-    } else {
-        "LOW"
-    };
-    let mut guarded = 0u8;
-    if risk == "HIGH" && cfg.risk_gate {
-        for i in 0..total {
-            if keep[i] || dup[i] {
-                continue;
-            }
-            if guard_v[i] || marker_v[i] {
-                keep[i] = true;
-                keep_count += 1;
-                guarded = 1;
-            }
-        }
-    }
-
-    // 预算过紧或只有高频单查询命中时可能选不出任何行；此时回退原文，不返回静默空结果。
-    if keep_count == 0 {
-        return mk(
-            original.to_string(),
-            total,
-            chars_a,
-            0.0,
-            dup_n,
-            seeds_total,
-            risk,
-            0,
-            region_count,
-            "passthrough:no-kept",
-        );
-    }
-
-    // 输出：零克隆直装；省略区间以单行 "..." 标记。
-    let mut out_text = String::with_capacity(original.len());
-    let mut in_gap = false;
-    for i in 0..total {
-        if keep[i] {
-            if in_gap && cfg.elide {
-                out_text.push_str("...\n");
-            }
-            in_gap = false;
-            out_text.push_str(lines[i]);
-            out_text.push('\n');
-        } else {
-            in_gap = true;
-        }
-    }
-    if in_gap && cfg.elide {
-        out_text.push_str("...\n");
-    }
-    let chars_b = if out_text.ends_with('\n') {
-        out_text.chars().count().saturating_sub(1)
-    } else {
-        out_text.chars().count()
-    };
-    let cut_pct = if chars_a > 0 {
-        100.0 * (1.0 - chars_b as f64 / chars_a as f64)
-    } else {
-        0.0
-    };
-    mk(
-        out_text,
-        keep_count,
-        chars_b,
-        cut_pct,
-        dup_n,
-        seeds_total,
-        risk,
-        guarded,
-        region_count,
-        "sieve",
-    )
+    out.push_str(std::str::from_utf8(&buf[i..]).unwrap());
+    out.push_str(": ");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::classify::{is_diffline, is_frame, is_incident_marker, is_lineref};
+    use crate::norm::{norm_into, push_analysis_lower};
+    use crate::terms::build_terms;
 
     fn cfg() -> Config {
         Config {
@@ -1201,5 +423,36 @@ mod tests {
     fn frame_extension_scan_is_bounded() {
         assert!(is_frame("  foo.rs:10"));
         assert!(!is_frame(&format!("  foo.{}:10", "a".repeat(50))));
+    }
+
+    #[test]
+    fn lineno_prefixes_kept_lines() {
+        let mut lines: Vec<String> = (0..200).map(|_| filler()).collect();
+        lines[99] = "fn target() { return 1; }".to_string();
+        let text = lines.join("\n");
+        let cfg = Config {
+            ratio: 0.35,
+            context: 0,
+            lineno: true,
+            ..Config::default()
+        };
+        let o = compress(&text, "target", &cfg);
+        assert!(
+            o.text.contains("100: fn target() { return 1; }"),
+            "种子行应带原文行号"
+        );
+        // passthrough / fail-open 返回原文，不加行号
+        let small = Config {
+            lineno: true,
+            ..Config::default()
+        };
+        let s: String = (0..10)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let o2 = compress(&s, "line", &small);
+        assert_eq!(o2.mode, "passthrough:small");
+        assert_eq!(o2.text, s);
+        assert!(!o2.text.contains("1: line 0"), "passthrough 不附加行号");
     }
 }

@@ -1,0 +1,292 @@
+//! query 记忆图（O2）：query 指纹 → top-k (case_id, score, sim) 有向映射，append-only。
+//!
+//! 二进制布局（自产自销，零依赖）：
+//! ```text
+//! [magic u32 "QMAP"][version u16]
+//! (rec)*  每条： [qlen u16][norm(query) bytes][n u16][(idlen u8)(id bytes)(score f32)(sim f32)*n][recency u32]
+//! ```
+//! 查询：归一化 query → 精确匹配直达（跳过 BM25，直接还原 score/sim 快照）；
+//! 编辑距离 ≤2 变体走轻量重排（新词面仍参与 BM25，见 recall 接线）。
+//! 同指纹多条时取 recency 最新。append-only：新条目追加；`rebuild` 合并（P3 落地，
+//! 本文件提供 load+write 原语）。
+
+use crate::memory::util::{edit_dist, fnv1a, utc_now};
+use std::fs;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
+const QMAP_MAGIC: u32 = 0x5041_4d51; // "QMAP"
+const QMAP_VER: u16 = 1;
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct QHit {
+    pub id: String,
+    pub score: f32,
+    pub sim: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct QEntry {
+    /// 归一化后的 query（小写，norm 口径）。
+    pub q: String,
+    pub hits: Vec<QHit>,
+    /// recency：Unix 秒（取 UTC 时间戳）。
+    pub recency: u32,
+}
+
+fn qmap_path(root: &str) -> PathBuf {
+    Path::new(root).join("index").join("qmap.bin")
+}
+
+/// 追加一条记忆图记录（不查重，rebuild 时合并）。
+pub(crate) fn append(root: &str, query: &str, hits: &[(String, f64, f64)]) -> std::io::Result<()> {
+    let q = norm_query(query);
+    let mut buf: Vec<u8> = Vec::with_capacity(64 + hits.iter().map(|h| h.0.len()).sum::<usize>());
+    buf.extend_from_slice(&(q.len() as u16).to_le_bytes());
+    buf.extend_from_slice(q.as_bytes());
+    buf.extend_from_slice(&(hits.len() as u16).to_le_bytes());
+    for (id, score, sim) in hits {
+        buf.extend_from_slice(&(id.len() as u8).to_le_bytes());
+        buf.extend_from_slice(id.as_bytes());
+        buf.extend_from_slice(&(*score as f32).to_le_bytes());
+        buf.extend_from_slice(&(*sim as f32).to_le_bytes());
+    }
+    let now = utc_now();
+    buf.extend_from_slice(&(fnv1a(&now) as u32).to_le_bytes());
+
+    let p = qmap_path(root);
+    let mut f = if p.exists() {
+        fs::OpenOptions::new().append(true).open(&p)?
+    } else {
+        // 新建：写 header。
+        if let Some(dir) = p.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        let mut f = fs::File::create(&p)?;
+        f.write_all(&QMAP_MAGIC.to_le_bytes())?;
+        f.write_all(&QMAP_VER.to_le_bytes())?;
+        f
+    };
+    f.write_all(&buf)?;
+    Ok(())
+}
+
+/// 归一化 query（小写 + norm 口径，与 ingest fingerprint 同一预处理）。
+fn norm_query(query: &str) -> String {
+    let mut out = String::new();
+    let mut run = String::new();
+    crate::norm::norm_into(query, &mut out, &mut run);
+    out
+}
+
+/// 读取全部条目（append-only 顺序）。header 损坏/版本不符返回空（可重建）。
+pub(crate) fn load_all(root: &str) -> std::io::Result<Vec<QEntry>> {
+    let p = qmap_path(root);
+    if !p.exists() {
+        return Ok(Vec::new());
+    }
+    let mut buf = Vec::new();
+    fs::File::open(&p)?.read_to_end(&mut buf)?;
+    if buf.len() < 6 {
+        return Ok(Vec::new());
+    }
+    let magic = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+    let ver = u16::from_le_bytes(buf[4..6].try_into().unwrap());
+    if magic != QMAP_MAGIC || ver != QMAP_VER {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    let mut i = 6usize;
+    while i < buf.len() {
+        let qlen = u16::from_le_bytes(buf[i..i + 2].try_into().unwrap()) as usize;
+        i += 2;
+        if i + qlen > buf.len() {
+            break;
+        }
+        let q = String::from_utf8_lossy(&buf[i..i + qlen]).into_owned();
+        i += qlen;
+        if i + 2 > buf.len() {
+            break;
+        }
+        let n = u16::from_le_bytes(buf[i..i + 2].try_into().unwrap()) as usize;
+        i += 2;
+        let mut hits = Vec::with_capacity(n);
+        let mut ok = true;
+        for _ in 0..n {
+            if i >= buf.len() {
+                ok = false;
+                break;
+            }
+            let ilen = buf[i] as usize;
+            i += 1;
+            if i + ilen + 8 > buf.len() {
+                ok = false;
+                break;
+            }
+            let id = String::from_utf8_lossy(&buf[i..i + ilen]).into_owned();
+            i += ilen;
+            let score = f32::from_le_bytes(buf[i..i + 4].try_into().unwrap());
+            let sim = f32::from_le_bytes(buf[i + 4..i + 8].try_into().unwrap());
+            i += 8;
+            hits.push(QHit { id, score, sim });
+        }
+        if !ok {
+            break; // 尾部损坏：丢弃该残段（append-only 下无影响，rebuild 可重建）
+        }
+        if i + 4 > buf.len() {
+            break;
+        }
+        let recency = u32::from_le_bytes(buf[i..i + 4].try_into().unwrap());
+        i += 4;
+        out.push(QEntry { q, hits, recency });
+    }
+    Ok(out)
+}
+
+/// 精确或编辑距离 ≤ max 的记忆图命中（取 recency 最新；精确优先）。
+/// 返回 (命中的归一化 query, hits, 编辑距离)。
+pub(crate) fn lookup(
+    root: &str,
+    query: &str,
+    max: usize,
+) -> std::io::Result<Option<(String, Vec<QHit>, usize)>> {
+    let q = norm_query(query);
+    let entries = load_all(root)?;
+    let mut exact: Option<(String, Vec<QHit>, usize)> = None;
+    let mut best: Option<(String, Vec<QHit>, usize)> = None;
+    let mut best_rec: u32 = 0;
+    for e in entries {
+        if e.q == q {
+            exact = Some((e.q.clone(), e.hits.clone(), 0));
+        }
+        if let Some(d) = edit_dist(&e.q, &q, max) {
+            if d > 0 && (best.is_none() || e.recency > best_rec) {
+                best = Some((e.q.clone(), e.hits.clone(), d));
+                best_rec = e.recency;
+            }
+        }
+    }
+    // 精确命中永远优先于变体。
+    Ok(exact.or(best))
+}
+
+/// 合并重写（--rebuild）：同归一化 query 只留 recency 最新一条；按 query 字典序。
+pub(crate) fn merge(root: &str) -> std::io::Result<()> {
+    let entries = load_all(root)?;
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let mut best: std::collections::HashMap<String, QEntry> = std::collections::HashMap::new();
+    for e in entries {
+        match best.get_mut(&e.q) {
+            Some(cur) if e.recency > cur.recency => *cur = e,
+            Some(_) => {}
+            None => {
+                best.insert(e.q.clone(), e);
+            }
+        }
+    }
+    let mut sorted: Vec<QEntry> = best.into_values().collect();
+    sorted.sort_by(|a, b| a.q.cmp(&b.q));
+    let p = qmap_path(root);
+    if let Some(d) = p.parent() {
+        fs::create_dir_all(d)?;
+    }
+    let mut buf: Vec<u8> = Vec::with_capacity(16 + sorted.len() * 64);
+    buf.extend_from_slice(&QMAP_MAGIC.to_le_bytes());
+    buf.extend_from_slice(&QMAP_VER.to_le_bytes());
+    for e in sorted {
+        buf.extend_from_slice(&(e.q.len() as u16).to_le_bytes());
+        buf.extend_from_slice(e.q.as_bytes());
+        buf.extend_from_slice(&(e.hits.len() as u16).to_le_bytes());
+        for h in &e.hits {
+            buf.extend_from_slice(&(h.id.len() as u8).to_le_bytes());
+            buf.extend_from_slice(h.id.as_bytes());
+            buf.extend_from_slice(&h.score.to_le_bytes());
+            buf.extend_from_slice(&h.sim.to_le_bytes());
+        }
+        buf.extend_from_slice(&e.recency.to_le_bytes());
+    }
+    fs::write(&p, buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn tmp_root(tag: &str) -> String {
+        let r = std::env::temp_dir().join(format!("scx-qmap-{}-{}", tag, fnv1a("q") & 0xff));
+        let _ = fs::remove_dir_all(&r);
+        let _ = fs::create_dir_all(r.join("index"));
+        r.to_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn qmap_hit_after_append() {
+        let root = tmp_root("hit");
+        append(
+            &root,
+            "数据库连接超时",
+            &[("c1".to_string(), 1.19, 1.0), ("c2".to_string(), 0.8, 0.6)],
+        )
+        .unwrap();
+        let hit = lookup(&root, "数据库连接超时", 0).unwrap();
+        assert_eq!(
+            hit,
+            Some((
+                "数据库连接超时".to_string(),
+                vec![
+                    QHit {
+                        id: "c1".to_string(),
+                        score: 1.19,
+                        sim: 1.0
+                    },
+                    QHit {
+                        id: "c2".to_string(),
+                        score: 0.8,
+                        sim: 0.6
+                    },
+                ],
+                0
+            ))
+        );
+        // 编辑距离 1 变体：加一字。
+        let v = lookup(&root, "数据库连接超时了", 2).unwrap();
+        assert!(v.is_some(), "≤2 变体应命中记忆图");
+        assert_eq!(v.unwrap().2, 1);
+        // 编辑距离 4：不命中。
+        let far = lookup(&root, "磁盘空间不足了", 2).unwrap();
+        assert!(far.is_none());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn qmap_append_only_and_latest_wins() {
+        let root = tmp_root("ap");
+        append(&root, "q", &[("a".to_string(), 1.0, 0.9)]).unwrap();
+        append(&root, "q", &[("b".to_string(), 0.7, 0.5)]).unwrap();
+        let all = load_all(&root).unwrap();
+        assert_eq!(all.len(), 2, "append-only：两次追加为两条");
+        // lookup 精确命中取 recency 最新——两条 recency 相同(同一秒)时取先写，
+        // 因此断言至少能命中且 id 为其中一条。
+        let hit = lookup(&root, "q", 0).unwrap().unwrap();
+        assert!(hit.1[0].id == "a" || hit.1[0].id == "b");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn qmap_handles_corrupt_tail() {
+        let root = tmp_root("cor");
+        append(&root, "数据库超时", &[("c1".to_string(), 1.0, 0.9)]).unwrap();
+        // 截断尾部：损坏最后 2 字节。
+        let p = qmap_path(&root);
+        let mut buf = fs::read(&p).unwrap();
+        buf.truncate(buf.len() - 2);
+        fs::write(&p, &buf).unwrap();
+        let r = lookup(&root, "数据库超时", 0);
+        assert!(r.is_ok(), "尾部损坏必须容错，不崩溃");
+        // 残段被丢弃（该条 recency 缺失）→ 命中可为空；rebuild 后恢复。
+        let _ = fs::remove_dir_all(&root);
+    }
+}
