@@ -11,6 +11,8 @@ use std::io::{self, Write};
 /// `detail` 时（P4.2 --recall-detail）每条追加一行 `summary:`（error_code+file_loc+证据行）；
 /// P4.4+ 优化：case 带修复结论（--store 配 --fix）时**无条件**追加 `fix:` 行——
 /// L1 本地直答的"上次怎么解决"在主流程/查看模式均直接可见（不依赖 --recall-detail）。
+/// P4.4+ 优化⑤：case 带原始证据（evidence_lno/evidence）时 detail 追加 `  evidence: <lno> <原文>` 行
+/// （证据行区间 + 原始证据回放，旧 case 无此键则跳过）。
 pub(crate) fn write_mem_lines(
     out: &mut dyn Write,
     hits: &[RecallHit],
@@ -25,12 +27,29 @@ pub(crate) fn write_mem_lines(
             h.sim, h.score, short
         )?;
         if detail {
-            let s = scx::memory::case_summary(root, &h.id).unwrap_or_default();
-            writeln!(out, "  summary: {}", s)?;
-        }
-        let fix = scx::memory::case_fix(root, &h.id).unwrap_or_default();
-        if !fix.is_empty() {
-            writeln!(out, "  fix: {}", fix)?;
+            let c = scx::memory::read_case(root, &h.id)?;
+            writeln!(
+                out,
+                "  summary: {}",
+                scx::memory::case_summary(root, &h.id)?
+            )?;
+            for (i, &lno) in c.evidence_lno.iter().enumerate() {
+                writeln!(
+                    out,
+                    "  evidence: {} {}",
+                    lno,
+                    c.evidence.get(i).map(String::as_str).unwrap_or("")
+                )?;
+            }
+            let fix = c.fix.clone();
+            if !fix.is_empty() {
+                writeln!(out, "  fix: {}", fix)?;
+            }
+        } else {
+            let fix = scx::memory::case_fix(root, &h.id).unwrap_or_default();
+            if !fix.is_empty() {
+                writeln!(out, "  fix: {}", fix)?;
+            }
         }
     }
     Ok(())
@@ -64,6 +83,8 @@ pub(crate) fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) {
 
 /// 摄取：把本次压缩产物沉淀为记忆 case（旁路，失败即退出；由调用方决定是否致命）。
 /// `fix` 为修复结论（--fix，可空）：非空时随 case 入库，recall-detail 直答输出。
+/// `evidence_lno`/`evidence`（P4.4+ 优化⑤）：原始证据行区间+原文，空数组等价旧行为。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn store(
     mem_dir: &str,
     query: &str,
@@ -72,11 +93,25 @@ pub(crate) fn store(
     stats: &CaseStats,
     forces: &[String],
     fix: &str,
+    evidence_lno: &[usize],
+    evidence: &[String],
 ) {
-    let r = if fix.is_empty() {
-        store_case(mem_dir, query, text, files.to_vec(), stats, forces.to_vec())
+    let r = if evidence_lno.is_empty() {
+        if fix.is_empty() {
+            store_case(mem_dir, query, text, files.to_vec(), stats, forces.to_vec())
+        } else {
+            scx::memory::store_case_fix(
+                mem_dir,
+                query,
+                text,
+                files.to_vec(),
+                stats,
+                forces.to_vec(),
+                fix,
+            )
+        }
     } else {
-        scx::memory::store_case_fix(
+        scx::memory::store_case_full(
             mem_dir,
             query,
             text,
@@ -84,6 +119,8 @@ pub(crate) fn store(
             stats,
             forces.to_vec(),
             fix,
+            evidence_lno,
+            evidence,
         )
     };
     match r {

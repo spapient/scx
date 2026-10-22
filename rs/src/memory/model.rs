@@ -41,6 +41,12 @@ pub struct Case {
     /// 语义：L1 本地直答的"上次怎么解决"——recall-detail 时随 case 输出；
     /// 空串表示未记录修复动作（此时 case 仅支撑案例召回）。
     pub fix: String,
+    /// 原始证据（P4.4+ 优化⑤：--store 自动从输入保留行提取，可选）。
+    /// 证据行区间 = `evidence_lno`（原始输入 1-based 行号）；`evidence` = 对应行
+    /// 原文（无 `N:` 前缀、无 `...` 省略标记）。L1 直答可回放原始证据而非只给摘要。
+    /// 旧 case（无此键）读为空：仅压缩结果快照（text）支撑召回，语义见 §11 评审④。
+    pub evidence_lno: Vec<usize>,
+    pub evidence: Vec<String>,
     /// 去重指纹（norm(query)+norm(text) 的 FNV-1a，见 ingest::fingerprint）。
     pub fp: String,
     pub source: Vec<String>,
@@ -65,6 +71,8 @@ impl Case {
             terms,
             text,
             fix: String::new(),
+            evidence_lno: Vec::new(),
+            evidence: Vec::new(),
             fp: String::new(),
             source: Vec::new(),
             tags: Vec::new(),

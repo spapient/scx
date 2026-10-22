@@ -3,4 +3,4 @@ stats: cases=2 gen=2
   status: open=2
   fix: 1/2 (50%)
   quality: mean=0.00
-  disk: 1.3 KiB
+  disk: 1.4 KiB

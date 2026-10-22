@@ -55,6 +55,10 @@ impl Default for Config {
 pub struct Outcome {
     /// 压缩后的文本；passthrough / fail-open 时为输入原文。
     pub text: String,
+    /// 保留行的原始输入行号（1-based，按原顺序；仅筛选模式有值，
+    /// passthrough/fail-open 为空）。P4.4+ 优化⑤：记忆库 --store 据此从输入
+    /// 提取原始证据行（证据行区间），L1 直答可回放原文。
+    pub kept_lno: Vec<usize>,
     pub kept: usize,
     pub total: usize,
     pub chars_in: usize,
@@ -115,6 +119,46 @@ mod tests {
         assert_eq!(o.seeds, o.evidence);
         assert!(o.seeds >= 1);
         assert!(o.text.contains("fn target"));
+    }
+
+    #[test]
+    fn sieve_kept_lno_aligns_with_output_lines() {
+        // P4.4+ 优化⑤：保留行原始行号（1-based）与输出行一一对应、严格递增。
+        let mut lines: Vec<String> = (0..200)
+            .map(|i| format!("pad alpha beta line {}", i))
+            .collect();
+        lines[50] = "ERROR db timeout conn_id=9f2a".to_string();
+        lines[51] = "Root cause: pool exhausted".to_string();
+        lines[150] = "at Pool.java:214".to_string();
+        let text = lines.join("\n");
+        let o = compress(&text, "db timeout conn_id pool", &cfg());
+        assert!(o.mode.starts_with("sieve"));
+        assert_eq!(o.kept_lno.len(), o.kept, "kept_lno 数量必须等于 kept");
+        assert!(!o.kept_lno.is_empty(), "筛选模式必须给出证据行号");
+        for w in o.kept_lno.windows(2) {
+            assert!(w[0] < w[1], "证据行号必须严格递增（原顺序）");
+        }
+        assert!(o.kept_lno.contains(&51), "保留行含 Root cause 行");
+        // 输出的保留行内容与输入行一致（按行号回查）。
+        let out_lines: Vec<&str> = o
+            .text
+            .split('\n')
+            .filter(|l| !l.is_empty() && *l != "...")
+            .collect();
+        assert_eq!(out_lines.len(), o.kept, "输出非省略行数必须等于 kept");
+    }
+
+    #[test]
+    fn passthrough_kept_lno_empty() {
+        // passthrough/fail-open 不产生证据行号（记忆库只对筛选结果提取原始证据）。
+        let text: String = (0..50)
+            .map(|i| format!("line {} with padding text alpha beta gamma", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let o = compress(&text, "绝对不存在的词zz", &cfg());
+        assert!(o.kept_lno.is_empty(), "failopen 无证据行号");
+        let o2 = compress("small", "q", &cfg());
+        assert!(o2.kept_lno.is_empty(), "passthrough:small 无证据行号");
     }
 
     #[test]

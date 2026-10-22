@@ -77,6 +77,64 @@ pub(crate) fn ingest_with_fix(
     forces: Vec<String>,
     fix: &str,
 ) -> std::io::Result<(bool, String)> {
+    ingest_impl(
+        root,
+        query,
+        terms,
+        text,
+        source,
+        stats,
+        forces,
+        fix,
+        &[],
+        &[],
+    )
+}
+
+/// P4.4+ 优化⑤：带原始证据的摄取（评审缺口 B——case 四要素落地）。
+/// `evidence_lno[i]` = 证据行原始 1-based 行号（证据行区间），`evidence[i]` = 对应行原文
+/// （无 `N:` 前缀、无 `...` 省略标记）。main.rs --store 从压缩结果 kept_lno + 输入提取；
+/// 旧 case/无证据调用（ingest/ingest_with_fix）传空，行为完全等价。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ingest_with_evidence(
+    root: &str,
+    query: &str,
+    terms: Vec<String>,
+    text: &str,
+    source: Vec<String>,
+    stats: &CaseStats,
+    forces: Vec<String>,
+    fix: &str,
+    evidence_lno: &[usize],
+    evidence: &[String],
+) -> std::io::Result<(bool, String)> {
+    ingest_impl(
+        root,
+        query,
+        terms,
+        text,
+        source,
+        stats,
+        forces,
+        fix,
+        evidence_lno,
+        evidence,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn ingest_impl(
+    root: &str,
+    query: &str,
+    terms: Vec<String>,
+    text: &str,
+    source: Vec<String>,
+    stats: &CaseStats,
+    forces: Vec<String>,
+    fix: &str,
+    evidence_lno: &[usize],
+    evidence: &[String],
+) -> std::io::Result<(bool, String)> {
     store::ensure_root(root)?;
     if text.len() > MAX_CASE_TEXT {
         return Err(std::io::Error::new(
@@ -98,6 +156,12 @@ pub(crate) fn ingest_with_fix(
             ),
         ));
     }
+    if evidence_lno.len() != evidence.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "evidence_lno/evidence length mismatch",
+        ));
+    }
     let fp = fingerprint(query, text);
     if let Some(existing) = find_by_fp(root, &fp)? {
         let mut c = store::read_case(root, &existing)?;
@@ -113,6 +177,8 @@ pub(crate) fn ingest_with_fix(
     let mut c = Case::new(id.clone(), query.to_string(), terms, text.to_string());
     c.fp = fp;
     c.fix = fix.to_string();
+    c.evidence_lno = evidence_lno.to_vec();
+    c.evidence = evidence.to_vec();
     c.source = source;
     c.stats = stats.clone();
     c.forces = forces;
@@ -256,6 +322,77 @@ mod tests {
         assert!(
             err.to_string().contains("case fix too long"),
             "超长 fix 应明确拒绝: {err}"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn ingest_with_evidence_roundtrip_and_legacy_compat() {
+        // P4.4+ 优化⑤：证据行区间 + 原始证据落盘；旧 case（无键）读为空，不 panic。
+        let root = tmp_root("ev");
+        let s1 = CaseStats {
+            kept: 3,
+            total: 200,
+            cut_pct: 94.2,
+            risk: "HIGH".to_string(),
+        };
+        let ev_lno = vec![3usize, 14, 37];
+        let ev = vec![
+            "ERROR db timeout".to_string(),
+            "at Pool.java:214".to_string(),
+            "fix hint".to_string(),
+        ];
+        let added = ingest_with_evidence(
+            &root,
+            "数据库连接超时 conn_id",
+            vec!["conn_id".into()],
+            TEXT,
+            vec!["/x/build.log".into()],
+            &s1,
+            vec![],
+            "enlarge pool",
+            &ev_lno,
+            &ev,
+        )
+        .unwrap();
+        assert!(added.0, "带证据首次摄取应为新增");
+        let ids = store::list_ids(&root).unwrap();
+        let c = store::read_case(&root, &ids[0]).unwrap();
+        assert_eq!(c.evidence_lno, ev_lno, "证据行区间必须落盘");
+        assert_eq!(c.evidence, ev, "原始证据行必须落盘");
+        assert_eq!(c.fix, "enlarge pool", "fix 与 evidence 可同时落盘");
+        // 旧 case 兼容：直接用 store::val_to_case 模拟无键读取（无 evidence 字段）。
+        let legacy = store::val_to_case(
+            &crate::memory::json::parse(
+                "{\"id\":\"x\",\"query\":\"q\",\"terms\":[],\"text\":\"t\",\
+                 \"fp\":\"f\",\"source\":[],\"tags\":[],\"fields\":{},\"stats\":{},\
+                 \"forces\":[],\"feedback\":{\"good\":0,\"bad\":0},\"quality\":0.5}",
+            )
+            .unwrap(),
+        );
+        assert!(
+            legacy.evidence_lno.is_empty(),
+            "旧 case 无 evidence 键应读空"
+        );
+        assert!(legacy.evidence.is_empty(), "旧 case 无 evidence 键应读空");
+        // 长度不匹配拒绝。
+        let err = ingest_with_evidence(
+            &root,
+            "q",
+            vec![],
+            "t",
+            vec![],
+            &s1,
+            vec![],
+            "",
+            &[1usize],
+            &[],
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("evidence_lno/evidence length mismatch"),
+            "证据数组长度不一致应拒绝: {err}"
         );
         let _ = fs::remove_dir_all(&root);
     }

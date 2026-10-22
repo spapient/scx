@@ -43,6 +43,14 @@ pub(crate) fn case_to_val(c: &Case) -> Val {
         ),
         ("text".into(), Val::Str(c.text.clone())),
         ("fix".into(), Val::Str(c.fix.clone())),
+        (
+            "evidence_lno".into(),
+            Val::Arr(c.evidence_lno.iter().map(|n| Val::Num(*n as f64)).collect()),
+        ),
+        (
+            "evidence".into(),
+            Val::Arr(c.evidence.iter().map(|s| Val::Str(s.clone())).collect()),
+        ),
         ("fp".into(), Val::Str(c.fp.clone())),
         (
             "source".into(),
@@ -160,6 +168,14 @@ pub(crate) fn val_to_case(v: &Val) -> Case {
     c.updated_at = get(&obj, "updated_at").map(as_str).unwrap_or_default();
     c.fp = get(&obj, "fp").map(as_str).unwrap_or_default();
     c.fix = get(&obj, "fix").map(as_str).unwrap_or_default(); // 缺键兼容旧 case
+                                                              // P4.4+ 优化⑤：原始证据（缺键兼容旧 case——仅压缩结果快照，语义见 §11 评审④）。
+    c.evidence_lno = get(&obj, "evidence_lno")
+        .map(|v| match v {
+            Val::Arr(items) => items.iter().map(|it| as_num(it) as usize).collect(),
+            _ => Vec::new(),
+        })
+        .unwrap_or_default();
+    c.evidence = get(&obj, "evidence").map(as_str_arr).unwrap_or_default();
     c.source = get(&obj, "source").map(as_str_arr).unwrap_or_default();
     c.tags = get(&obj, "tags").map(as_str_arr).unwrap_or_default();
     c.bucket = get(&obj, "bucket").map(as_str).unwrap_or_default();

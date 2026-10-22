@@ -84,9 +84,44 @@ pub fn store_case_fix(
     ingest::ingest_with_fix(root, query, terms, text, source, stats, forces, fix)
 }
 
+/// P4.4+ 优化⑤：带原始证据的摄取（评审缺口 B——case 四要素：query + 证据行区间 +
+/// 原始证据 + 修复结论）。`evidence_lno`/`evidence` 由调用方从压缩结果 kept_lno +
+/// 输入提取；旧 case/无证据调用等价 store_case_fix。
+#[allow(clippy::too_many_arguments)]
+pub fn store_case_full(
+    root: &str,
+    query: &str,
+    text: &str,
+    source: Vec<String>,
+    stats: &store::CaseStats,
+    forces: Vec<String>,
+    fix: &str,
+    evidence_lno: &[usize],
+    evidence: &[String],
+) -> std::io::Result<(bool, String)> {
+    let terms = crate::terms::build_terms(query);
+    ingest::ingest_with_evidence(
+        root,
+        query,
+        terms,
+        text,
+        source,
+        stats,
+        forces,
+        fix,
+        evidence_lno,
+        evidence,
+    )
+}
+
 /// 读取 case 的修复结论（空串 = 未记录；缺 case 返回 Err）。
 pub fn case_fix(root: &str, id: &str) -> std::io::Result<String> {
     store::read_case(root, id).map(|c| c.fix)
+}
+
+/// 门面：读取完整 case（P4.4+ 优化⑤：原始证据回放——evidence_lno/evidence 字段）。
+pub fn read_case(root: &str, id: &str) -> std::io::Result<model::Case> {
+    store::read_case(root, id)
 }
 
 /// 门面：按 query 召回 top-k case（会话缓存 → qmap 直达 → BM25+字段加权+衰减+桶过滤）。

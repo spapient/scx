@@ -219,6 +219,12 @@ fn main() {
             cut_pct: o.cut_pct,
             risk: o.risk.to_string(),
         };
+        // P4.4+ 优化⑤：证据行区间 + 原始证据（评审缺口 B）——按 kept_lno 从输入提取
+        // 保留行原文（与 compress 内部同一归一化口径：\r\n→\n、末行空行剔除）。
+        // failopen/passthrough 的 kept_lno 为空 → evidence 为空（全文仅存 text 快照，
+        // 低信号记忆语义不变）。
+        let evidence_lno = o.kept_lno.clone();
+        let evidence = extract_evidence(&text, &evidence_lno);
         if opts.recall > 0 {
             store(
                 &opts.mem_dir,
@@ -228,6 +234,8 @@ fn main() {
                 &stats,
                 &opts.forces,
                 &opts.fix,
+                &evidence_lno,
+                &evidence,
             );
         } else {
             let (tx, rx) = mpsc::channel();
@@ -237,13 +245,21 @@ fn main() {
             let files = opts.files.clone();
             let forces = opts.forces.clone();
             let fix = opts.fix.clone();
+            let ev_lno = evidence_lno.clone();
+            let ev = evidence.clone();
             std::thread::spawn(move || {
                 // P4.4+ 优化：--fix 非空走带修复结论的摄取（L1 本地直答）。
-                let r = if fix.is_empty() {
-                    scx::memory::store_case(&mem_dir, &query, &text, files, &stats, forces)
+                let r = if ev_lno.is_empty() {
+                    if fix.is_empty() {
+                        scx::memory::store_case(&mem_dir, &query, &text, files, &stats, forces)
+                    } else {
+                        scx::memory::store_case_fix(
+                            &mem_dir, &query, &text, files, &stats, forces, &fix,
+                        )
+                    }
                 } else {
-                    scx::memory::store_case_fix(
-                        &mem_dir, &query, &text, files, &stats, forces, &fix,
+                    scx::memory::store_case_full(
+                        &mem_dir, &query, &text, files, &stats, forces, &fix, &ev_lno, &ev,
                     )
                 };
                 let _ = tx.send(r);
@@ -302,4 +318,27 @@ fn main() {
             }
         }
     }
+}
+
+/// P4.4+ 优化⑤：按保留行原始行号（1-based）从输入提取证据行原文（评审缺口 B）。
+/// 与 compress 内部同一归一化口径（\r\n→\n、末行空行剔除），保证 evidence 行与
+/// 压缩保留行逐字一致；行号越界（异常输入）跳过该行，不 panic。
+fn extract_evidence(input: &str, lno: &[usize]) -> Vec<String> {
+    if lno.is_empty() {
+        return Vec::new();
+    }
+    let norm = input.replace("\r\n", "\n");
+    let mut lines: Vec<&str> = norm.split('\n').collect();
+    if lines.last().is_some_and(|l| l.is_empty()) {
+        lines.pop();
+    }
+    lno.iter()
+        .map(|&n| {
+            lines
+                .get(n.saturating_sub(1))
+                .copied()
+                .unwrap_or("")
+                .to_string()
+        })
+        .collect()
 }

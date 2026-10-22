@@ -65,10 +65,12 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
               risk: &'static str,
               guarded: u8,
               regions: usize,
+              kept_lno: Vec<usize>,
               mode: &'static str|
      -> Outcome {
         Outcome {
             text: text_owned,
+            kept_lno,
             kept,
             total,
             chars_in: chars_a,
@@ -98,6 +100,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             "LOW",
             0,
             0,
+            Vec::new(),
             "passthrough:small",
         );
     }
@@ -112,6 +115,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             "LOW",
             0,
             0,
+            Vec::new(),
             "passthrough:longline",
         );
     }
@@ -240,6 +244,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             "LOW",
             0,
             0,
+            Vec::new(),
             "failopen:zero-signal",
         );
     }
@@ -414,12 +419,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             risk,
             0,
             region_count,
+            Vec::new(),
             "passthrough:no-kept",
         );
     }
 
-    // 输出：零克隆直装；省略区间以单行 "..." 标记。
+    // 输出：零克隆直装；省略区间以单行 "..." 标记。保留行原始行号同步收集（i+1）。
     let mut out_text = String::with_capacity(original.len());
+    let mut kept_lno = Vec::with_capacity(keep_count);
     let mut in_gap = false;
     for i in 0..total {
         if keep[i] {
@@ -432,6 +439,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             }
             out_text.push_str(lines[i]);
             out_text.push('\n');
+            kept_lno.push(i + 1);
         } else {
             in_gap = true;
         }
@@ -459,6 +467,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         risk,
         guarded,
         region_count,
+        kept_lno,
         "sieve",
     )
 }
