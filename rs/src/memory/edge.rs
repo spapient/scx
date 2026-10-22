@@ -91,6 +91,7 @@ fn cached_build(root: &str) -> std::io::Result<Arc<EdgeIndex>> {
 pub(crate) struct BridgeCase {
     pub id: String,
     pub terms: Vec<String>,
+    pub query_terms: Vec<String>,
     pub fields: store::Fields,
     pub status: String,
     pub quality: f64,
@@ -130,7 +131,8 @@ pub(crate) fn bridge_cases(
             continue;
         }
         let c = store::read_case(root, &id)?;
-        let mut terms = crate::terms::build_mem_terms(&c.query);
+        let query_terms = crate::terms::build_mem_terms(&c.query);
+        let mut terms = query_terms.clone();
         terms.extend(crate::terms::build_mem_terms(&c.text));
         terms.sort();
         terms.dedup();
@@ -147,6 +149,7 @@ pub(crate) fn bridge_cases(
         out.push(BridgeCase {
             id,
             terms,
+            query_terms,
             fields: c.fields,
             status: c.status,
             quality: c.quality,
@@ -239,6 +242,8 @@ mod tests {
         );
         // 关桥（edge_enable=0）：B 被桶过滤，不再出现在结果里。
         crate::memory::meta::set_param(&root, "edge_enable", 0.0).unwrap();
+        // 隔离本测试：关闭低置信桶回退，确保 B 只能被实体边召回。
+        crate::memory::meta::set_param(&root, "bucket_bypass_sim", 0.0).unwrap();
         let q_off = "数据库连接池 timeout at Pool.java:214 pool";
         let hits2 = recall(&root, q_off, 3).unwrap();
         assert!(

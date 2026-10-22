@@ -201,9 +201,11 @@ fn ingest_impl(
     c.forces = forces;
     // O1：摄取即抽取，判别字段写入 case（召回时字段加权直接用，无需重扫）。
     c.fields = crate::memory::field::extract(text);
-    // O6：摄取即分桶（error_code 家族哈希），检索时按候选桶过滤扫描。
+    // O6：摄取即分桶；先用 case query 判家族，query 无证据再回退正文，
+    // 避免根因里的宽域词把 query 已明确的场景带偏。
     let fvec = c.fields.error_code.clone();
-    c.bucket = crate::memory::bucket::bucket_of(&fvec, &c.terms, text);
+    let qterms = crate::terms::build_mem_terms(&c.query);
+    c.bucket = crate::memory::bucket::bucket_of_query(&fvec, &qterms, text);
     store::write_case(root, &c)?;
     store::bump_case_count(root)?;
     Ok((true, id))

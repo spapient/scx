@@ -86,9 +86,22 @@ pub(crate) fn expand(
             cand.push((t.clone(), idf));
         }
     }
-    cand.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    // 确定性全序：idf 降序，idf 相等时按词面升序。`batch` 是 HashMap，迭代序随进程
+    // 随机；仅按 idf 排序时并列词会继承随机序，truncate(EXPAND_MAX) 因而跨进程选出
+    // 不同的扩展词集合，导致 PRF 第二轮命中数/排序不可重放（实测同一 query 跨进程
+    // 候选数在 6..10 抖动）。补词面次级键使排序唯一。
+    sort_expansion_candidates(&mut cand);
     cand.truncate(EXPAND_MAX);
     Ok(cand.into_iter().map(|(t, _)| t).collect())
+}
+
+/// 扩展候选排序：idf 降序、idf 相同按词面升序（确定、可重放）。
+fn sort_expansion_candidates(cand: &mut [(String, f64)]) {
+    cand.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
 }
 
 #[cfg(test)]
@@ -116,6 +129,20 @@ mod tests {
             cut_pct: 95.0,
             risk: "HIGH".to_string(),
         }
+    }
+
+    #[test]
+    fn expansion_sort_ties_break_by_term_asc() {
+        // idf 并列时词面升序：跨进程可重放（HashMap 迭代序不得影响截断结果）。
+        let mut cand = vec![
+            ("zz".to_string(), 1.0),
+            ("aa".to_string(), 1.0),
+            ("mm".to_string(), 2.0),
+            ("bb".to_string(), 1.0),
+        ];
+        sort_expansion_candidates(&mut cand);
+        let terms: Vec<&str> = cand.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(terms, vec!["mm", "aa", "bb", "zz"]);
     }
 
     #[test]

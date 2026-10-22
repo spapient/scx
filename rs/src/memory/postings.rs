@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 pub(crate) const POST_MAGIC: u32 = 0x5453_4f50; // "POST"
-pub(crate) const POST_VER: u16 = 2;
+pub(crate) const POST_VER: u16 = 3;
 
 pub(crate) fn postings_path(root: &str) -> PathBuf {
     Path::new(root).join("index").join("postings.bin")

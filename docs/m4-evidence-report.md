@@ -2,7 +2,18 @@
 
 日期：2026-10-23（初版 2026-10-22）
 库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨ + real-eval 机械门
-状态：**机械门 PASS（40 组/三层达标，fei/hao 双人裁决 kappa=0.698，20 处分歧已仲裁 → `baseline-final.json` rel 2=41/1=11/0=64，exit 0）。A/B 主指标仍持平（三层 A=B，无质量优势）；NDCG（报告项）A≥B。语料仍是合成样例，真实历史事故语料未闭环。**
+状态：**本文主体是早期 40 组合成回归集及评估口径演进记录，用于证明工具链可重放。v1 与 v2 均未在各自确认口径下建立 MRR 优势；2026-10-23 的 confirm5 预注册独立确认已建立 hard 层优势（n=69，ΔMRR=+0.0669，CI [0.0238, 0.1176]，p=0.0020，gate exit 0）。完整证据见 `docs/m4-confirm5-report.md`。该结论是机械目标标签下的目标排序优势，仍不等于 M4 人工弱相关负例闭环。**
+
+## 0. 最新状态（2026-10-23）
+
+- v1/v2 的历史结论保持不变：这两套语料没有建立 hard 层 MRR 优势。
+- confirm4 首跑失败，暴露“低置信查询被场景桶硬筛”的召回缺陷；修复为
+  `bucket_bypass_sim=0.30` 低置信桶回退。
+- confirm5 为修复后新建的 30 起事故独立确认集；单次运行 gate PASS、exit 0。
+- 预注册主判定：hard 层 n=69，A MRR 0.3425、B MRR 0.2757，
+  **Δ=+0.0669，95% CI [0.0238, 0.1176]，permutation p=0.0020**。
+- 因此“A 在 hard 层优于 B”在 confirm5 口径下成立；限制与完整哈希见
+  `docs/m4-confirm5-report.md`。
 
 ## 1. 结论先行
 
@@ -224,12 +235,13 @@ exit 0。裁决文件为 `eval-real/baseline.json`；非 literal 26 条均有
   脱敏记录或线上分布抽样说明；它不是已证实的独立历史语料。
 - 只有一名裁决人 `fei`，没有第二人复核/仲裁记录。
 
-### 11.3 结论
+### 11.3 结论（confirm5 之前的时点）
 
-**机械门通过；M4 的质量优势未通过。** 当前可以引用“40 组、三层各 ≥10、
+**机械门通过；在该时点 M4 的质量优势未通过。** 当时可以引用“40 组、三层各 ≥10、
 人工裁决元数据完整、`--gate` PASS、A 不劣于 B”；不得引用“A 优于 B”、
-“显著提升”或“M4 独立质量证据完全闭环”。要闭环后者，仍需真实来源语料、
-弱相关/负例、双人复核与可区分的 A/B 结果。
+“显著提升”或“M4 独立质量证据完全闭环”。后续 confirm4/confirm5 已补上
+30 起公开事故的独立确认（见 §0 与 `docs/m4-confirm5-report.md`），但
+弱相关/负例与双人人工复核仍不在这套机械目标基准的范围内。
 
 2026-10-23 后续合成诊断（§12）在截断 paraphrase 与 10 条多相关 query 上
 测出 A 领先，但标签由已知目标/主题规则生成，不能替代上述独立人工证据。
@@ -379,8 +391,8 @@ expired` vs `tls handshake cert expired`，fei=0、hao=2）。仲裁前任何 A/
 最终口径：三层主指标（literal/paraphrase r@5、semantic r@10、MRR）仍 A=B，
 `discrimination A!=B layers=0/3`；NDCG@10（仅报告、不过门）在最终标注下 A≥B
 （paraphrase 0.992 vs 0.976、semantic 1.000 vs 0.945、literal 1.000 vs 1.000），
-样本量小、CI 重叠，不构成显著优势结论。M4 的结论仍是“机械门 PASS；A 不劣于 B，
-质量优势未成立”；真实历史事故语料未闭环。
+样本量小、CI 重叠，不构成显著优势结论。该 40 组真实感语料本身的结论仍是
+“机械门 PASS；A 不劣于 B，质量优势未成立”；真实历史事故语料当时未闭环。
 
 **仍缺的两项输入只能由人提供，AI 不代劳：**
 
@@ -390,4 +402,48 @@ expired` vs `tls handshake cert expired`，fei=0、hao=2）。仲裁前任何 A/
 2. **第二裁决人**：`judge.by` 必须是真人姓名；`judge-audit.ps1` 的包可以
    交给第二人独立填写，再跑 `judge-agreement.ps1`。AI 填的 rel 不算“独立人工证据”。
 
-在两项输入补齐前，M4 结论只能是“机械门 PASS；质量优势未成立”。
+在该 40 组语料上，两项输入补齐前只能写“机械门 PASS；质量优势未成立”。
+后续 confirm5 已用 30 起公开事故补齐独立目标排序确认（见 §0 与
+`docs/m4-confirm5-report.md`），但人工弱相关/负例证据仍应单独评估。
+
+## 14. v2 判别基准补齐（2026-10-23，AI 辅助，非人工）
+
+为把 v2 从“机器草案”推进到可审计的完整标签集，新增
+`eval-real/fill-codex-weak-review.ps1`：对 312 行“同桶跨事故”边界按
+**具体故障机制**裁决，同机制标 `rel=1`，只有粗桶相同但机制不同标 `rel=0`；
+target 与同来源兄弟仍为 `rel=2`，异桶为 `rel=0`。判定表共 109 个
+target incident→candidate incident 对，逐行理由在
+`eval-real/v2-weak-pair-decisions.csv`。
+
+产物与门禁（E1）：
+
+```text
+eval-real/v2-baseline-codex.json  judge.by=codex-ai-2026-10-23
+rel distribution 2=432 1=192 0=197
+literal    A r@5=1.000 mrr=1.000 ndcg@10=0.983 | B r@5=1.000 mrr=1.000 ndcg@10=0.963
+paraphrase A r@5=0.867 mrr=0.558 ndcg@10=0.898 | B r@5=0.867 mrr=0.550 ndcg@10=0.867
+semantic   A r@10=1.000 mrr=0.484 ndcg@10=0.952 | B r@10=1.000 mrr=0.484 ndcg@10=0.933
+discrimination A!=B layers=1/3
+gate: PASS  exit=0
+```
+
+显著性复算不变：paraphrase ΔMRR=+0.0083，CI [-0.0028, 0.0222]，p=0.288；
+hard Δ=+0.0100，CI [-0.0025, 0.0254]，p=0.212；全部 `advantage=False`。
+宽松草案（同桶一律 1）与严格 AI 标签的 MRR、A/B 排序差异相同，只有 NDCG
+随负例增加而变化（详见 `docs/m4-v2-benchmark.md` §5.3）。
+
+**人工闭环结果（2026-10-23）**：fei/hao 两份审核文件均为 `312/312
+human-reviewed`，`reviewed_by=fei|hao`，没有未审核行。两人都把 312 条
+同桶跨事故标为 `1`；一致性 `common=821 raw=1.000 kappa=1.000`，0 处分歧，
+仲裁日志只有表头。最终 `eval-real/v2-baseline-arb.json`（`judge.by=fei+hao`）
+分布为 `2=432 / 1=312 / 0=77`，`--gate` PASS，exit 0。
+
+人工基准的主指标与草案完全相同：paraphrase MRR 0.558 vs 0.550
+（Δ=+0.0083，CI [-0.0028, 0.0222]，p=0.288），hard Δ=+0.0100
+（CI [-0.0025, 0.0254]，p=0.212），全部 `advantage=False`；
+`discrimination A!=B layers=1/3`。因此可以写“双人人工闭环完成、
+机械门 PASS、A 不劣于 B”；**这张 v2 语料本身仍不能写“A 优于 B”**。
+confirm5 的独立机械目标确认是另一套语料与另一项结论（见 §0），不能倒灌成
+v2 的优势证据。
+再者，312 条弱边界全部为 1，说明本轮人工标签没有提供弱相关负例区分度，
+后续若要做优势证明，应补充真正包含 0 的 near-miss/负例集。

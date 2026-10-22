@@ -306,7 +306,7 @@ pub(crate) fn set_param(root: &str, key: &str, val: f64) -> std::io::Result<()> 
 
 fn meta_toml(case_count: usize) -> String {
     format!(
-        "schema = {SCHEMA}\nembed_engine = \"{ENG_VER}\"\ncreated_at = \"{}\"\ncase_count = {case_count}\ngen = 0\n\n[params]\nbm25_k1 = 1.2\nbm25_b = 0.75\nfield_weight_error_code = 3.0\nfield_weight_file_loc = 2.5\nfield_weight_symbol = 2.0\nfield_weight_num_fp = 2.0\ndecay_tau_days = 90\ndecay_tau_solved = 180\ndecay_tau_regressed = 30\nmmr_lambda = 0.5\nfeedback_step = 0.1\ncache_sim_threshold = 0.85\nl1_base = 0.55\nl1_margin_min = 0.15\nquality_prior = 0.5\ngc_ttl_regressed = 180\ngc_ttl_stale = 365\nedge_enable = 1\nedge_weight = 1.0\n",
+        "schema = {SCHEMA}\nembed_engine = \"{ENG_VER}\"\ncreated_at = \"{}\"\ncase_count = {case_count}\ngen = 0\n\n[params]\nbm25_k1 = 1.2\nbm25_b = 0.75\nfield_weight_error_code = 3.0\nfield_weight_file_loc = 2.5\nfield_weight_symbol = 2.0\nfield_weight_num_fp = 2.0\ndecay_tau_days = 90\ndecay_tau_solved = 180\ndecay_tau_regressed = 30\nmmr_lambda = 0.5\nmmr_enable = 0\nbucket_allow_other = 1\nbucket_bypass_sim = 0.30\nfeedback_step = 0.1\ncache_sim_threshold = 0.85\nl1_base = 0.55\nl1_margin_min = 0.15\nquality_prior = 0.5\ngc_ttl_regressed = 180\ngc_ttl_stale = 365\nedge_enable = 1\nedge_weight = 1.0\nquery_field_weight = 1.0\nquery_field_trigger_sim = 0.30\nsynonyms_enable = 1\nsynonym_weight = 0.5\n",
         utc_now()
     )
 }
@@ -338,6 +338,24 @@ mod tests {
                 .iter()
                 .any(|(k, v)| k == "bm25_k1" && (*v - 1.2).abs() < 1e-9),
             "默认参数应含 bm25_k1=1.2"
+        );
+        assert!(
+            m.params
+                .iter()
+                .any(|(k, v)| k == "query_field_weight" && (*v - 1.0).abs() < 1e-9),
+            "新库默认必须启用 query-field 重排"
+        );
+        assert!(
+            m.params
+                .iter()
+                .any(|(k, v)| k == "synonym_weight" && (*v - 0.5).abs() < 1e-9),
+            "新库默认同义扩展必须降权"
+        );
+        assert!(
+            m.params
+                .iter()
+                .any(|(k, v)| k == "bucket_bypass_sim" && (*v - 0.30).abs() < 1e-9),
+            "新库默认低置信时必须绕过场景桶硬筛"
         );
         let _ = fs::remove_dir_all(&root);
     }

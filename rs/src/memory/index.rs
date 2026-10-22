@@ -8,6 +8,8 @@
 //!   doc 表（case id 字典序）：
 //!     [idlen u8][id]
 //!     [nterms u32][(tlen u8)(term)]*nterms
+//!     [nqterms u32][(tlen u8)(term)]*nqterms
+//!     [nbuckets u32][(blen u8)(bucket)]*nbuckets
 //!     [n_fp u32][(vlen u8)(value)]*n_fp   × 4 字段（error_code/file_loc/symbol/num_fp）
 //!     [slen u8][status][quality f32][ulen u8][updated_at]
 //!   term 表（term 字典序）：[tlen u16][term][df u32][delta-varint doc_idx 序列]
@@ -43,6 +45,10 @@ pub(crate) const INDEX_MIN_DOCS: usize = 10_000;
 #[derive(Debug, Clone)]
 pub(crate) struct DocRec {
     pub terms: Vec<String>,
+    /// 原始 case query 词表（query-field 重排特征；与 terms 的 query∪text 不同）。
+    pub query_terms: Vec<String>,
+    /// 多标签场景桶（query/正文任一命中）；过滤用交集，stats 仍用主 bucket。
+    pub buckets: Vec<String>,
     pub bucket: String,
     pub fields: crate::memory::store::Fields,
     pub status: String,
@@ -112,15 +118,19 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
     let mut total_len = 0usize;
     for id in &ids {
         let c = store::read_case(root, id)?;
-        let mut terms = build_mem_terms(&c.query);
+        let query_terms = build_mem_terms(&c.query);
+        let mut terms = query_terms.clone();
         terms.extend(build_mem_terms(&c.text));
         terms.sort();
         terms.dedup();
         total_len += terms.len();
+        let buckets = crate::memory::bucket::case_buckets(&[], &query_terms, &c.text);
         docs.push((
             id.clone(),
             DocRec {
                 terms,
+                query_terms,
+                buckets,
                 bucket: c.bucket,
                 fields: c.fields,
                 status: c.status,
@@ -147,6 +157,16 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
         for t in &rec.terms {
             body.push(t.len() as u8);
             body.extend_from_slice(t.as_bytes());
+        }
+        body.extend_from_slice(&(rec.query_terms.len() as u32).to_le_bytes());
+        for t in &rec.query_terms {
+            body.push(t.len() as u8);
+            body.extend_from_slice(t.as_bytes());
+        }
+        body.extend_from_slice(&(rec.buckets.len() as u32).to_le_bytes());
+        for b in &rec.buckets {
+            body.push(b.len() as u8);
+            body.extend_from_slice(b.as_bytes());
         }
         for f in [
             &rec.fields.error_code,
@@ -295,6 +315,22 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         for _ in 0..nterms {
             terms.push(take_str(&mut i, body)?);
         }
+        let nqterms = take_u32(&mut i).ok_or_else(|| corrupt("no doc nqterms"))? as usize;
+        if nqterms > body.len() {
+            return Err(corrupt("doc nqterms exceeds body"));
+        }
+        let mut query_terms = Vec::with_capacity(nqterms);
+        for _ in 0..nqterms {
+            query_terms.push(take_str(&mut i, body)?);
+        }
+        let nbuckets = take_u32(&mut i).ok_or_else(|| corrupt("no doc nbuckets"))? as usize;
+        if nbuckets > body.len() {
+            return Err(corrupt("doc nbuckets exceeds body"));
+        }
+        let mut buckets = Vec::with_capacity(nbuckets);
+        for _ in 0..nbuckets {
+            buckets.push(take_str(&mut i, body)?);
+        }
         let take_vec = |i: &mut usize, body: &[u8]| -> std::io::Result<Vec<String>> {
             let n = take_u32(i).ok_or_else(|| corrupt("no field n"))? as usize;
             if n > body.len() {
@@ -323,6 +359,8 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         ids.push(id);
         docs.push(DocRec {
             terms,
+            query_terms,
+            buckets,
             bucket,
             fields,
             status,
@@ -475,6 +513,14 @@ mod tests {
         assert_eq!(idx.n_docs, 3);
         assert_eq!(idx.ids.len(), 3);
         assert!(idx.ids.windows(2).all(|w| w[0] < w[1]), "id 字典序");
+        assert!(
+            idx.docs.iter().all(|d| !d.query_terms.is_empty()),
+            "索引必须携带 case-query 词表，倒排路径才能执行 query-field 重排"
+        );
+        assert!(
+            idx.docs.iter().all(|d| !d.buckets.is_empty()),
+            "索引必须携带多标签桶"
+        );
         // df 语义：df=posting 长度，且 posting 严格递增（确定性）。
         for (df, post) in idx.dict.values() {
             assert_eq!(*df, post.len());
