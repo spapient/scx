@@ -86,9 +86,20 @@ pub(crate) fn store(
             fix,
         )
     };
-    if let Err(e) = r {
-        eprintln!("scx: memory store failed: {}", e);
-        std::process::exit(2);
+    match r {
+        Ok((added, id)) => {
+            // P4.4+ 优化③：存储结果报告（stderr 旁路，不碰正文）——用户拿到完整
+            // case id 可直接 --rate/--delete 闭环；added=false 为指纹去重（刷新时间戳）。
+            eprintln!(
+                "scx: stored case={} added={}",
+                id,
+                if added { "yes" } else { "dedup" }
+            );
+        }
+        Err(e) => {
+            eprintln!("scx: memory store failed: {}", e);
+            std::process::exit(2);
+        }
     }
 }
 

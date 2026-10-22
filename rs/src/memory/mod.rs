@@ -57,7 +57,7 @@ impl Memory {
 
 /// 门面：摄取一个压缩结果（query + 证据块）→ 记忆 case。
 /// terms 由门面内部从 query 生成（与压缩路径同一词表，保证确定性）。
-/// 返回 true=新增，false=指纹去重（仅刷新 updated_at）。
+/// 返回 `(added, case_id)`（P4.4+ 优化③：id 供 CLI 报告 stored: 行）。
 pub fn store_case(
     root: &str,
     query: &str,
@@ -65,7 +65,7 @@ pub fn store_case(
     source: Vec<String>,
     stats: &store::CaseStats,
     forces: Vec<String>,
-) -> std::io::Result<bool> {
+) -> std::io::Result<(bool, String)> {
     let terms = crate::terms::build_terms(query);
     ingest::ingest(root, query, terms, text, source, stats, forces)
 }
@@ -79,7 +79,7 @@ pub fn store_case_fix(
     stats: &store::CaseStats,
     forces: Vec<String>,
     fix: &str,
-) -> std::io::Result<bool> {
+) -> std::io::Result<(bool, String)> {
     let terms = crate::terms::build_terms(query);
     ingest::ingest_with_fix(root, query, terms, text, source, stats, forces, fix)
 }

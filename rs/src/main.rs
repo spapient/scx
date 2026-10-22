@@ -197,8 +197,16 @@ fn main() {
     // P3.4 写后台化：--store 时摄取入队后台线程（std::thread + mpsc，零依赖），
     // 正文先回显、进程退出前 join 落盘确认；与 --recall 组合时保持同步
     // （recall 需看到新 case，顺序依赖）。
-    let mut store_rx: Option<mpsc::Receiver<std::io::Result<()>>> = None;
+    let mut store_rx: Option<mpsc::Receiver<std::io::Result<(bool, String)>>> = None;
     if opts.store {
+        // P4.4+ 优化③：query 零命中（failopen）时压缩结果=全文，store 会持久化
+        // 低信号记忆——stderr 警告（不拒绝：用户可能刻意沉淀原文作底料）。
+        if o.mode.starts_with("failopen") {
+            eprintln!(
+                "scx: note: query had no hits; --store will persist the full input \
+(low-signal memory). inspect with --recall-only first"
+            );
+        }
         let stats = CaseStats {
             kept: o.kept,
             total: o.total,
@@ -232,7 +240,7 @@ fn main() {
                         &mem_dir, &query, &text, files, &stats, forces, &fix,
                     )
                 };
-                let _ = tx.send(r.map(|_| ()));
+                let _ = tx.send(r);
             });
             store_rx = Some(rx);
         }
@@ -268,9 +276,16 @@ fn main() {
         json_line(&o);
     }
     // 后台摄取落盘确认（失败不阻塞正文/统计输出，进程退出前报错退出）。
+    // P4.4+ 优化③：成功时 stderr 报告 stored 行（完整 case id，可立即 --rate/--delete）。
     if let Some(rx) = store_rx {
         match rx.recv() {
-            Ok(Ok(())) => {}
+            Ok(Ok((added, id))) => {
+                eprintln!(
+                    "scx: stored case={} added={}",
+                    id,
+                    if added { "yes" } else { "dedup" }
+                );
+            }
             Ok(Err(e)) => {
                 eprintln!("scx: memory store failed: {}", e);
                 std::process::exit(2);

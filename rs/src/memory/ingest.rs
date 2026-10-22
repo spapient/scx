@@ -45,7 +45,8 @@ pub(crate) fn find_by_fp(root: &str, fp: &str) -> std::io::Result<Option<String>
     Ok(None)
 }
 
-/// 摄取一个 case。返回 true 表示新增，false 表示命中去重（仅刷新 updated_at）。
+/// 摄取一个 case。返回 `(added, case_id)`：added=true 表示新增，false 表示命中去重
+/// （仅刷新 updated_at）；case_id 始终为本次涉及的 case id（新增或既有）。
 ///
 /// `terms`/`stats`/`forces` 由调用方（CLI 或后续记忆管道）从压缩结果提取；
 /// 本函数负责 id 生成、指纹去重、写盘与 meta 维护。
@@ -58,7 +59,7 @@ pub(crate) fn ingest(
     source: Vec<String>,
     stats: &CaseStats,
     forces: Vec<String>,
-) -> std::io::Result<bool> {
+) -> std::io::Result<(bool, String)> {
     ingest_with_fix(root, query, terms, text, source, stats, forces, "")
 }
 
@@ -75,7 +76,7 @@ pub(crate) fn ingest_with_fix(
     stats: &CaseStats,
     forces: Vec<String>,
     fix: &str,
-) -> std::io::Result<bool> {
+) -> std::io::Result<(bool, String)> {
     store::ensure_root(root)?;
     if text.len() > MAX_CASE_TEXT {
         return Err(std::io::Error::new(
@@ -105,7 +106,7 @@ pub(crate) fn ingest_with_fix(
         // 反馈/状态等历史字段保留，仅刷新元数据；fix 不覆盖既有结论
         //（同指纹再摄取视为重复，保留首条记录的修复动作）。
         store::write_case(root, &c)?;
-        return Ok(false);
+        return Ok((false, existing));
     }
     let now = store::utc_now();
     let id = store::case_id(&now, query, text);
@@ -122,7 +123,7 @@ pub(crate) fn ingest_with_fix(
     c.bucket = crate::memory::bucket::bucket_of(&fvec, &c.terms, text);
     store::write_case(root, &c)?;
     store::bump_case_count(root)?;
-    Ok(true)
+    Ok((true, id))
 }
 
 /// 按 id 删除一个 case（tombstone 化前的简单物理删除，P3 换惰性标记）。
@@ -177,7 +178,7 @@ mod tests {
             vec![],
         )
         .unwrap();
-        assert!(a, "首次摄取应为新增");
+        assert!(a.0, "首次摄取应为新增");
         let b = ingest(
             &root,
             "数据库连接超时 conn_id",
@@ -188,7 +189,11 @@ mod tests {
             vec![],
         )
         .unwrap();
-        assert!(!b, "同指纹重复摄取应去重，不新增");
+        assert!(!b.0, "同指纹重复摄取应去重，不新增");
+        assert!(
+            store::list_ids(&root).unwrap().contains(&b.1),
+            "去重也应返回既有 case id"
+        );
         assert_eq!(
             store::list_ids(&root).unwrap().len(),
             1,
@@ -211,7 +216,7 @@ mod tests {
             vec![],
         )
         .unwrap();
-        assert!(c, "证据块变体应新增");
+        assert!(c.0, "证据块变体应新增");
         assert_eq!(store::list_ids(&root).unwrap().len(), 2);
         let _ = fs::remove_dir_all(&root);
     }
@@ -237,7 +242,7 @@ mod tests {
             "enlarge pool to 64 conns, restart daemon",
         )
         .unwrap();
-        assert!(added, "带 fix 首次摄取应为新增");
+        assert!(added.0, "带 fix 首次摄取应为新增");
         let ids = store::list_ids(&root).unwrap();
         let c = store::read_case(&root, &ids[0]).unwrap();
         assert_eq!(
