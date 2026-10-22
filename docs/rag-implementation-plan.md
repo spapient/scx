@@ -404,4 +404,34 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 **门禁终态**：80 库 + 8 CLI + 4 集成 + golden 29 例全绿；fmt/clippy 0；release ✓。
 **服务目标**：M4 证据门自动产出 30–50 组（16 case × 3 层 = 48 组），每条带证据链可审计；`--seed` 变化生成不同变体池，多 seed 融合可扩充。人工标注流程（docs/eval-baseline-template.md）保留作复核/抽样。
 
+## 20. P4.4+ 优化⑦实施记录（召回一致性修复 + M4 正式结论，2026-10-22，已提交）
+
+**背景**：正式 M4 评估（优化⑥ 标注器 + --eval-verbose）暴露 A 管线劣于朴素 B 的 3 个真实缺陷——
+①桶硬截断 + PRF 扩展词带偏桶判定（真目标被滤出候选集）；②PRF 扩展词统计含词面无关 case 的私有词；
+③PRF 覆盖首轮结果（实体边桥入候选被降级）。另暴露标注器 2 个工程缺陷（CJK 切片 panic、semantic 自检误杀）与 1 个规模缺口（max_cases 不可调）。
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| 桶一致性 | `recall()` 对原始 query 判候选桶一次；`score_pass` 接收 `cand/use_buckets` 参数；PRF 第二轮继承同桶——扩展词不再改变过滤语义 | 端到端：case `command not found kubectl`（other 桶）A 目标回归 top-1（修复前被 network 桶误滤）；golden memory_eval/memory_eval_verbose 重冻 |
+| PRF 相关度门槛 | `prf::expand(root, hits, ...)` 改收 `&[RecallHit]`，仅统计 sim>0（词面相关）的 case——无关 case 私有词（bash/deploy 等）不再入扩展表 | prf 单测改签名适配；端到端 case `tls handshake 超时` A 目标回归（修复前扩展词带出 build 桶） |
+| PRF 补漏不覆盖 | 扩展轮候选并入首轮（去重）按 score 重排截断——首轮命中（含实体边桥入、字段加权命中）永不降级 | edge 单测 `edge_bridge_recovers_cross_bucket_sibling` 修复前失败、修复后绿（桥入 B 保持 top-3） |
+| 标注分层放行 | `self_check(root, q, c, k)` 加 k 参数：literal/paraphrase top-5、semantic（弱相关 rel=1）top-10 | annotate 单测沿用；端到端 semantic 放行 16→3（24 case 库，无根因行/error_code 的 case 不造语义变体=诚实边界） |
+| eval 弱相关口径 | `metric` 返回 (r5, r10, mrr, ndcg)；聚合 [f64;9]；报告行 semantic 层显示 r@10 | eval 单测 `metric_recall_mrr_ndcg` 更新 4 元组；golden memory_eval 重冻（semantic 行 r@10） |
+| CJK 切片安全 | `replace_ci` 边界检查改 `s[..pos].chars().next_back()`（pos 是 char 边界，防中文 query 字节切片 panic） | 新增单测 `replace_ci_safe_on_cjk_boundary`（"数据库连接池耗尽 pool" 替换"连接池"不 panic） |
+| 标注规模可调 | CLI `--annotate-max N`（缺省 16，0=全库；annotate 内部 0→ids.len） | 24 case 库 `--annotate-max 0` 产 36 组落 30–50 窗口 |
+
+**M4 正式结论（36 组，24 case 库）**：
+| 层 | n | A | B | 判定 |
+|---|---|---|---|---|
+| literal | 24 | r@5=1.000 mrr=0.972 ndcg@10=0.979 | r@5=1.000 mrr=1.000 ndcg@10=1.000 | A=B（r@5） |
+| paraphrase | 9 | r@5=0.889 mrr=0.796 ndcg@10=0.846 | r@5=0.889 mrr=0.759 ndcg@10=0.792 | **A>B** |
+| semantic | 3 | r@10=1.000 | r@10=1.000 | A=B |
+| l1 | — | hits=30/33 rate=0.909 | — | 学习闭环可用 |
+
+证据案例：case `storage空间不足` A rank2 命中 / B 完全漏召（PRF 桥接 storage→disk）——统计管线超朴素基线的直接证据；
+case `连接pool最小空闲不足` A rank6 / B rank3——中英混排且 SYN 无桥的边界（后续项：词典/词干/子词）。
+
+**门禁终态**：81 库 + 8 CLI + 4 集成 + golden 29 例全绿；fmt/clippy 0；release ✓。
+**报告**：docs/m4-evidence-report.md（含复现命令链）。
+
 
