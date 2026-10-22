@@ -227,10 +227,18 @@ fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String
         }
     }
     let mut out = Vec::with_capacity(layers.len() + 2);
+    // P4.4+ 优化⑬（P1-5）：报告 NDCG 判别强度——multi-rel 条目（expected>1 或 rel 多值）
+    // 使 NDCG 非二值；single-rel 条目 NDCG 接近二值（单相关时评估严格性有限）。
+    let multi_rel = cases
+        .iter()
+        .filter(|c| c.expected.len() > 1 || c.rel.values().any(|r| *r > 0.0 && *r < 2.0))
+        .count();
     out.push(format!(
-        "eval: cases={} layers={}",
+        "eval: cases={} layers={} multi-rel={} single-rel={} (NDCG strength)",
         cases.len(),
-        layers.join(",")
+        layers.join(","),
+        multi_rel,
+        cases.len().saturating_sub(multi_rel)
     ));
     for l in &layers {
         let e = agg.get(l).unwrap_or(&[0.0; 9]);

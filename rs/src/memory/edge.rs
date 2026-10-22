@@ -8,10 +8,16 @@
 //! 2) 实体加权：共享实体数 × edge_weight 直接进打分（fb），把实体强相关但词面弱的
 //!    兄弟 case 提过截止线。
 //!
-//! 零依赖、确定性；实体表全库现算（小库口径，规模再大时随 index 落盘）。
+//! 零依赖、确定性；实体表全库现算（小库口径）。
+//!
+//! P4.4+ 优化⑬（P1-5）：`build` 原本每次召回重建全库实体表（1 万条库 read_case×N
+//! ≈ 0.85s/次，P3 性能回归）。改为进程内缓存（root+meta.toml mtime 键，与 index
+//! 同模式）：store/rate/gc/rebuild 都 bump gen → meta.toml 变化 → 自动 miss 重建。
+//! 库外进程无缓存，多进程共享 `--mem-dir` 仍是受支持场景（每次冷构建 ≤1 次）。
 
 use crate::memory::store;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// 实体 → case id 倒排（实体键精确匹配）。
 pub(crate) struct EdgeIndex {
@@ -33,6 +39,13 @@ impl EdgeIndex {
         }
         out
     }
+}
+
+/// 缓存键：root + meta.toml mtime（任何库变更都重写 meta.toml → 键失效）。
+type EdgeCacheEntry = (String, Option<std::time::SystemTime>, Arc<EdgeIndex>);
+static EDGE_CACHE: OnceLock<Mutex<Option<EdgeCacheEntry>>> = OnceLock::new();
+fn cache() -> &'static Mutex<Option<EdgeCacheEntry>> {
+    EDGE_CACHE.get_or_init(|| Mutex::new(None))
 }
 
 /// 全库构建实体表：每个 case 的四类字段值各作为一条实体键（去重）。
@@ -57,6 +70,21 @@ pub(crate) fn build(root: &str) -> std::io::Result<EdgeIndex> {
         }
     }
     Ok(EdgeIndex { map })
+}
+
+/// 进程内缓存的实体表（见模块注释）。mtime 读取失败 → 每次重建（保守正确）。
+fn cached_build(root: &str) -> std::io::Result<Arc<EdgeIndex>> {
+    let p = std::path::Path::new(root).join("meta.toml");
+    let mt = p.metadata().and_then(|m| m.modified()).ok();
+    let mut g = cache().lock().unwrap();
+    if let Some((r, t, idx)) = g.as_ref() {
+        if r == root && *t == mt {
+            return Ok(idx.clone());
+        }
+    }
+    let idx = Arc::new(build(root)?);
+    *g = Some((root.to_string(), mt, idx.clone()));
+    Ok(idx)
 }
 
 /// 桥 case 的召回上下文（与 recall::DocCtx 同构，由调用方转写）。
@@ -93,7 +121,7 @@ pub(crate) fn bridge_cases(
     if ents.is_empty() {
         return Ok((Vec::new(), 0));
     }
-    let idx = build(root)?;
+    let idx = cached_build(root)?;
     let bridge = idx.neighbors(&ents);
     let mut out = Vec::new();
     let mut total = 0usize;
