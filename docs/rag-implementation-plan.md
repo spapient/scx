@@ -365,4 +365,14 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 
 **门禁终态**：73 库 + 8 CLI + 4 集成 + golden 27 例全绿；fmt/clippy 0；测试调用点零改动（ingest 直调点均为丢弃返回值）。
 
+## 17. P4.4+ 优化④实施记录（--eval-verbose 候选诊断，2026-10-22，已提交）
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| `--eval-verbose` | eval.rs `run` → `run_impl(root, path, verbose)`（默认路径零漂移）；`run_verbose` 追加逐 case 诊断段：`case i/N q="..."` + `A:`/`B:` 各 top-10（rank + case 尾 8 + sim + score + `[hit]/[miss]`，与 --eval 的 tail8 口径一致）；verbose 时缓存每例 A/B 命中，避免二次召回 | golden `memory_eval_verbose` 第 28 例（复用 memory_eval 的 3 case 库与 baseline）：paraphrase 层 A mrr=0.5 vs B=1.0 的退化即刻可见——A top1 是 disk case `5e316932…`（[miss]），相关 db case `123e7dec…` 掉到第 2——诊断输出让标注者直接校准 |
+| CLI 接线 | `--eval-verbose` 参数（需配 --eval，否则报错 exit 2；含单测）；`main.rs` --eval 分支按开关走 `eval_cases_verbose`；USAGE 同步 | cli_args 单测：`--eval-verbose` 单独使用报错、配 --eval 通过 |
+
+**门禁终态**：73 库 + 8 CLI + 4 集成 + golden 28 例全绿；fmt/clippy 0；默认 `--eval` 输出逐字节不变（memory_eval.out 未漂移）。
+**服务目标**：M4 证据门的 30–50 组人工标注——标注者可逐例核对 A/B 排序差异并据此校准 rel 标注与调参假设。
+
 

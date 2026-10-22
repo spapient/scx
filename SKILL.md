@@ -37,7 +37,7 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 - `--recall K`：旁路召回最近 K 条相关经验（`mem:` 段，绝不进入正文）；`--recall-only` 只召回（**查看模式：只读——不写 qmap/L1 历史/缓存，不改变库状态**；输出真实 top-k，不做 L1 过滤，方便调参/标注/演示）；`--recall-detail` 追加 `summary:` 要点行（error_code + file_loc + 错误行）。主流程 `--recall` 的 mem 段仍按 L1 置信判据直答输出（学习路径：写入 qmap/L1 历史）。
 - `--rate good|bad <case-id>`：反馈标注（状态机 solved/regressed + 质量分 + 词级调权 + L1 基线自适应；bump 库代际 → 同 query 后续召回立即看到新排序）。
 - `--rebuild` / `--gc` / `--delete <case-id>`：库维护（重建索引缓存（不再改召回语义）/ 过期清理 / 删除条目，id 白名单校验）；`--stats`：库盘点（case 数/桶分布/状态分布/fix 覆盖率/质量均值/磁盘 KiB，豁免 --query）。case id 为 `<日期>_<16 位 hex>`。
-- `--eval <baseline.json>`：冻结标注集重放，输出三层（literal/paraphrase/semantic）A/B 对拍表（A=完整统计管线 vs B=朴素 BM25）+ `l1:` 直答命中率；`--l1-hist`：运行期 [l1] 命中分布出表。标注采集见 `docs/eval-baseline-template.md`。
+- `--eval <baseline.json>`：冻结标注集重放，输出三层（literal/paraphrase/semantic）A/B 对拍表（A=完整统计管线 vs B=朴素 BM25）+ `l1:` 直答命中率；`--eval-verbose`（需配 --eval）追加逐 case 诊断：A/B 各 top-10 候选的 rank/sim/score/case 尾 8 位 + `[hit]/[miss]`——标注者可见"召回为什么对/错"，直接服务 M4 证据门校准；`--l1-hist`：运行期 [l1] 命中分布出表。标注采集见 `docs/eval-baseline-template.md`。
 - 召回路线：自研统计向量（二值词面匹配 + 长度归一化 + 结构化字段加权 + 时间衰减 + MMR + 反馈调权 + 实体边一跳；打分词表去重、tf 恒 1，A/B 评估按此口径引用，不称 BM25），非 embedding；USearch/embedding 按触发条件留作可选 feature 默认关。设计依据 `docs/memory-rag-design.md`，计划 `docs/rag-implementation-plan.md`。
 
 统计行字段：`kept/total`、`chars`、`dup`、`seeds/evidence`（恒等，可机械断言）、`risk`、`guarded`、`regions`（种子区域数，0 表示回退全图排序）、`window`（规范化后的值）、`terms`、`forced`、`mode`。
