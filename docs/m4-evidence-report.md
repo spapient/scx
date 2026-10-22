@@ -2,7 +2,7 @@
 
 日期：2026-10-23（初版 2026-10-22）
 库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨ + real-eval 机械门
-状态：**机械门 PASS（40 组/三层达标/judge=fei，rel 2=40/1=14/0=62，exit 0）；负例与弱相关已补齐（单裁决人 fei）。M4 仍未完全闭环——语料为合成样例、仅一名裁决人，A/B 主指标持平（三层 A=B）。§13 工具已就绪，待真实历史事故语料与第二裁决人。**
+状态：**机械门 PASS（40 组/三层达标，judge=fei rel 2=40/1=14/0=62，judge=hao rel 2=41/1=11/0=64，均 exit 0）；双人裁决完成，Cohen's kappa=0.698（substantial，116 个共同候选），20 处分歧待仲裁。A/B 主指标仍持平（三层 A=B，无质量优势）。语料仍是合成样例，真实历史事故语料未闭环。**
 
 ## 1. 结论先行
 
@@ -356,6 +356,21 @@ judge-agreement: 两份相同 baseline → common=40 raw=1.000 kappa=1.000
 同日修掉一个 NDCG 口径 bug：IDCG 原只取 `expected`，漏掉 rel 字典里非 expected
 的弱相关候选，导致 multi-rel 下 NDCG 超过 1.0（实测 literal 1.108）；改为
 IDCG 取 rel 字典全部 >0 值，回归测试 `ndcg_never_exceeds_one_with_non_expected_relevant`。
+
+### 13.1 双人裁决结果（2026-10-23，20 处分歧待仲裁）
+
+第二裁决人 hao 对同一 40 组盲测包独立打分并回填 `baseline-hao.json`：
+`rel 2=41 / 1=11 / 0=64`，`--gate` PASS。双人一致性：
+
+```text
+common=116 raw=0.828 kappa=0.698（substantial）
+2,2=40  1,1=3  0,0=53  off-diag=20
+```
+
+分歧集中在两类：多数是 fei=1（弱相关） vs hao=0（无关）的边界判定；少数反向
+（hao 认弱相关而 fei 认为无关）；另有 1 处根因级分歧（case 36：`ssl certificate
+expired` vs `tls handshake cert expired`，fei=0、hao=2）。仲裁前任何 A/B 结论
+都不得越过主指标持平的事实：三层 r@5/r@10/MRR 仍 A=B。
 
 **仍缺的两项输入只能由人提供，AI 不代劳：**
 
