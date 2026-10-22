@@ -9,7 +9,8 @@ use std::io::{self, Write};
 /// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
 /// case 只显示指纹段（`YYYY-MM-DD_<hash16>` 的 hash16），保证输出不随日期漂移。
 /// `detail` 时（P4.2 --recall-detail）每条追加一行 `summary:`（error_code+file_loc+证据行）；
-/// P4.4+ 优化：case 带修复结论（--store 配 --fix）时再追加一行 `fix:`（L1 本地直答）。
+/// P4.4+ 优化：case 带修复结论（--store 配 --fix）时**无条件**追加 `fix:` 行——
+/// L1 本地直答的"上次怎么解决"在主流程/查看模式均直接可见（不依赖 --recall-detail）。
 pub(crate) fn write_mem_lines(
     out: &mut dyn Write,
     hits: &[RecallHit],
@@ -26,10 +27,10 @@ pub(crate) fn write_mem_lines(
         if detail {
             let s = scx::memory::case_summary(root, &h.id).unwrap_or_default();
             writeln!(out, "  summary: {}", s)?;
-            let fix = scx::memory::case_fix(root, &h.id).unwrap_or_default();
-            if !fix.is_empty() {
-                writeln!(out, "  fix: {}", fix)?;
-            }
+        }
+        let fix = scx::memory::case_fix(root, &h.id).unwrap_or_default();
+        if !fix.is_empty() {
+            writeln!(out, "  fix: {}", fix)?;
         }
     }
     Ok(())

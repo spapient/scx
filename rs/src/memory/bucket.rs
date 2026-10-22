@@ -12,8 +12,9 @@ const FAMILIES: [(&str, &[&str]); 5] = [
     (
         "db",
         &[
-            "db", // P4.4 评审处置：裸 "db" 补齐桶判定不对称（query "db timeout" 此前
-            // 只命中 network 家族 → 与 case 主桶 db 不匹配 → 漏召）。
+            // 注意：裸 "db" 不在子串表里（"db.java:4" 这类文件实体会被子串误判为
+            // db 场景桶，导致编译失败等场景被误归类、query "compile fail" 漏召）。
+            // 裸 "db" 由 bucket_of / candidate_buckets 用词级精确匹配单独处理。
             "conn_id",
             "jdbc",
             "mysql",
@@ -72,6 +73,12 @@ const FAMILIES: [(&str, &[&str]); 5] = [
 /// case 主桶：按家族顺序取首个命中。
 /// `text` 参与判定是为了覆盖 fields 未抽到的家族词（如 build 日志里只有 "cargo"）。
 pub(crate) fn bucket_of(fields: &[String], terms: &[String], text: &str) -> String {
+    // 裸 "db" 词级精确匹配（terms 是 query∪text 的切词表，"db.java:4" 是单一
+    // token ≠ "db"，不会被误归 db 场景桶）：修 query "db timeout" 漏召的同时
+    // 避免文件实体把编译等场景误归类。
+    if terms.iter().any(|t| t == "db") {
+        return "db".to_string();
+    }
     let mut hay: Vec<String> = fields.iter().map(|s| lower(s)).collect();
     hay.extend(terms.iter().map(|s| lower(s)));
     hay.push(lower(text));
@@ -86,11 +93,17 @@ pub(crate) fn bucket_of(fields: &[String], terms: &[String], text: &str) -> Stri
 /// query 候选桶集合：任一家族命中即入选（宁多勿漏，防漏召）。
 pub(crate) fn candidate_buckets(query: &str) -> Vec<String> {
     let q = lower(query);
-    FAMILIES
+    let mut out: Vec<String> = FAMILIES
         .iter()
         .filter(|(_, keys)| keys.iter().any(|k| q.contains(k)))
         .map(|(fam, _)| fam.to_string())
-        .collect()
+        .collect();
+    // 裸 "db" 词级精确匹配（与 bucket_of 同口径）：query 含独立词 "db" 即
+    // 候选 db 桶（子串会误判 "kubectl/obd" 等，宁多勿漏但别乱扩桶）。
+    if q.split_whitespace().any(|w| w == "db") && !out.contains(&"db".to_string()) {
+        out.push("db".to_string());
+    }
+    out
 }
 
 /// 归一化小写（复用 norm 的 push_analysis_lower 口径，输入已是小写关键词表）。
@@ -114,6 +127,11 @@ mod tests {
         assert_eq!(bucket_of(&[], &["cargo".into()], "error"), "build");
         assert_eq!(bucket_of(&[], &[], "NullPointerException stack"), "runtime");
         assert_eq!(bucket_of(&[], &[], "hello world"), "other");
+        // P4.4+ 优化：裸 "db" 词级精确匹配——terms 含独立 "db" 归 db 桶；
+        // "db.java:4" 是单一 token，不得误归 db 场景桶（编译失败场景归 build）。
+        assert_eq!(bucket_of(&[], &["db".into()], ""), "db");
+        let got = bucket_of(&[], &["db.java:4".into()], "compile fail");
+        assert_eq!(got, "build", "文件实体不得把编译场景误归 db 桶");
     }
 
     #[test]
@@ -130,6 +148,13 @@ mod tests {
             c4.contains(&"db".to_string()),
             "裸 db 应命中 db 桶: {:?}",
             c4
+        );
+        // P4.4+ 优化：子串不误判（"kubectl" 含 "db" 子串但不含独立 "db" 词）。
+        let c5 = candidate_buckets("kubectl get pods");
+        assert!(
+            !c5.contains(&"db".to_string()),
+            "子串不得乱扩 db 桶: {:?}",
+            c5
         );
     }
 }

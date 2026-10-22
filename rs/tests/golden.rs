@@ -570,6 +570,43 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
+    // 27) 库盘点（P4.4+ 优化：--stats 输出 case/桶/状态/fix 覆盖率/质量/磁盘）。
+    // 两个 case 用隔离日志：db 场景（seed_log）+ 磁盘场景（专用日志），
+    // 让基线展示多桶（failopen 全文保留会把无关家族词带进 text，同库会互相污染桶归属）。
+    let mem_st_dir = std::env::temp_dir().join("scx-golden-mem-stats");
+    let _ = std::fs::remove_dir_all(&mem_st_dir);
+    let mem_st = mem_st_dir.to_string_lossy().into_owned();
+    let _ = run_scx(
+        &[
+            "--query",
+            "db timeout conn_id",
+            "--store",
+            "1",
+            "--fix",
+            "enlarge pool to 64 conns",
+            "--mem-dir",
+            Box::leak(mem_st.clone().into_boxed_str()),
+        ],
+        seed_log,
+    );
+    let seed_disk = "INFO start\nWARN disk usage 97% mount /var\nERROR errno=28 no space left\n";
+    let _ = run_scx(
+        &[
+            "--query",
+            "磁盘空间不足",
+            "--store",
+            "1",
+            "--mem-dir",
+            Box::leak(mem_st.clone().into_boxed_str()),
+        ],
+        seed_disk,
+    );
+    v.push((
+        "memory_stats".into(),
+        vec!["--stats", "--mem-dir", Box::leak(mem_st.into_boxed_str())],
+        String::new(),
+    ));
+
     v
 }
 

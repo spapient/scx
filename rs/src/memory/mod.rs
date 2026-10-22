@@ -27,6 +27,7 @@ pub mod postings;
 pub mod prf;
 pub mod qmap;
 pub mod recall;
+pub mod stats;
 pub mod store;
 pub mod util;
 
@@ -181,4 +182,9 @@ pub fn case_summary(root: &str, id: &str) -> std::io::Result<String> {
 /// 门面：运行期 [l1] 直答命中分布出表（P2 阶段门残余，--l1-hist）。
 pub fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
     eval::l1_hist_table(root)
+}
+
+/// 门面：库盘点（P4.4+ 优化，--stats）：case/桶/状态/fix 覆盖率/质量/磁盘。
+pub fn stats_table(root: &str) -> std::io::Result<Vec<String>> {
+    stats::table(root)
 }

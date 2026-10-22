@@ -93,6 +93,21 @@ fn main() {
         }
         return;
     }
+    // P4.4+ 优化：--stats 库盘点（case/桶/状态/fix 覆盖率/质量/磁盘，豁免 --query）。
+    if opts.stats {
+        match scx::memory::stats_table(&opts.mem_dir) {
+            Ok(lines) => {
+                for l in lines {
+                    println!("{l}");
+                }
+            }
+            Err(e) => {
+                eprintln!("scx: stats failed: {}", e);
+                std::process::exit(2);
+            }
+        }
+        return;
+    }
     // O4 反馈标注：--rate good|bad <case-id>，独立于压缩主流程。
     if let Some((good, id)) = &opts.rate {
         match scx::memory::rate_case(&opts.mem_dir, id, *good) {

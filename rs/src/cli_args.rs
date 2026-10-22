@@ -1,7 +1,7 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--l1-hist] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--l1-hist] [--stats] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
 
 pub(crate) struct Opts {
     pub query: String,
@@ -31,6 +31,8 @@ pub(crate) struct Opts {
     /// P4.1 评估系统：冻结 baseline.json 重放（豁免 --query）。
     pub eval: Option<String>,
     pub l1_hist: bool,
+    /// P4.4+ 优化：库盘点（--stats，豁免 --query）。
+    pub stats: bool,
     pub mem_dir: String,
     pub forces: Vec<String>,
     pub files: Vec<String>,
@@ -119,6 +121,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut delete: Option<String> = None;
     let mut eval: Option<String> = None;
     let mut l1_hist = false;
+    let mut stats = false;
     let mut mem_dir = default_mem_dir();
     let mut mem_dir_seen = false;
     let mut forces = Vec::new();
@@ -277,6 +280,12 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 l1_hist = true;
             }
+            "--stats" => {
+                if inline.is_some() {
+                    return Err("--stats does not take a value".to_string());
+                }
+                stats = true;
+            }
             "--rebuild" => {
                 if inline.is_some() {
                     return Err("--rebuild does not take a value".to_string());
@@ -360,6 +369,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         && delete.is_none()
         && eval.is_none()
         && !l1_hist
+        && !stats
         && query.is_empty()
         && forces.is_empty()
     {
@@ -396,6 +406,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         delete,
         eval,
         l1_hist,
+        stats,
         mem_dir,
         forces,
         files,
@@ -545,5 +556,9 @@ mod tests {
         assert!(o.recall_detail);
         assert!(parse_args_from(args(&["--recall-detail=x"])).is_err());
         assert!(parse_args_from(args(&["--eval"])).is_err());
+        // P4.4+ 优化：--stats 豁免 --query。
+        let o = parse_args_from(args(&["--stats", "--mem-dir", "/tmp/m"])).unwrap();
+        assert!(o.stats);
+        assert!(parse_args_from(args(&["--stats=x"])).is_err());
     }
 }
