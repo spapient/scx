@@ -20,8 +20,8 @@
 {
   "cases": [
     { "query": "db timeout conn_id", "layer": "literal", "expected": ["2026-10-22_0adada28"], "rel": {"0adada28": 2} },
-    { "query": "数据库连接池超时 连接池", "layer": "paraphrase", "expected": ["0adada28"] },
-    { "query": "存储空间不足 errno 磁盘", "layer": "semantic", "expected": ["2026-10-22_5f82b3ab"], "rel": {"5f82b3ab": 1} }
+    { "query": "数据库连接池超时 连接池", "layer": "paraphrase", "expected": ["0adada28"], "judge": null, "note": "target=0adada28 hint=[ERROR db timeout conn_id=fkab pool exhausted]" },
+    { "query": "存储空间不足 errno 磁盘", "layer": "semantic", "expected": ["2026-10-22_5f82b3ab"], "judge": null, "note": "target=5f82b3ab hint=[ERROR db write errno=28 no space left]" }
   ]
 }
 ```
@@ -34,6 +34,8 @@
 | layer | string | literal / paraphrase / semantic 三选一（分层定义见 §2） |
 | expected | string[] | 相关 case id 列表（完整 id 或 hash16/hash8 后缀均可，后缀免日期漂移） |
 | rel | object（可选） | case id → 相关度 0..2；缺省时 expected 内视为 1 |
+| judge | object/null（可选） | 人工裁决元数据 `{"by":"姓名","date":"UTC"}`；`null` = 待 `--judge` 裁决。非 literal 条目必须有 by+date 才能过 `--gate` |
+| note | string（可选） | 盲测摘要，建议 `target=<hash16> hint=[首行] fix=[修复结论]`；`--judge` 只显示 query+note，不显示 A/B 分数 |
 
 ## 2. 三层定义与造例规则
 
@@ -69,8 +71,9 @@ scx --query "db timeout conn_id" --recall-only --recall 5 --recall-detail --mem-
 2. 每个 case 写 1 条 literal + 1 条 paraphrase（同一问题可多条变体）；semantic 层按主题另造。
 3. 全部 expected 用 `--recall-detail` 核对过 id 后填入。
 4. 保存为 `baseline.json`（建议放 `docs/eval/` 下，与日期/库版本一起留档）。
-5. 跑对拍：`scx --eval baseline.json --mem-dir <库目录>`，输出三层 A/B 指标 + `l1: hits/total/rate`。
-6. 把报告行贴进 `docs/rag-implementation-plan.md` §7 P4.1 的验证记录（M4 阶段门证据）。
+5. 盲测裁决：`scx --judge baseline.json --judge-by <姓名>`（只对 `judge:null` 的 paraphrase/semantic 逐条输入 `2/1/0/s`；literal 可由指纹机械判定，保留 rel 即可）。
+6. 跑机械门：`scx --eval baseline.json --gate --eval-verbose --mem-dir <库目录>`；`gate: PASS` 才可作为 M4 证据，`FAIL` 时按输出补齐样本/元数据或修召回。
+7. 把 `--judge` 后的 JSON、`--eval --gate` 输出、裁决人/日期/seed 一起留档；报告行贴进 `docs/rag-implementation-plan.md` §7 P4.1 的验证记录。
 
 ## 6. 约束与红线
 
@@ -78,3 +81,19 @@ scx --query "db timeout conn_id" --recall-only --recall 5 --recall-detail --mem-
 - 同一 baseline 一旦用于结论，禁止再改（改了要重跑全流程并注明版本）。
 - 分层标签要稳定：literal 只含词面命中例；paraphrase 必须与 literal 词面不同；semantic 几乎无共享词。
 - 数量口径：30-50 组是下限建议，多多益善；每层独立统计，层内样本太少（<5）时报告会暴露 n，请勿拿单例下结论。
+
+## 7. M4 机械门（`--gate`）与真实语料红线
+
+`--eval --gate` 只认同时满足以下条件的 baseline：
+
+- 总组数 ≥30；literal / paraphrase / semantic 各 ≥10；
+- 非 literal 条目必须有 `judge.by` + `judge.date`（`--judge` 自动写入）；
+- 每层 A 的预声明主指标（literal/paraphrase r@5；semantic r@10）与 MRR 都不低于 B；
+- 不允许三层之外的 layer 凑数。
+
+因此：
+
+- `demo.ps1` 的 23 组（16/5/2）**不能**过门，只能做流程演练；
+- `--annotate` 自动标注集没有 judge 元数据，**不能**过门；
+- 真实语料必须冻结后再调参，裁决时不得查看 A/B 分数；
+- 只有你一人裁决时，报告写“single-annotator, author, blind to A/B”，不要写“独立人工”；要写独立证据，至少加第二人复核/仲裁。
