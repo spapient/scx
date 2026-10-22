@@ -56,7 +56,10 @@ pub struct AnnotatedCase {
     pub query: String,
     pub layer: String,
     pub expected: Vec<String>,
+    /// 预填相关度建议（自动口径）；`judged=false`（raw 盲测模式）时序列化为
+    /// `"judge": null`，rel 不写——人工未裁决，--eval 必须拒绝（P4.4+ 优化⑩）。
     pub rel: f64,
+    pub judged: bool,
     pub evidence: Vec<String>,
     pub note: String,
 }
@@ -117,12 +120,13 @@ pub(crate) fn annotate_report(
     let mut semantic_no_root = 0usize;
     for id in ids {
         let c = store::read_case(root, &id)?;
-        // literal：同指纹，直接是答案。
+        // literal：同指纹，直接是答案（judged=true：指纹相关可机械断言）。
         out.push(AnnotatedCase {
             query: c.query.clone(),
             layer: "literal".to_string(),
             expected: vec![hash16_of(&c)],
             rel: 2.0,
+            judged: true,
             evidence: vec!["fingerprint".to_string()],
             note: String::new(),
         });
@@ -136,6 +140,7 @@ pub(crate) fn annotate_report(
                         layer: "paraphrase".to_string(),
                         expected: vec![hash16_of(&c)],
                         rel: if s.sim >= 0.5 { 2.0 } else { 1.0 },
+                        judged: true,
                         evidence: vec![
                             "synonym".to_string(),
                             format!(
@@ -153,6 +158,7 @@ pub(crate) fn annotate_report(
                     layer: "paraphrase".to_string(),
                     expected: vec![hash16_of(&c)],
                     rel: 2.0,
+                    judged: false,
                     evidence: vec!["synonym".to_string(), "raw".to_string()],
                     note: target_hint(&c),
                 });
@@ -170,6 +176,7 @@ pub(crate) fn annotate_report(
                         layer: "semantic".to_string(),
                         expected: vec![hash16_of(&c)],
                         rel: 1.0,
+                        judged: true,
                         evidence: vec![
                             "root-cause".to_string(),
                             format!(
@@ -187,6 +194,7 @@ pub(crate) fn annotate_report(
                     layer: "semantic".to_string(),
                     expected: vec![hash16_of(&c)],
                     rel: 1.0,
+                    judged: false,
                     evidence: vec!["root-cause".to_string(), "raw".to_string()],
                     note: target_hint(&c),
                 });
@@ -346,6 +354,8 @@ fn quote(s: &str) -> String {
 }
 
 /// 把标注集序列化为 baseline.json（兼容 --eval；expected 用 hash16）。
+/// judged=false（盲测 raw 集）时不写 rel，改写 `"judge": null`——人工未裁决，
+/// `--eval` 解析到 judge:null 直接报错拒绝（防止"接受预填 rel = 自动标注自证"）。
 pub fn write_baseline(out: &mut dyn Write, cases: &[AnnotatedCase]) -> io::Result<()> {
     let mut body = String::from("{\"cases\":[");
     for (i, c) in cases.iter().enumerate() {
@@ -353,13 +363,20 @@ pub fn write_baseline(out: &mut dyn Write, cases: &[AnnotatedCase]) -> io::Resul
             body.push(',');
         }
         body.push_str(&format!(
-            "{{\"query\":{},\"layer\":\"{}\",\"expected\":[\"{}\"],\"rel\":{{\"{}\":{}}}",
+            "{{\"query\":{},\"layer\":\"{}\",\"expected\":[\"{}\"]",
             quote(&c.query),
             c.layer,
-            c.expected[0],
-            c.expected[0],
-            fmt_rel(c.rel)
+            c.expected[0]
         ));
+        if c.judged {
+            body.push_str(&format!(
+                ",\"rel\":{{\"{}\":{}}}",
+                c.expected[0],
+                fmt_rel(c.rel)
+            ));
+        } else {
+            body.push_str(",\"judge\":null");
+        }
         if !c.evidence.is_empty() {
             body.push_str(",\"evidence\":[");
             for (j, e) in c.evidence.iter().enumerate() {
@@ -390,12 +407,16 @@ fn fmt_rel(r: f64) -> String {
 }
 
 /// 标注统计（stdout 报告用）：层分布 / rel 分布 / 组数。
+/// judged=false（raw 盲测集）的条目不计入 rel2/rel1，单独报 `unjudged`（P4.4+ 优化⑩）。
 pub fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
     let mut by_layer: std::collections::BTreeMap<String, usize> = Default::default();
     let mut rel2 = 0usize;
+    let mut unjudged = 0usize;
     for c in cases {
         *by_layer.entry(c.layer.clone()).or_default() += 1;
-        if c.rel >= 2.0 {
+        if !c.judged {
+            unjudged += 1;
+        } else if c.rel >= 2.0 {
             rel2 += 1;
         }
     }
@@ -403,8 +424,13 @@ pub fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
         "annotate: cases={} rel2={} rel1={}",
         cases.len(),
         rel2,
-        cases.len() - rel2
+        cases.len() - rel2 - unjudged
     )];
+    if unjudged > 0 {
+        lines.push(format!(
+            "  unjudged={unjudged} (blind-test: rel empty, run --judge)"
+        ));
+    }
     for (k, v) in by_layer {
         lines.push(format!("  layer: {k}={v}"));
     }

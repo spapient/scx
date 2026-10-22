@@ -216,6 +216,26 @@ fn main() {
         println!("  out: {out_name}");
         return;
     }
+    // P4.4+ 优化⑩：盲测裁决（--judge <baseline.json>）——逐条 stdin 录入 2/1/0/s，
+    // judge:null → rel+judge 元数据；未裁决保持 judge:null（--eval 仍拒绝）。
+    if let Some(path) = &opts.judge {
+        let by = opts
+            .judge_by
+            .clone()
+            .unwrap_or_else(|| std::env::var("USERNAME").unwrap_or_else(|_| "anonymous".into()));
+        match scx::memory::judge::judge(path, &by) {
+            Ok(lines) => {
+                for l in lines {
+                    println!("{l}");
+                }
+            }
+            Err(e) => {
+                eprintln!("scx: judge failed: {}", e);
+                std::process::exit(2);
+            }
+        }
+        return;
+    }
     let text = match read_input(&opts.files) {
         Ok(text) => text,
         Err(e) => {
@@ -252,6 +272,35 @@ fn main() {
     // （recall 需看到新 case，顺序依赖）。
     let mut store_rx: Option<mpsc::Receiver<std::io::Result<(bool, String)>>> = None;
     if opts.store {
+        // P4.4+ 优化⑩：--fix-file 读取（多行修复结论，换行保留）→ 等价 --fix。
+        let fix = if let Some(p) = &opts.fix_file {
+            match std::fs::read_to_string(p) {
+                Ok(t) => {
+                    let t = t.trim_end().to_string();
+                    if t.is_empty() {
+                        eprintln!(
+                            "scx: note: --fix-file {} is empty; case stored without fix",
+                            p
+                        );
+                    }
+                    t
+                }
+                Err(e) => {
+                    eprintln!("scx: --fix-file {} unreadable: {}", p, e);
+                    std::process::exit(2);
+                }
+            }
+        } else {
+            opts.fix.clone()
+        };
+        // P4.4+ 优化⑩：--store 不带 --fix 时 warning——L1 无法回答"上次怎么解决的"，
+        // 北极星直答依赖 fix 覆盖率（HARD 纪律：已验证修复后必须回写 --fix）。
+        if fix.is_empty() {
+            eprintln!(
+                "scx: note: --store without --fix; L1 cannot answer 'how was it solved' - \
+pass --fix \"...\" after a verified fix (HARD discipline)"
+            );
+        }
         // P4.4+ 优化③：query 零命中（failopen）时压缩结果=全文，store 会持久化
         // 低信号记忆——stderr 警告（不拒绝：用户可能刻意沉淀原文作底料）。
         if o.mode.starts_with("failopen") {
@@ -280,7 +329,7 @@ fn main() {
                 &opts.files,
                 &stats,
                 &opts.forces,
-                &opts.fix,
+                &fix,
                 &evidence_lno,
                 &evidence,
             );
@@ -291,7 +340,7 @@ fn main() {
             let text = o.text.clone();
             let files = opts.files.clone();
             let forces = opts.forces.clone();
-            let fix = opts.fix.clone();
+            let fix = fix.clone();
             let ev_lno = evidence_lno.clone();
             let ev = evidence.clone();
             std::thread::spawn(move || {

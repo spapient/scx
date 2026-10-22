@@ -20,6 +20,7 @@ use crate::terms::build_terms;
 use std::collections::HashMap;
 
 /// 单条评估输入（baseline.json 的一行标注）。
+#[derive(Debug)]
 pub(crate) struct EvalCase {
     pub query: String,
     pub layer: String,
@@ -51,6 +52,16 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
         };
         let query = get_str("query")?;
         let layer = get_str("layer")?;
+        // P4.4+ 优化⑩：盲测裁决门——judge:null（未裁决）一律拒绝，防止
+        // "人工直接接受预填 rel = 自动标注自证"。先跑 --judge 再评估。
+        if kvs
+            .iter()
+            .any(|(k, v)| k == "judge" && matches!(v, Val::Null))
+        {
+            return Err(format!(
+                "baseline: cases[{i}] unjudged (judge:null) - run --judge first"
+            ));
+        }
         let expected = match kvs.iter().find(|(k, _)| k == "expected") {
             Some((_, Val::Arr(items))) => {
                 let mut v = Vec::with_capacity(items.len());
@@ -182,6 +193,8 @@ fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String
     let mut layers: Vec<String> = Vec::new();
     // [n, A:r5,r10,mrr,ndcg, B:r5,r10,mrr,ndcg]；semantic 层报告 r@10（弱相关口径）。
     let mut agg: HashMap<String, [f64; 9]> = HashMap::new();
+    // P4.4+ 优化⑩：每层每 case 的 A/B mrr/ndcg 值（bootstrap 95% CI 重采样用）。
+    let mut per: HashMap<String, [Vec<f64>; 4]> = HashMap::new();
     // verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
     let mut diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)> = Vec::new();
     for c in &cases {
@@ -199,6 +212,13 @@ fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String
         e[6] += br10;
         e[7] += bmrr;
         e[8] += bndcg;
+        let p = per
+            .entry(c.layer.clone())
+            .or_insert_with(|| [Vec::new(), Vec::new(), Vec::new(), Vec::new()]);
+        p[0].push(amrr);
+        p[1].push(andcg);
+        p[2].push(bmrr);
+        p[3].push(bndcg);
         if !layers.iter().any(|l| l == &c.layer) {
             layers.push(c.layer.clone());
         }
@@ -215,26 +235,48 @@ fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String
     for l in &layers {
         let e = agg.get(l).unwrap_or(&[0.0; 9]);
         let n = e[0];
+        let p = per.get(l).unwrap();
+        // 主指标（预声明）：r@5/r@10 点值 + MRR/NDCG bootstrap 95% CI（固定 seed 确定性）。
+        let am_ci = boot_ci(&p[0], CI_SEED);
+        let an_ci = boot_ci(&p[1], CI_SEED);
+        let bm_ci = boot_ci(&p[2], CI_SEED);
+        let bn_ci = boot_ci(&p[3], CI_SEED);
         // 弱相关层（semantic）用 r@10 口径；强相关层（literal/paraphrase）用 r@5。
         if l == "semantic" {
             out.push(format!(
-                "layer {l}: n={n:.0} A r@10={:.3} mrr={:.3} ndcg@10={:.3} | B r@10={:.3} mrr={:.3} ndcg@10={:.3}",
+                "layer {l}: n={n:.0} A r@10={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}] | B r@10={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}]",
                 e[2] / n.max(1.0),
                 e[3] / n.max(1.0),
+                am_ci.0,
+                am_ci.1,
                 e[4] / n.max(1.0),
+                an_ci.0,
+                an_ci.1,
                 e[6] / n.max(1.0),
                 e[7] / n.max(1.0),
+                bm_ci.0,
+                bm_ci.1,
                 e[8] / n.max(1.0),
+                bn_ci.0,
+                bn_ci.1,
             ));
         } else {
             out.push(format!(
-                "layer {l}: n={n:.0} A r@5={:.3} mrr={:.3} ndcg@10={:.3} | B r@5={:.3} mrr={:.3} ndcg@10={:.3}",
+                "layer {l}: n={n:.0} A r@5={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}] | B r@5={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}]",
                 e[1] / n.max(1.0),
                 e[3] / n.max(1.0),
+                am_ci.0,
+                am_ci.1,
                 e[4] / n.max(1.0),
+                an_ci.0,
+                an_ci.1,
                 e[5] / n.max(1.0),
                 e[7] / n.max(1.0),
+                bm_ci.0,
+                bm_ci.1,
                 e[8] / n.max(1.0),
+                bn_ci.0,
+                bn_ci.1,
             ));
         }
     }
@@ -282,6 +324,47 @@ fn fmt_hits(hits: &[RecallHit], c: &EvalCase) -> String {
         ));
     }
     parts.join(" | ")
+}
+
+/// P4.4+ 优化⑩：bootstrap 95% CI（百分位法，B=1000，固定 seed 确定性可重放）。
+/// 对每层每 case 的指标值有放回重采样，取 2.5/97.5 百分位——n 很小（9/3）时
+/// 置信区间如实展示不确定性，不允许"点值更高 = 更好"的结论。
+const CI_SEED: u64 = 0x5DEE_CE66_D202_6102;
+
+/// xorshift64*：零依赖确定性 PRNG（无随机源，同 seed 逐位可重放）。
+struct Rng(u64);
+impl Rng {
+    fn next(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        self.0 = x;
+        x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    }
+}
+
+/// 有放回重采样 B 次 → 样本均值 → 95% 分位区间。空输入返回 (0,0)。
+fn boot_ci(vals: &[f64], seed: u64) -> (f64, f64) {
+    const B: usize = 1000;
+    let n = vals.len();
+    if n == 0 {
+        return (0.0, 0.0);
+    }
+    let mut rng = Rng(seed ^ 0x9E37_79B9_7F4A_7C15);
+    let mut means = Vec::with_capacity(B);
+    for _ in 0..B {
+        let mut s = 0.0;
+        for _ in 0..n {
+            let idx = (rng.next() % n as u64) as usize;
+            s += vals[idx];
+        }
+        means.push(s / n as f64);
+    }
+    means.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let lo = means[(B * 25 / 1000).min(B - 1)];
+    let hi = means[(B * 975 / 1000).min(B - 1)];
+    (lo, hi)
 }
 
 /// P2 阶段门残余：L1 直答命中率——top1 命中 expected 的相关 case 中，满足 L1 置信判据
@@ -542,5 +625,38 @@ mod tests {
         assert_eq!(s.chars().count(), 301, "300 字符 + 省略号");
         assert!(s.ends_with('…'));
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// P4.4+ 优化⑩：judge:null（未裁决）必须被 --eval 拒绝——防止"接受预填 rel=自证"。
+    #[test]
+    fn parse_baseline_rejects_unjudged() {
+        let v = crate::memory::json::parse(
+            r#"{"cases":[{"query":"q","layer":"paraphrase","expected":["a"],"judge":null}]}"#,
+        )
+        .unwrap();
+        let e = parse_baseline(&v).unwrap_err();
+        assert!(e.contains("unjudged"), "{e}");
+        // 裁决后（judge 对象 + rel）→ 正常解析。
+        let v2 = crate::memory::json::parse(
+            r#"{"cases":[{"query":"q","layer":"paraphrase","expected":["a"],"rel":{"a":1},"judge":{"by":"tester","date":"2026-10-22T00:00:00Z"}}]}"#,
+        )
+        .unwrap();
+        let cases = parse_baseline(&v2).unwrap();
+        assert_eq!(cases.len(), 1);
+        assert_eq!(cases[0].rel.get("a"), Some(&1.0));
+    }
+
+    /// P4.4+ 优化⑩：bootstrap CI 确定性（同 seed 同输出）且区间在 [min,max] 内。
+    #[test]
+    fn bootstrap_ci_deterministic_and_bounded() {
+        let vals = vec![1.0, 1.0, 1.0, 1.0, 0.5, 0.0];
+        let (a_lo, a_hi) = boot_ci(&vals, CI_SEED);
+        let (b_lo, b_hi) = boot_ci(&vals, CI_SEED);
+        assert_eq!(a_lo, b_lo, "同 seed 必须逐位可重放");
+        assert_eq!(a_hi, b_hi);
+        assert!(a_lo >= 0.0 && a_hi <= 1.000_000_1, "区间在指标范围内");
+        assert!(a_lo <= a_hi);
+        // 空输入 → (0,0) 不 panic。
+        assert_eq!(boot_ci(&[], CI_SEED), (0.0, 0.0));
     }
 }

@@ -1,7 +1,7 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
 
 pub(crate) struct Opts {
     pub query: String,
@@ -17,7 +17,11 @@ pub(crate) struct Opts {
     pub store: bool,
     /// P4.4+ 优化：修复结论（--store 配 --fix 写入 case.fix，L1 本地直答）。
     /// 仅在 --store 1 时生效；无 --store 时解析但被忽略。
+    /// P4.4+ 优化⑩：--store 不带 --fix 时 stderr warning（L1 无法直答"怎么解决的"）。
     pub fix: String,
+    /// P4.4+ 优化⑩：--fix-file <path>——多行修复结论从文件读入（等价 --fix 内容，
+    /// 换行保留；适合多行处置步骤）。与 --fix 同时给时报错。
+    pub fix_file: Option<String>,
     pub recall: usize,
     pub recall_only: bool,
     /// P4.2 L1 要点摘要：--recall-detail 时 mem 段追加 summary 行。
@@ -48,6 +52,11 @@ pub(crate) struct Opts {
     /// --annotate-max N：标注覆盖的最大 case 数（缺省 16；0 = 全库）。
     /// 证据门 30–50 组：case 数 × 三层产率约 1.7，24+ case 库可直接落窗。
     pub annotate_max: usize,
+    /// P4.4+ 优化⑩：盲测裁决（--judge <baseline.json>）——逐条 stdin 录入 2/1/0/s，
+    /// 把 judge:null 替换为 rel+judge 元数据（by/date）；未裁决条目 --eval 拒绝。
+    pub judge: Option<String>,
+    /// --judge-by <name>：裁决人标识（缺省取 USERNAME）。
+    pub judge_by: Option<String>,
     pub mem_dir: String,
     pub forces: Vec<String>,
     pub files: Vec<String>,
@@ -125,6 +134,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut store_seen = false;
     let mut fix = String::new();
     let mut fix_seen = false;
+    let mut fix_file: Option<String> = None;
     let mut recall = 0usize;
     let mut recall_seen = false;
     let mut recall_only = false;
@@ -143,6 +153,8 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut annotate_out: Option<String> = None;
     let mut seed = 0u64;
     let mut annotate_max = 16usize;
+    let mut judge: Option<String> = None;
+    let mut judge_by: Option<String> = None;
     let mut mem_dir = default_mem_dir();
     let mut mem_dir_seen = false;
     let mut forces = Vec::new();
@@ -259,6 +271,17 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 fix = v;
             }
+            // P4.4+ 优化⑩：--fix-file <path>——多行修复结论从文件读入。
+            "--fix-file" => {
+                if fix_file.is_some() {
+                    return Err("--fix-file specified more than once".to_string());
+                }
+                let p = option_value(&args, &mut i, name, inline)?;
+                if p.is_empty() {
+                    return Err("--fix-file requires a path".to_string());
+                }
+                fix_file = Some(p);
+            }
             "--recall" => {
                 if recall_seen {
                     return Err("--recall specified more than once".to_string());
@@ -351,6 +374,23 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                     .parse::<usize>()
                     .map_err(|_| format!("--annotate-max expects an integer, got {:?}", v))?;
             }
+            // P4.4+ 优化⑩：盲测裁决（--judge <baseline.json>，交互式 stdin 录入）。
+            "--judge" => {
+                if judge.is_some() {
+                    return Err("--judge specified more than once".to_string());
+                }
+                let p = option_value(&args, &mut i, name, inline)?;
+                if p.is_empty() {
+                    return Err("--judge requires a baseline path".to_string());
+                }
+                judge = Some(p);
+            }
+            "--judge-by" => {
+                if judge_by.is_some() {
+                    return Err("--judge-by specified more than once".to_string());
+                }
+                judge_by = Some(option_value(&args, &mut i, name, inline)?);
+            }
             "--rebuild" => {
                 if inline.is_some() {
                     return Err("--rebuild does not take a value".to_string());
@@ -437,10 +477,14 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         && !stats
         && !annotate
         && !annotate_raw
+        && judge.is_none()
         && query.is_empty()
         && forces.is_empty()
     {
         return Err("missing --query (or provide at least one --force pattern)".to_string());
+    }
+    if judge.is_some() && (annotate || annotate_raw || eval.is_some()) {
+        return Err("--judge cannot be combined with --annotate/--annotate-raw/--eval".to_string());
     }
     if (annotate || annotate_raw) && (eval.is_some() || l1_hist) {
         return Err(
@@ -455,6 +499,12 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     }
     if fix_seen && !store {
         return Err("--fix requires --store 1".to_string());
+    }
+    if fix_file.is_some() && !store {
+        return Err("--fix-file requires --store 1".to_string());
+    }
+    if fix_seen && fix_file.is_some() {
+        return Err("--fix and --fix-file are mutually exclusive".to_string());
     }
     if recall_only && !recall_seen {
         recall = 3; // recall-only 未指定 K 时默认 top-3（与主流程 --recall 语义一致）
@@ -472,6 +522,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         no_stats,
         store,
         fix,
+        fix_file,
         recall,
         recall_only,
         recall_detail,
@@ -488,6 +539,8 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         annotate_out,
         seed,
         annotate_max,
+        judge,
+        judge_by,
         mem_dir,
         forces,
         files,

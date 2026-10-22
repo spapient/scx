@@ -21,6 +21,7 @@ pub mod housekeep;
 pub mod index;
 pub mod ingest;
 pub mod json;
+pub mod judge;
 pub(crate) mod lock;
 pub mod meta;
 pub mod mmr;

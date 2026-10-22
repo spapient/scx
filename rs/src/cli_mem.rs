@@ -9,8 +9,10 @@ use std::io::{self, Write};
 /// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
 /// case 只显示指纹段（`YYYY-MM-DD_<hash16>` 的 hash16），保证输出不随日期漂移。
 /// `detail` 时（P4.2 --recall-detail）每条追加一行 `summary:`（error_code+file_loc+证据行）；
-/// P4.4+ 优化：case 带修复结论（--store 配 --fix）时**无条件**追加 `fix:` 行——
-/// L1 本地直答的"上次怎么解决"在主流程/查看模式均直接可见（不依赖 --recall-detail）。
+/// P4.4+ 优化：case 带修复结论（--store 配 --fix）时追加 `fix:` 行——
+/// **定位为"候选答案 + 证据"而非无条件事实**（P4.4+ 优化⑩：相似症状可能不同根因，
+/// 复用 fix 有风险）——fix 行恒带 `(sim=..)` 相似度标注：主流程 L1 置信直答时
+/// 该 sim 即直答依据；查看/候选场景下使用者据 sim 判断可复用性。
 /// P4.4+ 优化⑤：case 带原始证据（evidence_lno/evidence）时 detail 追加 `  evidence: <lno> <原文>` 行
 /// （证据行区间 + 原始证据回放，旧 case 无此键则跳过）。
 pub(crate) fn write_mem_lines(
@@ -43,12 +45,12 @@ pub(crate) fn write_mem_lines(
             }
             let fix = c.fix.clone();
             if !fix.is_empty() {
-                writeln!(out, "  fix: {}", fix)?;
+                writeln!(out, "  fix: {} (candidate, sim={:.2})", fix, h.sim)?;
             }
         } else {
             let fix = scx::memory::case_fix(root, &h.id).unwrap_or_default();
             if !fix.is_empty() {
-                writeln!(out, "  fix: {}", fix)?;
+                writeln!(out, "  fix: {} (candidate, sim={:.2})", fix, h.sim)?;
             }
         }
     }
