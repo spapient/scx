@@ -128,9 +128,17 @@ powershell -ExecutionPolicy Bypass -File ..\scripts\m4-eval.ps1
 - 盲测 SOP：`--annotate-raw --seed 0 --annotate-max 0 --annotate-out baseline-raw.json` →
   人工逐条裁决 rel（2/1/0，或删除）→ `--eval baseline-raw.json --eval-verbose` →
   报告留档（裁决 JSON + 输出 + 裁决人/日期/seed）。任何一层 A<B 即失败，回到处置 1 类修复。
+- **P0-1 盲测裁决链（2026-10-22，d2766dc）**：`--annotate-raw` 的 paraphrase/semantic 条目
+  rel 不再预填（序列化 `"judge": null`）；`--eval` 遇未裁决条目直接报错（防"自动标注自证"）；
+  新增 **`--judge [--judge-by NAME]` 交互裁决**——逐条打印 `[i/n] layer=.. query=".."` +
+  盲测摘要（**零 A/B 分数**），stdin `2/1/0/s`（s=跳过，EOF 中止不写回，跳过条目保持
+  judge:null 且 `--eval` 仍拒绝）；报告含裁决人/日期/seed 与 **bootstrap 95% CI**（固定
+  seed `CI_SEED`、B=1000、r@5+MRR 预声明主指标），并输出 multi-rel/single-rel 计数
+  （NDCG 判别强度可见，单相关条目 NDCG 接近二值、容易高估——评估必读口径）。
 
-**状态（不变）**：工具链就绪（`--annotate` 回归集 + `--annotate-raw` 盲测集）；
+**状态（不变）**：工具链就绪（`--annotate` 回归集 + `--annotate-raw` 盲测集 + `--judge` 裁决链）；
 **独立人工/盲测质量证据未闭环前，M4 不宣称通过**。盲测裁决集 ≥30 组、每层 ≥10 组、
-预声明主指标（r@5 + MRR）后，方为独立证据门。
+预声明主指标（r@5 + MRR）与 bootstrap CI 后，方为独立证据门。
 
-**门禁（优化⑧ 后）**：97 库 + 8 CLI + 5 集成 + golden 29 例全绿，fmt/clippy 0，release ✓。
+**门禁（P0-1..P1-5 后）**：104 库 + 8 CLI + 5 集成 + golden 29 例全绿，fmt/clippy 0，release ✓。
+实施记录与整改单见 `docs/rag-implementation-log.md` §24。
