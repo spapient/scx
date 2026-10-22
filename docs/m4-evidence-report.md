@@ -2,7 +2,7 @@
 
 日期：2026-10-23（初版 2026-10-22）
 库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨ + real-eval 机械门
-状态：**机械门 PASS（40 组/三层达标/judge=fei，exit 0）；M4 人工质量证据未闭环——全 rel=2、三层 A=B、语料为合成样例且单裁决人。后续合成诊断集 A 在 paraphrase/多相关层领先（§12），但不是独立人工证据。**
+状态：**机械门 PASS（40 组/三层达标/judge=fei，exit 0）；M4 人工质量证据未闭环——全 rel=2、三层 A=B、语料为合成样例且单裁决人。§12.1 合成诊断集 A 在语义/多相关层领先，但不是独立人工证据。弱相关/负例与双人复核工具已就绪（§13），待真实历史事故语料与第二裁决人。**
 
 ## 1. 结论先行
 
@@ -331,3 +331,32 @@ paraphrase 前/后: 1.000 / 1.000（无回归）
 
 结论边界不变：这是机制回归证据，不是独立人工质量证据；M4 的
 “全 rel=2 / 单裁决人 / 合成语料”仍未闭环。
+
+## 13. 弱相关/负例与双人复核工具（2026-10-23，就绪待真人）
+
+为补上 M4 剩余两项缺口，新增两个脚本（策略层，未改核心）：
+
+- `scripts/judge-audit.ps1`：对 baseline 每条 query 跑检索器 top-k，生成
+  **盲测候选包**（只含 query + 候选摘要 + fix，不含 target id、不含 A/B 分数），
+  人工逐候选打 `rel=2/1/0` 后 `-Import` 回填 rel 字典与 judge.by/date。
+  这是产出弱相关/负例的唯一诚实途径。
+- `scripts/judge-agreement.ps1`：比对两名裁决人回填后的 baseline，
+  输出共同候选数、原始一致率、Cohen's kappa（0/1/2 三类）与逐条分歧。
+
+机械自检（E1，非人工证据）：
+
+```text
+judge-audit 生成: 116 行（40 组 × top-10，40/40 target 均在候选池内）
+judge-audit 回填: rel2=40 rel1=0 rel0=64（smoke-test 填充，验证机制）
+judge-agreement: 两份相同 baseline → common=40 raw=1.000 kappa=1.000
+```
+
+**未闭环的两项输入只能由人提供，AI 不代劳：**
+
+1. **真实历史事故语料**：仓库内只有 `eval-real/seed-40.ps1` 写死的合成夹具，
+   没有真实事故。需要把真实事故日志逐条 `scx --query ... --store 1 --fix ...` 入库，
+   再按 `docs/eval-baseline-template.md` 生成 CSV/baseline。AI 不会伪造历史事故。
+2. **第二裁决人**：`judge.by` 必须是真人姓名；`judge-audit.ps1` 的包可以
+   交给第二人独立填写，再跑 `judge-agreement.ps1`。AI 填的 rel 不算“独立人工证据”。
+
+在两项输入补齐前，M4 结论只能是“机械门 PASS；质量优势未成立”。

@@ -79,6 +79,37 @@ scx --query "db timeout conn_id" --recall-only --recall 5 --recall-detail --mem-
 6. 跑机械门：`scx --eval baseline.json --gate --eval-verbose --mem-dir <库目录>`；`gate: PASS` 才可作为 M4 证据，`FAIL` 时按输出补齐样本/元数据或修召回。
 7. 把 `--judge` 后的 JSON、`--eval --gate` 输出、裁决人/日期/seed 一起留档；报告行贴进 `docs/rag-implementation-plan.md` §7 P4.1 的验证记录。
 
+## 5.1 弱相关/负例 + 第二裁决人（2026-10-23 新增脚本）
+
+上面的 `--judge` 只对每条 query 的**单一目标**打 rel，产不出弱相关（1）和负例（0），
+gate 会一直告警 `all labels are 2`。要补弱相关/负例并支持第二裁决人：
+
+1. 生成盲测候选包（隐藏 target id 与 A/B 分数，只有 query + 候选摘要 + fix）：
+
+   ```powershell
+   pwsh -NoProfile -File scripts\judge-audit.ps1 -Baseline eval-real\baseline.json -MemDir eval-real\mem -Out eval-real\judge-packet.tsv
+   ```
+
+2. 人工在 `rel` 列逐候选填 `2/1/0`（或 `s` 跳过）。这是唯一产出弱相关/负例的诚实途径：
+   候选池来自检索器 top-k，裁决人不知道哪条是 target，按 query 与候选摘要的相关度独立打分。
+3. 回填（写入 rel 字典 + judge.by/date）：
+
+   ```powershell
+   pwsh -NoProfile -File scripts\judge-audit.ps1 -Import eval-real\judge-packet.tsv -Baseline eval-real\baseline.json -Judge <姓名>
+   ```
+
+4. 第二裁决人：用同一 `judge:null` 副本独立执行 1–3（不同 `-Judge` 姓名），然后比对一致性：
+
+   ```powershell
+   pwsh -NoProfile -File scripts\judge-agreement.ps1 -A first.json -B second.json
+   ```
+
+   输出共同候选数、原始一致率、Cohen's kappa（0/1/2 三类）与逐条分歧；分歧项需人工仲裁，
+   仲裁后重新冻结 baseline。只有两人的裁决都写出 by+date 且 kappa 报告在案，才能写“双人复核”。
+
+> 红线：包内没有 target id 也没有 A/B 分数；不要用自动 rel 或 AI 自动标替人裁决——
+> `judge.by` 必须是真人姓名，AI/脚本标的一律不算“独立人工证据”。
+
 ## 6. 约束与红线
 
 - expected 必须是库中真实存在的 id——`--eval` 会按库实际召回计算，写错 id 等于污染结论。
