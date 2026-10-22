@@ -1,8 +1,9 @@
 # scx 构建说明（跨平台自举：Windows / macOS / Linux）
 
-## 语义要点（v0.4）
+## 语义要点（v0.4.1）
 
 - **结构性种子不变量**：证据行（seed）及其 ±context（默认 1）最小可读邻域先无条件标记为保留，再对剩余内容使用预算；`--ratio` 只约束可选内容，不挤占种子邻域。证据判定只来自查询证据（IDF 加权命中）与 `--force`，结构加分不制造种子。
+- **`--lineno 1` 行号溯源**：保留行输出附加原文行号前缀（grep -n 风格 `N: `）；passthrough / fail-open 返回原文时不附加，保持"原样保留"语义。
 - **无可用内容回退**：若预算或 `--context 0` 导致没有任何行可保留，返回 `mode=passthrough:no-kept` 和原文，不返回静默空正文。
 - **针尖档 `--context 0`**：完全跳过可选填充，只保留证据行与省略标记（风险 HIGH 且 risk-gate 开时另含失败级错误行与事故标记行）。无证据时走上述回退。实测削减 95.9% / 82.0% / 93.9%（三语料），金标 9/9、9/9、27/27 全保；这是"证据全保"语义下的物理地板。
 - **种子区域门控**：可选预算只填充在种子行的邻域区域（±window 扩展，间隔不超过 window*3 合并；`regions=` 为区域数，0 表示种子为零、回退全图排序）。区域外素材不参与预算（首两行身份行除外）。
@@ -12,6 +13,7 @@
 - 分析缓冲会剥离 ANSI 转义并把裸 `\r` 视为空白，避免彩色日志/进度条污染词面；筛选输出仍写原始行。
 - 单次输入上限 64 MiB（CLI 层，含多文件合计）；超出时明确报错，需先分段，避免一次性读入和筛选向量挤爆内存。
 - 统计行字段：`kept/total`、`chars`、`dup`、`seeds/evidence`（恒等，可断言）、`risk`、`guarded`、`regions`、`window`、`terms`、`forced`、`mode`。
+- **记忆知识库（RAG，P1–P4.3 增量，默认关）**：`--store 1` 沉淀证据块 → `--recall K` 旁路召回（mem: 段不进正文）→ `--rate good|bad` 反馈闭环；召回 = 自研统计向量（BM25 + 结构化字段加权 + 时间衰减 + MMR + 词级调权 + 场景桶 + 实体边一跳），非 embedding；`--eval <baseline.json>` 冻结标注集出 A/B 对拍表 + `l1:` 直答命中率，`--l1-hist` 出运行期命中分布；`--rebuild/--gc/--delete` 维护；全部零依赖、离线、确定性。设计 `docs/memory-rag-design.md`，计划 `docs/rag-implementation-plan.md`，标注采集 `docs/eval-baseline-template.md`。
 
 ## 削减率的物理极限（98.99% 目标核算，2026-10-14）
 
@@ -28,11 +30,15 @@
 ## 架构与复用
 
 - **库 + CLI 分离**：筛选引擎是纯函数库 `src/lib.rs` 的 `scx::compress(&text, &query, &Config) -> Outcome`（零文件、环境与进程 I/O，无随机源）；`src/main.rs` 仅是外壳（参数、输入、统计与 JSON 格式化）。
-- **复用**：任何程序或脚本可直接 `use scx::compress`；`cargo test` 当前含 31 个测试（20 个库测试 + 7 个 CLI 单元测试 + 4 个 CLI 集成测试），覆盖种子不变量、空结果回退、`--force` 重复行、配置边界、CJK 词面、ANSI/CR 分析、diff 正文识别、输入上限边界、CRLF 与确定性。
-- **历史差分基线**：0.3.x 曾与冻结参照在 40 组用例上逐字节一致；0.4.0 有意改变空结果回退、CJK 词面和预算语义，旧基线需要重冻。CI 当前执行格式、clippy、单测和 release 构建。
+- **模块划分**：`src/terms.rs`（词面/切词/估算）、`src/classify.rs`（错误/标记/结构分类）、`src/norm.rs`（归一化/ANSI 剥离）是独立纯函数层（`pub(crate)`），可供记忆库等外部复用；`src/lib.rs` 保留 Config/Outcome/compress 与测试，单文件 <500 行；`src/memory/` 为记忆知识库（store/recall/feedback/eval/edge 等 20+ 文件，各 <500 行）。
+- **复用**：任何程序或脚本可直接 `use scx::compress`；`cargo test` 当前含 71 个库测试 + 8 个 CLI 单元测试 + 4 个 CLI 集成测试 + 1 个 golden 差分门（25 例冻结基线、75 个 expected 文件），覆盖种子不变量、空结果回退、`--force` 重复行、配置边界、CJK 词面、ANSI/CR 分析、diff 正文识别、输入上限边界、CRLF 与确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放与字节级回归。
+- **golden 差分门**：`tests/golden.rs` 将 25 个代表性用例的 stdout/stderr/退出码与冻结基线（`tests/golden/expected/`）逐字节对比；有意变更语义时重冻基线：`cargo test --test golden update_baselines -- --ignored --nocapture`，并人工审查基线明细。CI 当前执行格式、clippy、单测、golden 和 release 构建。
+- **零依赖性能基准**：`examples/bench.rs`（50k 行约 2.5MB 全流程中位耗时，`std::time::Instant`，5 次采样取中位），防无声性能退化。运行：`cargo run --release --example bench --locked --target-dir "$TEMP/scx-cargo-target"`。
 
 ## 版本变动
 
+- **0.4.1 + 记忆库（P1–P4.3，2026-10-22）**：`scx::memory` 知识库落地——存储/摄取/召回（自研统计向量：BM25+字段加权+时间衰减+MMR+词级调权+场景桶+实体边一跳）、qmap 记忆图、反馈双环、倒排索引（mmap+坏段自愈）、库维护（rebuild/gc/delete）、评估系统（--eval A/B 对拍 + l1 命中率 + --l1-hist）、要点摘要（--recall-detail）；门禁终态 71 库 + 8 CLI + 4 集成 + golden 25 例全绿，1 万条库召回中位 2.1ms。设计/计划/标注模板见 docs/。
+- **0.4.1**：新增 `--lineno 1` 保留行行号溯源；lib.rs 模块化拆分（terms/classify/norm，过 500 行门禁，行为逐字节不变，由 golden 门证明）；新增 golden 差分门（16 用例冻结基线）与零依赖性能基准（50k 行中位 44 ms）；SKILL/README 补 0.4.1 用法与验证记录。
 - **0.4.0**：空结果回退 `passthrough:no-kept`；`--force` 命中行不再被重复行折叠；配置在库入口规范化（负数/超范围 `window`、`context`、`ratio` 不再触发溢出或超大循环）；预算只约束可选内容；小输入阈值改为“行数少且 token 少”；CJK 应用 STOP、补齐尾词并扩展字符范围；`is_frame` 扩展名扫描设上限；分析缓冲剥离 ANSI 转义并折叠裸 CR（输出仍为原文）；统一 diff 的 `+code`/`-code` 正文行参与排序；CLI 严格拒绝未知选项/非法值，新增 `--no-stats`、`--flag=value` 和 64 MiB 输入上限；入口脚本检查全部源码与清单；新增三平台 CI 与 MIT 许可证。
 - **0.3 内追加**：`--context N` 邻域半径档位（默认 1；0 为针尖模式，完全跳过可选填充）。刀口数据：commit 语料差距从 13.2 点收窄到 0.9 点，readme 反超同类参照 2.8 点。
 - 0.3.9（CJK 错误词面）：错误/失败/报错/异常/超时/崩溃 入错误判据与风险守卫；警告按 warn 级处理（只入判据、不入守卫）。差分门 23 例有意差异逐行审查通过——新增保留行全为中文错误/失败语义行，零误留、零移除；代价：diff 削减 94.9→94.0、commit 69.7→69.3、e2e 97.9→97.3；噪声档与 0.3.8 字节全同。参照重冻 v037→v039，三平台实机同哈希复验通过。
@@ -68,7 +74,7 @@ sh build.sh          # cargo build --release --locked 并安装到 bin/scx（构
 
 - 二进制命名：Windows 为 `bin/scx.exe`；macOS / Linux 为 `bin/scx`（均由本机自举生成，来源同一份零依赖源码）。
 - 档位对比（2026-10-14，同语料同查询同 ratio 0.35，读数为当时快照）：默认档 94.9% / 69.7% / 89.7%，针尖档 95.9% / 82.0% / 93.9%，金标全保；同类参照同尺为 98.2% / 82.9% / 91.1%（针尖档在 readme 上反超 2.8 点，commit 差 0.9 点）。
-- 当前回归（0.4.0）：`cargo test` 31/31；`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 与 `cargo build --release --locked` 通过；CI 覆盖 Linux/macOS/Windows。
+- 当前回归（0.4.1）：`cargo test` 33/33（含 golden 门 1 个 + 1 个 ignored 重冻）；`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 与 `cargo build --release --locked` 通过；golden 差分门对 0.4.0→0.4.1 拆分前后逐字节一致；50k 行基准中位 44 ms（0.3.8 为 61.6 ms）。CI 覆盖 Linux/macOS/Windows。
 - 历史差分等价（0.3.9）：40 用例对 v0.3.9 参照逐字节一致；CJK 词面变更已经逐行审查并重冻参照（v037→v039）；当时 `cargo test` 10/10。
 - 噪声转储与守卫（0.3.7）：针尖档 1,908 行→6 行（行削减 99.69%，字符 85,024→342 即 99.60%），默认档→20 行（98.9%）；4 条查询种子与“Root cause:”标记、真 ERROR 全保；Mac arm64 与 Alpine musl 实机复验通过且与基线期望逐字节一致。
 - 工程化基准（0.3.8）：50k 行（2.5MB）全流程中位 95.1 → 61.6 ms；输出与 0.3.7 逐字节一致（差分门 40/40、噪声档 A/B、三平台期望文件）；单测 9/9。
