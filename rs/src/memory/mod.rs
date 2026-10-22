@@ -10,6 +10,7 @@
 //! 本阶段（P1.1-P1.5 + P2.1/P2.4/P2.7）落地 json/store/meta/model/util/bucket/qmap/
 //! ingest/field/recall 与 CLI 门面。
 
+pub mod annotate;
 pub mod bucket;
 pub mod cache;
 pub mod edge;
@@ -227,4 +228,15 @@ pub fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
 /// 门面：库盘点（P4.4+ 优化，--stats）：case/桶/状态/fix 覆盖率/质量/磁盘。
 pub fn stats_table(root: &str) -> std::io::Result<Vec<String>> {
     stats::table(root)
+}
+
+/// 门面：智能标注（P4.4+ 优化⑥，--annotate）：替代人工采集 M4 证据门标注。
+/// 生成三层标注（literal/paraphrase/semantic），每条经召回自检验证并带证据链；
+/// 返回标注集（调用方负责序列化/落盘/报告）。
+pub fn annotate_cases(
+    root: &str,
+    seed: u64,
+    max_cases: usize,
+) -> std::io::Result<Vec<annotate::AnnotatedCase>> {
+    annotate::annotate(root, seed, max_cases)
 }

@@ -1,0 +1,5 @@
+annotate: cases=6 rel2=2 rel1=4
+  layer: literal=2
+  layer: paraphrase=2
+  layer: semantic=2
+  out: baseline-auto.json

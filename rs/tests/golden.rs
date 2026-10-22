@@ -621,6 +621,46 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
+    // 29) 智能标注器（P4.4+ 优化⑥：--annotate 三层标注 + 自检证据，替代人工 M4 采集）。
+    let mem_an_dir = std::env::temp_dir().join("scx-golden-mem-annotate");
+    let _ = std::fs::remove_dir_all(&mem_an_dir);
+    let mem_an = mem_an_dir.to_string_lossy().into_owned();
+    let _ = run_scx(
+        &[
+            "--query",
+            "db timeout conn_id",
+            "--store",
+            "1",
+            "--fix",
+            "enlarge pool to 64 conns",
+            "--mem-dir",
+            Box::leak(mem_an.clone().into_boxed_str()),
+        ],
+        seed_log,
+    );
+    let _ = run_scx(
+        &[
+            "--query",
+            "磁盘空间不足 errno",
+            "--store",
+            "1",
+            "--mem-dir",
+            Box::leak(mem_an.clone().into_boxed_str()),
+        ],
+        seed_disk,
+    );
+    v.push((
+        "memory_annotate".into(),
+        vec![
+            "--annotate",
+            "--seed",
+            "0",
+            "--mem-dir",
+            Box::leak(mem_an.into_boxed_str()),
+        ],
+        String::new(),
+    ));
+
     v
 }
 

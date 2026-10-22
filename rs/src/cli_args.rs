@@ -1,7 +1,7 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--annotate] [--annotate-out <path>] [--seed N] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
 
 pub(crate) struct Opts {
     pub query: String,
@@ -35,6 +35,12 @@ pub(crate) struct Opts {
     pub l1_hist: bool,
     /// P4.4+ 优化：库盘点（--stats，豁免 --query）。
     pub stats: bool,
+    /// P4.4+ 优化⑥：智能标注器（--annotate，豁免 --query）——生成 M4 证据门标注集。
+    pub annotate: bool,
+    /// --annotate-out <path>：标注集输出路径（缺省 `<mem-dir>/baseline-auto.json`）。
+    pub annotate_out: Option<String>,
+    /// --seed N：标注生成确定性种子（缺省 0，同 seed 可重放）。
+    pub seed: u64,
     pub mem_dir: String,
     pub forces: Vec<String>,
     pub files: Vec<String>,
@@ -125,6 +131,9 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut eval_verbose = false;
     let mut l1_hist = false;
     let mut stats = false;
+    let mut annotate = false;
+    let mut annotate_out: Option<String> = None;
+    let mut seed = 0u64;
     let mut mem_dir = default_mem_dir();
     let mut mem_dir_seen = false;
     let mut forces = Vec::new();
@@ -298,6 +307,28 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 stats = true;
             }
+            "--annotate" => {
+                if inline.is_some() {
+                    return Err("--annotate does not take a value".to_string());
+                }
+                annotate = true;
+            }
+            "--annotate-out" => {
+                if annotate_out.is_some() {
+                    return Err("--annotate-out specified more than once".to_string());
+                }
+                let p = option_value(&args, &mut i, name, inline)?;
+                if p.is_empty() {
+                    return Err("--annotate-out requires a path".to_string());
+                }
+                annotate_out = Some(p);
+            }
+            "--seed" => {
+                let v = option_value(&args, &mut i, name, inline)?;
+                seed = v
+                    .parse::<u64>()
+                    .map_err(|_| format!("--seed expects a non-negative integer, got {:?}", v))?;
+            }
             "--rebuild" => {
                 if inline.is_some() {
                     return Err("--rebuild does not take a value".to_string());
@@ -374,7 +405,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         return Err("--stat and --no-stats cannot be used together".to_string());
     }
     let query = query.unwrap_or_default();
-    // O4 反馈标注 / P3.3 库维护 / P4.1 评估 / P2 残余 l1-hist 模式不要求 --query。
+    // O4 反馈标注 / P3.3 库维护 / P4.1 评估 / P2 残余 l1-hist / 库盘点 / 智能标注不要求 --query。
     if rate.is_none()
         && !rebuild
         && !gc
@@ -382,10 +413,14 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         && eval.is_none()
         && !l1_hist
         && !stats
+        && !annotate
         && query.is_empty()
         && forces.is_empty()
     {
         return Err("missing --query (or provide at least one --force pattern)".to_string());
+    }
+    if annotate && (eval.is_some() || l1_hist) {
+        return Err("--annotate cannot be combined with --eval/--l1-hist".to_string());
     }
     if recall_only && query.is_empty() {
         return Err("--recall-only requires --query".to_string());
@@ -420,6 +455,9 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         eval_verbose,
         l1_hist,
         stats,
+        annotate,
+        annotate_out,
+        seed,
         mem_dir,
         forces,
         files,
