@@ -78,7 +78,12 @@ pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Ve
             format!("no cases in memory at {root}; store some with --store first"),
         ));
     }
-    let cap = max_cases.min(ids.len()).max(1);
+    // P4.4+ 优化⑦：max_cases=0 表示全库（证据门规模可调），否则取 min 且至少 1。
+    let cap = if max_cases == 0 {
+        ids.len()
+    } else {
+        max_cases.min(ids.len()).max(1)
+    };
     let ids: Vec<String> = ids.into_iter().take(cap).collect();
     let mut out: Vec<AnnotatedCase> = Vec::new();
     let mut dropped: Vec<(&'static str, String)> = Vec::new();
@@ -93,9 +98,9 @@ pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Ve
             evidence: vec!["fingerprint".to_string()],
             note: String::new(),
         });
-        // paraphrase：同义词改写 + 自检。
+        // paraphrase：同义词改写 + 自检（强相关门槛 top-5）。
         if let Some(q) = rewrite(&c, seed) {
-            if let Some(s) = self_check(root, &q, &c) {
+            if let Some(s) = self_check(root, &q, &c, 5) {
                 out.push(AnnotatedCase {
                     query: q,
                     layer: "paraphrase".to_string(),
@@ -114,10 +119,10 @@ pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Ve
                 dropped.push(("paraphrase", q));
             }
         }
-        // semantic：根因行词构造 + 自检。
+        // semantic：根因行词构造 + 自检（弱相关 rel=1，门槛放宽 top-10）。
         let sq = semantic_query(&c);
         if !sq.is_empty() {
-            match self_check(root, &sq, &c) {
+            match self_check(root, &sq, &c, 10) {
                 Some(s) => out.push(AnnotatedCase {
                     query: sq,
                     layer: "semantic".to_string(),
@@ -170,6 +175,8 @@ fn rewrite(c: &Case, seed: u64) -> Option<String> {
 }
 
 /// 大小写不敏感字面替换（首次命中即替换，避免同词多轮扰动）。
+/// 边界检查必须走 char 边界安全切片：pos 由 lower（与 s 字节对齐）求得，
+/// 前后各取一个完整 char 判断——中文 query 场景下字节切片会 panic（P4.4+ 优化⑦）。
 fn replace_ci(s: &mut String, from: &str, to: &str) -> bool {
     if from.is_empty() || to.is_empty() {
         return false;
@@ -177,10 +184,11 @@ fn replace_ci(s: &mut String, from: &str, to: &str) -> bool {
     let lower = s.to_lowercase();
     if let Some(pos) = lower.find(from) {
         // 词边界检查：替换点前/后须非 ascii 字母数字（防 "database" 里的 "db" 被替换）。
+        // s[..pos] / s[after..] 均为 char 边界（pos 是 from 起始边界，after=pos+from.len 同理）。
         let before_ok = pos == 0
-            || !s[pos.saturating_sub(1)..pos]
+            || !s[..pos]
                 .chars()
-                .next()
+                .next_back()
                 .is_some_and(|c| c.is_ascii_alphanumeric());
         let after = pos + from.len();
         let after_ok = after >= s.len()
@@ -234,10 +242,12 @@ fn semantic_query(c: &Case) -> String {
     String::new()
 }
 
-/// 自检：该 query 召回 top-5 是否含目标 case（tail16 匹配）。零写入（纯检索）。
-fn self_check(root: &str, query: &str, target: &Case) -> Option<SelfCheck> {
+/// 自检：该 query 召回 top-k 是否含目标 case（tail16 匹配）。零写入（纯检索）。
+/// 门槛按相关度分层（P4.4+ 优化⑦）：literal/paraphrase（强相关）top-5；
+/// semantic（弱相关，rel=1）放宽 top-10——语义变体词面重叠天然低，top-5 会系统性误杀。
+fn self_check(root: &str, query: &str, target: &Case, k: usize) -> Option<SelfCheck> {
     let target_tail = hash16_of(target);
-    let hits = recall::recall(root, query, 5).ok()?;
+    let hits = recall::recall(root, query, k).ok()?;
     for (rank, h) in hits.iter().enumerate() {
         let tail = h.id.rsplit('_').next().unwrap_or(&h.id);
         if tail == target_tail {
@@ -428,5 +438,18 @@ mod tests {
             s, "database timeout in database",
             "仅替换独立词 db，不碰 database 内嵌"
         );
+    }
+
+    /// P4.4+ 优化⑦ 回归：中文 query 里替换中文同义词不得 char 边界 panic。
+    #[test]
+    fn replace_ci_safe_on_cjk_boundary() {
+        let mut s = "数据库连接池耗尽 pool".to_string();
+        // "连接池" 前的 "库" 是 3 字节字符——旧实现 pos.saturating_sub(1)..pos 会 panic。
+        assert!(replace_ci(&mut s, "连接池", "pool"));
+        assert_eq!(s, "数据库pool耗尽 pool", "中文同义词替换应成功");
+        // 词边界不匹配时安全返回 false（不 panic、不替换）。
+        let mut t = "磁盘空间不足".to_string();
+        assert!(!replace_ci(&mut t, "空间不足x", "disk"), "无命中不 panic");
+        assert_eq!(t, "磁盘空间不足");
     }
 }

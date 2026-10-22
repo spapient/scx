@@ -115,18 +115,26 @@ fn rel_of(c: &EvalCase, id: &str) -> f64 {
         .unwrap_or(0.0)
 }
 
-/// 单例指标：Recall@5（expected 在前 5 命中占比）、MRR（首个 expected 的 1/rank）、
-/// NDCG@10（rel 分级，DCG/IDCG）。
-fn metric(c: &EvalCase, hits: &[RecallHit]) -> (f64, f64, f64) {
-    let r5 = if c.expected.is_empty() {
-        0.0
+/// 单例指标：Recall@5 / Recall@10（expected 命中占比）、MRR（首个 expected 的 1/rank）、
+/// NDCG@10（rel 分级，DCG/IDCG）。r10 供弱相关层（semantic）口径使用（P4.4+ 优化⑦）。
+fn metric(c: &EvalCase, hits: &[RecallHit]) -> (f64, f64, f64, f64) {
+    let (r5, r10) = if c.expected.is_empty() {
+        (0.0, 0.0)
     } else {
         let hit5 = hits
             .iter()
             .take(5)
             .filter(|h| hit_expected(&c.expected, &h.id))
             .count();
-        hit5 as f64 / c.expected.len() as f64
+        let hit10 = hits
+            .iter()
+            .take(10)
+            .filter(|h| hit_expected(&c.expected, &h.id))
+            .count();
+        (
+            hit5 as f64 / c.expected.len() as f64,
+            hit10 as f64 / c.expected.len() as f64,
+        )
     };
     let mut mrr = 0.0;
     for (i, h) in hits.iter().take(10).enumerate() {
@@ -142,7 +150,7 @@ fn metric(c: &EvalCase, hits: &[RecallHit]) -> (f64, f64, f64) {
     ideal.truncate(10);
     let idcg = dcg(&ideal);
     let ndcg = if idcg > 0.0 { dc / idcg } else { 0.0 };
-    (r5, mrr, ndcg)
+    (r5, r10, mrr, ndcg)
 }
 
 /// DCG：Σ rel_i / log2(i+1)，i 从 0 计（log2(2)=1）。
@@ -172,22 +180,25 @@ fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String
     let cases = parse_baseline(&v).map_err(std::io::Error::other)?;
     // 分层顺序按首次出现保持（golden 稳定）。
     let mut layers: Vec<String> = Vec::new();
-    let mut agg: HashMap<String, [f64; 7]> = HashMap::new(); // [n, A:r5,mrr,ndcg, B:r5,mrr,ndcg]
-                                                             // verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
+    // [n, A:r5,r10,mrr,ndcg, B:r5,r10,mrr,ndcg]；semantic 层报告 r@10（弱相关口径）。
+    let mut agg: HashMap<String, [f64; 9]> = HashMap::new();
+    // verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
     let mut diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)> = Vec::new();
     for c in &cases {
         let a = recall::recall(root, &c.query, 10)?;
         let b = plain(root, &c.query, 10)?;
-        let (ar5, amrr, andcg) = metric(c, &a);
-        let (br5, bmrr, bndcg) = metric(c, &b);
-        let e = agg.entry(c.layer.clone()).or_insert([0.0; 7]);
+        let (ar5, ar10, amrr, andcg) = metric(c, &a);
+        let (br5, br10, bmrr, bndcg) = metric(c, &b);
+        let e = agg.entry(c.layer.clone()).or_insert([0.0; 9]);
         e[0] += 1.0;
         e[1] += ar5;
-        e[2] += amrr;
-        e[3] += andcg;
-        e[4] += br5;
-        e[5] += bmrr;
-        e[6] += bndcg;
+        e[2] += ar10;
+        e[3] += amrr;
+        e[4] += andcg;
+        e[5] += br5;
+        e[6] += br10;
+        e[7] += bmrr;
+        e[8] += bndcg;
         if !layers.iter().any(|l| l == &c.layer) {
             layers.push(c.layer.clone());
         }
@@ -202,17 +213,30 @@ fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String
         layers.join(",")
     ));
     for l in &layers {
-        let e = agg.get(l).unwrap_or(&[0.0; 7]);
+        let e = agg.get(l).unwrap_or(&[0.0; 9]);
         let n = e[0];
-        out.push(format!(
-            "layer {l}: n={n:.0} A r@5={:.3} mrr={:.3} ndcg@10={:.3} | B r@5={:.3} mrr={:.3} ndcg@10={:.3}",
-            e[1] / n.max(1.0),
-            e[2] / n.max(1.0),
-            e[3] / n.max(1.0),
-            e[4] / n.max(1.0),
-            e[5] / n.max(1.0),
-            e[6] / n.max(1.0),
-        ));
+        // 弱相关层（semantic）用 r@10 口径；强相关层（literal/paraphrase）用 r@5。
+        if l == "semantic" {
+            out.push(format!(
+                "layer {l}: n={n:.0} A r@10={:.3} mrr={:.3} ndcg@10={:.3} | B r@10={:.3} mrr={:.3} ndcg@10={:.3}",
+                e[2] / n.max(1.0),
+                e[3] / n.max(1.0),
+                e[4] / n.max(1.0),
+                e[6] / n.max(1.0),
+                e[7] / n.max(1.0),
+                e[8] / n.max(1.0),
+            ));
+        } else {
+            out.push(format!(
+                "layer {l}: n={n:.0} A r@5={:.3} mrr={:.3} ndcg@10={:.3} | B r@5={:.3} mrr={:.3} ndcg@10={:.3}",
+                e[1] / n.max(1.0),
+                e[3] / n.max(1.0),
+                e[4] / n.max(1.0),
+                e[5] / n.max(1.0),
+                e[7] / n.max(1.0),
+                e[8] / n.max(1.0),
+            ));
+        }
     }
     // P2 阶段门残余：L1 直答命中率出表（[l1] 判据落地后首次可统计）。
     let (l1_hit, l1_total) = l1_stats(root, &cases)?;
@@ -456,16 +480,17 @@ mod tests {
             expected: vec!["c1".to_string(), "c2".to_string()],
             rel,
         };
-        // 命中顺序 c2 在前：recall@5=1.0，MRR=1/1（c2 首个 expected 即第一），NDCG<1（c1 排后）。
+        // 命中顺序 c2 在前：recall@5=1.0，recall@10=1.0，MRR=1/1（c2 首个 expected 即第一），NDCG<1（c1 排后）。
         let hits = vec![hit("c2", 0.9), hit("c1", 0.8), hit("c3", 0.1)];
-        let (r5, mrr, ndcg) = metric(&c, &hits);
+        let (r5, r10, mrr, ndcg) = metric(&c, &hits);
         assert!((r5 - 1.0).abs() < 1e-9);
+        assert!((r10 - 1.0).abs() < 1e-9);
         assert!((mrr - 1.0).abs() < 1e-9);
         // DCG=1/1+2/log2(3)=2.2619，IDCG=2/1+1/log2(3)=2.6309 → NDCG≈0.8597（c1 rel=2 排在 c2 后）。
         assert!((ndcg - 0.8597).abs() < 1e-3, "ndcg={ndcg}");
         // 完全未命中：全 0。
-        let (r5, mrr, ndcg) = metric(&c, &[hit("c9", 0.5)]);
-        assert_eq!((r5, mrr, ndcg), (0.0, 0.0, 0.0));
+        let (r5, r10, mrr, ndcg) = metric(&c, &[hit("c9", 0.5)]);
+        assert_eq!((r5, r10, mrr, ndcg), (0.0, 0.0, 0.0, 0.0));
     }
 
     #[test]

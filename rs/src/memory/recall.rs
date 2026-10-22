@@ -70,18 +70,38 @@ pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<R
     } else {
         None
     };
-    let hits = score_pass(root, query, k, &meta, idx.as_deref())?;
+    // O6 场景桶：候选桶由原始 query 判定一次，首轮与 PRF 第二轮共用（防扩展词带偏过滤）。
+    let cand = candidate_buckets(query);
+    let use_buckets = !cand.is_empty();
+    let hits = score_pass(root, query, k, &meta, idx.as_deref(), &cand, use_buckets)?;
     // P2.3 PRF：低置信（top1.sim < 0.99）时粗召回 top-K 扩展查询再召一轮。
     // 编辑距离 ≤2 变体命中也在本轮覆盖（轻量重排 = 词面重新打分）。
     let low_conf = hits.first().is_some_and(|h| h.sim < 0.99);
     if low_conf {
-        let top_ids: Vec<String> = hits.iter().map(|h| h.id.clone()).collect();
-        if let Ok(ext) = crate::memory::prf::expand(root, &top_ids, query, &meta) {
+        if let Ok(ext) = crate::memory::prf::expand(root, &hits, query, &meta) {
             if !ext.is_empty() {
                 let q2 = format!("{query} {}", ext.join(" "));
-                if let Ok(hits2) = score_pass(root, &q2, k, &meta, idx.as_deref()) {
+                // P4.4+ 优化⑦：第二轮继承首轮候选桶（桶由原始 query 判定），
+                // 扩展词不得改变过滤语义——否则跨语言变体/无关词会把真目标桶误滤（A/B 不可比）。
+                if let Ok(hits2) =
+                    score_pass(root, &q2, k, &meta, idx.as_deref(), &cand, use_buckets)
+                {
                     if !hits2.is_empty() {
-                        return Ok(hits2);
+                        // PRF 是补漏不是覆盖：扩展轮候选并入首轮（去重），首轮命中（含
+                        // 实体边桥入、字段加权命中）永不降级——只增不减，按 score 重排截断。
+                        let mut merged: Vec<RecallHit> = hits.clone();
+                        for h in hits2 {
+                            if !merged.iter().any(|m| m.id == h.id) {
+                                merged.push(h);
+                            }
+                        }
+                        merged.sort_by(|a, b| {
+                            b.score
+                                .partial_cmp(&a.score)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        merged.truncate(k);
+                        return Ok(merged);
                     }
                 }
             }
@@ -92,12 +112,15 @@ pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<R
 
 /// 单轮打分：BM25 + 字段加权 + 时间衰减 + 桶过滤。
 /// `idx` 为 Some 时候选集来自倒排（全库 df/avgdl），None 时线性扫描现算。
+/// `cand`/`use_buckets` 由调用方统一判定（首轮=原始 query 桶；PRF 第二轮继承同一桶）。
 fn score_pass(
     root: &str,
     query: &str,
     k: usize,
     meta: &Meta,
     idx: Option<&Index>,
+    cand: &[String],
+    use_buckets: bool,
 ) -> std::io::Result<Vec<RecallHit>> {
     let k1 = param(meta, "bm25_k1", 1.2);
     let b = param(meta, "bm25_b", 0.75);
@@ -121,9 +144,7 @@ fn score_pass(
     // P4.3 实体边一跳：query 实体键集合（去重在 edge 侧）。
     let q_ent_list: Vec<String> = qf.iter().flat_map(|f| f.iter().cloned()).collect();
 
-    // O6 场景桶：query 判候选桶，case 主桶不在候选桶集内则跳过。
-    let cand = candidate_buckets(query);
-    let use_buckets = !cand.is_empty();
+    // O6 场景桶：query 判候选桶，case 主桶不在候选桶集内则跳过（由调用方统一传入）。
 
     // 候选 docs + df + 统计量：倒排路径（全库口径）或线性路径（候选集口径）。
     let (docs, df, n, avgdl): (Docs, Df, f64, f64) = if let Some(idx) = idx {

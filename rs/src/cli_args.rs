@@ -1,7 +1,7 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--annotate] [--annotate-out <path>] [--seed N] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--annotate] [--annotate-out <path>] [--seed N] [--annotate-max N] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
 
 pub(crate) struct Opts {
     pub query: String,
@@ -41,6 +41,9 @@ pub(crate) struct Opts {
     pub annotate_out: Option<String>,
     /// --seed N：标注生成确定性种子（缺省 0，同 seed 可重放）。
     pub seed: u64,
+    /// --annotate-max N：标注覆盖的最大 case 数（缺省 16；0 = 全库）。
+    /// 证据门 30–50 组：case 数 × 三层产率约 1.7，24+ case 库可直接落窗。
+    pub annotate_max: usize,
     pub mem_dir: String,
     pub forces: Vec<String>,
     pub files: Vec<String>,
@@ -134,6 +137,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut annotate = false;
     let mut annotate_out: Option<String> = None;
     let mut seed = 0u64;
+    let mut annotate_max = 16usize;
     let mut mem_dir = default_mem_dir();
     let mut mem_dir_seen = false;
     let mut forces = Vec::new();
@@ -329,6 +333,12 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                     .parse::<u64>()
                     .map_err(|_| format!("--seed expects a non-negative integer, got {:?}", v))?;
             }
+            "--annotate-max" => {
+                let v = option_value(&args, &mut i, name, inline)?;
+                annotate_max = v
+                    .parse::<usize>()
+                    .map_err(|_| format!("--annotate-max expects an integer, got {:?}", v))?;
+            }
             "--rebuild" => {
                 if inline.is_some() {
                     return Err("--rebuild does not take a value".to_string());
@@ -458,6 +468,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         annotate,
         annotate_out,
         seed,
+        annotate_max,
         mem_dir,
         forces,
         files,

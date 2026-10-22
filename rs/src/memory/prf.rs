@@ -1,11 +1,15 @@
 //! PRF 伪相关反馈（查询扩展）：粗召回 top-K 后取高 IDF 高频词并入 query 再召一轮。
 //!
 //! 统计方法独有优势：embedding 做查询扩展很难。扩展词选取规则（确定性）：
-//! 取粗召回 top-K 的 case 词表（query ∪ text 同口径）；
+//! 只统计与 query 词面相关（sim > 0）的粗召回 case 词表（query ∪ text 同口径）；
 //! 全局 df 现算（线性阶段），批内 tf ≥2 且全局 idf 高（idf > 阈值）的词入选；
 //! 排除已含在 query 词表中的词。
 //! 只在召回低置信（top1.sim < 0.99）时触发：同 query 高置信已直接命中，无需扩展。
+//!
+//! P4.4+ 优化⑦：按 sim>0 过滤粗召回 case——无关 case（词面零重叠）的私有词
+//! 不得进入扩展词表（否则扩展会把不相干桶/词拉进 query，重排噪声压过真目标）。
 
+use crate::memory::recall::RecallHit;
 use crate::memory::store::{self, Meta};
 use crate::terms::build_terms;
 use std::collections::HashMap;
@@ -18,12 +22,13 @@ const IDF_MIN: f64 = 0.6;
 const EXPAND_MAX: usize = 6;
 
 /// 返回扩展词（未含 query 原词的、库内高判别词）。
-/// `top_ids`：粗召回 top-K case id；`meta`：df 快照与库规模。
+/// `hits`：粗召回 top-K 候选（含 sim；仅 sim>0 的 case 参与词频统计）。
+/// `meta`：df 快照与库规模。
 /// df 来源：rebuild 后的 [df] 快照（索引路径，免全库扫描）；
 /// 快照为空（小库未 rebuild）时回退全库现算（线性兜底）。
 pub(crate) fn expand(
     root: &str,
-    top_ids: &[String],
+    hits: &[RecallHit],
     query: &str,
     meta: &Meta,
 ) -> std::io::Result<Vec<String>> {
@@ -52,10 +57,14 @@ pub(crate) fn expand(
     if n == 0.0 {
         return Ok(Vec::new());
     }
-    // 批内 tf：只统计 top_ids 的 case。
+    // 批内 tf：只统计与 query 词面相关（sim>0）的 case——无关 case 的私有词
+    // 是噪声源（会把桶判定/重排带偏），P4.4+ 优化⑦ 明确排除。
     let mut batch: HashMap<String, usize> = HashMap::new();
-    for id in top_ids {
-        let c = store::read_case(root, id)?;
+    for h in hits {
+        if h.sim <= 0.0 {
+            continue;
+        }
+        let c = store::read_case(root, &h.id)?;
         let mut terms = build_terms(&c.query);
         terms.extend(build_terms(&c.text));
         for t in &terms {
@@ -86,6 +95,7 @@ pub(crate) fn expand(
 mod tests {
     use super::*;
     use crate::memory::ingest::ingest;
+    use crate::memory::recall::RecallHit;
     use crate::memory::store::CaseStats;
     use std::fs;
 
@@ -155,7 +165,16 @@ mod tests {
         let q = "pool 又出问题";
         let ids = store::list_ids(&root).unwrap();
         let meta = store::load_meta(&root).unwrap();
-        let ext = expand(&root, &ids, q, &meta).unwrap();
+        // 构造粗召回候选：全部标记 sim=1.0（PRF 只依赖词面相关标记，词频统计看 case 内容）。
+        let hits: Vec<RecallHit> = ids
+            .iter()
+            .map(|id| RecallHit {
+                id: id.clone(),
+                score: 1.0,
+                sim: 1.0,
+            })
+            .collect();
+        let ext = expand(&root, &hits, q, &meta).unwrap();
         // 扩展词应包含库内判别词（errno 或 conn_id 或 pool）。
         assert!(
             ext.iter()

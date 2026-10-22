@@ -171,7 +171,7 @@ fn main() {
     }
     // P4.4+ 优化⑥：智能标注器（--annotate，豁免 --query）——生成 M4 证据门标注集。
     if opts.annotate {
-        let cases = match scx::memory::annotate_cases(&opts.mem_dir, opts.seed, 16) {
+        let cases = match scx::memory::annotate_cases(&opts.mem_dir, opts.seed, opts.annotate_max) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("scx: annotate failed: {}", e);
