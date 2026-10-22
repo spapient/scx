@@ -33,3 +33,47 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: bin\run.cmd --version
+
+  quality:
+    # Frozen confirm5 regression: rebuild the corpus from its incident source,
+    # then fail if the pre-registered hard-query advantage disappears.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Build release
+        run: cargo build --manifest-path rs/Cargo.toml --release --locked
+      - name: Rebuild confirm5 corpus
+        shell: pwsh
+        run: ./eval-real/seed-confirm5.ps1 -Force -MemDir .\eval-real\confirm5-ci-mem -Csv .\eval-real\confirm5-ci-cases.csv
+      - name: Build confirm5 CI baseline
+        shell: pwsh
+        run: ./scripts/holdout-build.ps1 -Csv .\eval-real\confirm5-ci-cases.csv -Out .\eval-real\confirm5-ci-baseline.json -JudgeBy mechanical-target-confirm5-v1 -JudgeDate 2026-10-23T00:00:00Z
+      - name: Run confirm5 gate
+        shell: pwsh
+        run: |
+          .\rs\target\release\scx.exe --eval .\eval-real\confirm5-ci-baseline.json --gate --eval-verbose --mem-dir .\eval-real\confirm5-ci-mem 1> .\eval-real\confirm5-ci.txt 2> .\eval-real\confirm5-ci.err
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content .\eval-real\confirm5-ci.txt -Tail 40
+            Get-Content .\eval-real\confirm5-ci.err -Tail 40
+            throw "confirm5 gate failed with exit $LASTEXITCODE"
+          }
+      - name: Compute confirm5 statistics
+        shell: pwsh
+        run: |
+          ./eval-real/v2-rank-diff.ps1 -Verbose .\eval-real\confirm5-ci.txt -Baseline .\eval-real\confirm5-ci-baseline.json -Out .\eval-real\confirm5-ci-rank.csv
+          ./eval-real/v2-strata.ps1 -Baseline .\eval-real\confirm5-ci-baseline.json -MemDir .\eval-real\confirm5-ci-mem -Verbose .\eval-real\confirm5-ci.txt -Out .\eval-real\confirm5-ci-strata.csv
+          ./eval-real/v2-significance.ps1 -RankDiff .\eval-real\confirm5-ci-rank.csv -Strata .\eval-real\confirm5-ci-strata.csv -Out .\eval-real\confirm5-ci-significance.csv -Boot 10000 -Perm 10000 -Mde 0.05 -Seed 20261023
+          ./eval-real/cluster-significance.ps1 -RankDiff .\eval-real\confirm5-ci-rank.csv -Strata .\eval-real\confirm5-ci-strata.csv -Out .\eval-real\confirm5-ci-significance-cluster.csv -Boot 10000 -Perm 10000 -Mde 0.05 -Seed 20261023
+          $hard = @(Import-Csv .\eval-real\confirm5-ci-significance.csv | Where-Object { $_.group -eq 'tier:hard' })
+          if ($hard.Count -ne 1) { throw "confirm5 hard result missing" }
+          if ([double]$hard[0].delta -lt 0.05 -or [double]$hard[0].ci_lo -le 0 -or [double]$hard[0].perm_p -ge 0.05) {
+            $hard | Format-List | Out-String | Write-Host
+            throw "confirm5 quality advantage not established"
+          }
+          $cluster = @(Import-Csv .\eval-real\confirm5-ci-significance-cluster.csv)
+          if ($cluster.Count -ne 1 -or [double]$cluster[0].ci_lo -le 0) {
+            throw "confirm5 cluster sensitivity failed"
+          }
