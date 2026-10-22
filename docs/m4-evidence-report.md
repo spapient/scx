@@ -103,3 +103,34 @@ cd rs
 cargo build --release --locked
 powershell -ExecutionPolicy Bypass -File ..\scripts\m4-eval.ps1
 ```
+
+## 9. 优化⑧处置记录（2026-10-22，外部评审第二轮）
+
+**处置 1：literal MRR/NDCG < B 的退化例修复（P0）**
+
+- 逐 case 定位（`--eval-verbose`）：退化例 = case `disk io read timeout`，
+  A rank3（1) sim=0.13 score=6.00 [miss] 2) sim=0.13 score=6.00 [miss] 3) 目标 sim=0.95 score=4.57 [hit]）vs B rank1。
+- 根因：PRF 扩展轮按 q2 打分，扩展词把无关 case 得分抬到 6.00；合并后按 score 混排（q2 与首轮口径不可比），真目标被挤出。
+- 修复（recall.rs）：**PRF 严格补漏**——合并后不重排：首轮顺序权威，扩展新增（去重）按 q2 顺序追加尾部再截断。
+  扩展词只补漏、永不改变首轮排序。
+- 修复后重跑（36 组，自动口径）：literal A r@5=1.000 **mrr=1.000** **ndcg@10=1.000** = B 1.000；
+  paraphrase A r@5=1.000（B 0.889）mrr=0.833（B 0.759）ndcg@10=0.877（B 0.792）——A 反超；
+  semantic r@10 双 1.000；l1 0.909。**自动口径下 A 不再劣于 B 任何一层**。
+  注意：本报告 §3 的 0.958/0.969 为修复前数字，已被本节替代。
+
+**处置 2：选择偏差的工具化消除——`--annotate-raw` 盲测模式（新增）**
+
+- 问题（评审 §5.1）：自检用 A 管线 = 用 A 自证；放行集是"A 已成功的子集"。
+- 落地：`--annotate-raw`（与 `--annotate` 互斥）**不过自检**输出全变体集——
+  含自检本会丢弃的变体（真阴性/假阳性对照），每条带盲测摘要
+  `note: target=<hash16> hint=[原文首行] fix=[修复结论]`——盲测者只看 query 与目标摘要判 rel，
+  不看任何 A/B 分数。裁决后 `--eval` 即独立证据，A/B 平等面对全集。
+- 盲测 SOP：`--annotate-raw --seed 0 --annotate-max 0 --annotate-out baseline-raw.json` →
+  人工逐条裁决 rel（2/1/0，或删除）→ `--eval baseline-raw.json --eval-verbose` →
+  报告留档（裁决 JSON + 输出 + 裁决人/日期/seed）。任何一层 A<B 即失败，回到处置 1 类修复。
+
+**状态（不变）**：工具链就绪（`--annotate` 回归集 + `--annotate-raw` 盲测集）；
+**独立人工/盲测质量证据未闭环前，M4 不宣称通过**。盲测裁决集 ≥30 组、每层 ≥10 组、
+预声明主指标（r@5 + MRR）后，方为独立证据门。
+
+**门禁（优化⑧ 后）**：97 库 + 8 CLI + 5 集成 + golden 29 例全绿，fmt/clippy 0，release ✓。

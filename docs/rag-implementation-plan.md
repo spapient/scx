@@ -464,4 +464,20 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 
 **门禁终态**：96 库 + 8 CLI + 5 集成 + golden 29 例全绿；fmt/clippy/release 0。
 
+## 23. P4.4+ 优化⑩实施记录（M4 独立证据路径：PRF 严格补漏 + 盲测模式，2026-10-22）
+
+**背景**：外部评审二轮——①literal 层 A mrr/ndcg 仍低于 B（1 例退化未修）；②自动标注自检用 A 管线 = 用 A 自证（选择偏差），要求独立人工标注或盲测，不再继续 A 管线自证。
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| literal 退化定位 | `--eval-verbose` 逐 case：退化例 = `disk io read timeout`，A rank3（1) sim=0.13 score=6.00 [miss] 2) 同 3) 目标 sim=0.95 score=4.57 [hit]）vs B rank1 | 24-case 库复现；修复前 A literal mrr=0.972 → 修复后 1.000 |
+| PRF 严格补漏 | 合并后**不重排**：首轮顺序权威（含实体边桥入/字段加权/桶内候选），扩展新增去重后按 q2 顺序追加尾部再截断——扩展词只补漏、永不改变首轮排序（q2 口径 score 与首轮不可比，混排会把真目标挤出） | recall.rs；edge 桥入单测沿用；golden 零漂移 |
+| 盲测模式 `--annotate-raw` | 不过自检输出全变体集（含自检会丢弃的变体 = 真阴性/假阳性对照）；每条带盲测摘要 `note: target=<hash16> hint=[原文首行] fix=[修复结论]`；rel 用层默认（paraphrase=2/semantic=1），evidence 标 `raw`；与 `--annotate` 互斥，缺省输出 `baseline-raw.json` | 单测 `annotate_raw_is_superset_with_blind_hint`（raw ⊇ 自检集 + 盲测摘要字段）；24-case 库 E2E 输出 36 组 |
+| 盲测 SOP（独立证据门） | 生成 raw 集 → 人工盲视裁决 rel（2/1/0 或删除，不看 A/B 分数，不参照自检放行结果）→ `--eval baseline-raw.json --eval-verbose` → 报告留档（裁决 JSON + 输出 + 裁决人/日期/seed）；任何一层 A<B 即失败 | docs/m4-evidence-report.md §9 |
+
+**修复后重跑（36 组，自动口径）**：literal A r@5=1.000 **mrr=1.000** **ndcg@10=1.000** = B；paraphrase A r@5=1.000（B 0.889）mrr=0.833（B 0.759）ndcg=0.877（B 0.792）；semantic r@10 双 1.000；l1 0.909。**自动口径下 A 不再劣于 B 任何一层**（替代 §22 复跑表）。
+
+**门禁终态**：97 库 + 8 CLI + 5 集成 + golden 29 例全绿；fmt/clippy/release 0。
+**状态**：工具就绪（回归集 + 盲测集）；独立人工/盲测证据未闭环前 M4 不宣称通过。
+
 
