@@ -15,7 +15,8 @@ param(
     [string]$Out = "eval-real\judge-packet.tsv",
     [int]$TopK = 10,
     [string]$Import = "",
-    [string]$Judge = ""
+    [string]$Judge = "",
+    [switch]$Draft
 )
 
 $ErrorActionPreference = "Stop"
@@ -124,10 +125,16 @@ $row = 1
 for ($ci = 0; $ci -lt $cases.Count; $ci++) {
     $c = $cases[$ci]
     foreach ($cand in @(Get-Candidates ([string]$c.query))) {
+        $relDraft = ""
+        if ($Draft) {
+            # 机器草案：已知 target 标 2、其余标 0，仅供人工审改；不是独立人工证据。
+            $target = [string]$c.expected[0]
+            $relDraft = if ($cand.candidate -eq $target) { "2" } else { "0" }
+        }
         [void]$sb.AppendLine(
-            ("{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}`t" -f
+            ("{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}`t{7}" -f
                 $row, $ci, [string]$c.layer, ([string]$c.query).Replace("`t", " "),
-                $cand.candidate, $cand.summary.Replace("`t", " "), $cand.fix.Replace("`t", " "))
+                $cand.candidate, $cand.summary.Replace("`t", " "), $cand.fix.Replace("`t", " "), $relDraft)
         )
         $row++
     }
@@ -135,5 +142,6 @@ for ($ci = 0; $ci -lt $cases.Count; $ci++) {
 $dir = Split-Path -Parent $Out
 if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
 [IO.File]::WriteAllText($Out, $sb.ToString(), (New-Object Text.UTF8Encoding $false))
-Write-Output ("judge-audit: wrote {0} rows to {1} (blind: no target id, no A/B score)" -f ($row - 1), $Out)
+$draftNote = if ($Draft) { " (DRAFT rel pre-filled: target=2 others=0, review required)" } else { "" }
+Write-Output ("judge-audit: wrote {0} rows to {1} (blind: no target id, no A/B score){2}" -f ($row - 1), $Out, $draftNote)
 Write-Output "fill rel column (2/1/0/s), then: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\judge-audit.ps1 -Import $Out -Baseline $Baseline -Judge <姓名>"
