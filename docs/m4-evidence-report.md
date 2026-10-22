@@ -1,8 +1,8 @@
 # M4 证据评估报告（自动回归集 + 口径修正）
 
-日期：2026-10-22
-库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨
-状态：**自动回归集可复现；M4 独立质量证据未通过**
+日期：2026-10-23（初版 2026-10-22）
+库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨ + real-eval 机械门
+状态：**机械门 PASS（40 组/三层达标/judge=fei，exit 0）；M4 质量优势未成立——全 rel=2、三层 A=B、语料为合成样例且单裁决人**
 
 ## 1. 结论先行
 
@@ -86,7 +86,12 @@ literal 占 36 组的 66.7%，semantic 仅 8.3%。计划 §8 要求“各层 ≥
 - `--annotate` 确定性（同 seed 逐字可重放）、带证据链、输出可被 `--eval` 解析。
 - 自检丢弃数与未改写/无根因数现已输出，选择漏斗可审计。
 - `--eval` 的 Recall@5/MRR/NDCG 计算与分层聚合可重放。
-- M4 的**工具就绪**成立；M4 的**质量证据门**未成立。
+- M4 的**工具就绪**成立；`--eval --gate` 的**机械证据门**已于 2026-10-23 PASS
+  （real-eval 40 组，literal 14 / paraphrase 13 / semantic 13，非 literal 26 条
+  `judge.by=fei`，exit 0）。
+- M4 的**质量优势证据**仍未成立：40/40 标签为 `2`，三层 A=B（判别层 0/3），
+  语料是 `seed-40.ps1` 的真实感合成样例且只有单裁决人。只能写“A 不劣于 B”，
+  不能写“A 优于 B”“统计显著”或“独立质量证据完全通过”。
 
 ## 7. 通过 M4 的最小闭环
 
@@ -166,5 +171,62 @@ cargo build --release --locked
 实测：demo 16 case → 23 组（literal 16 / paraphrase 5 / semantic 2），
 `--gate` 报 `total=23 FAIL`、`paraphrase n=5 FAIL`、`semantic n=2 FAIL`，exit 2；
 自动标注集（23 组、无 judge 元数据）另报 `judge metadata ... FAIL`。
-这证明机械门不会把 demo/自动集误判为 M4 证据。**M4 状态仍为未通过**，直到真实冻结语料
-（≥30 组、每层 ≥10、人工裁决）在 `--gate` 下 PASS。
+这证明机械门不会把 demo/自动集误判为 M4 证据。**在 §10 的时点，M4 状态仍为未通过**；
+后续 2026-10-23 real-eval 机械门已 PASS（见 §11），但质量优势仍未成立。
+
+## 11. real-eval 40 组机械门实测（2026-10-23）
+
+### 11.1 输入与命令
+
+```powershell
+cd C:\Users\fei\.codex\skills\scx
+powershell -ExecutionPolicy Bypass -File .\scripts\real-eval-build.ps1 `
+  -Csv .\eval-real\cases.csv -Out .\eval-real\baseline.json
+.\rs\target\release\scx.exe --judge .\eval-real\baseline.json --judge-by fei
+.\rs\target\release\scx.exe --eval .\eval-real\baseline.json --gate `
+  --eval-verbose --mem-dir .\eval-real\mem
+```
+
+本次真实执行结果：
+
+```text
+eval: cases=40 layers=literal,paraphrase,semantic multi-rel=0 single-rel=40
+layer literal: n=14 A r@5=1.000 mrr=1.000 | B r@5=1.000 mrr=1.000
+layer paraphrase: n=13 A r@5=1.000 mrr=1.000 | B r@5=1.000 mrr=1.000
+layer semantic: n=13 A r@10=1.000 mrr=1.000 | B r@10=1.000 mrr=1.000
+l1: hits=17 total=40 rate=0.425
+gate: total=40 need>=30 (target 30-50) PASS
+gate: layer literal n=14 need>=10 PASS
+gate: layer paraphrase n=13 need>=10 PASS
+gate: layer semantic n=13 need>=10 PASS
+gate: judge metadata nonliteral=26 (need real by+date) PASS
+gate: rel distribution 2=40 1=0 0=0
+gate: warning all labels are 2 (no weak/negative controls)
+gate: discrimination A!=B layers=0/3
+gate: warning A=B on all layers (no measurable advantage)
+gate: PASS
+```
+
+exit 0。裁决文件为 `eval-real/baseline.json`；非 literal 26 条均有
+`judge.by=fei` 与 UTC `judge.date`，literal 14 条为原文对照并预填 `rel=2`。
+
+同次代码门禁：`cargo test --locked --quiet` 通过 111 库 + 8 CLI + 5 集成
+（golden 1 passed / 1 ignored）；`cargo clippy --all-targets -- -D warnings`
+零告警。
+
+### 11.2 证据强度边界
+
+- 40 条标签全部为 `2`，没有 `1`（弱相关）或 `0`（无关）对照；这只能证明
+  “目标能被找回”，不能证明系统能区分相关与干扰项。
+- 三层 A/B 主指标与 MRR 全部相等（`discrimination A!=B layers=0/3`），
+  没有可测出的 A 相对 B 优势。
+- `eval-real/seed-40.ps1` 是脚本内写死的真实感样例，未附真实历史事故来源、
+  脱敏记录或线上分布抽样说明；它不是已证实的独立历史语料。
+- 只有一名裁决人 `fei`，没有第二人复核/仲裁记录。
+
+### 11.3 结论
+
+**机械门通过；M4 的质量优势未通过。** 当前可以引用“40 组、三层各 ≥10、
+人工裁决元数据完整、`--gate` PASS、A 不劣于 B”；不得引用“A 优于 B”、
+“显著提升”或“M4 独立质量证据完全闭环”。要闭环后者，仍需真实来源语料、
+弱相关/负例、双人复核与可区分的 A/B 结果。

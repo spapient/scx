@@ -1,0 +1,26 @@
+schema = 2
+embed_engine = "stat-v1"
+created_at = "2026-10-22T16:01:44Z"
+case_count = 40
+gen = 40
+
+[params]
+bm25_k1 = 1.2
+bm25_b = 0.75
+field_weight_error_code = 3.0
+field_weight_file_loc = 2.5
+field_weight_symbol = 2.0
+field_weight_num_fp = 2.0
+decay_tau_days = 90
+decay_tau_solved = 180
+decay_tau_regressed = 30
+mmr_lambda = 0.5
+feedback_step = 0.1
+cache_sim_threshold = 0.85
+l1_base = 0.55
+l1_margin_min = 0.15
+quality_prior = 0.5
+gc_ttl_regressed = 180
+gc_ttl_stale = 365
+edge_enable = 1
+edge_weight = 1.0

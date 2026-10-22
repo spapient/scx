@@ -1,4 +1,4 @@
-# 真实 M4 语料：CSV -> baseline.json
+# M4 样例语料：CSV -> baseline.json（真实感合成夹具，不代表已证实的历史事故）
 # 用法：
 #   powershell -ExecutionPolicy Bypass -File scripts\real-eval-build.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\real-eval-build.ps1 -Csv eval-real\cases.csv -Out eval-real\baseline.json
