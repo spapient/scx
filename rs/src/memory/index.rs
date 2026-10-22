@@ -30,7 +30,7 @@ use crate::memory::postings::{
     self, crc32, postings_path, varint_get, varint_put, POST_MAGIC, POST_VER,
 };
 use crate::memory::store::{self, Meta};
-use crate::terms::build_terms;
+use crate::terms::build_mem_terms;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -112,8 +112,8 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
     let mut total_len = 0usize;
     for id in &ids {
         let c = store::read_case(root, id)?;
-        let mut terms = build_terms(&c.query);
-        terms.extend(build_terms(&c.text));
+        let mut terms = build_mem_terms(&c.query);
+        terms.extend(build_mem_terms(&c.text));
         terms.sort();
         terms.dedup();
         total_len += terms.len();

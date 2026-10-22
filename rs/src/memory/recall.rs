@@ -15,7 +15,7 @@ use crate::memory::bucket::candidate_buckets;
 use crate::memory::field;
 use crate::memory::index::{self, Index};
 use crate::memory::store::{self, Meta};
-use crate::terms::build_terms;
+use crate::terms::build_mem_terms;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,7 +131,7 @@ fn score_pass(
     ];
     // P4.3 实体边：共享实体加权（0 则关，兼容老 meta 缺省开 1.0）。
     let edge_w = param(meta, "edge_weight", 1.0);
-    let qterms = build_terms(query);
+    let qterms = build_mem_terms(query);
     let qfields = field::extract(query);
     let qf = [
         &qfields.error_code,
@@ -206,8 +206,8 @@ fn score_pass(
             if use_buckets && !cand.iter().any(|cb| cb == &c.bucket) {
                 continue;
             }
-            let mut terms = build_terms(&c.query);
-            terms.extend(build_terms(&c.text));
+            let mut terms = build_mem_terms(&c.query);
+            terms.extend(build_mem_terms(&c.text));
             let mut seen: Vec<&str> = Vec::with_capacity(terms.len());
             for t in &terms {
                 if !seen.contains(&t.as_str()) {

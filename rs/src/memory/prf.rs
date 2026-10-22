@@ -11,7 +11,7 @@
 
 use crate::memory::recall::RecallHit;
 use crate::memory::store::{self, Meta};
-use crate::terms::build_terms;
+use crate::terms::build_mem_terms;
 use std::collections::HashMap;
 
 /// 扩展候选：批内出现 ≥2 次（高频）且全局稀有（idf 高）。
@@ -32,7 +32,7 @@ pub(crate) fn expand(
     query: &str,
     meta: &Meta,
 ) -> std::io::Result<Vec<String>> {
-    let qterms = build_terms(query);
+    let qterms = build_mem_terms(query);
     let (n, df): (f64, HashMap<String, usize>) = if !meta.df.is_empty() {
         (meta.case_count as f64, meta.df.iter().cloned().collect())
     } else {
@@ -42,8 +42,8 @@ pub(crate) fn expand(
         let mut df: HashMap<String, usize> = HashMap::new();
         for id in &all_ids {
             let c = store::read_case(root, id)?;
-            let mut terms = build_terms(&c.query);
-            terms.extend(build_terms(&c.text));
+            let mut terms = build_mem_terms(&c.query);
+            terms.extend(build_mem_terms(&c.text));
             let mut seen: Vec<&str> = Vec::with_capacity(terms.len());
             for t in &terms {
                 if !seen.contains(&t.as_str()) {
@@ -65,8 +65,8 @@ pub(crate) fn expand(
             continue;
         }
         let c = store::read_case(root, &h.id)?;
-        let mut terms = build_terms(&c.query);
-        terms.extend(build_terms(&c.text));
+        let mut terms = build_mem_terms(&c.query);
+        terms.extend(build_mem_terms(&c.text));
         for t in &terms {
             *batch.entry(t.clone()).or_insert(0) += 1;
         }

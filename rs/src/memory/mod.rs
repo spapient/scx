@@ -69,7 +69,7 @@ pub fn store_case(
     stats: &store::CaseStats,
     forces: Vec<String>,
 ) -> std::io::Result<(bool, String)> {
-    let terms = crate::terms::build_terms(query);
+    let terms = crate::terms::build_mem_terms(query);
     ingest::ingest(root, query, terms, text, source, stats, forces)
 }
 
@@ -83,7 +83,7 @@ pub fn store_case_fix(
     forces: Vec<String>,
     fix: &str,
 ) -> std::io::Result<(bool, String)> {
-    let terms = crate::terms::build_terms(query);
+    let terms = crate::terms::build_mem_terms(query);
     ingest::ingest_with_fix(root, query, terms, text, source, stats, forces, fix)
 }
 
@@ -102,7 +102,7 @@ pub fn store_case_full(
     evidence_lno: &[usize],
     evidence: &[String],
 ) -> std::io::Result<(bool, String)> {
-    let terms = crate::terms::build_terms(query);
+    let terms = crate::terms::build_mem_terms(query);
     ingest::ingest_with_evidence(
         root,
         query,

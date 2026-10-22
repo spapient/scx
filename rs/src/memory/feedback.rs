@@ -96,7 +96,7 @@ pub(crate) fn rate(
     c.updated_at = utc_now();
     // 词环：该 case 词表 ±Δ（仅质量≥0.5 的 good / bad 参与，防误标污染）。
     let mut terms = c.terms.clone();
-    for t in crate::terms::build_terms(&c.query) {
+    for t in crate::terms::build_mem_terms(&c.query) {
         if !terms.contains(&t) {
             terms.push(t);
         }

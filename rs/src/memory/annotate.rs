@@ -295,7 +295,7 @@ fn semantic_query(c: &Case) -> String {
     for kw in ["root cause", "root-cause", "cause:", "原因"] {
         if let Some(idx) = hay.to_lowercase().find(kw) {
             let line = hay[idx..].split('\n').next().unwrap_or("");
-            let terms = crate::terms::build_terms(line);
+            let terms = crate::terms::build_mem_terms(line);
             if !terms.is_empty() {
                 let mut q: Vec<String> = Vec::new();
                 for t in terms.iter().take(3) {

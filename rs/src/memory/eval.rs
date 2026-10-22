@@ -16,7 +16,7 @@
 use crate::memory::json::Val;
 use crate::memory::recall::{self, RecallHit};
 use crate::memory::store;
-use crate::terms::build_terms;
+use crate::terms::build_mem_terms;
 use std::collections::HashMap;
 
 /// 单条评估输入（baseline.json 的一行标注）。
@@ -395,15 +395,15 @@ pub(crate) fn plain(root: &str, query: &str, k: usize) -> std::io::Result<Vec<Re
     let meta = store::load_meta(root)?;
     let k1 = param(&meta, "bm25_k1", 1.2);
     let b = param(&meta, "bm25_b", 0.75);
-    let qterms = build_terms(query);
+    let qterms = build_mem_terms(query);
     let ids = store::list_ids(root)?;
     let mut docs: Vec<(String, Vec<String>)> = Vec::with_capacity(ids.len());
     let mut df: HashMap<String, usize> = HashMap::new();
     let mut total_len = 0usize;
     for id in &ids {
         let c = store::read_case(root, id)?;
-        let mut terms = build_terms(&c.query);
-        terms.extend(build_terms(&c.text));
+        let mut terms = build_mem_terms(&c.query);
+        terms.extend(build_mem_terms(&c.text));
         let mut seen: Vec<&str> = Vec::with_capacity(terms.len());
         for t in &terms {
             if !seen.contains(&t.as_str()) {
