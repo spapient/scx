@@ -538,6 +538,38 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
+    // 26) L1 本地直答（P4.4+ 优化：--store 配 --fix 保存修复结论，recall-detail 输出 fix 行）。
+    let mem_fix_dir = std::env::temp_dir().join("scx-golden-mem-fix");
+    let _ = std::fs::remove_dir_all(&mem_fix_dir);
+    let mem_fix = mem_fix_dir.to_string_lossy().into_owned();
+    let _ = run_scx(
+        &[
+            "--query",
+            "db timeout conn_id",
+            "--store",
+            "1",
+            "--fix",
+            "enlarge pool to 64 conns, restart daemon",
+            "--mem-dir",
+            Box::leak(mem_fix.clone().into_boxed_str()),
+        ],
+        seed_log,
+    );
+    v.push((
+        "memory_fix".into(),
+        vec![
+            "--query",
+            "db timeout conn_id",
+            "--recall-only",
+            "--recall",
+            "1",
+            "--recall-detail",
+            "--mem-dir",
+            Box::leak(mem_fix.into_boxed_str()),
+        ],
+        String::new(),
+    ));
+
     v
 }
 

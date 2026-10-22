@@ -1,7 +1,7 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--l1-hist] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--l1-hist] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
 
 pub(crate) struct Opts {
     pub query: String,
@@ -15,6 +15,9 @@ pub(crate) struct Opts {
     pub stat: bool,
     pub no_stats: bool,
     pub store: bool,
+    /// P4.4+ 优化：修复结论（--store 配 --fix 写入 case.fix，L1 本地直答）。
+    /// 仅在 --store 1 时生效；无 --store 时解析但被忽略。
+    pub fix: String,
     pub recall: usize,
     pub recall_only: bool,
     /// P4.2 L1 要点摘要：--recall-detail 时 mem 段追加 summary 行。
@@ -103,6 +106,8 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut no_stats = false;
     let mut store = false;
     let mut store_seen = false;
+    let mut fix = String::new();
+    let mut fix_seen = false;
     let mut recall = 0usize;
     let mut recall_seen = false;
     let mut recall_only = false;
@@ -218,6 +223,17 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 store_seen = true;
                 let v = option_value(&args, &mut i, name, inline)?;
                 store = parse_bool01(&v, "--store")?;
+            }
+            "--fix" => {
+                if fix_seen {
+                    return Err("--fix specified more than once".to_string());
+                }
+                fix_seen = true;
+                let v = option_value(&args, &mut i, name, inline)?;
+                if v.is_empty() {
+                    return Err("--fix requires non-empty text".to_string());
+                }
+                fix = v;
             }
             "--recall" => {
                 if recall_seen {
@@ -352,6 +368,9 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     if recall_only && query.is_empty() {
         return Err("--recall-only requires --query".to_string());
     }
+    if fix_seen && !store {
+        return Err("--fix requires --store 1".to_string());
+    }
     if recall_only && !recall_seen {
         recall = 3; // recall-only 未指定 K 时默认 top-3（与主流程 --recall 语义一致）
     }
@@ -367,6 +386,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         stat,
         no_stats,
         store,
+        fix,
         recall,
         recall_only,
         recall_detail,
@@ -490,6 +510,19 @@ mod tests {
         assert_eq!(o.recall, 3);
         assert!(o.recall_only);
         assert_eq!(o.mem_dir, "/tmp/m");
+        // P4.4+ 优化：--fix 与 --store 绑定。
+        let o = parse_args_from(args(&[
+            "--query",
+            "q",
+            "--store",
+            "1",
+            "--fix",
+            "enlarge pool",
+        ]))
+        .unwrap();
+        assert_eq!(o.fix, "enlarge pool");
+        assert!(parse_args_from(args(&["--query", "q", "--fix", "x"])).is_err());
+        assert!(parse_args_from(args(&["--query", "q", "--store", "1", "--fix="])).is_err());
         assert!(parse_args_from(args(&["--query", "q", "--store", "2"])).is_err());
         assert!(parse_args_from(args(&["--query", "q", "--recall", "0"])).is_err());
         assert!(parse_args_from(args(&["--recall-only"])).is_err());

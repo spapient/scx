@@ -69,6 +69,25 @@ pub fn store_case(
     ingest::ingest(root, query, terms, text, source, stats, forces)
 }
 
+/// 带修复结论的摄取（P4.4+ 优化：--store 配 --fix，L1 本地直答的"上次怎么解决"）。
+pub fn store_case_fix(
+    root: &str,
+    query: &str,
+    text: &str,
+    source: Vec<String>,
+    stats: &store::CaseStats,
+    forces: Vec<String>,
+    fix: &str,
+) -> std::io::Result<bool> {
+    let terms = crate::terms::build_terms(query);
+    ingest::ingest_with_fix(root, query, terms, text, source, stats, forces, fix)
+}
+
+/// 读取 case 的修复结论（空串 = 未记录；缺 case 返回 Err）。
+pub fn case_fix(root: &str, id: &str) -> std::io::Result<String> {
+    store::read_case(root, id).map(|c| c.fix)
+}
+
 /// 门面：按 query 召回 top-k case（会话缓存 → qmap 直达 → BM25+字段加权+衰减+桶过滤）。
 ///
 /// O3 会话缓存：进程内存 30 分钟窗口，窗口内同 query 直接返回快照（零磁盘），

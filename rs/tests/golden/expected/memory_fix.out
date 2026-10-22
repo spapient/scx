@@ -1,0 +1,3 @@
+mem: sim=1.00 score=0.86 case=123e7decc4c4a423
+  summary: conn_id=9f2a | pool.java:214 | ERROR db timeout conn_id=9f2a pool exhausted
+  fix: enlarge pool to 64 conns, restart daemon

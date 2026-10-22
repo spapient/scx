@@ -7,8 +7,9 @@ use scx::memory::{recall_cases, store_case, CaseStats, Memory, RecallHit};
 use std::io::{self, Write};
 
 /// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
-/// case 只显示指纹段（`YYYY-MM-DD_<hash8>` 的 hash8），保证输出不随日期漂移。
-/// `detail` 时（P4.2 --recall-detail）每条追加一行 `summary:`（error_code+file_loc+证据行）。
+/// case 只显示指纹段（`YYYY-MM-DD_<hash16>` 的 hash16），保证输出不随日期漂移。
+/// `detail` 时（P4.2 --recall-detail）每条追加一行 `summary:`（error_code+file_loc+证据行）；
+/// P4.4+ 优化：case 带修复结论（--store 配 --fix）时再追加一行 `fix:`（L1 本地直答）。
 pub(crate) fn write_mem_lines(
     out: &mut dyn Write,
     hits: &[RecallHit],
@@ -25,6 +26,10 @@ pub(crate) fn write_mem_lines(
         if detail {
             let s = scx::memory::case_summary(root, &h.id).unwrap_or_default();
             writeln!(out, "  summary: {}", s)?;
+            let fix = scx::memory::case_fix(root, &h.id).unwrap_or_default();
+            if !fix.is_empty() {
+                writeln!(out, "  fix: {}", fix)?;
+            }
         }
     }
     Ok(())
@@ -57,6 +62,7 @@ pub(crate) fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) {
 }
 
 /// 摄取：把本次压缩产物沉淀为记忆 case（旁路，失败即退出；由调用方决定是否致命）。
+/// `fix` 为修复结论（--fix，可空）：非空时随 case 入库，recall-detail 直答输出。
 pub(crate) fn store(
     mem_dir: &str,
     query: &str,
@@ -64,8 +70,22 @@ pub(crate) fn store(
     files: &[String],
     stats: &CaseStats,
     forces: &[String],
+    fix: &str,
 ) {
-    if let Err(e) = store_case(mem_dir, query, text, files.to_vec(), stats, forces.to_vec()) {
+    let r = if fix.is_empty() {
+        store_case(mem_dir, query, text, files.to_vec(), stats, forces.to_vec())
+    } else {
+        scx::memory::store_case_fix(
+            mem_dir,
+            query,
+            text,
+            files.to_vec(),
+            stats,
+            forces.to_vec(),
+            fix,
+        )
+    };
+    if let Err(e) = r {
         eprintln!("scx: memory store failed: {}", e);
         std::process::exit(2);
     }

@@ -64,6 +64,7 @@
 - [x] 默认不自动存储：无 `--mem-dir`/`--store` 时 memory 零路径。
 - [x] delete(root,id) 物理删除 + case_count 重算（P4.4：入口 valid_id 白名单）。
 - [x] **P4.4 边界说明（诚实口径）**：`--store` 存的是**压缩结果**（Outcome.text：当前 query 命中的保留行，可能含 `...` 省略标记与 `--lineno` 的 `N:` 前缀），**不含用户真正的修复动作/结论**。因此 L1 返回的 `summary:` 是"错误行摘要"而非"上次怎么解决的"——它支撑案例召回（"上次这问题长这样、怎么处理过"），但兑现不了"L1 本地直答、不再问模型"的北极星；要完整直答需 `--store` 额外保存修复结论（后续可选增强，非本期）。
+- [x] **P4.4+ 优化（--fix 本地直答，北极星缺口补全）**：`--store 1` 可配 `--fix "修复结论"`，把"上次怎么解决"写入 `case.fix`（≤4 KiB）；`--recall-detail` 在 `summary:` 后追加 `fix:` 行——L1 从"案例召回"升级为"本地直答"。同指纹重复摄取不覆盖既有 fix（保留首条结论）；旧 case 无 fix 键按空处理（向后兼容，不输出 fix 行）。实测：`store --fix "enlarge pool to 64 conns, restart daemon"` → `recall-detail` 输出 `fix: enlarge pool to 64 conns, restart daemon`（golden `memory_fix` 用例）。
 - [x] **P4.4 大小上限**：单 case 文本 ≤1 MiB（`MAX_CASE_TEXT`），超限拒绝（实测 1.2 MB 输入 → `case text too large: 1200000 bytes > 1048576`，exit 2，不落盘）。
 - **验证**：`ingest_dedup_by_fingerprint`（同指纹保持 1、变体新增到 2）+ `fingerprint_is_deterministic_and_sensitive` + `delete_removes_case_and_meta` + size cap 拒绝；CLI 冒烟：库目录 1 个 case、重复再存不变。
 

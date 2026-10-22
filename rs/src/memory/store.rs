@@ -42,6 +42,7 @@ pub(crate) fn case_to_val(c: &Case) -> Val {
             Val::Arr(c.terms.iter().map(|t| Val::Str(t.clone())).collect()),
         ),
         ("text".into(), Val::Str(c.text.clone())),
+        ("fix".into(), Val::Str(c.fix.clone())),
         ("fp".into(), Val::Str(c.fp.clone())),
         (
             "source".into(),
@@ -158,6 +159,7 @@ pub(crate) fn val_to_case(v: &Val) -> Case {
     c.created_at = get(&obj, "created_at").map(as_str).unwrap_or_default();
     c.updated_at = get(&obj, "updated_at").map(as_str).unwrap_or_default();
     c.fp = get(&obj, "fp").map(as_str).unwrap_or_default();
+    c.fix = get(&obj, "fix").map(as_str).unwrap_or_default(); // 缺键兼容旧 case
     c.source = get(&obj, "source").map(as_str_arr).unwrap_or_default();
     c.tags = get(&obj, "tags").map(as_str_arr).unwrap_or_default();
     c.bucket = get(&obj, "bucket").map(as_str).unwrap_or_default();
@@ -306,10 +308,12 @@ mod tests {
         c.status = "solved".to_string();
         c.feedback = Feedback { good: 2, bad: 0 };
         c.quality = 1.0;
+        c.fix = "enlarge pool to 64 conns".to_string();
 
         write_case(root, &c).unwrap();
         let loaded = read_case(root, &id).unwrap();
         assert_eq!(loaded, c, "case 往返必须逐字段一致");
+        assert_eq!(loaded.fix, "enlarge pool to 64 conns", "fix 必须往返");
         assert!(
             !Path::new(root)
                 .join("cases")

@@ -37,6 +37,10 @@ pub struct Case {
     pub query: String,
     pub terms: Vec<String>,
     pub text: String,
+    /// 修复结论/下一步动作（P4.4+ 优化：--store 配 --fix 写入，可选）。
+    /// 语义：L1 本地直答的"上次怎么解决"——recall-detail 时随 case 输出；
+    /// 空串表示未记录修复动作（此时 case 仅支撑案例召回）。
+    pub fix: String,
     /// 去重指纹（norm(query)+norm(text) 的 FNV-1a，见 ingest::fingerprint）。
     pub fp: String,
     pub source: Vec<String>,
@@ -60,6 +64,7 @@ impl Case {
             query,
             terms,
             text,
+            fix: String::new(),
             fp: String::new(),
             source: Vec::new(),
             tags: Vec::new(),

@@ -198,6 +198,7 @@ fn main() {
                 &opts.files,
                 &stats,
                 &opts.forces,
+                &opts.fix,
             );
         } else {
             let (tx, rx) = mpsc::channel();
@@ -206,8 +207,16 @@ fn main() {
             let text = o.text.clone();
             let files = opts.files.clone();
             let forces = opts.forces.clone();
+            let fix = opts.fix.clone();
             std::thread::spawn(move || {
-                let r = scx::memory::store_case(&mem_dir, &query, &text, files, &stats, forces);
+                // P4.4+ 优化：--fix 非空走带修复结论的摄取（L1 本地直答）。
+                let r = if fix.is_empty() {
+                    scx::memory::store_case(&mem_dir, &query, &text, files, &stats, forces)
+                } else {
+                    scx::memory::store_case_fix(
+                        &mem_dir, &query, &text, files, &stats, forces, &fix,
+                    )
+                };
                 let _ = tx.send(r.map(|_| ()));
             });
             store_rx = Some(rx);

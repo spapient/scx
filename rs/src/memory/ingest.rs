@@ -19,6 +19,9 @@ use std::path::Path;
 /// 超过上限拒绝摄取并明确报错（旁路，不影响压缩主流程）。
 pub(crate) const MAX_CASE_TEXT: usize = 1024 * 1024; // 1 MiB
 
+/// 修复结论上限（P4.4+ 优化：--fix 随 --store 写入，属用户摘要文本）。
+pub(crate) const MAX_FIX_LEN: usize = 4096; // 4 KiB
+
 /// 计算去重指纹（确定性、无随机源）。
 pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut q = String::new();
@@ -46,6 +49,7 @@ pub(crate) fn find_by_fp(root: &str, fp: &str) -> std::io::Result<Option<String>
 ///
 /// `terms`/`stats`/`forces` 由调用方（CLI 或后续记忆管道）从压缩结果提取；
 /// 本函数负责 id 生成、指纹去重、写盘与 meta 维护。
+/// 不带修复结论的便捷入口（测试与无 fix 调用点复用；fix 为空）。
 pub(crate) fn ingest(
     root: &str,
     query: &str,
@@ -54,6 +58,23 @@ pub(crate) fn ingest(
     source: Vec<String>,
     stats: &CaseStats,
     forces: Vec<String>,
+) -> std::io::Result<bool> {
+    ingest_with_fix(root, query, terms, text, source, stats, forces, "")
+}
+
+/// 摄取带修复结论的 case（P4.4+ 优化：--store 配 --fix）。
+/// 8 参为保持 ingest 7 参签名（30+ 测试/调用点零改动）而接受的局部扩展，
+/// fix 是末尾可选参数（空串等价 ingest）。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ingest_with_fix(
+    root: &str,
+    query: &str,
+    terms: Vec<String>,
+    text: &str,
+    source: Vec<String>,
+    stats: &CaseStats,
+    forces: Vec<String>,
+    fix: &str,
 ) -> std::io::Result<bool> {
     store::ensure_root(root)?;
     if text.len() > MAX_CASE_TEXT {
@@ -66,12 +87,23 @@ pub(crate) fn ingest(
             ),
         ));
     }
+    if fix.len() > MAX_FIX_LEN {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "case fix too long: {} bytes > {} (scx-memory MAX_FIX_LEN)",
+                fix.len(),
+                MAX_FIX_LEN
+            ),
+        ));
+    }
     let fp = fingerprint(query, text);
     if let Some(existing) = find_by_fp(root, &fp)? {
         let mut c = store::read_case(root, &existing)?;
         let now = store::utc_now();
         c.updated_at = now;
-        // 反馈/状态等历史字段保留，仅刷新元数据。
+        // 反馈/状态等历史字段保留，仅刷新元数据；fix 不覆盖既有结论
+        //（同指纹再摄取视为重复，保留首条记录的修复动作）。
         store::write_case(root, &c)?;
         return Ok(false);
     }
@@ -79,6 +111,7 @@ pub(crate) fn ingest(
     let id = store::case_id(&now, query, text);
     let mut c = Case::new(id.clone(), query.to_string(), terms, text.to_string());
     c.fp = fp;
+    c.fix = fix.to_string();
     c.source = source;
     c.stats = stats.clone();
     c.forces = forces;
@@ -180,6 +213,45 @@ mod tests {
         .unwrap();
         assert!(c, "证据块变体应新增");
         assert_eq!(store::list_ids(&root).unwrap().len(), 2);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn ingest_with_fix_persists_and_rejects_oversize() {
+        // P4.4+ 优化：--store 配 --fix 时修复结论随 case 入库（L1 本地直答）。
+        let root = tmp_root("fix");
+        let s1 = CaseStats {
+            kept: 3,
+            total: 200,
+            cut_pct: 94.2,
+            risk: "HIGH".to_string(),
+        };
+        let added = ingest_with_fix(
+            &root,
+            "数据库连接超时 conn_id",
+            vec!["conn_id".into()],
+            TEXT,
+            vec!["/x/build.log".into()],
+            &s1,
+            vec![],
+            "enlarge pool to 64 conns, restart daemon",
+        )
+        .unwrap();
+        assert!(added, "带 fix 首次摄取应为新增");
+        let ids = store::list_ids(&root).unwrap();
+        let c = store::read_case(&root, &ids[0]).unwrap();
+        assert_eq!(
+            c.fix, "enlarge pool to 64 conns, restart daemon",
+            "fix 必须落盘"
+        );
+        // 超长 fix 拒绝。
+        let huge_fix = "x".repeat(MAX_FIX_LEN + 1);
+        let err =
+            ingest_with_fix(&root, "q", vec![], "t", vec![], &s1, vec![], &huge_fix).unwrap_err();
+        assert!(
+            err.to_string().contains("case fix too long"),
+            "超长 fix 应明确拒绝: {err}"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
