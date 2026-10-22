@@ -356,3 +356,13 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 **门禁终态**：73 库 + 8 CLI + 4 集成 + golden 27 例全绿；fmt/clippy 0；行数门禁（stats.rs 144 / bucket.rs 160 行）通过。
 **遗留口径**：failopen 全文保留会把无关家族词带进 case.text → 桶归属随压缩结果变化（与 §11 评审④"text 是压缩结果"边界一致，非 bug）。
 
+## 16. P4.4+ 优化③实施记录（2026-10-22，已提交）
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| stored 报告 | `ingest`/`ingest_with_fix` 返回类型 `Result<bool>` → `Result<(bool, String)>`（新增标志 + case id；去重时返回既有 id）；门面 `store_case`/`store_case_fix` 透传；同步路径（cli_mem::store）与异步路径（main.rs 后台线程 tx 类型 `io::Result<(bool, String)>`）均 stderr 报告 `scx: stored case=<完整 id> added=yes|dedup`——用户拿到完整 id 可直接 `--rate`/`--delete` 闭环 | 端到端：命中 store `added=yes`、重复 store 同 id `added=dedup`、stdout 正文/统计零污染；golden 漂移仅 `memory_store.err` +1 行（最小） |
+| failopen 低信号守卫 | 主流程 store 分支：`o.mode.starts_with("failopen")` 时 stderr 警告 `note: query had no hits; --store will persist the full input (low-signal memory). inspect with --recall-only first`（不拒绝——用户可刻意沉淀原文作底料） | 端到端：60 行零命中（mode=failopen:zero-signal）出警告；小输入直通（passthrough:small）不误报；命中（sieve）不误报 |
+
+**门禁终态**：73 库 + 8 CLI + 4 集成 + golden 27 例全绿；fmt/clippy 0；测试调用点零改动（ingest 直调点均为丢弃返回值）。
+
+

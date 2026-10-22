@@ -33,7 +33,7 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 
 ## 记忆知识库（RAG，v0.4.1 之上的 P1–P4.3 增量；默认关闭，零依赖离线确定性）
 
-- `--store 1`：把本次压缩的证据块沉淀为记忆条目（默认不存，需显式开启；`--mem-dir DIR` 指定库目录，缺省 `~/.scx-memory`）。可配 `--fix "修复结论"`：把"这次怎么解决"随 case 入库；之后任何命中召回（主流程 --recall 与 --recall-detail 均**无条件**输出 `fix:` 行，仅需 case 带结论）即 L1 本地直答，不再问模型。
+- `--store 1`：把本次压缩的证据块沉淀为记忆条目（默认不存，需显式开启；`--mem-dir DIR` 指定库目录，缺省 `~/.scx-memory`）。可配 `--fix "修复结论"`：把"这次怎么解决"随 case 入库；之后任何命中召回（主流程 --recall 与 --recall-detail 均**无条件**输出 `fix:` 行，仅需 case 带结论）即 L1 本地直答，不再问模型。存储结果 stderr 报告 `scx: stored case=<完整 id> added=yes|dedup`（可直接 --rate/--delete 闭环）；query 零命中（failopen，>小输入直通阈值时）会警告 `note: ... low-signal memory`（不拒绝，原文可作底料刻意沉淀）。
 - `--recall K`：旁路召回最近 K 条相关经验（`mem:` 段，绝不进入正文）；`--recall-only` 只召回（**查看模式：只读——不写 qmap/L1 历史/缓存，不改变库状态**；输出真实 top-k，不做 L1 过滤，方便调参/标注/演示）；`--recall-detail` 追加 `summary:` 要点行（error_code + file_loc + 错误行）。主流程 `--recall` 的 mem 段仍按 L1 置信判据直答输出（学习路径：写入 qmap/L1 历史）。
 - `--rate good|bad <case-id>`：反馈标注（状态机 solved/regressed + 质量分 + 词级调权 + L1 基线自适应；bump 库代际 → 同 query 后续召回立即看到新排序）。
 - `--rebuild` / `--gc` / `--delete <case-id>`：库维护（重建索引缓存（不再改召回语义）/ 过期清理 / 删除条目，id 白名单校验）；`--stats`：库盘点（case 数/桶分布/状态分布/fix 覆盖率/质量均值/磁盘 KiB，豁免 --query）。case id 为 `<日期>_<16 位 hex>`。
