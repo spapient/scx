@@ -178,7 +178,9 @@ fn metric(c: &EvalCase, hits: &[RecallHit]) -> (f64, f64, f64, f64) {
     }
     let dcg_r: Vec<f64> = hits.iter().take(10).map(|h| rel_of(c, &h.id)).collect();
     let dc = dcg(&dcg_r);
-    let mut ideal: Vec<f64> = c.expected.iter().map(|id| rel_of(c, id)).collect();
+    // IDCG 必须来自 rel 字典里所有标注为相关的候选（含非 expected 的弱相关/强相关），
+    // 不能只用 expected：否则实际 top-10 里的 rel=1 候选会让 DCG > IDCG，NDCG 突破 1.0。
+    let mut ideal: Vec<f64> = c.rel.values().copied().filter(|v| *v > 0.0).collect();
     ideal.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
     ideal.truncate(10);
     let idcg = dcg(&ideal);
@@ -632,6 +634,27 @@ mod tests {
         // 完全未命中：全 0。
         let (r5, r10, mrr, ndcg) = metric(&c, &[hit("c9", 0.5)]);
         assert_eq!((r5, r10, mrr, ndcg), (0.0, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn ndcg_never_exceeds_one_with_non_expected_relevant() {
+        // rel 里有非 expected 的弱相关候选：理想排序必须把它纳入 IDCG，
+        // 否则 top-10 命中它时 NDCG 会超过 1.0（回归：gate 实测 literal 1.108）。
+        let mut rel = HashMap::new();
+        rel.insert("t".to_string(), 2.0);
+        rel.insert("w".to_string(), 1.0);
+        let c = EvalCase {
+            query: "q".to_string(),
+            layer: "literal".to_string(),
+            expected: vec!["t".to_string()],
+            rel,
+            judged_by: None,
+            judged_date: None,
+        };
+        let hits = vec![hit("t", 1.0), hit("w", 0.9)];
+        let (_, _, _, ndcg) = metric(&c, &hits);
+        // DCG = 2/1 + 1/log2(3)；IDCG 同为 [2,1] → NDCG=1.0（不越界）。
+        assert!((ndcg - 1.0).abs() < 1e-9, "ndcg={ndcg}");
     }
 
     #[test]

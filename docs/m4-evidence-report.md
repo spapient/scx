@@ -2,7 +2,7 @@
 
 日期：2026-10-23（初版 2026-10-22）
 库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨ + real-eval 机械门
-状态：**机械门 PASS（40 组/三层达标/judge=fei，exit 0）；M4 人工质量证据未闭环——全 rel=2、三层 A=B、语料为合成样例且单裁决人。§12.1 合成诊断集 A 在语义/多相关层领先，但不是独立人工证据。弱相关/负例与双人复核工具已就绪（§13），待真实历史事故语料与第二裁决人。**
+状态：**机械门 PASS（40 组/三层达标/judge=fei，rel 2=40/1=14/0=62，exit 0）；负例与弱相关已补齐（单裁决人 fei）。M4 仍未完全闭环——语料为合成样例、仅一名裁决人，A/B 主指标持平（三层 A=B）。§13 工具已就绪，待真实历史事故语料与第二裁决人。**
 
 ## 1. 结论先行
 
@@ -351,7 +351,13 @@ judge-audit 回填: rel2=40 rel1=0 rel0=64（smoke-test 填充，验证机制）
 judge-agreement: 两份相同 baseline → common=40 raw=1.000 kappa=1.000
 ```
 
-**未闭环的两项输入只能由人提供，AI 不代劳：**
+2026-10-23 已用 `judge-audit.ps1` 产出第一裁决人 fei 的弱相关/负例：
+`rel 2=40 / 1=14 / 0=62`，`--gate` 仍 PASS，且不再有 `all labels are 2`。
+同日修掉一个 NDCG 口径 bug：IDCG 原只取 `expected`，漏掉 rel 字典里非 expected
+的弱相关候选，导致 multi-rel 下 NDCG 超过 1.0（实测 literal 1.108）；改为
+IDCG 取 rel 字典全部 >0 值，回归测试 `ndcg_never_exceeds_one_with_non_expected_relevant`。
+
+**仍缺的两项输入只能由人提供，AI 不代劳：**
 
 1. **真实历史事故语料**：仓库内只有 `eval-real/seed-40.ps1` 写死的合成夹具，
    没有真实事故。需要把真实事故日志逐条 `scx --query ... --store 1 --fix ...` 入库，
