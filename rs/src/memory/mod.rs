@@ -174,6 +174,11 @@ pub fn eval_cases(root: &str, path: &str) -> std::io::Result<Vec<String>> {
     eval::run(root, path)
 }
 
+/// 门面：--eval-verbose 逐候选诊断（P4.4+ 优化④，服务 M4 人工标注校准）。
+pub fn eval_cases_verbose(root: &str, path: &str) -> std::io::Result<Vec<String>> {
+    eval::run_verbose(root, path)
+}
+
 /// 门面：L1 要点行摘要（P4.2，O5 后半），≤300 字符。
 pub fn case_summary(root: &str, id: &str) -> std::io::Result<String> {
     eval::case_summary(root, id)

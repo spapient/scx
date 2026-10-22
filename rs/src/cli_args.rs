@@ -1,7 +1,7 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--l1-hist] [--stats] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
 
 pub(crate) struct Opts {
     pub query: String,
@@ -30,6 +30,8 @@ pub(crate) struct Opts {
     pub delete: Option<String>,
     /// P4.1 评估系统：冻结 baseline.json 重放（豁免 --query）。
     pub eval: Option<String>,
+    /// P4.4+ 优化④：--eval-verbose 逐 case 诊断（A/B top-10 候选 + [hit]/[miss]）。
+    pub eval_verbose: bool,
     pub l1_hist: bool,
     /// P4.4+ 优化：库盘点（--stats，豁免 --query）。
     pub stats: bool,
@@ -120,6 +122,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut gc = false;
     let mut delete: Option<String> = None;
     let mut eval: Option<String> = None;
+    let mut eval_verbose = false;
     let mut l1_hist = false;
     let mut stats = false;
     let mut mem_dir = default_mem_dir();
@@ -274,6 +277,15 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 eval = Some(p);
             }
+            "--eval-verbose" => {
+                if inline.is_some() {
+                    return Err("--eval-verbose does not take a value".to_string());
+                }
+                if eval.is_none() {
+                    return Err("--eval-verbose requires --eval <baseline.json>".to_string());
+                }
+                eval_verbose = true;
+            }
             "--l1-hist" => {
                 if inline.is_some() {
                     return Err("--l1-hist does not take a value".to_string());
@@ -405,6 +417,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         gc,
         delete,
         eval,
+        eval_verbose,
         l1_hist,
         stats,
         mem_dir,
@@ -551,6 +564,13 @@ mod tests {
         // P4.1/P4.2：--eval 豁免 --query；--recall-detail 开关。
         let o = parse_args_from(args(&["--eval", "bl.json", "--mem-dir", "/tmp/m"])).unwrap();
         assert_eq!(o.eval.as_deref(), Some("bl.json"));
+        // P4.4+ 优化④：--eval-verbose 需配合 --eval。
+        let o = parse_args_from(args(&["--eval", "bl.json", "--eval-verbose"])).unwrap();
+        assert!(o.eval_verbose);
+        assert!(
+            parse_args_from(args(&["--eval-verbose"])).is_err(),
+            "无 --eval 时 --eval-verbose 应报错"
+        );
         let o =
             parse_args_from(args(&["--query", "q", "--recall", "3", "--recall-detail"])).unwrap();
         assert!(o.recall_detail);

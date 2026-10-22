@@ -64,8 +64,14 @@ fn main() {
         return;
     }
     // P4.1 评估系统：--eval <baseline.json> 冻结重放，A/B 分层对拍（独立于压缩主流程）。
+    // P4.4+ 优化④：--eval-verbose 时追加逐 case A/B top-10 候选诊断（服务 M4 标注校准）。
     if let Some(path) = &opts.eval {
-        match scx::memory::eval_cases(&opts.mem_dir, path) {
+        let res = if opts.eval_verbose {
+            scx::memory::eval_cases_verbose(&opts.mem_dir, path)
+        } else {
+            scx::memory::eval_cases(&opts.mem_dir, path)
+        };
+        match res {
             Ok(lines) => {
                 for l in lines {
                     println!("{l}");

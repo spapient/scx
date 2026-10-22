@@ -153,8 +153,19 @@ fn dcg(rels: &[f64]) -> f64 {
         .sum()
 }
 
-/// 评估入口：读取 baseline.json → 逐例 A/B 召回 → 分层聚合 → 报告行（确定性）。
+/// 评估入口（默认报告）：读取 baseline.json → 逐例 A/B 召回 → 分层聚合 → 报告行（确定性）。
 pub(crate) fn run(root: &str, path: &str) -> std::io::Result<Vec<String>> {
+    run_impl(root, path, false)
+}
+
+/// 评估入口（--eval-verbose）：聚合报告 + 逐 case 的 A/B top-10 候选诊断
+/// （rank/sim/score/case 尾 8 /[hit]|[miss]）——标注者可见"召回为什么对/错"，
+/// 直接服务 M4 证据门的人工标注与校准（P4.4+ 优化④）。
+pub(crate) fn run_verbose(root: &str, path: &str) -> std::io::Result<Vec<String>> {
+    run_impl(root, path, true)
+}
+
+fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String>> {
     let txt = std::fs::read_to_string(path)?;
     let v = crate::memory::json::parse(&txt)
         .map_err(|e| std::io::Error::other(format!("eval: {e}")))?;
@@ -162,6 +173,8 @@ pub(crate) fn run(root: &str, path: &str) -> std::io::Result<Vec<String>> {
     // 分层顺序按首次出现保持（golden 稳定）。
     let mut layers: Vec<String> = Vec::new();
     let mut agg: HashMap<String, [f64; 7]> = HashMap::new(); // [n, A:r5,mrr,ndcg, B:r5,mrr,ndcg]
+                                                             // verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
+    let mut diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)> = Vec::new();
     for c in &cases {
         let a = recall::recall(root, &c.query, 10)?;
         let b = plain(root, &c.query, 10)?;
@@ -178,8 +191,11 @@ pub(crate) fn run(root: &str, path: &str) -> std::io::Result<Vec<String>> {
         if !layers.iter().any(|l| l == &c.layer) {
             layers.push(c.layer.clone());
         }
+        if verbose {
+            diag.push((c.query.clone(), a, b));
+        }
     }
-    let mut out = Vec::with_capacity(layers.len() + 1);
+    let mut out = Vec::with_capacity(layers.len() + 2);
     out.push(format!(
         "eval: cases={} layers={}",
         cases.len(),
@@ -208,7 +224,40 @@ pub(crate) fn run(root: &str, path: &str) -> std::io::Result<Vec<String>> {
     out.push(format!(
         "l1: hits={l1_hit} total={l1_total} rate={l1_rate:.3}"
     ));
+    // P4.4+ 优化④：逐 case 诊断段（A/B 各 top-10，case 尾 8 位与 --eval 口径一致）。
+    if verbose {
+        for (i, (q, a, b)) in diag.iter().enumerate() {
+            out.push(format!("case {}/{} q=\"{}\"", i + 1, diag.len(), q));
+            out.push(format!("  A: {}", fmt_hits(a, &cases[i])));
+            out.push(format!("  B: {}", fmt_hits(b, &cases[i])));
+        }
+    }
     Ok(out)
+}
+
+/// 单行候选诊断：`1) <tail8> sim=0.86 score=0.55 [hit] | 2) ... [miss]`。
+fn fmt_hits(hits: &[RecallHit], c: &EvalCase) -> String {
+    if hits.is_empty() {
+        return "(no hits)".to_string();
+    }
+    let mut parts = Vec::with_capacity(hits.len());
+    for (i, h) in hits.iter().enumerate() {
+        let tail = h.id.rsplit('_').next().unwrap_or(&h.id);
+        let tag = if hit_expected(&c.expected, &h.id) {
+            "hit"
+        } else {
+            "miss"
+        };
+        parts.push(format!(
+            "{}) {} sim={:.2} score={:.2} [{}]",
+            i + 1,
+            tail,
+            h.sim,
+            h.score,
+            tag
+        ));
+    }
+    parts.join(" | ")
 }
 
 /// P2 阶段门残余：L1 直答命中率——top1 命中 expected 的相关 case 中，满足 L1 置信判据

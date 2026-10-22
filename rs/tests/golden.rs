@@ -501,7 +501,21 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         "memory_eval".into(),
         vec![
             "--eval",
+            Box::leak(baseline_path.clone().into_boxed_str()),
+            "--mem-dir",
+            Box::leak(mem_ev.clone().into_boxed_str()),
+        ],
+        String::new(),
+    ));
+
+    // 28) --eval-verbose 逐 case 诊断（P4.4+ 优化④：A/B top-10 + [hit]/[miss]，
+    //     服务 M4 人工标注校准；复用 memory_eval 的库与基线，默认 --eval 输出不变）。
+    v.push((
+        "memory_eval_verbose".into(),
+        vec![
+            "--eval",
             Box::leak(baseline_path.into_boxed_str()),
+            "--eval-verbose",
             "--mem-dir",
             Box::leak(mem_ev.into_boxed_str()),
         ],
