@@ -17,6 +17,7 @@ pub mod edge;
 pub mod eval;
 pub mod feedback;
 pub mod field;
+pub(crate) mod gate;
 pub mod housekeep;
 pub mod index;
 pub mod ingest;
@@ -229,6 +230,19 @@ pub fn eval_cases(root: &str, path: &str) -> std::io::Result<Vec<String>> {
 /// 门面：--eval-verbose 逐候选诊断（P4.4+ 优化④，服务 M4 人工标注校准）。
 pub fn eval_cases_verbose(root: &str, path: &str) -> std::io::Result<Vec<String>> {
     eval::run_verbose(root, path)
+}
+
+/// 门面：`--eval --gate` 的 M4 机械门——返回报告行与是否通过。
+pub fn eval_cases_gate(
+    root: &str,
+    path: &str,
+    verbose: bool,
+) -> std::io::Result<(Vec<String>, bool)> {
+    if verbose {
+        eval::run_gate_verbose(root, path)
+    } else {
+        eval::run_gate(root, path)
+    }
 }
 
 /// 门面：L1 要点行摘要（P4.2，O5 后半），≤300 字符。

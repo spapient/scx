@@ -142,3 +142,29 @@ powershell -ExecutionPolicy Bypass -File ..\scripts\m4-eval.ps1
 
 **门禁（P0-1..P1-5 后）**：104 库 + 8 CLI + 5 集成 + golden 29 例全绿，fmt/clippy 0，release ✓。
 实施记录与整改单见 `docs/rag-implementation-log.md` §24。
+
+## 10. `--gate` 机械门（2026-10-22，优化⑭）
+
+`--eval --gate` 把 M4 的证据门变成可执行校验，任一条件失败即打印 `gate: FAIL` 并 exit 2：
+
+| 条件 | 规则 |
+|---|---|
+| 总样本 | `total >= 30`（计划目标 30–50；超过 50 不惩罚） |
+| 分层 | `literal` / `paraphrase` / `semantic` 各 `n >= 10` |
+| 裁决元数据 | 非 literal 条目必须带 `judge.by` + `judge.date`；自动标注集（无 judge 对象）不得过门 |
+| 主指标 | 每层 A 的预声明指标（literal/paraphrase r@5；semantic r@10）与 MRR 均 `>= B` |
+| 未知层 | 出现三层之外的 layer 直接 FAIL，防止用其他层凑总数 |
+
+复跑示例：
+
+```powershell
+cd rs
+cargo build --release --locked
+.\target\release\scx.exe --eval $env:TEMP\scx-demo-raw.json --gate --eval-verbose --mem-dir $env:TEMP\scx-demo-mem
+```
+
+实测：demo 16 case → 23 组（literal 16 / paraphrase 5 / semantic 2），
+`--gate` 报 `total=23 FAIL`、`paraphrase n=5 FAIL`、`semantic n=2 FAIL`，exit 2；
+自动标注集（23 组、无 judge 元数据）另报 `judge metadata ... FAIL`。
+这证明机械门不会把 demo/自动集误判为 M4 证据。**M4 状态仍为未通过**，直到真实冻结语料
+（≥30 组、每层 ≥10、人工裁决）在 `--gate` 下 PASS。

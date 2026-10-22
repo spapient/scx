@@ -66,15 +66,21 @@ fn main() {
     // P4.1 评估系统：--eval <baseline.json> 冻结重放，A/B 分层对拍（独立于压缩主流程）。
     // P4.4+ 优化④：--eval-verbose 时追加逐 case A/B top-10 候选诊断（服务 M4 标注校准）。
     if let Some(path) = &opts.eval {
-        let res = if opts.eval_verbose {
-            scx::memory::eval_cases_verbose(&opts.mem_dir, path)
+        // P4.4+ 优化⑭：--gate 在报告后机械校验 M4 证据门；失败 exit 2。
+        let res: std::io::Result<(Vec<String>, bool)> = if opts.eval_gate {
+            scx::memory::eval_cases_gate(&opts.mem_dir, path, opts.eval_verbose)
+        } else if opts.eval_verbose {
+            scx::memory::eval_cases_verbose(&opts.mem_dir, path).map(|lines| (lines, false))
         } else {
-            scx::memory::eval_cases(&opts.mem_dir, path)
+            scx::memory::eval_cases(&opts.mem_dir, path).map(|lines| (lines, false))
         };
         match res {
-            Ok(lines) => {
+            Ok((lines, gate_failed)) => {
                 for l in lines {
                     println!("{l}");
+                }
+                if gate_failed {
+                    std::process::exit(2);
                 }
             }
             Err(e) => {

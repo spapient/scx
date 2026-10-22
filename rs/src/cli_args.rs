@@ -1,7 +1,7 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
 
 pub(crate) struct Opts {
     pub query: String,
@@ -36,6 +36,8 @@ pub(crate) struct Opts {
     pub eval: Option<String>,
     /// P4.4+ 优化④：--eval-verbose 逐 case 诊断（A/B top-10 候选 + [hit]/[miss]）。
     pub eval_verbose: bool,
+    /// P4.4+ 优化⑭：--gate 机械校验 M4 证据门（须配 --eval）。
+    pub eval_gate: bool,
     pub l1_hist: bool,
     /// P4.4+ 优化：库盘点（--stats，豁免 --query）。
     pub stats: bool,
@@ -149,6 +151,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut delete: Option<String> = None;
     let mut eval: Option<String> = None;
     let mut eval_verbose = false;
+    let mut eval_gate = false;
     let mut l1_hist = false;
     let mut stats = false;
     let mut annotate = false;
@@ -331,6 +334,13 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 eval_verbose = true;
             }
+            // P4.4+ 优化⑭：M4 机械门（样本量/分层/裁决元数据/A≥B）。
+            "--gate" => {
+                if inline.is_some() {
+                    return Err("--gate does not take a value".to_string());
+                }
+                eval_gate = true;
+            }
             "--l1-hist" => {
                 if inline.is_some() {
                     return Err("--l1-hist does not take a value".to_string());
@@ -512,6 +522,9 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     if annotate && annotate_raw {
         return Err("--annotate and --annotate-raw are mutually exclusive".to_string());
     }
+    if eval_gate && eval.is_none() {
+        return Err("--gate requires --eval <baseline.json>".to_string());
+    }
     if recall_only && query.is_empty() {
         return Err("--recall-only requires --query".to_string());
     }
@@ -550,6 +563,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         delete,
         eval,
         eval_verbose,
+        eval_gate,
         l1_hist,
         stats,
         annotate,
@@ -707,6 +721,11 @@ mod tests {
         // P4.4+ 优化④：--eval-verbose 需配合 --eval。
         let o = parse_args_from(args(&["--eval", "bl.json", "--eval-verbose"])).unwrap();
         assert!(o.eval_verbose);
+        // P4.4+ 优化⑭：--gate 必须配 --eval；不允许带值。
+        let o = parse_args_from(args(&["--eval", "bl.json", "--gate"])).unwrap();
+        assert!(o.eval_gate);
+        assert!(parse_args_from(args(&["--gate"])).is_err());
+        assert!(parse_args_from(args(&["--eval", "bl.json", "--gate=x"])).is_err());
         assert!(
             parse_args_from(args(&["--eval-verbose"])).is_err(),
             "无 --eval 时 --eval-verbose 应报错"

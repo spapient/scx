@@ -156,3 +156,16 @@ P0/P1/P2 整改单逐条落地（评审口径：qmap 陈旧快照 / 只读污染
 
 自动口径 36 组（24/9/3）可复现，但独立人工/盲测质量证据未闭环：各层 ≥10 未满足、自检选择偏差未消除、n=9/n=3 无显著性。
 评审底线：做不到独立人工裁决就把 M4 降级为“回归门”。盲测裁决链（--judge）已就绪，待真人裁决 raw 集并产出可引用数字。
+
+## 25. P4.4+ 优化⑭实施记录（--gate 机械证据门，2026-10-22）
+
+**背景**：M4 的“30–50 组、每层 ≥10、人工裁决、A≥B”此前只写在文档/SOP 里，`--eval` 对 5 条 demo 也照常出表，存在误把 demo/自动标注当证据的风险。
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| `--gate` | `--eval --gate` 机械校验：总组数 ≥30；literal/paraphrase/semantic 各 ≥10；非 literal 必须有 `judge.by`+`judge.date`；每层 A 的 r@5（semantic r@10）与 MRR 均 ≥ B；未知层直接失败；任一失败 exit 2 | 单测 5 例（完整集 PASS / 小集 FAIL / 缺 judge 元数据 FAIL / A<B FAIL / 未知层 FAIL）；demo E2E：23 组 16/5/2 被拒；自动集另报 judge metadata FAIL |
+| 解析 | `EvalCase` 增加 `judged_by`/`judged_date`，从 `judge:{by,date}` 读取；自动标注集无 judge 对象 → gate 拒绝，`--judge` 裁决后方可过门 | `parse_baseline_rejects_unjudged` 扩展断言 by/date 读取 |
+| 兼容 | 默认 `--eval`/`--eval-verbose` 输出零漂移；gate 行仅在 `--gate` 时追加 | golden 29 例未漂移 |
+
+**门禁终态**：109 库 + 8 CLI + 5 集成 + golden 29 例全绿；fmt/clippy 0；release ✓。
+**状态**：M4 仍为“未通过”；`--gate` 只负责阻止假通过，真人裁决与真实冻结语料仍是前置条件。

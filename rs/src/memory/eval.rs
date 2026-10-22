@@ -26,6 +26,10 @@ pub(crate) struct EvalCase {
     pub layer: String,
     pub expected: Vec<String>,
     pub rel: HashMap<String, f64>,
+    /// `--judge` 写入的裁决人；自动标注集为空（`--gate` 据此拒绝非 literal 条目）。
+    pub judged_by: Option<String>,
+    /// `--judge` 写入的裁决时间（UTC）；与 judged_by 同时存在才算人工裁决。
+    pub judged_date: Option<String>,
 }
 
 /// 解析 baseline.json：`{"name":..,"cases":[{"query":..,"layer":..,"expected":[..],"rel":{..}}]}`
@@ -88,11 +92,29 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
         for e in &expected {
             rel.entry(e.clone()).or_insert(1.0);
         }
+        // P4.4+ 优化⑭：读取 judge 元数据供 --gate 校验。自动标注集没有 judge
+        // 对象（或只有 rel），因此不能冒充人工裁决证据。
+        let mut judged_by = None;
+        let mut judged_date = None;
+        if let Some((_, Val::Obj(jkvs))) = kvs.iter().find(|(k, _)| k == "judge") {
+            let get_optional = |key: &str| -> Option<String> {
+                jkvs.iter()
+                    .find(|(k, _)| k == key)
+                    .and_then(|(_, v)| match v {
+                        Val::Str(s) if !s.trim().is_empty() => Some(s.clone()),
+                        _ => None,
+                    })
+            };
+            judged_by = get_optional("by");
+            judged_date = get_optional("date");
+        }
         out.push(EvalCase {
             query,
             layer,
             expected,
             rel,
+            judged_by,
+            judged_date,
         });
     }
     Ok(out)
@@ -174,17 +196,32 @@ fn dcg(rels: &[f64]) -> f64 {
 
 /// 评估入口（默认报告）：读取 baseline.json → 逐例 A/B 召回 → 分层聚合 → 报告行（确定性）。
 pub(crate) fn run(root: &str, path: &str) -> std::io::Result<Vec<String>> {
-    run_impl(root, path, false)
+    run_impl(root, path, false, false).map(|(lines, _)| lines)
 }
 
 /// 评估入口（--eval-verbose）：聚合报告 + 逐 case 的 A/B top-10 候选诊断
 /// （rank/sim/score/case 尾 8 /[hit]|[miss]）——标注者可见"召回为什么对/错"，
 /// 直接服务 M4 证据门的人工标注与校准（P4.4+ 优化④）。
 pub(crate) fn run_verbose(root: &str, path: &str) -> std::io::Result<Vec<String>> {
-    run_impl(root, path, true)
+    run_impl(root, path, true, false).map(|(lines, _)| lines)
 }
 
-fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String>> {
+/// P4.4+ 优化⑭：M4 机械门（`--eval --gate`）——报告 + 是否通过。
+pub(crate) fn run_gate(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
+    run_impl(root, path, false, true)
+}
+
+/// `--eval --gate --eval-verbose`：门禁结论 + 逐 case 诊断。
+pub(crate) fn run_gate_verbose(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
+    run_impl(root, path, true, true)
+}
+
+fn run_impl(
+    root: &str,
+    path: &str,
+    verbose: bool,
+    gate: bool,
+) -> std::io::Result<(Vec<String>, bool)> {
     let txt = std::fs::read_to_string(path)?;
     let v = crate::memory::json::parse(&txt)
         .map_err(|e| std::io::Error::other(format!("eval: {e}")))?;
@@ -298,6 +335,13 @@ fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String
     out.push(format!(
         "l1: hits={l1_hit} total={l1_total} rate={l1_rate:.3}"
     ));
+    // P4.4+ 优化⑭：M4 机械门——样本量/分层/裁决元数据/主指标 A≥B。
+    let mut gate_failed = false;
+    if gate {
+        let g = crate::memory::gate::check(&cases, &layers, &agg);
+        out.extend(g.lines);
+        gate_failed = g.failed;
+    }
     // P4.4+ 优化④：逐 case 诊断段（A/B 各 top-10，case 尾 8 位与 --eval 口径一致）。
     if verbose {
         for (i, (q, a, b)) in diag.iter().enumerate() {
@@ -306,7 +350,7 @@ fn run_impl(root: &str, path: &str, verbose: bool) -> std::io::Result<Vec<String
             out.push(format!("  B: {}", fmt_hits(b, &cases[i])));
         }
     }
-    Ok(out)
+    Ok((out, gate_failed))
 }
 
 /// 单行候选诊断：`1) <tail8> sim=0.86 score=0.55 [hit] | 2) ... [miss]`。
@@ -570,6 +614,8 @@ mod tests {
             layer: "literal".to_string(),
             expected: vec!["c1".to_string(), "c2".to_string()],
             rel,
+            judged_by: None,
+            judged_date: None,
         };
         // 命中顺序 c2 在前：recall@5=1.0，recall@10=1.0，MRR=1/1（c2 首个 expected 即第一），NDCG<1（c1 排后）。
         let hits = vec![hit("c2", 0.9), hit("c1", 0.8), hit("c3", 0.1)];
@@ -652,6 +698,11 @@ mod tests {
         let cases = parse_baseline(&v2).unwrap();
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0].rel.get("a"), Some(&1.0));
+        assert_eq!(cases[0].judged_by.as_deref(), Some("tester"));
+        assert_eq!(
+            cases[0].judged_date.as_deref(),
+            Some("2026-10-22T00:00:00Z")
+        );
     }
 
     /// P4.4+ 优化⑩：bootstrap CI 确定性（同 seed 同输出）且区间在 [min,max] 内。
