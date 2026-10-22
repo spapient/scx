@@ -58,6 +58,27 @@ pub(crate) fn norm_into(s: &str, out: &mut String, run: &mut String) {
     }
 }
 
+/// 身份归一化：保留数字段，仅折叠空白并做 Unicode 小写。
+///
+/// 用于 case 去重 / qmap / 会话缓存这类“精确键”。`norm_into` 会把 8080/9090、
+/// errno=28/29 都折叠成 `#`，适合日志词面匹配，但不适合判断“是不是同一条记忆”。
+pub(crate) fn norm_identity_into(s: &str, out: &mut String) {
+    let mut pending_space = false;
+    for c in s.chars() {
+        if c.is_whitespace() {
+            pending_space = true;
+            continue;
+        }
+        if pending_space && !out.is_empty() {
+            out.push(' ');
+        }
+        pending_space = false;
+        for lc in c.to_lowercase() {
+            out.push(lc);
+        }
+    }
+}
+
 // 分析用小写缓冲：剥离 ANSI 转义并折叠裸 CR。输出仍保留原始行，因此只影响匹配/排序，
 // 不影响"保留行逐字原文"的承诺。进度条常用裸 \r 回写，按空白处理避免污染词面。
 pub(crate) fn push_analysis_lower(s: &str, out: &mut String) {

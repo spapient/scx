@@ -61,8 +61,14 @@ pub(crate) struct Index {
     pub dict: HashMap<String, (usize, Vec<usize>)>,
 }
 
-/// 惰性作废索引（新增/删除 case 后调用）：删 postings.bin，召回回退线性/按需重建。
-pub(crate) fn invalidate(root: &str) {
+/// 获取索引写锁。调用方在“case 资产变更 + 索引失效 + gen 前进”期间持锁，
+/// 防止 index::build 在失效之后又把旧快照写回。
+pub(crate) fn lock(root: &str) -> std::io::Result<crate::memory::lock::FileLock> {
+    crate::memory::lock::acquire(root, "index.lock")
+}
+
+/// 持锁作废索引（调用方必须已持有 [`lock`] 返回的守卫）。
+pub(crate) fn invalidate_locked(root: &str) {
     let p = postings_path(root);
     if p.exists() {
         let _ = fs::remove_file(&p);
@@ -74,6 +80,14 @@ pub(crate) fn invalidate(root: &str) {
             *g = None;
         }
     }
+}
+
+/// 惰性作废索引（新增/删除 case 后调用）：删 postings.bin，召回回退线性/按需重建。
+/// 锁失败必须上抛：静默失败会让新 case 永远被旧索引漏掉。
+pub(crate) fn invalidate(root: &str) -> std::io::Result<()> {
+    let _g = lock(root)?;
+    invalidate_locked(root);
+    Ok(())
 }
 
 /// 进程内索引缓存（会话/守护进程多次召回免重复 parse；CLI 单次无副作用）。
@@ -91,6 +105,8 @@ pub(crate) type Df = Vec<(String, usize)>;
 /// 全量构建 postings.bin（读取全部 case 的 query∪text 词表）。
 /// 返回 (n_docs, n_terms, df 快照按 term 字典序) —— df 供 meta [df] 节落盘。
 pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
+    // 跨进程串行构建：避免两个 rebuild/自动构建同时写 postings.bin。
+    let _g = lock(root)?;
     let ids = store::list_ids(root)?;
     let mut docs: Vec<(String, DocRec)> = Vec::with_capacity(ids.len());
     let mut total_len = 0usize;
@@ -216,12 +232,19 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
     if ver != POST_VER {
         return Err(corrupt("bad version"));
     }
-    let body_len = u64::from_le_bytes(buf[6..14].try_into().unwrap()) as usize;
-    if body_len + 14 + 4 != buf.len() {
+    let body_len = usize::try_from(u64::from_le_bytes(buf[6..14].try_into().unwrap()))
+        .map_err(|_| corrupt("body_len too large"))?;
+    let body_end = 14usize
+        .checked_add(body_len)
+        .ok_or_else(|| corrupt("body_len overflow"))?;
+    let total_len = body_end
+        .checked_add(4)
+        .ok_or_else(|| corrupt("file length overflow"))?;
+    if total_len != buf.len() {
         return Err(corrupt("bad body_len"));
     }
-    let body = &buf[14..14 + body_len];
-    let crc = u32::from_le_bytes(buf[14 + body_len..14 + body_len + 4].try_into().unwrap());
+    let body = &buf[14..body_end];
+    let crc = u32::from_le_bytes(buf[body_end..total_len].try_into().unwrap());
     if crc32(body) != crc {
         return Err(corrupt("crc mismatch"));
     }
@@ -235,12 +258,18 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         Some(v)
     };
     let n_docs = take_u32(&mut i).ok_or_else(|| corrupt("no n_docs"))? as usize;
+    if n_docs > body.len() {
+        return Err(corrupt("n_docs exceeds body"));
+    }
     if i + 8 > body.len() {
         return Err(corrupt("no total_len"));
     }
     let total_len = u64::from_le_bytes(body[i..i + 8].try_into().unwrap()) as usize;
     i += 8;
     let n_terms = take_u32(&mut i).ok_or_else(|| corrupt("no n_terms"))? as usize;
+    if n_terms > body.len() {
+        return Err(corrupt("n_terms exceeds body"));
+    }
     let mut ids: Vec<String> = Vec::with_capacity(n_docs);
     let mut docs: Vec<DocRec> = Vec::with_capacity(n_docs);
     let take_str = |i: &mut usize, body: &[u8]| -> std::io::Result<String> {
@@ -259,12 +288,18 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
     for _ in 0..n_docs {
         let id = take_str(&mut i, body)?;
         let nterms = take_u32(&mut i).ok_or_else(|| corrupt("no doc nterms"))? as usize;
+        if nterms > body.len() {
+            return Err(corrupt("doc nterms exceeds body"));
+        }
         let mut terms = Vec::with_capacity(nterms);
         for _ in 0..nterms {
             terms.push(take_str(&mut i, body)?);
         }
         let take_vec = |i: &mut usize, body: &[u8]| -> std::io::Result<Vec<String>> {
             let n = take_u32(i).ok_or_else(|| corrupt("no field n"))? as usize;
+            if n > body.len() {
+                return Err(corrupt("field count exceeds body"));
+            }
             let mut v = Vec::with_capacity(n);
             for _ in 0..n {
                 v.push(take_str(i, body)?);
@@ -309,6 +344,9 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         i += tlen;
         let df = u32::from_le_bytes(body[i..i + 4].try_into().unwrap()) as usize;
         i += 4;
+        if df > body.len() {
+            return Err(corrupt("df exceeds body"));
+        }
         let mut post = Vec::with_capacity(df);
         let mut prev = 0usize;
         for _ in 0..df {
@@ -489,9 +527,46 @@ mod tests {
         seed(&root);
         build(&root).unwrap();
         assert!(postings_path(&root).exists());
-        invalidate(&root);
+        invalidate(&root).unwrap();
         assert!(!postings_path(&root).exists());
         assert!(load(&root).unwrap().is_none());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn write_case_invalidates_cached_index() {
+        let root = tmp_root("wcinv");
+        seed(&root);
+        build(&root).unwrap();
+        assert!(postings_path(&root).exists());
+        let c = store::Case::new(
+            "newcase".to_string(),
+            "new query".to_string(),
+            vec![],
+            "ERROR new evidence".to_string(),
+        );
+        store::write_case(&root, &c).unwrap();
+        assert!(
+            !postings_path(&root).exists(),
+            "新 case 必须让旧索引失效，否则大库会漏召"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn parse_rejects_overflowing_body_len() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&POST_MAGIC.to_le_bytes());
+        buf.extend_from_slice(&POST_VER.to_le_bytes());
+        buf.extend_from_slice(&u64::MAX.to_le_bytes());
+        buf.extend_from_slice(&[0u8; 4]);
+        let err = match parse(&buf) {
+            Ok(_) => panic!("溢出 body_len 必须被拒绝"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().contains("body_len"),
+            "溢出长度必须明确报 corrupt: {err}"
+        );
     }
 }

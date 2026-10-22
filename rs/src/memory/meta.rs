@@ -6,6 +6,7 @@
 // 阶段化开发过渡：df 快照为 P2（领域 IDF）预留，非 test 构建暂放宽 dead_code。
 #![cfg_attr(not(test), allow(dead_code))]
 
+use crate::memory::lock;
 use crate::memory::model::{ENG_VER, SCHEMA};
 use crate::memory::util::utc_now;
 use std::fs;
@@ -16,12 +17,16 @@ pub(crate) fn ensure_root(root: &str) -> std::io::Result<()> {
     for sub in ["", "cases", "index"] {
         let p = Path::new(root).join(sub);
         if !p.exists() {
-            fs::create_dir_all(&p)?;
+            lock::create_dir_all(&p)?;
         }
     }
     let meta_p = Path::new(root).join("meta.toml");
     if !meta_p.exists() {
-        fs::write(&meta_p, meta_toml(0).as_bytes())?;
+        // 多进程同时首次打开：锁内二次检查，避免两边写坏同一 meta。
+        let _g = lock::acquire(root, "meta.lock")?;
+        if !meta_p.exists() {
+            lock::atomic_write(&meta_p, meta_toml(0).as_bytes())?;
+        }
     }
     Ok(())
 }
@@ -78,19 +83,19 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
                 }
             }
             "params" => {
-                if let Ok(f) = v.parse::<f64>() {
+                if let Some(f) = v.parse::<f64>().ok().filter(|f| f.is_finite()) {
                     params.push((k.to_string(), f));
                 }
             }
             "word_w" => {
-                if let Ok(f) = v.parse::<f64>() {
+                if let Some(f) = v.parse::<f64>().ok().filter(|f| f.is_finite()) {
                     word_w.push((k.to_string(), f));
                 }
             }
             "l1" if k == "hist" => {
                 let body = v.trim().trim_matches('"');
                 for tok in body.split(',') {
-                    if let Ok(f) = tok.trim().parse::<f64>() {
+                    if let Some(f) = tok.trim().parse::<f64>().ok().filter(|f| f.is_finite()) {
                         l1_hist.push(f);
                     }
                 }
@@ -112,6 +117,7 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
 /// 库代际 +1 并原子写回（case 写入/删除的兜底失效信号；失败返回 Err，
 /// 由调用方决定是否致命——case 已写盘，gen 落后只会多一次重算，不丢数据）。
 pub(crate) fn bump_gen(root: &str) -> std::io::Result<()> {
+    let _g = lock::acquire(root, "meta.lock")?;
     let p = Path::new(root).join("meta.toml");
     let txt = fs::read_to_string(&p)?;
     let mut next: Option<u64> = None;
@@ -122,7 +128,7 @@ pub(crate) fn bump_gen(root: &str) -> std::io::Result<()> {
             if let Some(eq) = t.find('=') {
                 if t[..eq].trim() == "gen" {
                     if let Ok(v) = t[eq + 1..].trim().parse::<u64>() {
-                        next = Some(v + 1);
+                        next = Some(v.saturating_add(1));
                         out.push(format!("gen = {}", next.unwrap()));
                         continue;
                     }
@@ -142,19 +148,15 @@ pub(crate) fn bump_gen(root: &str) -> std::io::Result<()> {
     }
     let mut body = out.join("\n");
     body.push('\n');
-    atomic_write(&p, body.as_bytes())
-}
-
-/// 原子写 meta.toml（临时文件 + rename；防崩溃半写）。
-fn atomic_write(p: &Path, body: &[u8]) -> std::io::Result<()> {
-    let tmp = p.with_extension("tmp");
-    fs::write(&tmp, body)?;
-    fs::rename(&tmp, p)
+    lock::atomic_write(&p, body.as_bytes())
 }
 
 /// 追加一条 top1_sim 到 L1 历史并重写 meta.toml（O5 自适应基线数据源）。
 /// 失败静默（旁路：历史只是置信校准的输入，不影响召回正确性）。
 pub(crate) fn push_l1_hist(root: &str, sim: f64) {
+    let Ok(_g) = lock::acquire(root, "meta.lock") else {
+        return;
+    };
     let Ok(mut meta) = load_meta(root) else {
         return;
     };
@@ -195,11 +197,14 @@ pub(crate) fn push_l1_hist(root: &str, sim: f64) {
     }
     let mut body = out.join("\n");
     body.push('\n');
-    let _ = atomic_write(&p, body.as_bytes());
+    let _ = lock::atomic_write(&p, body.as_bytes());
 }
 
 /// 词级调权：good 词 +step / bad 词 −step（上下限 ±0.5，§3.9），重写 [word_w] 节。
 pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
+    let Ok(_g) = lock::acquire(root, "meta.lock") else {
+        return;
+    };
     let step = if good { 0.1 } else { -0.15 };
     let Ok(mut meta) = load_meta(root) else {
         return;
@@ -254,12 +259,13 @@ pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
     }
     let mut body = out.join("\n");
     body.push('\n');
-    let _ = atomic_write(&p, body.as_bytes());
+    let _ = lock::atomic_write(&p, body.as_bytes());
 }
 
 /// 写/更新 [params] 单个参数：节内有 key 原位替换，无则节内末尾插入，无节则文件尾建节。
 /// 供测试与调参共用（P4.3 edge_enable/edge_weight 等）。
 pub(crate) fn set_param(root: &str, key: &str, val: f64) -> std::io::Result<()> {
+    let _g = lock::acquire(root, "meta.lock")?;
     let p = Path::new(root).join("meta.toml");
     let txt = fs::read_to_string(&p)?;
     let key_line = format!("{key} = {val:.3}");
@@ -295,7 +301,7 @@ pub(crate) fn set_param(root: &str, key: &str, val: f64) -> std::io::Result<()> 
     }
     let mut body = lines.join("\n");
     body.push('\n');
-    atomic_write(&p, body.as_bytes())
+    lock::atomic_write(&p, body.as_bytes())
 }
 
 fn meta_toml(case_count: usize) -> String {

@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 fn bin() -> &'static str {
     env!("CARGO_BIN_EXE_scx")
@@ -110,4 +110,64 @@ fn invalid_option_and_no_kept_fallback_are_explicit() {
     assert!(stdout.contains("mode=passthrough:no-kept"));
     let _ = fs::remove_file(path);
     let _ = fs::remove_file(long_path);
+}
+
+#[test]
+fn concurrent_store_processes_keep_all_cases_and_meta_updates() {
+    let root = std::env::temp_dir().join(format!(
+        "scx-cli-conc-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&root).unwrap();
+    let mut children = Vec::new();
+    let mut inputs = Vec::new();
+    for i in 0..8 {
+        let p = root.join(format!("in{i}.txt"));
+        fs::write(&p, format!("ERROR concurrent store {i} unique{i}\n")).unwrap();
+        children.push(
+            Command::new(bin())
+                .args([
+                    "--query",
+                    &format!("concurrent q{i}"),
+                    "--store",
+                    "1",
+                    "--mem-dir",
+                    root.to_str().unwrap(),
+                    p.to_str().unwrap(),
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        inputs.push(p);
+    }
+    for mut c in children {
+        assert!(c.wait().unwrap().success(), "并发 store 子进程必须成功");
+    }
+    let ids: Vec<String> = fs::read_dir(root.join("cases"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(ids.len(), 8, "8 个进程的 case 不能丢");
+    let meta = fs::read_to_string(root.join("meta.toml")).unwrap();
+    assert!(
+        meta.lines().any(|l| l.trim() == "case_count = 8"),
+        "case_count 必须等于实际 case 数: {meta}"
+    );
+    assert!(
+        meta.lines().any(|l| l.trim() == "gen = 8"),
+        "每次写 case 的 gen 递增都必须保留: {meta}"
+    );
+    for p in inputs {
+        let _ = fs::remove_file(p);
+    }
+    let _ = fs::remove_dir_all(root);
 }

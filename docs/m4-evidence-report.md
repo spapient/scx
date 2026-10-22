@@ -1,76 +1,105 @@
-# M4 证据门评估报告（自动化闭环）
+# M4 证据评估报告（自动回归集 + 口径修正）
 
 日期：2026-10-22
-库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦
-状态：**通过**（30–50 组窗口达成；A ≥ B 全面成立，含超 B 的直接证据）
+库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨
+状态：**自动回归集可复现；M4 独立质量证据未通过**
 
-## 1. 背景
+## 1. 结论先行
 
-M4 证据门原要求 30–50 组**人工标注**验证 RAG 召回质量（A/B 对拍：A=完整统计管线 vs B=朴素词面基线）。
-用户诉求升级为"顶级优秀的智能标注优于人工、有证据、证据力度强"——落地为：
+`--annotate` 能稳定产出 30–50 组带证据链的回归标注，`--eval` 能重放 A/B 表；
+这证明**评估工具链可用**，不证明 **A 的召回质量优于 B**。
 
-- 优化⑥ `--annotate`：从库中真实 case 生成三层标注（literal/paraphrase/semantic），
-  **每条变体先经召回管线自检（目标必须进 top-k）才放行**，证据链（fingerprint/synonym/root-cause + recall sim/score/rank）随标注落盘；
-- 优化⑦ 召回一致性修复：正式评估暴露的 3 个缺陷（见 §5）修复后，A/B 对拍真实成立。
+原因：自动标注的 paraphrase/semantic 变体先经 **A 管线**自检（目标必须进 A 的
+top-k）才放行，B 不参与放行。A 失败的变体被丢弃，因此评测集是“A 已成功的子集”，
+存在选择偏差。没有独立人工标签或盲测，不能把 A/B 差异归因于统计管线更好。
 
-## 2. 标注集（36 组，落 30–50 窗口）
+## 2. 可复现语料与命令
 
-24-case 真实感多样库（16 英文运维场景 + 8 中文/中英混排场景；覆盖 db/network/disk/build/runtime/other 全部桶族）：
+原报告引用的 24-case 语料未入库，无法复现其精确数字。现提供可复现脚本：
 
-```
---annotate --seed 0 --annotate-max 0 --mem-dir <库>
-annotate: cases=36 rel2=28 rel1=8
-  layer: literal=24   paraphrase=9   semantic=3
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/m4-eval.ps1
 ```
 
-每条标注含证据链（literal=fingerprint；paraphrase=synonym+recall sim/score/rank；semantic=root-cause+recall）。
-semantic 层仅 3 组为诚实边界：无根因行/error_code 家族词的 case 不造语义变体（不编造）。
+脚本定义 24 个真实感 case（16 英文运维 + 8 中文/混排），执行：
 
-## 3. A/B 对拍结果
+```text
+store × 24 → --annotate --seed 0 --annotate-max 0 → --eval
+```
 
-| 层 | n | A r@5 | B r@5 | A mrr | B mrr | A ndcg@10 | B ndcg@10 | 判定 |
-|---|---|---|---|---|---|---|---|---|
-| literal | 24 | 1.000 | 1.000 | 0.972 | 1.000 | 0.979 | 1.000 | A=B（r@5） |
-| paraphrase | 9 | 0.889 | 0.889 | **0.796** | 0.759 | **0.846** | 0.792 | **A>B** |
-| semantic | 3 | r@10: 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | A=B |
-| l1 直答命中率 | — | 0.909（30/33） | — | — | — | — | — | 学习闭环可用 |
+本次输出（Windows，release）：
 
-## 4. 逐 case 证据（A/B 差异仅 2/36）
+```text
+annotate: cases=36 rel2=30 rel1=6
+  layer: literal=24
+  layer: paraphrase=9
+  layer: semantic=3
+  dropped: paraphrase=1 semantic=0 (self-check filtered)
+  skipped: paraphrase_no_synonym=14 semantic_no_root=21
+```
 
-- **case 16 `storage空间不足`：A rank 2 命中，B 完全 miss（词面无共享词）**
-  A 经 PRF 扩展（storage→disk 桥接）把目标（`ERROR disk full 存储空间不足`）召回；
-  朴素 B 无词面重叠直接漏掉。**这是统计管线超朴素基线的直接证据**。
-- **case 13 `连接pool最小空闲不足`：A rank 6 / B rank 3**
-  中英混排变体（连接+pool）词面与目标（`pool min idle below threshold`）仅共享 pool 一词，
-  且 SYN 表无 空闲↔idle 桥。统计向量在此类变体上的边界，列为后续项（词典/词干）。
+## 3. A/B 对拍（本脚本可复现数字）
 
-## 5. 优化⑦ 修复清单（A/B 对拍真实成立的必要处置）
+| 层 | n | A r@5 | B r@5 | A mrr | B mrr | A ndcg@10 | B ndcg@10 |
+|---|---|---|---|---|---|---|---|
+| literal | 24 | 1.000 | 1.000 | 0.958 | **1.000** | 0.969 | **1.000** |
+| paraphrase | 9 | **1.000** | 0.889 | 0.778 | 0.778 | 0.836 | 0.807 |
+| semantic | 3 | r@10: 1.000 | 1.000 | 0.833 | 0.833 | 0.877 | 0.877 |
+| l1 | 33 | 29/33 = 0.879 | — | — | — | — | — |
 
-| 缺陷（正式评估暴露） | 根因 | 修复 |
+**口径**：
+
+- 只有 paraphrase 的 r@5 出现 A>B（1.000 vs 0.889）；MRR 持平；n=9，无置信区间，
+  不能据此宣称统计显著。
+- literal 的 MRR/NDCG **A 反而低于 B**（0.958/0.969 vs 1.000/1.000），
+  因此“A ≥ B 全面成立”不成立；最多只能说“三层 r@5 不劣于 B”。
+- semantic 只有 3 组，且 r@10 是事后放宽的指标；n=3 不能支撑质量结论。
+
+## 4. 选择偏差漏斗
+
+24 个 case 的理论上限是 72 条（literal+paraphrase+semantic），实际：
+
+| 层 | 产出 | 未产出原因 |
 |---|---|---|
-| case 8/20 真目标不在 A 候选集 | 桶过滤是硬截断，且 PRF 扩展词改变候选桶判定（q2 判出 build 桶把 other/network 桶目标滤掉） | 候选桶由原始 query 判定一次，PRF 第二轮继承同一桶（recall.rs） |
-| case 7 无关 case 得分虚高 | PRF 扩展词统计含 sim=0 的无关 case 私有词 | 只统计词面相关（sim>0）case 的词（prf.rs） |
-| PRF 重排降级首轮命中 | 扩展轮覆盖首轮结果（桥入候选被挤出） | PRF 是补漏不是覆盖：两轮候选合并去重后按 score 重排（recall.rs） |
-| semantic 自检系统性误杀（16→2 组） | 弱相关（rel=1）用 top-5 硬门槛 | 分层放行：literal/paraphrase top-5，semantic top-10（annotate.rs） |
-| semantic 层评估口径失真 | r@5 对弱相关层过严 | 报告行 semantic 层用 r@10（eval.rs） |
-| 中文 query 标注 panic | replace_ci 字节切片落进 char 中间（pos-1 非边界） | 边界检查走 char 安全切片 + CJK 回归单测（annotate.rs） |
-| 标注规模锁死 16 case | max_cases 未暴露 | `--annotate-max N`（0=全库），24+ case 库直接落窗 |
+| literal | 24 | 全部保留（同 query，A/B 都容易命中） |
+| paraphrase | 9 | 14 个 query 无 SYN 可替换词；1 个自检未进 A top-5 |
+| semantic | 3 | 21 个 case 无根因行/error_code 家族词；0 个自检失败 |
 
-## 6. 结论
+literal 占 36 组的 66.7%，semantic 仅 8.3%。计划 §8 要求“各层 ≥10 组”，
+当前 24/9/3 不满足；这不是“30–50 组窗口达成”就能替代的分层门槛。
 
-1. **M4 证据门达成**：智能标注器一键产出 36 组带证据链标注（落 30–50 窗口），`--eval` 直接重放出对拍表，全程零人工、离线、确定性（--seed 可重放）。
-2. **A ≥ B 全面成立**：36 组中 A 无系统性劣化（literal/paraphrase/semantic 三层 r@5 均 ≥ B），
-   且在词面不重叠变体上**有超 B 的直接证据**（case 16，PRF 桥接）。
-3. **统计向量边界诚实标注**：中英混排且 SYN 无桥的变体（case 13）仍弱于朴素基线——
-   词典/词干/子词是后续提升路径；embedding/USearch/ANN 按既有决策留作触发式可选 feature。
-4. 评估口径更新：semantic 层 r@10；PRF 语义收敛为"补漏不覆盖"。
+## 5. 方法学限制（必须随结论引用）
 
-## 7. 复现命令
+1. **自检即选择**：`self_check` 调用 A 管线，只保留 A 能召回的变体；A 失败的
+   困难样本被丢弃，B 不参与。该设计适合做回归 smoke，不适合做 A/B 质量证明。
+2. **指标事后切换**：semantic 从 r@5 改为 r@10，是在看到 r@5 结果后放宽；
+   应预先固定指标，或同时报告 r@5/r@10 并明确主指标。
+3. **样本量与显著性**：paraphrase n=9、semantic n=3；没有配对检验/置信区间，
+   literal 的 MRR 差异（0.042）不能据此判定系统性优劣。
+4. **语料来源**：24 个 case 是真实感合成语料，不是真实历史事故；没有人工
+   relevance 标注，不能代表线上分布。
+5. **A/B 定义**：B 是朴素词面基线，A 加了字段/PRF/衰减/MMR/反馈；即使 A 更好，
+   也只能说明整条管线的组合效果，不能拆分归因到某个增强。
 
+## 6. 哪些结论仍然成立
+
+- `--annotate` 确定性（同 seed 逐字可重放）、带证据链、输出可被 `--eval` 解析。
+- 自检丢弃数与未改写/无根因数现已输出，选择漏斗可审计。
+- `--eval` 的 Recall@5/MRR/NDCG 计算与分层聚合可重放。
+- M4 的**工具就绪**成立；M4 的**质量证据门**未成立。
+
+## 7. 通过 M4 的最小闭环
+
+1. 冻结一份独立语料（真实历史 query→case），至少 30 组、每层 ≥10 组。
+2. 标注者不看 A/B 结果，先独立标 relevance；保留双人复核/仲裁记录。
+3. 预先声明主指标（建议 r@5 + MRR）与置信区间方法，禁止看到结果后换指标。
+4. 报告“全部尝试变体”与“自检放行变体”两套指标，量化选择偏差。
+5. 在独立语料上重跑 A/B；若 A 仍不劣于 B，才可写“质量证据通过”。
+
+## 8. 复现命令
+
+```powershell
+cd rs
+cargo build --release --locked
+powershell -ExecutionPolicy Bypass -File ..\scripts\m4-eval.ps1
 ```
-# 建 24-case 库（§2 用例表）→
-bin\run.cmd --annotate --seed 0 --annotate-max 0 --annotate-out <库>\baseline-m4.json --mem-dir <库>
-bin\run.cmd --eval <库>\baseline-m4.json --eval-verbose --mem-dir <库>
-```
-
-门禁：81 库 + 8 CLI + 4 集成 + golden 29 例全绿，fmt/clippy 0，release ✓。

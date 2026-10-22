@@ -171,13 +171,15 @@ fn main() {
     }
     // P4.4+ 优化⑥：智能标注器（--annotate，豁免 --query）——生成 M4 证据门标注集。
     if opts.annotate {
-        let cases = match scx::memory::annotate_cases(&opts.mem_dir, opts.seed, opts.annotate_max) {
+        let report = match scx::memory::annotate_report(&opts.mem_dir, opts.seed, opts.annotate_max)
+        {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("scx: annotate failed: {}", e);
                 std::process::exit(2);
             }
         };
+        let cases = &report.cases;
         let path = opts.annotate_out.clone().unwrap_or_else(|| {
             std::path::Path::new(&opts.mem_dir)
                 .join("baseline-auto.json")
@@ -186,7 +188,7 @@ fn main() {
         });
         let bytes = {
             let mut buf: Vec<u8> = Vec::new();
-            if let Err(e) = scx::memory::annotate::write_baseline(&mut buf, &cases) {
+            if let Err(e) = scx::memory::annotate::write_baseline(&mut buf, cases) {
                 eprintln!("scx: annotate serialize failed: {}", e);
                 std::process::exit(2);
             }
@@ -196,7 +198,7 @@ fn main() {
             eprintln!("scx: annotate write {} failed: {}", path, e);
             std::process::exit(2);
         }
-        for line in scx::memory::annotate::stats(&cases) {
+        for line in scx::memory::annotate::stats_report(&report) {
             println!("{line}");
         }
         let out_name = std::path::Path::new(&path)

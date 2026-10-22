@@ -21,6 +21,7 @@ pub mod housekeep;
 pub mod index;
 pub mod ingest;
 pub mod json;
+pub(crate) mod lock;
 pub mod meta;
 pub mod mmr;
 pub mod model;
@@ -239,4 +240,13 @@ pub fn annotate_cases(
     max_cases: usize,
 ) -> std::io::Result<Vec<annotate::AnnotatedCase>> {
     annotate::annotate(root, seed, max_cases)
+}
+
+/// 门面：标注 + 自检丢弃统计（CLI 报告用）。
+pub fn annotate_report(
+    root: &str,
+    seed: u64,
+    max_cases: usize,
+) -> std::io::Result<annotate::AnnotateReport> {
+    annotate::annotate_report(root, seed, max_cases)
 }

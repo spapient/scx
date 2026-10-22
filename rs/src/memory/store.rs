@@ -205,12 +205,18 @@ pub(crate) fn val_to_case(v: &Val) -> Case {
     c
 }
 
-/// 原子写：临时文件 + rename（std::fs::rename 在 Windows 上以 ReplaceFile 语义覆盖目标）。
-/// 防崩溃/磁盘满留下半写文件；并发写以最后一次 rename 为准。
-pub(crate) fn atomic_write(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let tmp = p.with_extension("tmp");
-    fs::write(&tmp, bytes)?;
-    fs::rename(&tmp, p)
+pub(crate) use crate::memory::lock::atomic_write;
+
+/// 单 case 读改写锁：rate / 去重刷新 / delete 必须先持有同一把锁，
+/// 否则并发反馈会互相覆盖（最后写入者的旧快照胜出）。
+pub(crate) fn lock_case(root: &str, id: &str) -> std::io::Result<crate::memory::lock::FileLock> {
+    if !valid_id(id) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid case id: {id}"),
+        ));
+    }
+    crate::memory::lock::acquire(root, &format!("cases/{id}.lock"))
 }
 
 /// 写一个 case 到库（原子写 case.json）。
@@ -218,11 +224,20 @@ pub(crate) fn atomic_write(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// 属无效产物，徒增 I/O 与 schema 维护成本）；每次写 case 视为库状态变化，
 /// 自动 bump 库代际（qmap/会话缓存据此失效，保证新 case/反馈对同 query 召回可见）。
 pub(crate) fn write_case(root: &str, c: &Case) -> std::io::Result<()> {
+    // 索引锁覆盖“写 case → 删旧索引 → bump gen”整个窗口：索引构建要么看到
+    // 写前状态并随后被失效，要么看到写后状态；不能在新 gen 下写回旧索引。
+    let _idx = crate::memory::index::lock(root)?;
     let dir = Path::new(root).join("cases").join(&c.id);
-    fs::create_dir_all(&dir)?;
+    crate::memory::lock::create_dir_all(&dir).map_err(|e| {
+        std::io::Error::new(e.kind(), format!("create case dir {}: {e}", dir.display()))
+    })?;
     let mut json_txt = json::write(&case_to_val(c));
     json_txt.push('\n');
-    atomic_write(&dir.join("case.json"), json_txt.as_bytes())?;
+    atomic_write(&dir.join("case.json"), json_txt.as_bytes())
+        .map_err(|e| std::io::Error::new(e.kind(), format!("write case {}: {e}", c.id)))?;
+    // 索引是缓存：case 新增/更新后必须失效，否则大库会继续用旧 postings
+    // 漏掉新 case（小库走线性路径看不出来）。
+    crate::memory::index::invalidate_locked(root);
     crate::memory::meta::bump_gen(root)
 }
 
@@ -265,6 +280,9 @@ pub(crate) fn list_ids(root: &str) -> std::io::Result<Vec<String>> {
 
 /// case_count 递增（新 case 写入后调用）；同时持久化回 meta.toml。
 pub(crate) fn bump_case_count(root: &str) -> std::io::Result<()> {
+    // 与 bump_gen 共用 meta 锁：case_count 是从目录重算的，但写回必须串行，
+    // 否则并发的 rename 会互相覆盖/报错。
+    let _g = crate::memory::lock::acquire(root, "meta.lock")?;
     let n = list_ids(root)?.len();
     let mut meta = load_meta(root)?;
     meta.case_count = n;
@@ -352,5 +370,38 @@ mod tests {
         assert!(a.starts_with("2026-10-22_"));
         let c = case_id("2026-10-22T10:30:00Z", "q2", "t");
         assert_ne!(a, c, "query 变体必须产生不同 id");
+    }
+
+    #[test]
+    fn concurrent_case_writes_are_lossless() {
+        let root = std::env::temp_dir().join(format!(
+            "scx-mem-conc-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let root = root.to_str().unwrap().to_string();
+        ensure_root(&root).unwrap();
+        let mut handles = Vec::new();
+        for t in 0..8 {
+            let root = root.clone();
+            handles.push(std::thread::spawn(move || {
+                for i in 0..4 {
+                    let id = format!("c{t}_{i}");
+                    let c = Case::new(id.clone(), format!("q{t}_{i}"), vec![], "text".into());
+                    write_case(&root, &c).unwrap();
+                    bump_case_count(&root).unwrap();
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert_eq!(list_ids(&root).unwrap().len(), 32, "32 个 case 全部落盘");
+        let m = load_meta(&root).unwrap();
+        assert_eq!(m.case_count, 32, "case_count 不能丢更新");
+        assert_eq!(m.gen, 32, "每次 write_case 的 gen 递增都必须保留");
+        let _ = fs::remove_dir_all(&root);
     }
 }

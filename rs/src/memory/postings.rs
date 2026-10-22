@@ -7,7 +7,6 @@
 //! 段尾 CRC-32（IEEE 802.3 查表）是崩溃一致性的最后防线：
 //! 写入时整段校验，加载时 body_len 边界 + crc 双校验，坏段报 Err(corrupt)。
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 pub(crate) const POST_MAGIC: u32 = 0x5453_4f50; // "POST"
@@ -21,7 +20,7 @@ pub(crate) fn postings_path(root: &str) -> PathBuf {
 pub(crate) fn write_file(root: &str, body: &[u8]) -> std::io::Result<()> {
     let p = postings_path(root);
     if let Some(d) = p.parent() {
-        fs::create_dir_all(d)?;
+        crate::memory::lock::create_dir_all(d)?;
     }
     let crc = crc32(body);
     let mut buf = Vec::with_capacity(14 + body.len() + 4);
@@ -30,7 +29,7 @@ pub(crate) fn write_file(root: &str, body: &[u8]) -> std::io::Result<()> {
     buf.extend_from_slice(&(body.len() as u64).to_le_bytes());
     buf.extend_from_slice(body);
     buf.extend_from_slice(&crc.to_le_bytes());
-    fs::write(&p, buf)
+    crate::memory::lock::atomic_write(&p, &buf)
 }
 
 // ---- varint（LEB128，无符号，7bit 组）----

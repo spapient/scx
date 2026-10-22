@@ -1,9 +1,9 @@
 # scx 记忆知识库（RAG）实施计划
 
-版本：v1.7（可执行计划，基于设计稿 v0.2；v1.7 增补 --recall-only 查看模式口径修正 + 演示脚本 scripts/demo.ps1）
+版本：v1.9（可执行计划，基于设计稿 v0.2；v1.9 增补损坏自愈、同 case 并发与索引一致性修复）
 日期：2026-10-22
 作者：scx 项目组
-状态：P1 已完成；P2 已完成；P3 已完成；P4.1/P4.2/P4.3 已完成（评估 A/B 对拍 + L1 命中率出表 + --l1-hist + 要点摘要 + 实体边一跳）；P4.4 评审处置已完成（代际失效/只读召回/64 位 id/原子写/删 mmap 与 vec.bin/白名单与大小上限/桶漏召修复/评估口径诚实化，见 §11）；P4.4 ANN 与 P4.5 embedding 可选未启动（按触发条件）
+状态：P1/P3 工程完成；P2 工程完成但 M2 的独立标注门未通过；P4.1/P4.2/P4.3 工具完成；P4.4 安全/一致性/损坏自愈处置完成（见 §11、§18-§22）；**M4 独立质量证据未通过**（自动回归集可复现，但自检使用 A 管线、分层 24/9/3 不满足各层 ≥10）；P4.4 ANN 与 P4.5 embedding 可选未启动（按触发条件）
 
 > 本文档回答"怎么做、先做什么、怎么做完算完"；设计依据见 `docs/memory-rag-design.md`（v0.2，O1-O8）。
 > 任何阶段门不过，不进下一阶段。每阶段一个 git 提交点，可独立回滚。
@@ -34,7 +34,7 @@
 | M1 | P1 MVP 记忆 | 能存、能取、能召回 | 库往返测试通过；golden 16 用例逐字节不变；cargo test 全绿 |
 | M2 | P2 召回质量 | 召回"更对"：记忆图/反馈/去冗 | 标注集 Recall@5/MRR ≥ 基线；L1 命中率可统计 |
 | M3 | P3 工程化 | 稳、快、可自愈 | 1 万条库 < 5ms；坏段注入测试通过；三平台构建绿 |
-| M4 | P4 证明与增强 | 有评估证据、可选增强 | 30–50 组人工标注集上线 → A vs B 对拍表入档 → NDCG 存档可重放（P4.4 评审处置：`--eval` 工具就绪不等于 M4 通过；正式标注集未上线前不宣称 A/B 收益） |
+| M4 | P4 证明与增强 | 有评估证据、可选增强 | 30–50 组**独立人工**标注集上线 → A vs B 对拍表入档 → NDCG 存档可重放；自动标注回归集可复现不等于 M4 通过（自检用 A 放行、存在选择偏差；见 §21） |
 
 依赖：P1 → P2 → P3 → P4（串行主线）；阶段内任务多数可并行（见 §7 依赖图）。
 
@@ -404,7 +404,7 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 **门禁终态**：80 库 + 8 CLI + 4 集成 + golden 29 例全绿；fmt/clippy 0；release ✓。
 **服务目标**：M4 证据门自动产出 30–50 组（16 case × 3 层 = 48 组），每条带证据链可审计；`--seed` 变化生成不同变体池，多 seed 融合可扩充。人工标注流程（docs/eval-baseline-template.md）保留作复核/抽样。
 
-## 20. P4.4+ 优化⑦实施记录（召回一致性修复 + M4 正式结论，2026-10-22，已提交）
+## 20. P4.4+ 优化⑦实施记录（召回一致性修复 + M4 自动回归集结论，2026-10-22，已提交）
 
 **背景**：正式 M4 评估（优化⑥ 标注器 + --eval-verbose）暴露 A 管线劣于朴素 B 的 3 个真实缺陷——
 ①桶硬截断 + PRF 扩展词带偏桶判定（真目标被滤出候选集）；②PRF 扩展词统计含词面无关 case 的私有词；
@@ -420,18 +420,48 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 | CJK 切片安全 | `replace_ci` 边界检查改 `s[..pos].chars().next_back()`（pos 是 char 边界，防中文 query 字节切片 panic） | 新增单测 `replace_ci_safe_on_cjk_boundary`（"数据库连接池耗尽 pool" 替换"连接池"不 panic） |
 | 标注规模可调 | CLI `--annotate-max N`（缺省 16，0=全库；annotate 内部 0→ids.len） | 24 case 库 `--annotate-max 0` 产 36 组落 30–50 窗口 |
 
-**M4 正式结论（36 组，24 case 库）**：
+**M4 自动回归集结论（36 组，24-case 可复现语料）**：
 | 层 | n | A | B | 判定 |
 |---|---|---|---|---|
-| literal | 24 | r@5=1.000 mrr=0.972 ndcg@10=0.979 | r@5=1.000 mrr=1.000 ndcg@10=1.000 | A=B（r@5） |
-| paraphrase | 9 | r@5=0.889 mrr=0.796 ndcg@10=0.846 | r@5=0.889 mrr=0.759 ndcg@10=0.792 | **A>B** |
-| semantic | 3 | r@10=1.000 | r@10=1.000 | A=B |
-| l1 | — | hits=30/33 rate=0.909 | — | 学习闭环可用 |
+| literal | 24 | r@5=1.000 mrr=0.958 ndcg@10=0.969 | r@5=1.000 mrr=1.000 ndcg@10=1.000 | r@5 持平；**MRR/NDCG A<B** |
+| paraphrase | 9 | r@5=1.000 mrr=0.778 ndcg@10=0.836 | r@5=0.889 mrr=0.778 ndcg@10=0.807 | r@5 A>B；MRR 持平，n=9 无显著性 |
+| semantic | 3 | r@10=1.000 mrr=0.833 | r@10=1.000 mrr=0.833 | 持平；n=3 不作质量结论 |
+| l1 | 33 | hits=29/33 rate=0.879 | — | 学习闭环可用 |
 
-证据案例：case `storage空间不足` A rank2 命中 / B 完全漏召（PRF 桥接 storage→disk）——统计管线超朴素基线的直接证据；
-case `连接pool最小空闲不足` A rank6 / B rank3——中英混排且 SYN 无桥的边界（后续项：词典/词干/子词）。
+**漏斗（本次 `--annotate` 实报）**：literal 24；paraphrase 9（14 个无 SYN 可替换词、1 个自检未进 top-5）；semantic 3（21 个无根因行/error_code、0 个自检失败）。24/9/3 不满足 §8“各层 ≥10”，literal 占 66.7%。
 
-**门禁终态**：81 库 + 8 CLI + 4 集成 + golden 29 例全绿；fmt/clippy 0；release ✓。
-**报告**：docs/m4-evidence-report.md（含复现命令链）。
+**口径**：自动标注先经 A 管线自检放行，B 不参与；因此该表是“A 已成功子集上的回归表”，不是独立 A/B 质量证据。literal MRR/NDCG A 低于 B，不能写“A≥B 全面成立”；paraphrase 的 r@5 优势是唯一正向信号，但样本量不足且无置信区间。
+
+**门禁终态**：89 库 + 8 CLI + 4 集成 + golden 29 例全绿；fmt/clippy 0；release ✓。
+**报告**：docs/m4-evidence-report.md（含方法学限制与 `scripts/m4-eval.ps1` 复现命令）。
+
+## 21. P4.4+ 优化⑧实施记录（并发写 / 数字身份 / 证据口径，2026-10-22）
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| 跨进程原子写 | 新增 `memory/lock.rs`：唯一临时名 `<file>.tmp.<pid>.<seq>` + rename（Windows sharing violation 有限重试）；`meta.toml` 的 gen/case_count/word_w/l1/params、qmap 追加/合并、postings 构建全部加锁（`meta.lock`/`qmap.lock`/`index.lock`） | 单测 `concurrent_case_writes_are_lossless`（8 线程 × 4 case：32 case、case_count=32、gen=32）；12 进程并发 store 12/12 exit 0、case_count=12、gen=12 |
+| 数字身份 | `norm_identity_into` 保留 query 数字；case 去重、qmap 精确键、会话缓存键改用该口径；text 仍用 `norm_into` 折叠 PID/时间戳/行号；旧 case 通过动态重算指纹兼容 | 单测 `fingerprint_keeps_query_numbers_but_folds_text_noise`、`ingest_keeps_numeric_query_variants_and_dedups_legacy_fp`、`qmap_keeps_numeric_query_identity`；端到端 `port 8080` vs `port 9090` → 2 case，各自 top-1 正确 |
+| 标注漏斗 | `AnnotateReport` 增加 `paraphrase_no_synonym` / `semantic_no_root`；stdout 输出 `dropped:` 与 `skipped:` 两类，避免只报放行集 | 单测 `annotate_reports_dropped_variants`；24-case 实报 36 组 + 14 no-synonym + 1 self-check + 21 no-root |
+| 证据口径 | M4 报告/README/SKILL 改为“自动回归集可复现，独立质量证据未通过”；新增 `scripts/m4-eval.ps1` 固定 24-case 语料；semantic 仍报 r@10 但明确标注为事后放宽 | 脚本复跑（优化⑨）：36 组、literal A mrr 0.958 < B 1.000、paraphrase r@5 1.000 vs 0.889、l1 29/33 |
+| 索引一致性 | `write_case` 写入后 `index::invalidate`：case 新增/更新立即让旧 postings 失效，避免大库继续用旧索引漏掉新 case（索引仍可重建，属缓存） | 单测 `write_case_invalidates_cached_index`；原 `invalidate_removes_index_file` 仍绿 |
+
+**残余**：历史“单文件 <500 行”门禁已被 `cli_args.rs`/`eval.rs`/`recall.rs`/`annotate.rs` 等超过（非本轮引入），CI 未强制；拆分列为后续。
+
+**结论**：并发写与数字身份是已修复的真实缺陷；M4 的“工具/回归集”可用，但“质量证据”仍未闭环，下一步是独立人工标注/盲测，而不是继续用自动标注自证。
+
+## 22. P4.4+ 优化⑨实施记录（损坏自愈 / 同 case 并发 / 索引一致性，2026-10-22）
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| qmap 损坏自愈 | append 在同一把 qmap 锁内先解码已有文件：残尾截断到最后一个完整记录、坏 header 重建后再追加；解码所有切片先校验边界。超长 query（>u16）、hit 数（>u16）、case id（>u8）明确拒绝，不再静默截断字段长度 | 单测：1 字节残尾后 lookup 不 panic、下一 append 后两条均可读；坏 header 自动重建；超长字段拒绝且不破坏已有记录 |
+| 索引健壮性 | `postings.bin` 的 `body_len` 使用 checked add，n_docs/n_terms/df/字段数均做文件上界检查；单 token 在 `build_terms` 统一限制 255B（线性/索引同口径），避免 doc-term u8 长度截断错位 | 单测 `parse_rejects_overflowing_body_len`、`runaway_token_is_dropped`；全部既有索引/golden 测试通过 |
+| 同 case 并发 | 新增 `store::lock_case`；`rate`、同指纹去重刷新、`delete` 共用 case 锁。同指纹 store 另有 ingest 锁，避免跨秒重复落库；空 fix/evidence 可补录，已有结论不覆盖 | 单测 `concurrent_rate_same_case_does_not_lose_feedback`（8 线程×5 good=40）、`dedup_backfills_missing_fix_and_evidence_without_overwriting` |
+| 索引一致性 | `write_case`/`delete_case` 在 index 锁内完成“资产变更 → 作废 postings → bump gen”；`index::invalidate` 锁失败上抛，不再静默让旧索引继续服务 | 单测 `write_case_invalidates_cached_index`、`delete_case_invalidates_index`；无环锁序 case→index→meta/qmap |
+| L1 写回 | `adapt_l1_base` 改 meta 锁 + `atomic_write`，与 word_w/gen/case_count 共用同一写路径 | 既有 4 条 L1 自适应测试通过 |
+| 跨进程回归 | CLI 集成测试并发 spawn 8 个 store 进程 | `concurrent_store_processes_keep_all_cases_and_meta_updates`：8/8 成功、case 目录=8、case_count=8、gen=8 |
+
+**M4 复跑（2026-10-22，release）**：`literal A mrr=0.958 ndcg=0.969 / B=1.000/1.000`；`paraphrase A r@5=1.000 MRR 0.778 / B r@5=0.889 MRR 0.778`；`semantic r@10=1.000 / 1.000`；`l1=29/33`。自动标注漏斗 24/9/3，结论仍为回归集可复现、独立质量证据未通过。
+
+**门禁终态**：96 库 + 8 CLI + 5 集成 + golden 29 例全绿；fmt/clippy/release 0。
 
 

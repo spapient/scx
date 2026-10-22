@@ -4,6 +4,10 @@
 //! 保证"同一查询词面 → 同一词表"的确定性。
 
 pub(crate) const MAX_QUERY_TERMS: usize = 256;
+/// 单 token 上限（字节）。记忆索引的 doc 词表长度字段为 u8；超长 token
+/// 不能静默截断，否则索引会错位。线性与索引路径共用本切词器，在入口统一
+/// 丢弃超长 token，保持两条路径同口径。
+pub(crate) const MAX_TERM_BYTES: usize = u8::MAX as usize;
 pub(crate) const STOP: &[&str] = &[
     "the", "and", "for", "with", "that", "this", "from", "your", "are", "was", "were", "not",
     "you", "use", "using", "的", "了", "是", "在", "和", "与", "或", "把", "被", "我", "你", "请",
@@ -33,12 +37,12 @@ pub(crate) fn build_terms(query: &str) -> Vec<String> {
             cur.push(c);
             continue;
         }
-        if cur.chars().count() >= 2 && !stop(&cur) {
+        if cur.chars().count() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
             terms.push(cur.clone());
         }
         cur.clear();
     }
-    if cur.chars().count() >= 2 && !stop(&cur) {
+    if cur.chars().count() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
         terms.push(cur);
     }
     let mut run = String::new();

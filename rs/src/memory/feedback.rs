@@ -13,7 +13,13 @@ use crate::memory::store;
 use crate::memory::util::utc_now;
 
 /// 反馈后重算 L1 自适应基线并写回 meta [params]（失败静默，旁路）。
-fn adapt_l1_base(root: &str, meta: &Meta) {
+fn adapt_l1_base(root: &str) {
+    let Ok(_g) = crate::memory::lock::acquire(root, "meta.lock") else {
+        return;
+    };
+    let Ok(meta) = meta::load_meta(root) else {
+        return;
+    };
     if meta.l1_hist.len() < 4 {
         return; // 历史太少不滑动，保持默认 0.55。
     }
@@ -51,7 +57,7 @@ fn adapt_l1_base(root: &str, meta: &Meta) {
     }
     let mut body = out.join("\n");
     body.push('\n');
-    let _ = std::fs::write(&p, body.as_bytes());
+    let _ = crate::memory::lock::atomic_write(&p, body.as_bytes());
 }
 
 /// 反馈标注：good=true 记 good，false 记 bad。
@@ -61,12 +67,7 @@ pub(crate) fn rate(
     id: &str,
     good: bool,
 ) -> std::io::Result<crate::memory::model::Case> {
-    if !store::valid_id(id) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("invalid case id: {id}"),
-        ));
-    }
+    let _case_lock = store::lock_case(root, id)?;
     let mut c = store::read_case(root, id)?;
     let fb = if good {
         Feedback {
@@ -106,9 +107,7 @@ pub(crate) fn rate(
     // 写回 case（原子写；write_case 内部 bump gen，qmap/缓存随之失效）。
     store::write_case(root, &c)?;
     // L1 自适应：基于 [l1] 历史重算 l1_base。
-    if let Ok(m) = meta::load_meta(root) {
-        adapt_l1_base(root, &m);
-    }
+    adapt_l1_base(root);
     Ok(c)
 }
 
@@ -251,5 +250,43 @@ mod tests {
             "l1_base 应滑动到 P50≈0.85, got {base}"
         );
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn concurrent_rate_same_case_does_not_lose_feedback() {
+        let root = tmp_root("conc");
+        ingest(
+            &root,
+            "连接超时",
+            vec!["timeout".into()],
+            "ERROR conn timeout concurrent",
+            vec!["/a.log".into()],
+            &stats(),
+            vec![],
+        )
+        .unwrap();
+        let id = store::list_ids(&root).unwrap()[0].clone();
+        let root = std::sync::Arc::new(root);
+        let id = std::sync::Arc::new(id);
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let root = root.clone();
+            let id = id.clone();
+            let barrier = barrier.clone();
+            handles.push(std::thread::spawn(move || {
+                barrier.wait();
+                for _ in 0..5 {
+                    rate(&root, &id, true).unwrap();
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        let c = store::read_case(&root, &id).unwrap();
+        assert_eq!(c.feedback.good, 40, "并发 rate 的读改写不得丢更新");
+        assert_eq!(c.quality, 1.0);
+        let _ = fs::remove_dir_all(root.as_str());
     }
 }

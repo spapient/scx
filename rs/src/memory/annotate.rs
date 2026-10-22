@@ -61,6 +61,21 @@ pub struct AnnotatedCase {
     pub note: String,
 }
 
+/// 标注结果 + 自检丢弃统计。
+///
+/// `dropped` 必须随报告输出：只报“生成了多少组”而不报“筛掉了多少 A 的失败
+/// 变体”，会让自检变成看不见的选择偏差。`--annotate` 现在打印
+/// `dropped: paraphrase=.. semantic=..`。
+pub struct AnnotateReport {
+    pub cases: Vec<AnnotatedCase>,
+    /// 自检未通过（目标不在 A 的 top-k）而丢弃的变体。
+    pub dropped: Vec<(&'static str, String)>,
+    /// paraphrase 无法改写（query 没有 SYN 表中的可替换词）。
+    pub paraphrase_no_synonym: usize,
+    /// semantic 无法构造（无根因行且无 error_code 家族词）。
+    pub semantic_no_root: usize,
+}
+
 /// 自检结果：目标 case 在 top-k 召回中的位置与分数（None = 未召回，丢弃）。
 struct SelfCheck {
     sim: f64,
@@ -68,9 +83,13 @@ struct SelfCheck {
     rank: usize,
 }
 
-/// 智能标注主入口：读库 → 三层生成 → 自检 → 输出。返回生成的标注集。
+/// 智能标注主入口：读库 → 三层生成 → 自检 → 输出。
 /// `max_cases` 控制参与 case 数（缺省 16）；总组数 clamp 到 30–50 附近，不足时如实报告。
-pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Vec<AnnotatedCase>> {
+pub(crate) fn annotate_report(
+    root: &str,
+    seed: u64,
+    max_cases: usize,
+) -> io::Result<AnnotateReport> {
     let ids = store::list_ids(root)?;
     if ids.is_empty() {
         return Err(io::Error::new(
@@ -87,6 +106,8 @@ pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Ve
     let ids: Vec<String> = ids.into_iter().take(cap).collect();
     let mut out: Vec<AnnotatedCase> = Vec::new();
     let mut dropped: Vec<(&'static str, String)> = Vec::new();
+    let mut paraphrase_no_synonym = 0usize;
+    let mut semantic_no_root = 0usize;
     for id in ids {
         let c = store::read_case(root, &id)?;
         // literal：同指纹，直接是答案。
@@ -118,6 +139,8 @@ pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Ve
             } else {
                 dropped.push(("paraphrase", q));
             }
+        } else {
+            paraphrase_no_synonym += 1;
         }
         // semantic：根因行词构造 + 自检（弱相关 rel=1，门槛放宽 top-10）。
         let sq = semantic_query(&c);
@@ -139,10 +162,22 @@ pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Ve
                 }),
                 None => dropped.push(("semantic", sq)),
             }
+        } else {
+            semantic_no_root += 1;
         }
     }
     // 总组数收敛到 30–50：cap 内每 case 最多 3 组；不足 30 时如实（宁缺毋滥，不编造）。
-    Ok(out)
+    Ok(AnnotateReport {
+        cases: out,
+        dropped,
+        paraphrase_no_synonym,
+        semantic_no_root,
+    })
+}
+
+/// 兼容入口：只要标注集（测试/门面复用）。
+pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Vec<AnnotatedCase>> {
+    Ok(annotate_report(root, seed, max_cases)?.cases)
 }
 
 /// hash16 后缀（与 --eval 的 tail16 匹配口径一致）。
@@ -335,6 +370,29 @@ pub fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
     lines
 }
 
+/// 含丢弃统计的报告行：让选择偏差可见。
+pub fn stats_report(report: &AnnotateReport) -> Vec<String> {
+    let mut lines = stats(&report.cases);
+    let paraphrase = report
+        .dropped
+        .iter()
+        .filter(|(layer, _)| *layer == "paraphrase")
+        .count();
+    let semantic = report
+        .dropped
+        .iter()
+        .filter(|(layer, _)| *layer == "semantic")
+        .count();
+    lines.push(format!(
+        "  dropped: paraphrase={paraphrase} semantic={semantic} (self-check filtered)"
+    ));
+    lines.push(format!(
+        "  skipped: paraphrase_no_synonym={} semantic_no_root={}",
+        report.paraphrase_no_synonym, report.semantic_no_root
+    ));
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,6 +485,40 @@ mod tests {
             .map(|c| format!("{}-{}", c.layer, c.query))
             .collect();
         assert_eq!(qs, qs2, "同 seed 必须逐字一致（可重放）");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn annotate_reports_dropped_variants() {
+        let root = tmp_root("dropped");
+        seed_lib(&root);
+        let report = annotate_report(&root, 0, 16).unwrap();
+        let lines = stats_report(&report);
+        let text = lines.join("\n");
+        assert!(text.contains("dropped:"), "必须报告自检丢弃数: {text}");
+        let dp = report
+            .dropped
+            .iter()
+            .filter(|(layer, _)| *layer == "paraphrase")
+            .count();
+        let ds = report
+            .dropped
+            .iter()
+            .filter(|(layer, _)| *layer == "semantic")
+            .count();
+        assert!(text.contains(&format!("paraphrase={dp}")), "{text}");
+        assert!(text.contains(&format!("semantic={ds}")), "{text}");
+        assert!(
+            text.contains(&format!(
+                "paraphrase_no_synonym={}",
+                report.paraphrase_no_synonym
+            )),
+            "必须报告未改写（非自检失败）的数量: {text}"
+        );
+        assert!(
+            text.contains(&format!("semantic_no_root={}", report.semantic_no_root)),
+            "必须报告无根因（非自检失败）的数量: {text}"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 

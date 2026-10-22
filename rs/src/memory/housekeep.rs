@@ -49,8 +49,7 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
         let age_days = now_s.saturating_sub(upd_s) as f64 / 86_400.0;
         let expired = (c.status == "regressed" && age_days > ttl_regressed)
             || (c.quality == 0.0 && age_days > ttl_stale);
-        if expired {
-            let _ = delete_case(root, &id);
+        if expired && delete_case(root, &id).unwrap_or(false) {
             removed += 1;
         }
     }
@@ -61,22 +60,21 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
 /// id 先过白名单校验（P4.4 评审处置：禁 `..`/路径分隔符逃逸）。
 /// 返回是否存在。
 pub(crate) fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
-    if !store::valid_id(id) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("invalid case id: {id}"),
-        ));
-    }
+    // case 锁串行化 rate/去重更新；index 锁覆盖“删资产 → 作废索引 → bump gen”，
+    // 防止并发 rebuild 在失效后把已删除 case 写回。
+    let _case_lock = store::lock_case(root, id)?;
+    let _index_lock = index::lock(root)?;
     let dir = Path::new(root).join("cases").join(id);
     if !dir.exists() {
         return Ok(false);
     }
     fs::remove_dir_all(dir)?;
+    index::invalidate_locked(root);
     store::bump_case_count(root)?;
     crate::memory::meta::bump_gen(root)?;
-    // 惰性作废：删除即失效，不重建（回退线性；rebuild/自动构建恢复）。
-    index::invalidate(root);
-    let _ = fs::remove_file(qmap_path(root));
+    if let Ok(_g) = crate::memory::lock::acquire(root, "qmap.lock") {
+        let _ = fs::remove_file(qmap_path(root));
+    }
     Ok(true)
 }
 
@@ -90,6 +88,9 @@ fn qmap_path(root: &str) -> PathBuf {
 /// A/B 评估不可比）。索引启用只由规模阈值决定；强制索引走独立测试参数（预留）。
 /// 失败静默旁路。
 fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
+    let Ok(_g) = crate::memory::lock::acquire(root, "meta.lock") else {
+        return;
+    };
     let p = Path::new(root).join("meta.toml");
     let Ok(txt) = fs::read_to_string(&p) else {
         return;
@@ -128,7 +129,7 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
     }
     let mut body = out.join("\n");
     body.push('\n');
-    let _ = fs::write(&p, body.as_bytes());
+    let _ = crate::memory::lock::atomic_write(&p, body.as_bytes());
 }
 
 fn param(m: &Meta, key: &str, dflt: f64) -> f64 {

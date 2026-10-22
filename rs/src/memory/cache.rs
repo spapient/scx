@@ -88,11 +88,11 @@ fn cache() -> &'static Mutex<Cache> {
     C.get_or_init(|| Mutex::new(Cache::new()))
 }
 
-/// query 指纹（确定性；norm 后 FNV-1a 低 64 位）。
+/// query 指纹（确定性；保留数字的身份归一化后 FNV-1a 低 64 位）。
+/// 不能用 `norm_into`：8080/9090 折叠成同一键会把 A 查询的快照返回给 B。
 fn qkey(query: &str) -> u64 {
     let mut out = String::new();
-    let mut run = String::new();
-    crate::norm::norm_into(query, &mut out, &mut run);
+    crate::norm::norm_identity_into(query, &mut out);
     fnv1a(&out)
 }
 

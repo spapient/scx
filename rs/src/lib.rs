@@ -452,6 +452,17 @@ mod tests {
     }
 
     #[test]
+    fn runaway_token_is_dropped() {
+        let long = "x".repeat(crate::terms::MAX_TERM_BYTES + 1);
+        assert!(
+            build_terms(&long).is_empty(),
+            "超长 token 不得进入索引词表（u8 长度字段会截断）"
+        );
+        let max = "x".repeat(crate::terms::MAX_TERM_BYTES);
+        assert_eq!(build_terms(&max), vec![max], "上限内 token 保持可用");
+    }
+
+    #[test]
     fn crlf_failopen_preserves_original() {
         let lines: Vec<String> = (0..200)
             .map(|i| format!("line {} alpha beta gamma delta", i))

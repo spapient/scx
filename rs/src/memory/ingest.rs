@@ -12,8 +12,6 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use crate::memory::store::{self, Case, CaseStats};
-use std::fs;
-use std::path::Path;
 
 /// 单 case 文本上限（P4.4 评审处置）：64 MiB 输入不得直接变 64 MiB case；
 /// 超过上限拒绝摄取并明确报错（旁路，不影响压缩主流程）。
@@ -23,22 +21,29 @@ pub(crate) const MAX_CASE_TEXT: usize = 1024 * 1024; // 1 MiB
 pub(crate) const MAX_FIX_LEN: usize = 4096; // 4 KiB
 
 /// 计算去重指纹（确定性、无随机源）。
+///
+/// 身份口径：query 保留数字（8080/9090、errno=28/29 是不同事故），text 仍按
+/// `norm_into` 折叠数字（日志里的 PID/时间戳/行号不应制造重复 case）。
+/// 这修复了旧实现“query 数字也被折叠 → 不同端口事故互相去重”的问题。
 pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut q = String::new();
+    crate::norm::norm_identity_into(query, &mut q);
     let mut run = String::new();
     let mut t = String::new();
-    crate::norm::norm_into(query, &mut q, &mut run);
     crate::norm::norm_into(text, &mut t, &mut run);
     let h = store::fnv1a(&format!("{q}\u{0}{t}"));
     format!("{:016x}", h)
 }
 
-/// 按指纹查库内是否已存在 case，返回其 id。
+/// 按身份指纹查库内是否已存在 case，返回其 id。
 /// 规模小（P1 阶段 <1 万）时线性扫描；P3 起由索引/指纹表替代。
+///
+/// 同时比对动态重算值：旧 case 的 `fp` 是“数字折叠”口径，直接比字段会漏掉
+/// 升级前的同一条记忆；动态值让旧库无需迁移即可按新口径去重。
 pub(crate) fn find_by_fp(root: &str, fp: &str) -> std::io::Result<Option<String>> {
     for id in store::list_ids(root)? {
         let c = store::read_case(root, &id)?;
-        if c.fp == fp {
+        if c.fp == fp || fingerprint(&c.query, &c.text) == fp {
             return Ok(Some(id));
         }
     }
@@ -163,17 +168,29 @@ fn ingest_impl(
         ));
     }
     let fp = fingerprint(query, text);
+    // 同一指纹的“查重 + 写入”必须串行：两个并发 store 若都在 find 前进入，
+    // 会跨秒生成两个 id，或在去重更新时用旧快照覆盖刚写入的反馈。
+    let _ingest_lock = crate::memory::lock::acquire(root, &format!("cases/.ingest-{fp}.lock"))?;
     if let Some(existing) = find_by_fp(root, &fp)? {
+        let _case_lock = store::lock_case(root, &existing)?;
         let mut c = store::read_case(root, &existing)?;
         let now = store::utc_now();
         c.updated_at = now;
-        // 反馈/状态等历史字段保留，仅刷新元数据；fix 不覆盖既有结论
-        //（同指纹再摄取视为重复，保留首条记录的修复动作）。
+        // 反馈/状态等历史字段保留；空修复结论/空证据可由后续 --store 补录，
+        // 已有结论绝不覆盖（同指纹重复摄取以首条有效结论为准）。
+        if c.fix.is_empty() && !fix.is_empty() {
+            c.fix = fix.to_string();
+        }
+        if c.evidence.is_empty() && !evidence.is_empty() {
+            c.evidence_lno = evidence_lno.to_vec();
+            c.evidence = evidence.to_vec();
+        }
         store::write_case(root, &c)?;
         return Ok((false, existing));
     }
     let now = store::utc_now();
     let id = store::case_id(&now, query, text);
+    let _case_lock = store::lock_case(root, &id)?;
     let mut c = Case::new(id.clone(), query.to_string(), terms, text.to_string());
     c.fp = fp;
     c.fix = fix.to_string();
@@ -194,20 +211,7 @@ fn ingest_impl(
 
 /// 按 id 删除一个 case（tombstone 化前的简单物理删除，P3 换惰性标记）。
 pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
-    if !store::valid_id(id) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("invalid case id: {id}"),
-        ));
-    }
-    let dir = Path::new(root).join("cases").join(id);
-    if !dir.exists() {
-        return Ok(false);
-    }
-    fs::remove_dir_all(dir)?;
-    store::bump_case_count(root)?; // 先减后加语义由 bump 内部处理（见 store.rs）
-    crate::memory::meta::bump_gen(root)?;
-    Ok(true)
+    crate::memory::housekeep::delete_case(root, id)
 }
 
 #[cfg(test)]
@@ -327,6 +331,52 @@ mod tests {
     }
 
     #[test]
+    fn dedup_backfills_missing_fix_and_evidence_without_overwriting() {
+        let root = tmp_root("backfill");
+        let s = CaseStats {
+            kept: 1,
+            total: 10,
+            cut_pct: 90.0,
+            risk: "LOW".to_string(),
+        };
+        let first = ingest(&root, "q", vec![], TEXT, vec![], &s, vec![]).unwrap();
+        assert!(first.0);
+        let second = ingest_with_evidence(
+            &root,
+            "q",
+            vec![],
+            TEXT,
+            vec![],
+            &s,
+            vec![],
+            "restart pool",
+            &[1],
+            &["ERROR db timeout".to_string()],
+        )
+        .unwrap();
+        assert!(!second.0, "同指纹必须去重");
+        let c = store::read_case(&root, &first.1).unwrap();
+        assert_eq!(c.fix, "restart pool", "空 fix 可由后续 store 补录");
+        assert_eq!(c.evidence_lno, vec![1], "空 evidence 可由后续 store 补录");
+        assert_eq!(c.evidence, vec!["ERROR db timeout"]);
+        // 已有结论不被后续重复摄取覆盖。
+        ingest_with_fix(
+            &root,
+            "q",
+            vec![],
+            TEXT,
+            vec![],
+            &s,
+            vec![],
+            "different fix",
+        )
+        .unwrap();
+        let c = store::read_case(&root, &first.1).unwrap();
+        assert_eq!(c.fix, "restart pool", "已有修复结论不得被覆盖");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn ingest_with_evidence_roundtrip_and_legacy_compat() {
         // P4.4+ 优化⑤：证据行区间 + 原始证据落盘；旧 case（无键）读为空，不 panic。
         let root = tmp_root("ev");
@@ -412,6 +462,72 @@ mod tests {
             fingerprint("db timeout", "other text"),
             "文本变体指纹必须不同"
         );
+    }
+
+    #[test]
+    fn fingerprint_keeps_query_numbers_but_folds_text_noise() {
+        assert_ne!(
+            fingerprint("port 8080 already in use", "ERROR port 8080 in use"),
+            fingerprint("port 9090 already in use", "ERROR port 9090 in use"),
+            "不同端口是不同事故，不能共享身份指纹"
+        );
+        assert_eq!(
+            fingerprint("port 8080 in use", "ERROR pid=12345 port 8080"),
+            fingerprint("port 8080 in use", "ERROR pid=67890 port 8080"),
+            "同一 query 下 text 的 PID/时间戳噪声仍应折叠"
+        );
+    }
+
+    #[test]
+    fn ingest_keeps_numeric_query_variants_and_dedups_legacy_fp() {
+        let root = tmp_root("numid");
+        let s = CaseStats {
+            kept: 1,
+            total: 10,
+            cut_pct: 0.0,
+            risk: "LOW".to_string(),
+        };
+        let text = "ERROR port 8080 already in use\nat Sock.java:1";
+        let a = ingest(
+            &root,
+            "port 8080 already in use",
+            vec![],
+            text,
+            vec![],
+            &s,
+            vec![],
+        )
+        .unwrap();
+        let b = ingest(
+            &root,
+            "port 9090 already in use",
+            vec![],
+            "ERROR port 9090 already in use\nat Sock.java:1",
+            vec![],
+            &s,
+            vec![],
+        )
+        .unwrap();
+        assert!(a.0 && b.0, "不同端口必须各自落库");
+        assert_eq!(store::list_ids(&root).unwrap().len(), 2);
+
+        // 模拟旧库：fp 是旧“数字折叠”口径；动态重算仍应识别同一条记忆。
+        let mut c = store::read_case(&root, &a.1).unwrap();
+        c.fp = "0000000000000000".to_string();
+        store::write_case(&root, &c).unwrap();
+        let dup = ingest(
+            &root,
+            "port 8080 already in use",
+            vec![],
+            text,
+            vec![],
+            &s,
+            vec![],
+        )
+        .unwrap();
+        assert!(!dup.0, "旧 fp 也应通过动态身份键去重");
+        assert_eq!(store::list_ids(&root).unwrap().len(), 2);
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
