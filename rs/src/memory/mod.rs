@@ -248,5 +248,14 @@ pub fn annotate_report(
     seed: u64,
     max_cases: usize,
 ) -> std::io::Result<annotate::AnnotateReport> {
-    annotate::annotate_report(root, seed, max_cases)
+    annotate::annotate_report(root, seed, max_cases, false)
+}
+
+/// 门面：raw 模式（不过自检的全变体集，人工盲测裁决用）。
+pub fn annotate_raw_report(
+    root: &str,
+    seed: u64,
+    max_cases: usize,
+) -> std::io::Result<annotate::AnnotateReport> {
+    annotate::annotate_report(root, seed, max_cases, true)
 }

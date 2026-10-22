@@ -170,9 +170,13 @@ fn main() {
         return;
     }
     // P4.4+ 优化⑥：智能标注器（--annotate，豁免 --query）——生成 M4 证据门标注集。
-    if opts.annotate {
-        let report = match scx::memory::annotate_report(&opts.mem_dir, opts.seed, opts.annotate_max)
-        {
+    // P4.4+ 优化⑧：--annotate-raw 盲测模式——不过自检的全变体集（人工裁决用，选择偏差消除）。
+    if opts.annotate || opts.annotate_raw {
+        let report = match if opts.annotate_raw {
+            scx::memory::annotate_raw_report(&opts.mem_dir, opts.seed, opts.annotate_max)
+        } else {
+            scx::memory::annotate_report(&opts.mem_dir, opts.seed, opts.annotate_max)
+        } {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("scx: annotate failed: {}", e);
@@ -182,7 +186,11 @@ fn main() {
         let cases = &report.cases;
         let path = opts.annotate_out.clone().unwrap_or_else(|| {
             std::path::Path::new(&opts.mem_dir)
-                .join("baseline-auto.json")
+                .join(if opts.annotate_raw {
+                    "baseline-raw.json"
+                } else {
+                    "baseline-auto.json"
+                })
                 .to_string_lossy()
                 .into_owned()
         });

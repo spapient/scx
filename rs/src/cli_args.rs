@@ -1,7 +1,7 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--annotate] [--annotate-out <path>] [--seed N] [--annotate-max N] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
 
 pub(crate) struct Opts {
     pub query: String,
@@ -37,6 +37,10 @@ pub(crate) struct Opts {
     pub stats: bool,
     /// P4.4+ 优化⑥：智能标注器（--annotate，豁免 --query）——生成 M4 证据门标注集。
     pub annotate: bool,
+    /// P4.4+ 优化⑧：盲测模式（--annotate-raw）——不过自检的全变体集（含自检会丢弃的
+    /// 变体），每条附目标 case 摘要（note: target/hint/fix），供人工盲测裁决 rel；
+    /// 消除"自检用 A 管线验证 = 用 A 自证"的选择偏差。与 --annotate 互斥。
+    pub annotate_raw: bool,
     /// --annotate-out <path>：标注集输出路径（缺省 `<mem-dir>/baseline-auto.json`）。
     pub annotate_out: Option<String>,
     /// --seed N：标注生成确定性种子（缺省 0，同 seed 可重放）。
@@ -135,6 +139,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut l1_hist = false;
     let mut stats = false;
     let mut annotate = false;
+    let mut annotate_raw = false;
     let mut annotate_out: Option<String> = None;
     let mut seed = 0u64;
     let mut annotate_max = 16usize;
@@ -317,6 +322,13 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 annotate = true;
             }
+            // P4.4+ 优化⑧：盲测模式——不过自检的全变体集（人工裁决用，消除选择偏差）。
+            "--annotate-raw" => {
+                if inline.is_some() {
+                    return Err("--annotate-raw does not take a value".to_string());
+                }
+                annotate_raw = true;
+            }
             "--annotate-out" => {
                 if annotate_out.is_some() {
                     return Err("--annotate-out specified more than once".to_string());
@@ -424,13 +436,19 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         && !l1_hist
         && !stats
         && !annotate
+        && !annotate_raw
         && query.is_empty()
         && forces.is_empty()
     {
         return Err("missing --query (or provide at least one --force pattern)".to_string());
     }
-    if annotate && (eval.is_some() || l1_hist) {
-        return Err("--annotate cannot be combined with --eval/--l1-hist".to_string());
+    if (annotate || annotate_raw) && (eval.is_some() || l1_hist) {
+        return Err(
+            "--annotate/--annotate-raw cannot be combined with --eval/--l1-hist".to_string(),
+        );
+    }
+    if annotate && annotate_raw {
+        return Err("--annotate and --annotate-raw are mutually exclusive".to_string());
     }
     if recall_only && query.is_empty() {
         return Err("--recall-only requires --query".to_string());
@@ -466,6 +484,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         l1_hist,
         stats,
         annotate,
+        annotate_raw,
         annotate_out,
         seed,
         annotate_max,

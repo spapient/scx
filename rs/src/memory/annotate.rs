@@ -83,12 +83,19 @@ struct SelfCheck {
     rank: usize,
 }
 
-/// 智能标注主入口：读库 → 三层生成 → 自检 → 输出。
+/// 智能标注主入口：读库 → 三层生成 → 自检（可选）→ 输出。
 /// `max_cases` 控制参与 case 数（缺省 16）；总组数 clamp 到 30–50 附近，不足时如实报告。
+///
+/// `raw=true`（`--annotate-raw`）：**跳过自检筛选**，输出全部 rewrite/semantic 变体
+/// （含自检本会丢弃的变体），rel 用层默认（paraphrase=2、semantic=1），evidence 标 `raw`，
+/// note 附目标 case 摘要——供**人工盲测裁决**（不看 A/B 分数，只判 query 与目标是否相关）。
+/// 用途：消除"自检用 A 管线验证 = 用 A 自证"的选择偏差；A/B 评估平等面对全集，
+/// 自检本会丢弃的变体成为真阴性/假阳性对照。裁决后改 rel/删条，直接 `--eval` 即独立证据。
 pub(crate) fn annotate_report(
     root: &str,
     seed: u64,
     max_cases: usize,
+    raw: bool,
 ) -> io::Result<AnnotateReport> {
     let ids = store::list_ids(root)?;
     if ids.is_empty() {
@@ -119,48 +126,70 @@ pub(crate) fn annotate_report(
             evidence: vec!["fingerprint".to_string()],
             note: String::new(),
         });
-        // paraphrase：同义词改写 + 自检（强相关门槛 top-5）。
+        // paraphrase：同义词改写 + 自检（强相关门槛 top-5）；raw 模式不过自检。
+        // 注意：本分支不得 continue 跳过 semantic 生成（golden 回归实证）。
         if let Some(q) = rewrite(&c, seed) {
-            if let Some(s) = self_check(root, &q, &c, 5) {
+            if !raw {
+                match self_check(root, &q, &c, 5) {
+                    Some(s) => out.push(AnnotatedCase {
+                        query: q,
+                        layer: "paraphrase".to_string(),
+                        expected: vec![hash16_of(&c)],
+                        rel: if s.sim >= 0.5 { 2.0 } else { 1.0 },
+                        evidence: vec![
+                            "synonym".to_string(),
+                            format!(
+                                "recall sim={:.2} score={:.2} rank={}",
+                                s.sim, s.score, s.rank
+                            ),
+                        ],
+                        note: String::new(),
+                    }),
+                    None => dropped.push(("paraphrase", q)),
+                }
+            } else {
                 out.push(AnnotatedCase {
                     query: q,
                     layer: "paraphrase".to_string(),
                     expected: vec![hash16_of(&c)],
-                    rel: if s.sim >= 0.5 { 2.0 } else { 1.0 },
-                    evidence: vec![
-                        "synonym".to_string(),
-                        format!(
-                            "recall sim={:.2} score={:.2} rank={}",
-                            s.sim, s.score, s.rank
-                        ),
-                    ],
-                    note: String::new(),
+                    rel: 2.0,
+                    evidence: vec!["synonym".to_string(), "raw".to_string()],
+                    note: target_hint(&c),
                 });
-            } else {
-                dropped.push(("paraphrase", q));
             }
         } else {
             paraphrase_no_synonym += 1;
         }
-        // semantic：根因行词构造 + 自检（弱相关 rel=1，门槛放宽 top-10）。
+        // semantic：根因行词构造 + 自检（弱相关 rel=1，门槛放宽 top-10）；raw 模式不过自检。
         let sq = semantic_query(&c);
         if !sq.is_empty() {
-            match self_check(root, &sq, &c, 10) {
-                Some(s) => out.push(AnnotatedCase {
+            if !raw {
+                match self_check(root, &sq, &c, 10) {
+                    Some(s) => out.push(AnnotatedCase {
+                        query: sq,
+                        layer: "semantic".to_string(),
+                        expected: vec![hash16_of(&c)],
+                        rel: 1.0,
+                        evidence: vec![
+                            "root-cause".to_string(),
+                            format!(
+                                "recall sim={:.2} score={:.2} rank={}",
+                                s.sim, s.score, s.rank
+                            ),
+                        ],
+                        note: String::new(),
+                    }),
+                    None => dropped.push(("semantic", sq)),
+                }
+            } else {
+                out.push(AnnotatedCase {
                     query: sq,
                     layer: "semantic".to_string(),
                     expected: vec![hash16_of(&c)],
                     rel: 1.0,
-                    evidence: vec![
-                        "root-cause".to_string(),
-                        format!(
-                            "recall sim={:.2} score={:.2} rank={}",
-                            s.sim, s.score, s.rank
-                        ),
-                    ],
-                    note: String::new(),
-                }),
-                None => dropped.push(("semantic", sq)),
+                    evidence: vec!["root-cause".to_string(), "raw".to_string()],
+                    note: target_hint(&c),
+                });
             }
         } else {
             semantic_no_root += 1;
@@ -175,9 +204,21 @@ pub(crate) fn annotate_report(
     })
 }
 
+/// 盲测辅助信息：目标 case 摘要（query / fix / 原文首行），标注者据此裁决相关性。
+fn target_hint(c: &Case) -> String {
+    let text = c.text.lines().next().unwrap_or("").trim();
+    let fix = c.fix.trim();
+    format!(
+        "target={} hint=[{}] fix=[{}]",
+        hash16_of(c),
+        text.chars().take(64).collect::<String>(),
+        fix.chars().take(48).collect::<String>()
+    )
+}
+
 /// 兼容入口：只要标注集（测试/门面复用）。
 pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Vec<AnnotatedCase>> {
-    Ok(annotate_report(root, seed, max_cases)?.cases)
+    Ok(annotate_report(root, seed, max_cases, false)?.cases)
 }
 
 /// hash16 后缀（与 --eval 的 tail16 匹配口径一致）。
@@ -492,7 +533,7 @@ mod tests {
     fn annotate_reports_dropped_variants() {
         let root = tmp_root("dropped");
         seed_lib(&root);
-        let report = annotate_report(&root, 0, 16).unwrap();
+        let report = annotate_report(&root, 0, 16, false).unwrap();
         let lines = stats_report(&report);
         let text = lines.join("\n");
         assert!(text.contains("dropped:"), "必须报告自检丢弃数: {text}");
@@ -543,5 +584,48 @@ mod tests {
         let mut t = "磁盘空间不足".to_string();
         assert!(!replace_ci(&mut t, "空间不足x", "disk"), "无命中不 panic");
         assert_eq!(t, "磁盘空间不足");
+    }
+
+    /// P4.4+ 优化⑧：raw 模式不过自检——输出必须 ⊇ 自检模式（含自检丢弃的变体），
+    /// 且每条 raw 变体带盲测摘要（note 含 target=hint=fix=），供人工裁决（选择偏差消除）。
+    #[test]
+    fn annotate_raw_is_superset_with_blind_hint() {
+        let root = tmp_root("rawsup");
+        seed_lib(&root);
+        let cases = annotate(&root, 0, 16).unwrap();
+        let raw = annotate_report(&root, 0, 16, true).unwrap();
+        let raw = &raw.cases;
+        let keys = |v: &[AnnotatedCase]| -> Vec<String> {
+            let mut k: Vec<String> = v
+                .iter()
+                .map(|c| format!("{}-{}", c.layer, c.query))
+                .collect();
+            k.sort();
+            k
+        };
+        let a = keys(&cases);
+        let b = keys(raw);
+        for k in &a {
+            assert!(
+                b.contains(k),
+                "raw 集必须 ⊇ 自检集（自检放行的都保留）: {k}"
+            );
+        }
+        assert!(
+            b.len() >= a.len(),
+            "raw 集必须 ≥ 自检集（含本会丢弃的变体）: {} vs {}",
+            b.len(),
+            a.len()
+        );
+        for c in raw.iter().filter(|c| c.layer != "literal") {
+            assert!(
+                c.evidence.iter().any(|e| e == "raw"),
+                "raw 变体必须标 evidence=raw: {:?}",
+                c.evidence
+            );
+            assert!(c.note.contains("target="), "盲测摘要缺 target: {}", c.note);
+            assert!(c.note.contains("hint=["), "盲测摘要缺 hint: {}", c.note);
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 }

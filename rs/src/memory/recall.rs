@@ -87,19 +87,17 @@ pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<R
                     score_pass(root, &q2, k, &meta, idx.as_deref(), &cand, use_buckets)
                 {
                     if !hits2.is_empty() {
-                        // PRF 是补漏不是覆盖：扩展轮候选并入首轮（去重），首轮命中（含
-                        // 实体边桥入、字段加权命中）永不降级——只增不减，按 score 重排截断。
+                        // PRF 严格补漏（P4.4+ 优化⑦）：首轮顺序权威——首轮命中
+                        // （含实体边桥入、字段加权、桶内候选）位置不变；扩展轮只把
+                        // 新命中的 case 按 q2 排序追加在尾部。绝不与首轮 score 混排
+                        // （q2 口径 score 会被扩展词放大，混排会把真目标挤出——literal
+                        // 层 mrr 退化实证：case 'disk io read timeout' A rank3 vs B rank1）。
                         let mut merged: Vec<RecallHit> = hits.clone();
                         for h in hits2 {
                             if !merged.iter().any(|m| m.id == h.id) {
                                 merged.push(h);
                             }
                         }
-                        merged.sort_by(|a, b| {
-                            b.score
-                                .partial_cmp(&a.score)
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                        });
                         merged.truncate(k);
                         return Ok(merged);
                     }
