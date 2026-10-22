@@ -375,4 +375,19 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 **门禁终态**：73 库 + 8 CLI + 4 集成 + golden 28 例全绿；fmt/clippy 0；默认 `--eval` 输出逐字节不变（memory_eval.out 未漂移）。
 **服务目标**：M4 证据门的 30–50 组人工标注——标注者可逐例核对 A/B 排序差异并据此校准 rel 标注与调参假设。
 
+## 18. P4.4+ 优化⑤实施记录（case schema v2 原始证据，2026-10-22，已提交）
+
+**背景**：外部评审产品缺口 B——"`--store` 存的是查询条件压缩结果，无证据行区间/原始证据，L1 只给摘要不是可复用答案"。fix（修复结论）已在优化①补齐；本轮补齐原始证据，case 升级为**四要素：query + 证据行区间（evidence_lno）+ 原始证据（evidence）+ 修复结论（fix）**。
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| 引擎暴露保留行号 | `Outcome` 增 `kept_lno: Vec<usize>`（筛选模式保留行的原始 1-based 行号，输出循环同步收集；passthrough/failopen 为空）；`mk` 闭包 + 4 处调用点接线 | 单测 `sieve_kept_lno_aligns_with_output_lines`（数量=kept、严格递增、含证据行号）、`passthrough_kept_lno_empty` |
+| 提取与落盘 | main.rs `extract_evidence(input, lno)` 按行号取原文（与 compress 同一归一化口径：\r\n→\n、末行剔除、越界跳过）；store 同步/异步路径传 evidence；ingest 新入口 `ingest_with_evidence`/门面 `store_case_full`（原 ingest/ingest_with_fix 签名不变，30+ 调用点零改动） | 单测 `ingest_with_evidence_roundtrip_and_legacy_compat`（落盘/旧 case 无键读空/长度不一致拒绝）；端到端：81 行输入 store → case.json `evidence_lno=[1,2,10,11,12,13]`、`evidence`=原始行，`--recall-detail` 输出 `evidence: 11 ERROR db timeout...` 等 |
+| 直答回放 | `--recall-detail` 在 summary 后输出 `evidence: <行号> <原文>` 行（读一次 case 同时取 evidence/fix；无证据跳过）；主流程 fix 行行为不变 | 端到端 recall-detail 输出证据回放 + fix |
+| 旧 case 兼容 | case.json 新键 evidence_lno/evidence；`val_to_case` 缺键读空 | golden memory_summary/memory_fix（旧库预置 case 无 evidence）**零漂移**——兼容实证 |
+| 存储代价 | evidence 总长由保留行决定（≤ 输入）；golden memory_stats disk 1.3→1.4 KiB（新 case 含证据字段，1 行预期漂移） | golden 重冻 28 例全绿 |
+
+**门禁终态**：76 库 + 8 CLI + 4 集成 + golden 28 例全绿；fmt/clippy 0；release ✓。
+**语义边界**：passthrough/failopen 无保留行 → kept_lno 空 → 仅存压缩快照（text），低信号记忆语义不变（§16 口径）；`evidence` 是"保留行的原始文本"，与压缩结果同一行集，非全量输入原文。
+
 
