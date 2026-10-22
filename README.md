@@ -13,7 +13,7 @@
 - 分析缓冲会剥离 ANSI 转义并把裸 `\r` 视为空白，避免彩色日志/进度条污染词面；筛选输出仍写原始行。
 - 单次输入上限 64 MiB（CLI 层，含多文件合计）；超出时明确报错，需先分段，避免一次性读入和筛选向量挤爆内存。
 - 统计行字段：`kept/total`、`chars`、`dup`、`seeds/evidence`（恒等，可断言）、`risk`、`guarded`、`regions`、`window`、`terms`、`forced`、`mode`。
-- **记忆知识库（RAG，P1–P4.3 增量，默认关）**：`--store 1` 沉淀证据块 → `--recall K` 旁路召回（mem: 段不进正文）→ `--rate good|bad` 反馈闭环；召回 = 自研统计向量（BM25 + 结构化字段加权 + 时间衰减 + MMR + 词级调权 + 场景桶 + 实体边一跳），非 embedding；`--eval <baseline.json>` 冻结标注集出 A/B 对拍表 + `l1:` 直答命中率，`--l1-hist` 出运行期命中分布；`--rebuild/--gc/--delete` 维护；全部零依赖、离线、确定性。设计 `docs/memory-rag-design.md`，计划 `docs/rag-implementation-plan.md`，标注采集 `docs/eval-baseline-template.md`。
+- **记忆知识库（RAG，P1–P4.3 增量 + P4.4 评审处置，默认关）**：`--store 1` 沉淀证据块（≤1 MiB/case）→ `--recall K` 旁路召回（mem: 段不进正文；`--recall-only` 只读查看、不污染库状态）→ `--rate good|bad <case-id>` 反馈闭环（代际失效：改动立即影响同 query 召回排序）；召回 = 自研统计向量（词面匹配 + 结构化字段加权 + 时间衰减 + MMR + 词级调权 + 场景桶 + 实体边一跳，tf 恒 1 去重词表口径），非 embedding；`--eval <baseline.json>` 冻结标注集出 A/B 对拍表 + `l1:` 直答命中率（工具就绪、M4 证据门待 30–50 组人工标注），`--l1-hist` 出运行期命中分布；`--rebuild/--gc/--delete` 维护（id 白名单防路径穿越）；全部零依赖、离线、确定性。设计 `docs/memory-rag-design.md`，计划 `docs/rag-implementation-plan.md`（含 §11 评审处置记录），标注采集 `docs/eval-baseline-template.md`。
 
 ## 削减率的物理极限（98.99% 目标核算，2026-10-14）
 

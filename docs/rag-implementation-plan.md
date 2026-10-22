@@ -3,7 +3,7 @@
 版本：v1.7（可执行计划，基于设计稿 v0.2；v1.7 增补 --recall-only 查看模式口径修正 + 演示脚本 scripts/demo.ps1）
 日期：2026-10-22
 作者：scx 项目组
-状态：P1 已完成；P2 已完成；P3 已完成；P4.1/P4.2/P4.3 已完成（评估 A/B 对拍 + L1 命中率出表 + --l1-hist + 要点摘要 + 实体边一跳）；P4.4/P4.5 可选未启动（按触发条件）
+状态：P1 已完成；P2 已完成；P3 已完成；P4.1/P4.2/P4.3 已完成（评估 A/B 对拍 + L1 命中率出表 + --l1-hist + 要点摘要 + 实体边一跳）；P4.4 评审处置已完成（代际失效/只读召回/64 位 id/原子写/删 mmap 与 vec.bin/白名单与大小上限/桶漏召修复/评估口径诚实化，见 §11）；P4.4 ANN 与 P4.5 embedding 可选未启动（按触发条件）
 
 > 本文档回答"怎么做、先做什么、怎么做完算完"；设计依据见 `docs/memory-rag-design.md`（v0.2，O1-O8）。
 > 任何阶段门不过，不进下一阶段。每阶段一个 git 提交点，可独立回滚。
@@ -34,7 +34,7 @@
 | M1 | P1 MVP 记忆 | 能存、能取、能召回 | 库往返测试通过；golden 16 用例逐字节不变；cargo test 全绿 |
 | M2 | P2 召回质量 | 召回"更对"：记忆图/反馈/去冗 | 标注集 Recall@5/MRR ≥ 基线；L1 命中率可统计 |
 | M3 | P3 工程化 | 稳、快、可自愈 | 1 万条库 < 5ms；坏段注入测试通过；三平台构建绿 |
-| M4 | P4 证明与增强 | 有评估证据、可选增强 | A vs B 对拍表入档；NDCG 存档可重放 |
+| M4 | P4 证明与增强 | 有评估证据、可选增强 | 30–50 组人工标注集上线 → A vs B 对拍表入档 → NDCG 存档可重放（P4.4 评审处置：`--eval` 工具就绪不等于 M4 通过；正式标注集未上线前不宣称 A/B 收益） |
 
 依赖：P1 → P2 → P3 → P4（串行主线）；阶段内任务多数可并行（见 §7 依赖图）。
 
@@ -53,16 +53,19 @@
 ### P1.1 存储层（store.rs）— ✅ 已完成（2026-10-22）
 - [x] `case.json` 读写：schema=2 字段（id/query/terms/text/source/tags/bucket/fields/status/stats/forces/feedback/quality），自研 JSON 子集 writer/parser（json.rs：Val 枚举 + 递归下降，零依赖）。
 - [x] `meta.toml` 读写：schema/embed_engine/case_count/df 快照/params，行式 key=value 子集。
-- [x] `vec.bin`：magic+version+case_id+nonzero_count+[(word_id u32)(weight u16)]，量化 BM25 权重到 u16（本期 write_case 传 `&[]`，P1.4 起填稀疏向量）。
-- [x] case id：`<YYYY-MM-DD>_<hash8>`（hash = query+证据块指纹，FNV-1a 64，确定性无随机源）。
-- **验证**：`memory_store_roundtrip`（写→读→逐字段断言）+ vec.bin 往返；30 库测试全绿；clippy 零告警。
+- [x] `meta.toml` 读写：schema/embed_engine/case_count/df 快照/params/gen，行式 key=value 子集。
+- [x] ~~`vec.bin`~~：P4.4 评审处置已移除——实际始终以空稀疏向量写入、召回未使用，属无效产物（不再落盘）。
+- [x] case id：`<YYYY-MM-DD>_<hash16>`（hash = query+证据块指纹，FNV-1a 64 取 64 位→16 hex；P4.4 由 32 位升 64 位，1 万条碰撞率 ~1.2%→<0.003%）。
+- **验证**：`memory_store_roundtrip`（写→读→逐字段断言）+ 原子写（临时文件+rename，P4.4）+ 单 case ≤1 MiB 上限；30 库测试全绿；clippy 零告警。
 
-### P1.2 摄取（--store 1，ingest.rs）— ✅ 已完成（2026-10-22）
+### P1.2 摄取（--store 1，ingest.rs）— ✅ 已完成（2026-10-22，P4.4 补边界）
 - [x] 摄取即过滤：入库的是 compress 筛出的证据块，非原始日志。
 - [x] 证据块（Outcome.text 的保留行区间）作为 case.text；norm_into 指纹去重（已存在 → 更新 updated_at，不新增）。
 - [x] 默认不自动存储：无 `--mem-dir`/`--store` 时 memory 零路径。
-- [x] delete(root,id) 物理删除 + case_count 重算。
-- **验证**：`ingest_dedup_by_fingerprint`（同指纹保持 1、变体新增到 2）+ `fingerprint_is_deterministic_and_sensitive` + `delete_removes_case_and_meta`；CLI 冒烟：库目录 1 个 case、重复再存不变。
+- [x] delete(root,id) 物理删除 + case_count 重算（P4.4：入口 valid_id 白名单）。
+- [x] **P4.4 边界说明（诚实口径）**：`--store` 存的是**压缩结果**（Outcome.text：当前 query 命中的保留行，可能含 `...` 省略标记与 `--lineno` 的 `N:` 前缀），**不含用户真正的修复动作/结论**。因此 L1 返回的 `summary:` 是"错误行摘要"而非"上次怎么解决的"——它支撑案例召回（"上次这问题长这样、怎么处理过"），但兑现不了"L1 本地直答、不再问模型"的北极星；要完整直答需 `--store` 额外保存修复结论（后续可选增强，非本期）。
+- [x] **P4.4 大小上限**：单 case 文本 ≤1 MiB（`MAX_CASE_TEXT`），超限拒绝（实测 1.2 MB 输入 → `case text too large: 1200000 bytes > 1048576`，exit 2，不落盘）。
+- **验证**：`ingest_dedup_by_fingerprint`（同指纹保持 1、变体新增到 2）+ `fingerprint_is_deterministic_and_sensitive` + `delete_removes_case_and_meta` + size cap 拒绝；CLI 冒烟：库目录 1 个 case、重复再存不变。
 
 ### P1.3 字段抽取（field.rs，O1）— ✅ 已完成（2026-10-22）
 - [x] 复用 classify.rs：error_code（错误词面邻近 token）、file_loc（is_frame/is_lineref 行）、symbol（行内标识符）、num_fp（norm_into 数字折叠指纹）。
@@ -93,15 +96,17 @@
 
 **目标**：召回质量显著提升，L1 命中率可统计。P2.2/2.3/2.4/2.5 互相独立可并行（本次串行实施）。
 
-### P2.1 query 记忆图（qmap.bin，O2）— ✅ 已完成
+### P2.1 query 记忆图（qmap.bin，O2）— ✅ 已完成（P4.4 评审处置：代际失效）
 - [x] 自研二进制 `index/qmap.bin`：`[magic "QMAP" u32][ver u16]` + 每条 `[qlen u16][norm(query)][n u16][(idlen u8)(id)(score f32)(sim f32)*n][recency u32]`；条目存 score/sim 快照 → 同指纹二次直达能原样复现输出（golden 稳定性）。
 - [x] recall 成功后回流写入（append-only、尾部损坏容错：丢弃残段不崩溃）；`recall::recall` 入口先 qmap 精确直达（dist=0 返回历史 top-k）；编辑距离 ≤2 变体命中转轻量重排。
-- **验证**：单测 3 例（往返/变体/损坏容错）通过；`memory::mod` 门面接线。
+- [x] **P4.4 修复**：qmap 升 v2，条目带 `gen`（meta.toml 全局代际）。`write_case`/`--rate` 会 bump gen → 旧快照查询即失效（新 case 立即可见、反馈立即改序）；`--rebuild` 只合并不复活旧快照。只看模式（--recall-only）不再写 qmap。
+- **验证**：单测 4 例（往返/变体/损坏容错/gen 失效）通过；端到端：store 新 case 后同 query 召回可见新 case（score 0.58→1.13 验证 rate 立即可见）。
 
-### P2.2 会话缓存（O3）— ✅ 已完成
+### P2.2 会话缓存（O3）— ✅ 已完成（P4.4：带 gen 失效）
 - [x] 进程内存全局单例 LRU（容量 64、窗口 30 分钟），键 = fnv1a(norm(query))；`recall_cases` 先查缓存命中直接返回。
 - [x] **快照语义（P2.6 收尾修复）**：缓存存 (id, score, sim) 完整快照而非裸 id 列表——原"命中返回 sim=0 占位"会被 L1 自适应过滤吞掉（会话内二次同问反而无输出），改为快照后命中路径与正常召回同口径，L1 过滤/排序可复用。
-- **验证**：单测 2 例（窗口内命中含快照逐字段一致 / 窗口外过期 miss）通过。
+- [x] **P4.4 修复**：缓存条目带 gen，库代际变化后缓存查询直接 miss（不喂旧快照）。
+- **验证**：单测 3 例（窗口内命中含快照逐字段一致 / 窗口外过期 miss / gen 失效 miss）通过。
 
 ### P2.3 PRF 查询扩展 — ✅ 已完成
 - [x] `memory/prf.rs`：批内 tf≥2、全局 idf>0.6、排除 query 已含词、最多 6 个、按 idf 降序；`recall` 低置信（top1.sim<0.99）时扩展 query 再召一轮。
@@ -119,13 +124,15 @@
 
 ### P2.6 反馈双环 + 状态机（O4）+ 自适应置信（O5 前半）— ✅ 已完成
 - [x] `--rate good|bad <case-id>`：词级调权（good +0.1 / bad −0.15，clamp ±0.5，存 meta.toml [word_w]）+ case 状态机（open→solved→regressed）+ quality=good/(good+bad) 分（进排序先验，meta quality_prior=0.5）。
-- [x] L1 置信自适应：每次 recall 记录 top1.sim 到 meta [l1] hist（上限 64 条）；`--rate` 时重算 `l1_base = P50(hist)`（clamp 0.3..0.9）写回 [params]；CLI 过滤判据 `sim_top1 ≥ l1_base 且 (top1−top2) ≥ l1_margin_min(0.15)`（扩展命中率 ≥0.30 判据预留，CLI 传 1.0 视为满足，统计接线留 P3 评估）。
+- [x] L1 置信自适应：**主流程 `--recall`（学习路径）** 每次召回记录 top1.sim 到 meta [l1] hist（上限 64 条）；`--rate` 时重算 `l1_base = P50(hist)`（clamp 0.3..0.9）写回 [params]；CLI 过滤判据 `sim_top1 ≥ l1_base 且 (top1−top2) ≥ l1_margin_min(0.15)`（扩展命中率 ≥0.30 判据预留，CLI 传 1.0 视为满足，统计接线留 P3 评估）。
+- [x] **P4.4 修复（查看模式只读）**：`--recall-only`/`--eval`/bench 一律只读——不写 qmap、不写 L1 历史、不写会话缓存。查看、标注、演示不得改变库状态（实测连续多次 --recall-only 后 `--l1-hist` 仍 n=0）。
 - [x] E2E 冒烟：store→recall mem 行→rate good（solved）→rate bad（regressed）→meta 词权重/l1_base 落盘。
 - **验证**：单测 4 例（状态机×2 / l1_qualified 判据 / l1_base P50 滑动）通过。
 
-### P2.7 场景桶过滤（O6）— ✅ 已完成
+### P2.7 场景桶过滤（O6）— ✅ 已完成（P4.4：桶判定对称修复）
 - [x] `memory/bucket.rs`：5 家族（db/network/disk/build/runtime）+ other，小写子串判定；摄取写 `c.bucket`；检索先按 query 判候选桶再扫（空候选=全量扫防漏召）。
-- **验证**：单测 `bucket_filter_reduces_scan` 通过。
+- [x] **P4.4 修复（桶判定不对称漏召）**：db 家族关键词表补裸词 `"db"`。此前 query "db timeout" 只有 timeout 命中 network 家族 → 候选桶 [network]，而 case 主桶靠 conn_id 判为 db → 唯一候选被滤、输出空（1 case 库实测复现）。补词后 query "db timeout" → [db, network]，case db 命中。
+- **验证**：单测 `bucket_filter_reduces_scan` + `candidate_buckets("db timeout")` 含 db；端到端 1 case 库 recall-only 输出恢复正常。
 
 **P2 集成（本次阶段门）**：
 - [x] 全量 `cargo test --locked`：57 库 + 8 CLI + 4 集成 + golden 全绿（P2 前 50 库 → P2 后 57 库，PRF/MMR/feedback/cache 等新增 7 测试）。
@@ -142,24 +149,25 @@
 
 **目标**：索引正式化、崩溃自愈、性能达标、写后台化。
 
-### P3.1 倒排索引 + mmap — ✅ 已完成
+### P3.1 倒排索引（P4.4：删 mmap，索引纯缓存）— ✅ 已完成
 - [x] `memory/index.rs`（~470 行）`postings.bin` **v2 自包含 doc 打分快照**：`[magic "POST" u32][ver u16][body_len u64][body][crc32 u32]`；body = n_docs/total_len/n_terms + doc 表（id + 去重词表 + 4 字段 + bucket/status/quality/updated_at，case id 字典序）+ term 表（term 字典序 + df + delta-varint doc_idx）。**候选打分零 case.json 读取**（性能门关键）。
-- [x] `memory/mmap.rs` 三平台零依赖只读 mmap（Windows kernel32 extern / Unix libc extern，失败回退 `fs::read`）。
+- [x] ~~`memory/mmap.rs`~~：P4.4 评审处置已删除——手写 unsafe FFI（from_raw_parts）+ 无文件锁，另一进程 rebuild/truncate 时映射失效；1 万条以内 `fs::read` 足够（零 unsafe）。
 - [x] `memory/postings.rs`（段封装：varint LEB128 + CRC-32 IEEE 查表 + 段写）。
-- [x] 自动启用阈值 `INDEX_MIN_DOCS=10000`；`--rebuild` 后写 `[params] index_force=1` 强制小库启用（评估/测试）。
+- [x] 自动启用阈值 `INDEX_MIN_DOCS=10000`；**P4.4 修复：`--rebuild` 不再写 `[params] index_force=1`**——索引只是缓存，重建不得改变召回语义（线性/索引两路径 df/avgdl 口径不同，强制索引会让 A/B 不可比）；rebuild 只落 df 快照。
 - [x] **进程内索引缓存**（root+mtime 键，Arc 共享）：会话/守护进程多次召回免重复 parse（冷启动 parse ~11ms，命中 ~0）；`invalidate` 清缓存。
-- **验证**：`build_parse_roundtrip`（df 快照覆盖全部 term）/`candidates_union_dedup_sorted`/`corrupt_tail_rejected_and_rebuild_recovers`/`invalidate_removes_index_file` 通过。
+- **验证**：`build_parse_roundtrip`（df 快照覆盖全部 term）/`candidates_union_dedup_sorted`/`corrupt_tail_rejected_and_rebuild_recovers`/`invalidate_removes_index_file` 通过；单测断言 rebuild 后 meta 无 index_force 且 df 快照已落。
 
 ### P3.2 崩溃一致性 + 坏段自愈 — ✅ 已完成
 - [x] body_len 边界 + crc32 段尾双校验；`load` 坏段返回 Err(corrupt)；召回主路径坏段 → 自动 `build` 覆盖重建，重建失败回退线性扫描。
 - **验证**：坏段注入单测 + E2E（截断 postings 尾部 5 字节 → recall 自动 heal 输出同值）+ golden `memory_corrupt_heal`。
 
-### P3.3 rebuild / gc / delete — ✅ 已完成
-- [x] `--rebuild`：index::build 全量重建 + qmap::merge（同归一化 query 取 recency 最新）+ df 快照写 `meta.toml [df]`（**来自 build 返回值**，修掉"写空 df"一致性 bug）+ `index_force=1` + case_count 同步；输出 `rebuild: docs=N terms=N`。
+### P3.3 rebuild / gc / delete — ✅ 已完成（P4.4：安全加固）
+- [x] `--rebuild`：index::build 全量重建 + qmap::merge（同归一化 query 取 recency 最新）+ df 快照写 `meta.toml [df]`（**来自 build 返回值**，修掉"写空 df"一致性 bug）+ case_count 同步；输出 `rebuild: docs=N terms=N`。**P4.4：不再写 index_force、不复活旧 qmap 快照（gen 失效）。**
 - [x] `--gc`：双条件 expire（regressed 且 >180 天 / 从未反馈 quality=0 且 >365 天，`gc_ttl_regressed=180`/`gc_ttl_stale=365` 入 meta 模板）→ 物理删除 + 索引作废；输出 `gc: removed=N`。
 - [x] `--delete <case-id>`：物理删除 + case_count 重算 + 删 postings/qmap（惰性作废）；输出 `delete: removed case=...`。
+- [x] **P4.4 安全修复**：`--delete`/`--rate` 入口先过 `valid_id` 白名单（ASCII 字母数字 + `-` `_`、禁 `..`、≤64 字符）——原实现直接拼接 `root/cases/<id>` 路径，`..\..\` 可逃出记忆库目录（实测拒绝 `..\..\evil`，exit 2）。
 - [x] 三个维护模式豁免 `--query` 要求（cli_args 校验放行 + 单测）。
-- **验证**：housekeep 3 单测（rebuild 建索引+force 标记 / gc 只清过期 / delete 作废索引）+ E2E 冒烟 + golden 3 例。
+- **验证**：housekeep 3 单测（rebuild 建索引 + 无 force 标记 / gc 只清过期 / delete 作废索引）+ E2E 冒烟 + golden 3 例。
 
 ### P3.4 写后台化（write-behind）— ✅ 已完成
 - [x] `--store`（未配 `--recall`）摄取入队 `mpsc` + `std::thread::spawn`（零依赖）；正文与统计先回显，进程退出前 `rx.recv()` join 确认落盘（失败 exit 2）；`--store + --recall` 组合保持同步（recall 需看到新 case）。
@@ -188,16 +196,16 @@
 
 ## 7. P4 — 证明与增强（P4.1/P4.2/P4.3 已完成，P4.4/4.5 可选）
 
-### P4.1 评估系统（O8）— ✅ 已完成（2026-10-22）
-- [x] `memory/eval.rs`（~300 行）：`--eval <baseline.json>` 冻结评估输入重放；baseline = `{"cases":[{"query","layer","expected","rel"}]}`，expected 支持完整 id 或 hash8 后缀（golden 免日期漂移）。
+### P4.1 评估系统（O8）— 工具 ✅ / M4 证据门未通过（P4.4 评审处置）
+- [x] `memory/eval.rs`（~300 行）：`--eval <baseline.json>` 冻结评估输入重放；baseline = `{"cases":[{"query","layer","expected","rel"}]}`，expected 支持完整 id 或 hash16 后缀（P4.4 起 id 64 位，旧 8 位标注兼容：tail8 亦匹配；golden 免日期漂移）。
 - [x] 指标：Recall@5 / MRR / NDCG@10（rel 分级 0..2，DCG=Σ rel/log2(i+1)），分 literal/paraphrase/semantic 三层聚合出表。
-- [x] **A/B 对拍**：A = 完整统计管线（recall::recall，字段+PRF+衰减+MMR+反馈+桶）；B = `eval::plain` 朴素 BM25 基线（全库候选、纯词面、无任何增强），差异即增强项收益。评估路径确定可重放（无随机源）。
+- [x] **A/B 对拍**：A = 完整统计管线（recall::recall，字段+PRF+衰减+MMR+反馈+桶）；B = `eval::plain` 朴素词面基线（全库候选、纯词面、无任何增强）。**P4.4 口径修正：两路打分词表均为去重词表（tf 恒 1），实际是"二值词面匹配 + 长度归一化 + 字段加权"，不是严格 BM25；A/B 同词表对比仍公平，但任何结论须按此口径引用，不宣称"BM25 增益"。** 评估路径确定可重放（无随机源）。
 - [x] 报告行：`eval: cases=N layers=...` + 每层 `layer X: n=.. A r@5/mrr/ndcg | B r@5/mrr/ndcg` + **`l1: hits=.. total=.. rate=..`（P2 阶段门残余补全：L1 直答命中率出表，top1 命中相关 case 中满足置信判据的比例，判据参数 l1_base/margin 随库自适应）**。
 - [x] **`--l1-hist`（P2 阶段门残余补全之二）**：读 meta.toml [l1] hist（recall 侧每次 push top1.sim 的滑动历史）出运行期直答分布——`l1hist: n=.. mean=.. p50=.. p90=.. over_base=.. (base=..)`；冒烟验证：store+recall 一次后 `n=1 mean=1.000 over_base=1`。
 - [x] CLI 接线（豁免 --query）+ 4 单测（dcg 标准公式 / metric recall·mrr·ndcg / baseline 严格容错解析 / summary 300 字符截断）+ golden `memory_eval`（重冻含 l1 行）。
-- [x] **`--recall-only` 口径修正（查看模式）**：原 P2.6 对 --recall-only 也做 L1 自适应过滤（hits 不达置信判据时整段滤空，演示/标注时看不到真实召回）→ 改为输出真实 top-k；主流程 `--recall` 的 mem 段保持 L1 直答过滤不变。golden 25 例零漂移（既有用例本就达判据，输出不变）。
+- [x] **`--recall-only` 口径修正（查看模式）**：原 P2.6 对 --recall-only 也做 L1 自适应过滤（hits 不达置信判据时整段滤空，演示/标注时看不到真实召回）→ 改为输出真实 top-k；主流程 `--recall` 的 mem 段保持 L1 直答过滤不变。**P4.4 再加固：--recall-only/--eval/bench 一律只读（不写 qmap/L1 历史/缓存）。** golden 25 例零漂移（既有用例本就达判据，输出不变）。
 - **验证**：golden 25 例冻结；库 71 测试全绿；clippy/release/行数门禁过。
-- **初测发现（诚实记录）**：3 例合成标注中 literal/semantic 层 A=B=1.0；paraphrase 层 A mrr=0.5 vs B=1.0（单例，PRF/MMR 使相关 case 排第 2）——说明统计向量在释义层无优势属预期（与设计稿 §10 判断一致）；l1 首测 hits=1 total=2 rate=0.500（literal 字段精确命中过判据；semantic 未过；paraphrase 相关 case 未进 top1 不计分母）。多例标注集上线后由本系统出正式对拍表。
+- **初测发现（诚实记录）**：3 例合成标注中 literal/semantic 层 A=B=1.0；paraphrase 层 A mrr=0.5 vs B=1.0（单例，PRF/MMR 使相关 case 排第 2）——说明统计向量在释义层无优势属预期（与设计稿 §10 判断一致）；l1 首测 hits=1 total=2 rate=0.500（literal 字段精确命中过判据；semantic 未过；paraphrase 相关 case 未进 top1 不计分母）。**P4.4 状态声明：当前仅 3 例合成标注初测，M4 证据门（30–50 组人工标注）未通过，正式标注集上线前不宣称 A/B 收益。**
 - **标注采集就绪**：`docs/eval-baseline-template.md`（v1.0）给出 baseline.json 格式、三层造例规则、rel 分级、id 获取流程（--recall-detail 核对）与红线——30-50 组人工标注的采集门槛已文档化，只差人工产出。
 
 ### P4.2 L1 要点行摘要（O5 后半）— ✅ 已完成（2026-10-22）
@@ -221,7 +229,7 @@
 - [ ] 本地 embedding feature 开关；RRF 混合（设计稿预判混合稳压）。
 - **验证**：P4.1 对拍表 A vs B vs 混合，决策记录入档。
 
-**M4 阶段门（当前状态）**：对拍表 + NDCG 存档可重放 ✅（--eval 已就绪，正式标注集上线后运行即得）；P4.1 需 ≥30 组分层人工标注（§8）。
+**M4 阶段门（当前状态）**：`--eval` 工具就绪（对拍表 + NDCG 存档可重放）✅；**M4 证据门未通过**——正式标注集（30–50 组人工标注，§8）未上线，当前仅 3 例合成初测；标注集上线前不宣称 A/B 收益。
 
 ---
 
@@ -275,7 +283,31 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 
 ---
 
-## 11. 风险与回滚
+## 11. P4.4 评审处置记录（2026-10-22，逐条闭环）
+
+输入：对 v0.1 实现的 6 条功能问题 + 6 条工程安全债评审。处置结果：
+
+| 评审条目 | 处置 | 验证 |
+|---|---|---|
+| ① qmap append-only 快照不失效（新 case/反馈不可见） | 代际失效：meta `gen` + qmap v2 条目带 gen + 缓存带 gen；write_case/rate 均 bump gen；rebuild 不复活旧快照 | 单测 + 端到端（store 新 case 后同 query 召回可见；rate 后 score 0.58→1.13 立即可见） |
+| ② --recall-only 不是只读（污染 l1_base） | 查看模式只读：recall_cases 加 read_only；--recall-only/--eval/bench 不写 qmap/L1 历史/缓存 | 端到端（连续多次 --recall-only 后 --l1-hist 仍 n=0） |
+| ③ P4.1 "已完成"但 M4 证据门没完成 | 状态改"工具 ✅ / M4 证据门未通过"；正式标注集上线前不宣称 A/B 收益 | §7 P4.1 标题 + §3 M4 行 + 初测诚实记录 |
+| ④ --store 存"压缩结果"非完整 case/答案 | 不掩盖：§4 P1.2 补边界说明（summary 是错误行摘要；完整直答需后续保存修复结论） | 文档 |
+| ⑤ --rebuild 写 index_force 改变召回语义 | 索引纯缓存：rebuild 不再写 index_force，只落 df 快照 | 单测断言 meta 无 index_force + df 已落 |
+| ⑥ "BM25"实为 tf=1 词面匹配 | 口径诚实化：注释/计划文档改"二值词面匹配 + 长度归一化 + 字段加权"；A/B 同词表公平但结论按此口径引用 | 文档 + eval.rs 头注释 |
+| 安全债-1 手写 unsafe mmap | 删除 mmap.rs，索引加载改 fs::read（零 unsafe，1 万条内足够） | check/test 绿 |
+| 安全债-2 裸 fs::write 无原子性 | case/meta 写入统一原子写（临时文件+rename） | 单测 + 端到端 |
+| 安全债-3 case id 32 位碰撞 | 升 64 位（hash16）；eval 兼容旧 8 位 tail | golden 重冻仅 id 长度差 |
+| 安全债-4 vec.bin 无效产物 | 移除 vec.bin 读写（write_case 去参、删模块引用） | 编译 + 单测 |
+| 安全债-5 --delete 路径穿越 | valid_id 白名单（ASCII 字母数字 + `-` `_`、禁 `..`、≤64）；--delete/--rate 入口统一过检 | 端到端（拒绝 `..\..\evil`，exit 2） |
+| 安全债-6 无大小上限 | MAX_CASE_TEXT=1 MiB，超限拒绝不落盘 | 端到端（1.2 MB 拒绝） |
+| 附带修复：桶判定不对称漏召 | db 家族补裸词 "db"（query "db timeout" 不再只归 network 桶） | 端到端 1 case 库召回恢复 |
+
+**提交**：代码修复 + golden 重冻（5 文件仅 id 8→16 hex）+ 文档同步 分两笔 git 提交（评审处置 / 文档）。
+
+---
+
+## 12. 风险与回滚
 
 | 风险 | 等级 | 对策 |
 |---|---|---|
@@ -289,7 +321,7 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 
 ---
 
-## 12. 决策点（实施中需要停下问用户）
+## 13. 决策点（实施中需要停下问用户）
 
 | # | 决策点 | 触发时机 | 默认建议 |
 |---|---|---|---|
@@ -300,7 +332,7 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 
 ---
 
-## 13. 时间估算（诚实口径，含自研序列化成本）
+## 14. 时间估算（诚实口径，含自研序列化成本）
 
 | 阶段 | 估算 | 说明 |
 |---|---|---|

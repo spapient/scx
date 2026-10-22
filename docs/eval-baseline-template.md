@@ -28,7 +28,7 @@
 |---|---|---|
 | query | string | 评估时用的检索词（按真实用法写，可含字段/实体/中文混排） |
 | layer | string | literal / paraphrase / semantic 三选一（分层定义见 §2） |
-| expected | string[] | 相关 case id 列表（完整 id 或 hash8 后缀均可，后缀免日期漂移） |
+| expected | string[] | 相关 case id 列表（完整 id 或 hash16/hash8 后缀均可，后缀免日期漂移） |
 | rel | object（可选） | case id → 相关度 0..2；缺省时 expected 内视为 1 |
 
 ## 2. 三层定义与造例规则
