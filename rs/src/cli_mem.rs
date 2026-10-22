@@ -33,28 +33,34 @@ pub(crate) fn write_mem_lines(
             writeln!(
                 out,
                 "  summary: {}",
-                scx::memory::case_summary(root, &h.id)?
+                escape(&scx::memory::case_summary(root, &h.id)?)
             )?;
             for (i, &lno) in c.evidence_lno.iter().enumerate() {
                 writeln!(
                     out,
                     "  evidence: {} {}",
                     lno,
-                    c.evidence.get(i).map(String::as_str).unwrap_or("")
+                    escape(c.evidence.get(i).map(String::as_str).unwrap_or(""))
                 )?;
             }
             let fix = c.fix.clone();
             if !fix.is_empty() {
-                writeln!(out, "  fix: {} (candidate, sim={:.2})", fix, h.sim)?;
+                writeln!(out, "  fix: {} (candidate, sim={:.2})", escape(&fix), h.sim)?;
             }
         } else {
             let fix = scx::memory::case_fix(root, &h.id).unwrap_or_default();
             if !fix.is_empty() {
-                writeln!(out, "  fix: {} (candidate, sim={:.2})", fix, h.sim)?;
+                writeln!(out, "  fix: {} (candidate, sim={:.2})", escape(&fix), h.sim)?;
             }
         }
     }
     Ok(())
+}
+
+/// P4.4+ 优化⑫（P1-4）：召回回放输出转义控制字符（ANSI ESC / C0），
+/// 防恶意日志在终端注入转义序列。
+fn escape(s: &str) -> String {
+    scx::memory::util::escape_ctrl(s)
 }
 
 /// 召回路径：先按 query 召回（线性扫描 BM25+字段加权），只输出 mem 段。

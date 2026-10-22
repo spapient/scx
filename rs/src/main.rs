@@ -272,6 +272,18 @@ fn main() {
     // （recall 需看到新 case，顺序依赖）。
     let mut store_rx: Option<mpsc::Receiver<std::io::Result<(bool, String)>>> = None;
     if opts.store {
+        // P4.4+ 优化⑫（P1-4）：--max-bytes 总容量软配额——库已超限则拒绝写入
+        // （保留现有资产；提示 --gc / --delete 清理）。
+        if let Some(max) = opts.max_bytes {
+            let total = scx::memory::housekeep::bytes_total(&opts.mem_dir).unwrap_or(0);
+            if total > max {
+                eprintln!(
+                    "scx: memory quota exceeded: {} bytes > --max-bytes {max} - run --gc or --delete first",
+                    total
+                );
+                std::process::exit(2);
+            }
+        }
         // P4.4+ 优化⑩：--fix-file 读取（多行修复结论，换行保留）→ 等价 --fix。
         let fix = if let Some(p) = &opts.fix_file {
             match std::fs::read_to_string(p) {

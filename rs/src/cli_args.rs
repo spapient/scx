@@ -57,6 +57,9 @@ pub(crate) struct Opts {
     pub judge: Option<String>,
     /// --judge-by <name>：裁决人标识（缺省取 USERNAME）。
     pub judge_by: Option<String>,
+    /// P4.4+ 优化⑫（P1-4）：--max-bytes N：记忆库总容量软配额（字节）。
+    /// store 前若库总量（cases+meta+index）超过 N 则拒绝写入（提示 --gc / --delete）。
+    pub max_bytes: Option<u64>,
     pub mem_dir: String,
     pub forces: Vec<String>,
     pub files: Vec<String>,
@@ -155,6 +158,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut annotate_max = 16usize;
     let mut judge: Option<String> = None;
     let mut judge_by: Option<String> = None;
+    let mut max_bytes: Option<u64> = None;
     let mut mem_dir = default_mem_dir();
     let mut mem_dir_seen = false;
     let mut forces = Vec::new();
@@ -391,6 +395,20 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 judge_by = Some(option_value(&args, &mut i, name, inline)?);
             }
+            // P4.4+ 优化⑫（P1-4）：--max-bytes 总容量软配额（store 前检查）。
+            "--max-bytes" => {
+                if max_bytes.is_some() {
+                    return Err("--max-bytes specified more than once".to_string());
+                }
+                let v = option_value(&args, &mut i, name, inline)?;
+                let parsed = v
+                    .parse::<u64>()
+                    .map_err(|_| format!("--max-bytes expects a byte count, got {:?}", v))?;
+                if parsed == 0 {
+                    return Err("--max-bytes must be > 0".to_string());
+                }
+                max_bytes = Some(parsed);
+            }
             "--rebuild" => {
                 if inline.is_some() {
                     return Err("--rebuild does not take a value".to_string());
@@ -541,6 +559,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         annotate_max,
         judge,
         judge_by,
+        max_bytes,
         mem_dir,
         forces,
         files,

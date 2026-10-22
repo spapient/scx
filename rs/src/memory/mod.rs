@@ -61,6 +61,8 @@ impl Memory {
 /// 门面：摄取一个压缩结果（query + 证据块）→ 记忆 case。
 /// terms 由门面内部从 query 生成（与压缩路径同一词表，保证确定性）。
 /// 返回 `(added, case_id)`（P4.4+ 优化③：id 供 CLI 报告 stored: 行）。
+/// P4.4+ 优化⑫（P1-4）：query/text/fix/evidence 统一经 sanitize 脱敏后才落盘
+/// （token/密码/连接串不进入记忆库；指纹基于脱敏后 query，幂等）。
 pub fn store_case(
     root: &str,
     query: &str,
@@ -69,8 +71,10 @@ pub fn store_case(
     stats: &store::CaseStats,
     forces: Vec<String>,
 ) -> std::io::Result<(bool, String)> {
-    let terms = crate::terms::build_mem_terms(query);
-    ingest::ingest(root, query, terms, text, source, stats, forces)
+    let query = crate::memory::util::sanitize(query);
+    let text = crate::memory::util::sanitize(text);
+    let terms = crate::terms::build_mem_terms(&query);
+    ingest::ingest(root, &query, terms, &text, source, stats, forces)
 }
 
 /// 带修复结论的摄取（P4.4+ 优化：--store 配 --fix，L1 本地直答的"上次怎么解决"）。
@@ -83,8 +87,11 @@ pub fn store_case_fix(
     forces: Vec<String>,
     fix: &str,
 ) -> std::io::Result<(bool, String)> {
-    let terms = crate::terms::build_mem_terms(query);
-    ingest::ingest_with_fix(root, query, terms, text, source, stats, forces, fix)
+    let query = crate::memory::util::sanitize(query);
+    let text = crate::memory::util::sanitize(text);
+    let fix = crate::memory::util::sanitize(fix);
+    let terms = crate::terms::build_mem_terms(&query);
+    ingest::ingest_with_fix(root, &query, terms, &text, source, stats, forces, &fix)
 }
 
 /// P4.4+ 优化⑤：带原始证据的摄取（评审缺口 B——case 四要素：query + 证据行区间 +
@@ -102,18 +109,25 @@ pub fn store_case_full(
     evidence_lno: &[usize],
     evidence: &[String],
 ) -> std::io::Result<(bool, String)> {
-    let terms = crate::terms::build_mem_terms(query);
+    let query = crate::memory::util::sanitize(query);
+    let text = crate::memory::util::sanitize(text);
+    let fix = crate::memory::util::sanitize(fix);
+    let evidence: Vec<String> = evidence
+        .iter()
+        .map(|e| crate::memory::util::sanitize(e))
+        .collect();
+    let terms = crate::terms::build_mem_terms(&query);
     ingest::ingest_with_evidence(
         root,
-        query,
+        &query,
         terms,
-        text,
+        &text,
         source,
         stats,
         forces,
-        fix,
+        &fix,
         evidence_lno,
-        evidence,
+        &evidence,
     )
 }
 

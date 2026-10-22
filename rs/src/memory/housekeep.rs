@@ -47,13 +47,42 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
         };
         let upd_s = parse_utc_secs(&c.updated_at);
         let age_days = now_s.saturating_sub(upd_s) as f64 / 86_400.0;
+        // P4.4+ 优化⑫（P1-4）：带 fix 的 case（已沉淀"怎么解决"）不因 stale 过期——
+        // 经验价值最高，默认永不因"未反馈"被清；regressed 仍按短 TTL 清理。
         let expired = (c.status == "regressed" && age_days > ttl_regressed)
-            || (c.quality == 0.0 && age_days > ttl_stale);
+            || (c.quality == 0.0 && c.fix.is_empty() && age_days > ttl_stale);
         if expired && delete_case(root, &id).unwrap_or(false) {
             removed += 1;
         }
     }
     Ok(removed)
+}
+
+/// P4.4+ 优化⑫（P1-4）：库总字节数（cases + meta + index 文件递归求和）。
+/// 供 `--max-bytes` 软配额检查（每个 store 前调用；1 万 case 目录枚举 <100ms）。
+pub fn bytes_total(root: &str) -> std::io::Result<u64> {
+    fn walk(dir: &std::path::Path) -> std::io::Result<u64> {
+        let mut total = 0u64;
+        let mut stack: Vec<std::path::PathBuf> = vec![dir.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for entry in std::fs::read_dir(&d)? {
+                let entry = entry?;
+                let p = entry.path();
+                let ft = entry.file_type()?;
+                if ft.is_dir() {
+                    stack.push(p);
+                } else if ft.is_file() {
+                    total += entry.metadata()?.len();
+                }
+            }
+        }
+        Ok(total)
+    }
+    if std::path::Path::new(root).exists() {
+        walk(std::path::Path::new(root))
+    } else {
+        Ok(0)
+    }
 }
 
 /// 删除一个 case（物理删除 + 惰性作废索引 + 库代际前进）。
@@ -143,7 +172,7 @@ fn param(m: &Meta, key: &str, dflt: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::ingest::ingest;
+    use crate::memory::ingest::{ingest, ingest_with_fix};
     use crate::memory::store::{self, CaseStats};
     use std::fs;
 
@@ -230,6 +259,44 @@ mod tests {
         // 索引已作废（惰性）。
         assert!(!index::load(&root).unwrap().is_some(), "gc 后索引作废");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// P4.4+ 优化⑫（P1-4）：带 fix 的 case 不因 stale 过期（经验价值最高）。
+    #[test]
+    fn gc_keeps_stale_case_with_fix() {
+        let root = tmp_root("gc-fix");
+        let s = stats();
+        let mut c = ingest_fix_direct(&root, &s);
+        c.quality = 0.0; // 从未反馈
+        let now = store::utc_now();
+        let older = format!("2020-01-01{}", &now[10..]);
+        c.updated_at = older; // 远超 gc_ttl_stale=365
+        store::write_case(&root, &c).unwrap();
+        let removed = gc(&root).unwrap();
+        assert_eq!(removed, 0, "带 fix 的 case 不应被 stale GC 清理");
+        assert_eq!(store::list_ids(&root).unwrap().len(), 1);
+        // 去掉 fix 后同条件应被清（对照）。
+        let mut c2 = store::read_case(&root, &store::list_ids(&root).unwrap()[0]).unwrap();
+        c2.fix = String::new();
+        store::write_case(&root, &c2).unwrap();
+        assert_eq!(gc(&root).unwrap(), 1);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// 直接落一个带 fix 的 case（经 ingest_with_fix，目录/指纹/写盘齐全）。
+    fn ingest_fix_direct(root: &str, s: &store::CaseStats) -> store::Case {
+        ingest_with_fix(
+            root,
+            "磁盘满",
+            vec!["disk".into()],
+            "ERROR disk full delta",
+            vec!["/b.log".into()],
+            s,
+            vec![],
+            "扩容并清理 inode",
+        )
+        .unwrap();
+        store::read_case(root, &store::list_ids(root).unwrap()[0]).unwrap()
     }
 
     #[test]

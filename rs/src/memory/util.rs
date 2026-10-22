@@ -33,6 +33,224 @@ pub(crate) fn utc_now() -> String {
     format!("{y:04}-{mo:02}-{d:02}T{hh:02}:{mi:02}:{ss:02}Z")
 }
 
+/// P4.4+ 优化⑫（P1-4）：入库前模式脱敏——token/密码/连接串/Bearer 等敏感值
+/// 在落盘前替换为 `<redacted>`。幂等（脱敏结果不再含可脱敏模式）、确定性、
+/// 不破坏行号与结构（键名保留、仅值替换）。朴素字节扫描（零依赖）。
+pub(crate) fn sanitize(s: &str) -> String {
+    // 多轮直到稳定：嵌套形式（如 `Authorization: Bearer token=..`）逐层收敛。
+    let mut out = s.to_string();
+    for _ in 0..3 {
+        let next = sanitize_once(&out);
+        if next == out {
+            break;
+        }
+        out = next;
+    }
+    out
+}
+
+/// 敏感键（大小写不敏感匹配，后随 `=`/`:` + 可选空白 + 值到边界）。
+const SENSITIVE_KEYS: &[&str] = &[
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "access_token",
+    "access-token",
+    "authorization",
+    "client_secret",
+    "private_key",
+    "auth",
+];
+
+fn sanitize_once(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while i < b.len() {
+        if let Some((key_len, sep_len)) = match_key_value(b, i) {
+            // key + 分隔符（保留键名与分隔符原样）。
+            let key_end = i + key_len + sep_len;
+            out.push_str(&s[i..key_end]);
+            // 值：到空白/逗号/分号/引号/尖括号边界；空值不替换。
+            // Bearer/Basic 前缀的整个 `Bearer <token>` 一并替换（Authorization 一行收敛）。
+            let mut v = key_end;
+            if let Some(tok_end) = match_bearer_value(b, v) {
+                v = tok_end;
+            } else {
+                while v < b.len() && !is_val_boundary(b[v]) {
+                    v += 1;
+                }
+            }
+            if v > key_end {
+                out.push_str("<redacted>");
+                i = v;
+            } else {
+                i = key_end;
+            }
+            continue;
+        }
+        if let Some((pw_start, at_pos)) = match_url_userinfo(b, i) {
+            out.push_str(&s[i..pw_start]);
+            out.push_str("<redacted>");
+            i = at_pos; // @ 由下一轮原样输出（保留结构）。
+            continue;
+        }
+        if let Some(len) = match_bearer(b, i) {
+            out.push_str(&s[i..i + len]);
+            out.push_str("<redacted>");
+            i += len;
+            continue;
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// 位置 i 是否以敏感键开头（大小写不敏感）且键后紧跟 `=`/`:`（可带空白）。
+/// 返回 (键字节长, 分隔符字节长含键后空白)。
+fn match_key_value(b: &[u8], i: usize) -> Option<(usize, usize)> {
+    for key in SENSITIVE_KEYS {
+        let k = key.as_bytes();
+        if b.len() - i < k.len() + 1 {
+            continue;
+        }
+        if !b[i..i + k.len()].eq_ignore_ascii_case(k) {
+            continue;
+        }
+        let mut j = i + k.len();
+        let mut sep_len = 0usize;
+        while j < b.len() && (b[j] == b' ' || b[j] == b'\t') {
+            j += 1;
+            sep_len += 1;
+        }
+        if j >= b.len() || (b[j] != b'=' && b[j] != b':') {
+            continue;
+        }
+        sep_len += 1; // '=' 或 ':'
+                      // 分隔符后的前导空白也并入分隔符（`passwd: hunter2` → sep=": "）。
+        j += 1;
+        while j < b.len() && (b[j] == b' ' || b[j] == b'\t') {
+            j += 1;
+            sep_len += 1;
+        }
+        return Some((k.len(), sep_len));
+    }
+    None
+}
+
+/// 值边界：空白、逗号、分号、引号、尖括号。
+fn is_val_boundary(c: u8) -> bool {
+    matches!(
+        c,
+        b' ' | b'\t' | b'\r' | b'\n' | b',' | b';' | b'"' | b'\'' | b'<' | b'>'
+    )
+}
+
+/// URL 用户信息：`://user:pass@` → 保留到密码起点，密码替换。
+/// 返回 (密码起点, @ 位置)——上层输出 s[i..pw_start] + `<redacted>` 后从 @ 续扫。
+fn match_url_userinfo(b: &[u8], i: usize) -> Option<(usize, usize)> {
+    if !b[i..].starts_with(b"://") {
+        return None;
+    }
+    let mut j = i + 3;
+    while j < b.len() && !matches!(b[j], b'/' | b'@' | b' ' | b'\t' | b'\r' | b'\n') {
+        if b[j] == b':' {
+            // 找到 user:pass@ 形态。
+            let mut k = j + 1;
+            while k < b.len() && !matches!(b[k], b'@' | b'/' | b' ' | b'\t' | b'\r' | b'\n') {
+                k += 1;
+            }
+            if k < b.len() && b[k] == b'@' {
+                return Some((j + 1, k));
+            }
+        }
+        j += 1;
+    }
+    None
+}
+
+/// `Bearer <token>` / `Basic <token>`：键 + 空白 + 8+ 字符值到空白边界。
+fn match_bearer(b: &[u8], i: usize) -> Option<usize> {
+    for kw in ["Bearer", "Basic"] {
+        let k = kw.as_bytes();
+        if b.len() - i < k.len() + 2 {
+            continue;
+        }
+        if !b[i..i + k.len()].eq_ignore_ascii_case(k) {
+            continue;
+        }
+        let mut j = i + k.len();
+        if b[j] != b' ' && b[j] != b'\t' {
+            continue;
+        }
+        j += 1;
+        let mut n = j;
+        while n < b.len() && !is_val_boundary(b[n]) {
+            n += 1;
+        }
+        if n - j >= 8 {
+            return Some(n - j);
+        }
+    }
+    None
+}
+
+/// 从位置 i 起，若值以 `Bearer `/`Basic ` 开头且 token ≥8 字符，返回 token 末尾
+/// （把整个 `Bearer <token>` 交给上层一并替换；否则返回 None 走普通值扫描）。
+fn match_bearer_value(b: &[u8], i: usize) -> Option<usize> {
+    for kw in ["Bearer", "Basic"] {
+        let k = kw.as_bytes();
+        if b.len() - i < k.len() + 2 {
+            continue;
+        }
+        if !b[i..i + k.len()].eq_ignore_ascii_case(k) {
+            continue;
+        }
+        let mut j = i + k.len();
+        if b[j] != b' ' && b[j] != b'\t' {
+            continue;
+        }
+        j += 1;
+        let mut n = j;
+        while n < b.len() && !is_val_boundary(b[n]) {
+            n += 1;
+        }
+        if n - j >= 8 {
+            return Some(n);
+        }
+    }
+    None
+}
+
+/// P4.4+ 优化⑫（P1-4）：终端输出安全转义——C0 控制字符与 ESC/ANSI 序列
+/// 转成可见字面（`\x1b`、`\xNN`），防 --recall-detail 回放证据时的转义注入。
+pub fn escape_ctrl(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        let u = ch as u32;
+        if ch == '\n' {
+            out.push_str("\\n");
+        } else if ch == '\t' {
+            out.push_str("\\t");
+        } else if ch == '\r' {
+            out.push_str("\\r");
+        } else if u == 0x1b {
+            out.push_str("\\x1b");
+        } else if u < 0x20 || u == 0x7f {
+            out.push_str(&format!("\\x{u:02x}"));
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 /// Howard Hinnant 的 civil_from_days：days-since-epoch → (年, 月, 日)。
 fn civil_from_days(z: u64) -> (u64, u64, u64) {
     let z = z + 719_468;
@@ -176,5 +394,48 @@ mod tests {
         // 非法输入 → 0
         assert_eq!(parse_utc_secs("garbage"), 0);
         assert_eq!(parse_utc_secs("2024-13-01T00:00:00Z"), 0);
+    }
+
+    /// P4.4+ 优化⑫（P1-4）：脱敏覆盖全部模式 + 幂等 + 不误伤明文。
+    #[test]
+    fn sanitize_redacts_secrets_and_is_idempotent() {
+        let cases: &[(&str, &str)] = &[
+            ("password=abc123", "password=<redacted>"),
+            ("passwd: hunter2", "passwd: <redacted>"),
+            (
+                "Authorization: Bearer abcd.efgh.ijkl",
+                "Authorization: <redacted>",
+            ),
+            ("token=eyJhbGciOiJIUzI1NiJ9.abc", "token=<redacted>"),
+            ("api_key=sk-live-abc", "api_key=<redacted>"),
+            (
+                "postgres://user:pw@db:5432/x",
+                "postgres://user:<redacted>@db:5432/x",
+            ),
+            ("client_secret = 9f8e7d6c5b4a", "client_secret = <redacted>"),
+            ("ERROR plain log line", "ERROR plain log line"),
+            ("conn timeout pool", "conn timeout pool"),
+        ];
+        for (input, want) in cases {
+            assert_eq!(sanitize(input), *want, "input={input}");
+        }
+        // 幂等：再脱敏结果不变。
+        let once = sanitize("Authorization: Bearer xyz.123 token=abc");
+        assert_eq!(sanitize(&once), once);
+        // 嵌套收敛：Bearer 内嵌 token=。
+        let nested = sanitize("Authorization: Bearer aaaaaaaaaaaaaaaaaa token=zzz");
+        assert!(!nested.contains("aaaaaaaaaaaaaaaaaa"), "{nested}");
+        assert!(!nested.contains("zzz"), "{nested}");
+        assert!(nested.contains("<redacted>"));
+        assert!(nested.contains("Authorization:"));
+    }
+
+    /// P4.4+ 优化⑫（P1-4）：控制字符/ANSI 转义可见化。
+    #[test]
+    fn escape_ctrl_renders_controls_visibly() {
+        assert_eq!(escape_ctrl("a\x1b[31mb"), "a\\x1b[31mb");
+        assert_eq!(escape_ctrl("x\ny"), "x\\ny");
+        assert_eq!(escape_ctrl("plain"), "plain");
+        assert_eq!(escape_ctrl("\x00\x07\x7f"), "\\x00\\x07\\x7f");
     }
 }
