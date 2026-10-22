@@ -2,7 +2,7 @@
 
 日期：2026-10-23（初版 2026-10-22）
 库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨ + real-eval 机械门
-状态：**机械门 PASS（40 组/三层达标，judge=fei rel 2=40/1=14/0=62，judge=hao rel 2=41/1=11/0=64，均 exit 0）；双人裁决完成，Cohen's kappa=0.698（substantial，116 个共同候选），20 处分歧待仲裁。A/B 主指标仍持平（三层 A=B，无质量优势）。语料仍是合成样例，真实历史事故语料未闭环。**
+状态：**机械门 PASS（40 组/三层达标，fei/hao 双人裁决 kappa=0.698，20 处分歧已仲裁 → `baseline-final.json` rel 2=41/1=11/0=64，exit 0）。A/B 主指标仍持平（三层 A=B，无质量优势）；NDCG（报告项）A≥B。语料仍是合成样例，真实历史事故语料未闭环。**
 
 ## 1. 结论先行
 
@@ -371,6 +371,16 @@ common=116 raw=0.828 kappa=0.698（substantial）
 （hao 认弱相关而 fei 认为无关）；另有 1 处根因级分歧（case 36：`ssl certificate
 expired` vs `tls handshake cert expired`，fei=0、hao=2）。仲裁前任何 A/B 结论
 都不得越过主指标持平的事实：三层 r@5/r@10/MRR 仍 A=B。
+
+仲裁决议（2026-10-23）：11 项 fei=1/hao=0 取 0；8 项 fei=0/hao=1 取 1；
+1 项 fei=0/hao=2（case 36）取 2。仲裁后与 hao 完全一致，产出
+`eval-real/baseline-final.json`：`rel 2=41 / 1=11 / 0=64`，`--gate` PASS。
+
+最终口径：三层主指标（literal/paraphrase r@5、semantic r@10、MRR）仍 A=B，
+`discrimination A!=B layers=0/3`；NDCG@10（仅报告、不过门）在最终标注下 A≥B
+（paraphrase 0.992 vs 0.976、semantic 1.000 vs 0.945、literal 1.000 vs 1.000），
+样本量小、CI 重叠，不构成显著优势结论。M4 的结论仍是“机械门 PASS；A 不劣于 B，
+质量优势未成立”；真实历史事故语料未闭环。
 
 **仍缺的两项输入只能由人提供，AI 不代劳：**
 
