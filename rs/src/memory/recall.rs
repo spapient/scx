@@ -15,6 +15,7 @@ use crate::memory::bucket::candidate_buckets;
 use crate::memory::field;
 use crate::memory::index::{self, Index};
 use crate::memory::store::{self, Meta};
+use crate::memory::synonyms;
 use crate::terms::build_mem_terms;
 use std::collections::HashMap;
 
@@ -131,7 +132,8 @@ fn score_pass(
     ];
     // P4.3 实体边：共享实体加权（0 则关，兼容老 meta 缺省开 1.0）。
     let edge_w = param(meta, "edge_weight", 1.0);
-    let qterms = build_mem_terms(query);
+    let orig_qterms = build_mem_terms(query);
+    let qterms = synonyms::expand_terms(&orig_qterms);
     let qfields = field::extract(query);
     let qf = [
         &qfields.error_code,
@@ -296,6 +298,14 @@ fn score_pass(
                 }
             }
         }
+        // P4.3 实体边加权：共享实体数 × edge_weight（词面弱但实体强相关的兄弟 case 越线）。
+        if dctx.edge_shared > 0 {
+            fb += dctx.edge_shared as f64 * edge_w;
+        }
+        // 纯词面/字段/实体支持度：quality/decay 只能给已有证据的 case 加权，
+        // 不能让零匹配 case 仅凭质量先验进入 top-k（否则任意候选会以 0 分返回，
+        // 评估会把“按库顺序碰巧命中”误算成召回）。
+        let support = score + fb;
         // O4 时间衰减：age 用 updated_at（去重/反馈会刷新它），τ 随状态动态。
         let tau_eff = match dctx.status.as_str() {
             "solved" => param(meta, "decay_tau_solved", 180.0),
@@ -312,9 +322,8 @@ fn score_pass(
             1.0
         };
         fb += dctx.quality * q_prior * qsign;
-        // P4.3 实体边加权：共享实体数 × edge_weight（词面弱但实体强相关的兄弟 case 越线）。
-        if dctx.edge_shared > 0 {
-            fb += dctx.edge_shared as f64 * edge_w;
+        if support <= 0.0 {
+            continue;
         }
         hits.push(RecallHit {
             id: id.clone(),
@@ -323,10 +332,11 @@ fn score_pass(
         });
     }
 
-    // score_max：所有 query 词 idf 加字段全命中，作 sim 归一化分母。
+    // score_max：原始 query 词 idf 加字段全命中，作 sim 归一化分母。
+    // 同义扩展只增加命中机会，不得抬高分母把原始 query 的 sim 稀释。
     // 直觉：query 每个词在 case 中都命中一次 ≈ sim=1（tf>1 或字段命中可再溢出）。
     let mut sm = 0.0;
-    for qt in &qterms {
+    for qt in &orig_qterms {
         let d = *df.get(qt).unwrap_or(&0) as f64;
         sm += ((1.0 + (n - d + 0.5) / (d + 0.5)).ln()).max(0.0);
     }
@@ -536,7 +546,13 @@ mod tests {
         assert_eq!(hits.len(), 1, "build 桶 case 不应参与打分");
         // 无家族命中的 query：候选桶空 → 全量扫（防漏召）。
         let all = recall(&root, "hello", 5).unwrap();
-        assert_eq!(all.len(), 2);
+        assert_eq!(all.len(), 1, "零词面支持的 case 不得以 0 分进入结果");
+        let hello_case = store::read_case(&root, &all[0].id).unwrap();
+        assert_eq!(hello_case.bucket, "build");
+        assert!(
+            recall(&root, "zzz-no-match", 5).unwrap().is_empty(),
+            "无任何支持度的 query 必须返回空结果，而不是按库顺序兜底"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -206,6 +206,7 @@
 - [x] CLI 接线（豁免 --query）+ 4 单测（dcg 标准公式 / metric recall·mrr·ndcg / baseline 严格容错解析 / summary 300 字符截断）+ golden `memory_eval`（重冻含 l1 行）。
 - [x] **`--recall-only` 口径修正（查看模式）**：原 P2.6 对 --recall-only 也做 L1 自适应过滤（hits 不达置信判据时整段滤空，演示/标注时看不到真实召回）→ 改为输出真实 top-k；主流程 `--recall` 的 mem 段保持 L1 直答过滤不变。**P4.4 再加固：--recall-only/--eval/bench 一律只读（不写 qmap/L1 历史/缓存）。** golden 25 例零漂移（既有用例本就达判据，输出不变）。
 - **验证**：golden 25 例冻结；库 71 测试全绿；clippy/release/行数门禁过。
+- **2026-10-23 召回健壮性修复**：桶判定大小写（`Jdbc.java` 误归 network）、network 优先级压过 disk、零支持度候选按库顺序兜底三个缺陷已修；A/B 均过滤零分候选；A 增加高精度领域同义词扩展（B 保持纯词面）。104 条截断诊断 paraphrase A 1.000 vs B 0.949；10 条合成多相关诊断 A r@10 0.867 vs B 0.700。均为诊断集，不是独立人工证据。见 `docs/m4-evidence-report.md` §12。
 - **初测发现（诚实记录）**：3 例合成标注中 literal/semantic 层 A=B=1.0；paraphrase 层 A mrr=0.5 vs B=1.0（单例，PRF/MMR 使相关 case 排第 2）——说明统计向量在释义层无优势属预期（与设计稿 §10 判断一致）；l1 首测 hits=1 total=2 rate=0.500（literal 字段精确命中过判据；semantic 未过；paraphrase 相关 case 未进 top1 不计分母）。**P4.4 状态声明：当前仅 3 例合成标注初测，M4 证据门（30–50 组人工标注）未通过，正式标注集上线前不宣称 A/B 收益。**
 - **标注采集就绪**：`docs/eval-baseline-template.md`（v1.0）给出 baseline.json 格式、三层造例规则、rel 分级、id 获取流程（--recall-detail 核对）与红线——30-50 组人工标注的采集门槛已文档化，只差人工产出。
 

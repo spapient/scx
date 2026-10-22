@@ -31,7 +31,7 @@
 
 - **库 + CLI 分离**：筛选引擎是纯函数库 `src/lib.rs` 的 `scx::compress(&text, &query, &Config) -> Outcome`（零文件、环境与进程 I/O，无随机源）；`src/main.rs` 仅是外壳（参数、输入、统计与 JSON 格式化）。
 - **模块划分**：`src/terms.rs`（词面/切词/估算）、`src/classify.rs`（错误/标记/结构分类）、`src/norm.rs`（归一化/ANSI 剥离）是独立纯函数层（`pub(crate)`），可供记忆库等外部复用；`src/memory/` 为记忆知识库（store/recall/feedback/eval/edge/stats 等 20+ 文件）。历史门禁为单文件 <500 行；当前 `cli_args.rs`、`eval.rs`、`recall.rs`、`annotate.rs` 等已因后续功能增长超过，拆分列为待办（CI 未强制该门禁）。
-- **复用**：任何程序或脚本可直接 `use scx::compress`；`cargo test` 当前含 111 个库测试 + 8 个 CLI 单元测试 + 5 个 CLI 集成测试 + 1 个 golden 差分门（29 例冻结基线、87 个 expected 文件），覆盖种子不变量、空结果回退、`--force` 重复行、配置边界、CJK 词面、ANSI/CR 分析、diff 正文识别、输入上限边界、CRLF 与确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放/库盘点/并发读写/`--gate` 机械证据门与字节级回归。
+- **复用**：任何程序或脚本可直接 `use scx::compress`；`cargo test` 当前含 114 个库测试 + 8 个 CLI 单元测试 + 5 个 CLI 集成测试 + 1 个 golden 差分门（29 例冻结基线、87 个 expected 文件），覆盖种子不变量、空结果回退、`--force` 重复行、配置边界、CJK 词面、ANSI/CR 分析、diff 正文识别、输入上限边界、CRLF 与确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放/库盘点/并发读写/`--gate` 机械证据门与字节级回归。
 - **golden 差分门**：`tests/golden.rs` 将 29 个代表性用例的 stdout/stderr/退出码与冻结基线（`tests/golden/expected/`）逐字节对比；有意变更语义时重冻基线：`cargo test --test golden update_baselines -- --ignored --nocapture`，并人工审查基线明细。CI 当前执行格式、clippy、单测、golden 和 release 构建。
 - **零依赖性能基准**：`examples/bench.rs`（50k 行约 2.5MB 全流程中位耗时，`std::time::Instant`，5 次采样取中位），防无声性能退化。运行：`cargo run --release --example bench --locked --target-dir "$TEMP/scx-cargo-target"`。
 
@@ -55,6 +55,8 @@ scx --stats --mem-dir D:\scx-mem
 ```
 
 ## 版本变动
+
+- **2026-10-23 召回桶/零分/同义词修复**：`bucket::lower` 现在真正做 Unicode 小写（此前 `Jdbc.java` 匹配不到 `jdbc`）；`network` 桶降到 `disk/build/runtime` 之后，`disk/storage ... timeout` 不再被通用 `timeout` 吞掉；A/B 都过滤零词面/字段/实体支持度候选，不再靠库顺序零分“碰巧命中”；A 管线增加高精度领域同义词扩展（`replication→replica`、`delay→lag`、`memory→heap` 等），B 保持纯词面。104 条截断诊断：literal 1.000/1.000，paraphrase **A 1.000 vs B 0.949**，semantic 0.933/0.933；10 条合成多相关诊断：A r@10 **0.867 vs B 0.700**。均为诊断集，不是独立人工证据；原始 40 组 gate 仍为 A=B=1.000、全 rel=2。
 
 - **2026-10-23 M4 机械门实测**：`eval-real` 40 组（literal 14 / paraphrase 13 / semantic 13），非 literal 26 条 `judge=fei`，`--eval --gate` **PASS / exit 0**；但 40/40 rel=2、三层 A=B（判别层 0/3），只能写“A 不劣于 B”，不能写“A 优于 B”。真实历史语料、弱相关/负例与双人复核仍未闭环。
 

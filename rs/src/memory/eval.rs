@@ -486,11 +486,15 @@ pub(crate) fn plain(root: &str, query: &str, k: usize) -> std::io::Result<Vec<Re
                 score += idf * f * (k1 + 1.0) / denom;
             }
         }
-        hits.push(RecallHit {
-            id: id.clone(),
-            score,
-            sim: 0.0,
-        });
+        // 与 A 管线的零支持度过滤同口径：没有 query 词命中的 case 不得以
+        // 0 分进入 top-k，否则 B 会靠库顺序“碰巧命中”被高估。
+        if score > 0.0 {
+            hits.push(RecallHit {
+                id: id.clone(),
+                score,
+                sim: 0.0,
+            });
+        }
     }
     let mut sm = 0.0;
     for qt in &qterms {

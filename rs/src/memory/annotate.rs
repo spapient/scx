@@ -14,42 +14,9 @@
 //! 被 eval 解析器忽略）；expected 用 hash16 后缀（免日期漂移）。
 
 use crate::memory::model::Case;
+use crate::memory::synonyms::PAIRS as SYN;
 use crate::memory::{recall, store, util::fnv1a};
 use std::io::{self, Write};
-
-/// 同义词表（中英混排，词面字面替换；顺序即确定性索引）。
-/// 覆盖项目典型领域词：db/pool/timeout/conn/disk/storage/queue/worker 等。
-const SYN: &[(&str, &str)] = &[
-    ("db", "database"),
-    ("database", "db"),
-    ("timeout", "超时"),
-    ("超时", "timeout"),
-    ("conn_id", "连接id"),
-    ("连接id", "conn_id"),
-    ("connection", "连接"),
-    ("连接", "connection"),
-    ("pool", "连接池"),
-    ("连接池", "pool"),
-    ("池", "pool"),
-    ("error", "错误"),
-    ("错误", "error"),
-    ("errno", "错误码"),
-    ("错误码", "errno"),
-    ("disk", "磁盘"),
-    ("磁盘", "disk"),
-    ("storage", "存储"),
-    ("存储", "storage"),
-    ("full", "满"),
-    ("满", "full"),
-    ("queue", "队列"),
-    ("队列", "queue"),
-    ("fail", "失败"),
-    ("失败", "fail"),
-    ("crash", "崩溃"),
-    ("崩溃", "crash"),
-    ("worker", "线程"),
-    ("线程", "worker"),
-];
 
 /// 一条自动标注（对应 baseline.json 的一个 case 条目 + 证据链）。
 pub struct AnnotatedCase {

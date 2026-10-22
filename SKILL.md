@@ -57,5 +57,5 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 
 ## 构建与来源（自举，零同步）
 Rust 零依赖、离线构建、无平台分支；已复检 macOS arm64 / macOS x86_64 / Linux x86_64 三目标 cargo check。
-- 架构：筛选引擎是纯函数库（`scx::compress`，零 I/O），CLI 仅是外壳；任何程序可直接复用库；记忆库独立为 `scx::memory` 模块（store/recall/feedback/eval/edge/stats 等 20+ 文件；历史门禁为单文件 <500 行，当前 `cli_args.rs`/`eval.rs`/`recall.rs`/`annotate.rs` 已超，拆分列为待办）；`cargo test` 当前 111 库 + 8 CLI + 5 集成 + golden 29 例差分门，覆盖不变量、fail-open、空结果回退、`--force` 重复行、配置边界、CJK、ANSI/CR 分析、输入上限边界、CRLF、确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放/库盘点/并发读写/qmap 残尾修复/索引溢出/数字身份、脱敏幂等/控制字符转义/gc fix 豁免、中文词表桥接、盲测裁决链/bootstrap CI/`--gate` 机械证据门（含占位裁决/饱和标签告警）与 29 用例逐字节回归门（有意变更语义时重冻：`cargo test --test golden update_baselines -- --ignored`）。
+- 架构：筛选引擎是纯函数库（`scx::compress`，零 I/O），CLI 仅是外壳；任何程序可直接复用库；记忆库独立为 `scx::memory` 模块（store/recall/feedback/eval/edge/stats 等 20+ 文件；历史门禁为单文件 <500 行，当前 `cli_args.rs`/`eval.rs`/`recall.rs`/`annotate.rs` 已超，拆分列为待办）；`cargo test` 当前 114 库 + 8 CLI + 5 集成 + golden 29 例差分门，覆盖不变量、fail-open、空结果回退、`--force` 重复行、配置边界、CJK、ANSI/CR 分析、输入上限边界、CRLF、确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放/库盘点/并发读写/qmap 残尾修复/索引溢出/数字身份、脱敏幂等/控制字符转义/gc fix 豁免、中文词表桥接、盲测裁决链/bootstrap CI/`--gate` 机械证据门（含占位裁决/饱和标签告警）与 29 用例逐字节回归门（有意变更语义时重冻：`cargo test --test golden update_baselines -- --ignored`）。
 - 入口脚本自动检测：二进制缺失或源码更新时自动构建；跨机器只需携带技能目录文本与源码，二进制永远各平台本机构建（需要 Rust；macOS 用 brew/rustup，Windows 用 rustup）。详细命令见 README.md。

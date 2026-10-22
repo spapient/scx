@@ -2,7 +2,7 @@
 
 日期：2026-10-23（初版 2026-10-22）
 库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨ + real-eval 机械门
-状态：**机械门 PASS（40 组/三层达标/judge=fei，exit 0）；M4 质量优势未成立——全 rel=2、三层 A=B、语料为合成样例且单裁决人**
+状态：**机械门 PASS（40 组/三层达标/judge=fei，exit 0）；M4 人工质量证据未闭环——全 rel=2、三层 A=B、语料为合成样例且单裁决人。后续合成诊断集 A 在 paraphrase/多相关层领先（§12），但不是独立人工证据。**
 
 ## 1. 结论先行
 
@@ -194,7 +194,7 @@ eval: cases=40 layers=literal,paraphrase,semantic multi-rel=0 single-rel=40
 layer literal: n=14 A r@5=1.000 mrr=1.000 | B r@5=1.000 mrr=1.000
 layer paraphrase: n=13 A r@5=1.000 mrr=1.000 | B r@5=1.000 mrr=1.000
 layer semantic: n=13 A r@10=1.000 mrr=1.000 | B r@10=1.000 mrr=1.000
-l1: hits=17 total=40 rate=0.425
+l1: hits=19 total=40 rate=0.475
 gate: total=40 need>=30 (target 30-50) PASS
 gate: layer literal n=14 need>=10 PASS
 gate: layer paraphrase n=13 need>=10 PASS
@@ -210,7 +210,7 @@ gate: PASS
 exit 0。裁决文件为 `eval-real/baseline.json`；非 literal 26 条均有
 `judge.by=fei` 与 UTC `judge.date`，literal 14 条为原文对照并预填 `rel=2`。
 
-同次代码门禁：`cargo test --locked --quiet` 通过 111 库 + 8 CLI + 5 集成
+同次代码门禁：`cargo test --locked --quiet` 通过 114 库 + 8 CLI + 5 集成
 （golden 1 passed / 1 ignored）；`cargo clippy --all-targets -- -D warnings`
 零告警。
 
@@ -230,3 +230,67 @@ exit 0。裁决文件为 `eval-real/baseline.json`；非 literal 26 条均有
 人工裁决元数据完整、`--gate` PASS、A 不劣于 B”；不得引用“A 优于 B”、
 “显著提升”或“M4 独立质量证据完全闭环”。要闭环后者，仍需真实来源语料、
 弱相关/负例、双人复核与可区分的 A/B 结果。
+
+2026-10-23 后续合成诊断（§12）在截断 paraphrase 与 10 条多相关 query 上
+测出 A 领先，但标签由已知目标/主题规则生成，不能替代上述独立人工证据。
+
+## 12. 召回桶、零支持度与同义词扩展（2026-10-23）
+
+用 40 组原 query 做前 2/3 词和去数字截断，生成 104 条诊断 query（不是人工
+证据，只用于找退化），暴露了三个实现缺陷：
+
+1. **桶判定的大小写 bug**：`bucket::lower` 误用了不做小写的 `norm_into`，
+   `Jdbc.java`/`DATABASE` 匹配不到小写关键词表；`database query timeout`
+   被 `timeout` 抢先归到 `network`，候选桶 `db` 时漏掉目标。
+2. **网络桶优先级过宽**：`network` 含通用词 `timeout`，排在 `disk` 前面，
+   使 `disk io read timeout`/`storage read timeout` 被归到 network；query
+   `storage read` 的候选桶是 disk，目标被过滤。
+3. **零支持度候选被当作命中**：没有 query 词命中的 case 仍以 `score=0`
+   按库顺序返回；`replication delay`（与目标 `replica lag` 无词面交集）
+   在 A rank 9 / B rank 5 被“碰巧命中”，指标虚高。
+
+修复：
+
+- `bucket::lower` 改为 `push_analysis_lower`（真正 Unicode 小写）；
+- 家族优先级改为 `db / disk / build / runtime / network`，通用 `timeout`
+  不再压过具体存储/构建/运行时信号；
+- 只有通用 `timeout`/`connection`、没有 socket/dns/tcp 等专用词时返回空候选桶
+  （全量扫），避免把跨 db/disk 的通用症状硬筛到 network；
+- A 管线与 eval B 基线都过滤零词面/字段/实体支持度候选；quality/decay 只能
+  给已有证据的 case 加权，不能单独把 case 带进 top-k；
+- A 管线只使用高精度同义词扩展（`replication↔replica`、`delay↔lag`、
+  `memory↔heap`、`failure↔failed` 等），不扩展 `db↔database` 这类高频宽词；
+  B 基线保持纯词面；
+- 新增大小写、disk-vs-network、通用网络词、零支持度、同义词回归测试；golden
+  `memory_eval_verbose` 重冻（仅删除零分噪声候选，指标行不变）。
+
+104 条诊断 query 复跑（同义词扩展后）：
+
+```text
+literal:   n=35 A r@5=1.000 mrr=1.000 | B r@5=1.000 mrr=1.000
+paraphrase:n=39 A r@5=1.000 mrr=1.000 | B r@5=0.949 mrr=0.949
+semantic:  n=30 A r@10=0.933 mrr=0.933 | B r@10=0.933 mrr=0.933
+```
+
+`replication delay` 的 A 现在通过 `replication→replica`、`delay→lag` 在 rank1
+命中目标，B 仍是 `(no hits)`；`Java 进程内存耗尽` 的 A/B 都无词面命中。
+零分兜底已移除，不再出现“按库顺序碰巧命中”。
+
+另用 10 条 **合成多相关** 诊断（一个 query 对应 2–3 个 topic 相关 case，
+rel=2/1；不是人工证据）测得：
+
+```text
+semantic: n=10 A r@10=0.867 mrr=0.950 ndcg=0.895
+          B r@10=0.700 mrr=0.950 ndcg=0.780
+```
+
+A 的召回提升来自同义词扩展补到 pytest 等零字面重叠目标；但 A 仍会在
+`test failure` 中插入低相关候选，不能把该诊断当成质量优势的最终证据。
+复现：`pwsh -NoProfile -File scripts/recall-probe.ps1`。
+
+结论边界：这些数字支持“同义词扩展 + 零支持度过滤 + 桶修复”是有效机制，
+不构成 M4 独立人工证据；M4 的 rel=2 饱和、单一裁决人、真实来源缺失仍未解决。
+
+代码门禁：`cargo test --locked --quiet` 114 库 + 8 CLI + 5 集成全绿，
+golden 1 passed / 1 ignored；`cargo clippy --all-targets -- -D warnings`
+零告警。

@@ -7,7 +7,8 @@
 //! 零依赖、确定性：纯函数，无 I/O、无随机源。
 
 /// 家族关键词表：每个家族一组小写子串（匹配字段/词表任意位置）。
-/// 顺序即优先级：主桶取首个命中的家族。
+/// 顺序即优先级：主桶取首个命中的家族。network 放最后：`timeout` 是通用词，
+/// 不能把同时带 `disk/storage`、`cargo/build` 或 `oom/thread` 的具体场景吞掉。
 const FAMILIES: [(&str, &[&str]); 5] = [
     (
         "db",
@@ -26,21 +27,6 @@ const FAMILIES: [(&str, &[&str]); 5] = [
             "database",
             "连接池",
             "数据库",
-        ],
-    ),
-    (
-        "network",
-        &[
-            "socket",
-            "http",
-            "tcp",
-            "udp",
-            "dns",
-            "connect",
-            "network",
-            "网络",
-            "连接超时",
-            "timeout",
         ],
     ),
     (
@@ -66,6 +52,21 @@ const FAMILIES: [(&str, &[&str]); 5] = [
             "null",
             "空指针",
             "异常",
+        ],
+    ),
+    (
+        "network",
+        &[
+            "socket",
+            "http",
+            "tcp",
+            "udp",
+            "dns",
+            "connect",
+            "network",
+            "网络",
+            "连接超时",
+            "timeout",
         ],
     ),
 ];
@@ -103,14 +104,28 @@ pub(crate) fn candidate_buckets(query: &str) -> Vec<String> {
     if q.split_whitespace().any(|w| w == "db") && !out.contains(&"db".to_string()) {
         out.push("db".to_string());
     }
+    // `timeout`/`connection` 是跨 db/network/disk/build 的通用症状。query 只有
+    // 这类通用词时硬筛 network 会把 `database query timeout` / `storage timeout`
+    // 直接滤掉；返回空候选桶 = 全量扫，宁多勿漏。出现 socket/dns/tcp 等网络
+    // 专用词时才筛 network。
+    let only_generic_network = out.len() == 1
+        && out[0] == "network"
+        && !["socket", "http", "tcp", "udp", "dns", "network", "网络"]
+            .iter()
+            .any(|k| q.contains(k));
+    if only_generic_network {
+        return Vec::new();
+    }
     out
 }
 
-/// 归一化小写（复用 norm 的 push_analysis_lower 口径，输入已是小写关键词表）。
+/// 归一化小写（剥离 ANSI/CR 后做 Unicode 小写）。
+///
+/// 旧实现误用 `norm_into`：它不做小写，`Jdbc.java`/`DATABASE` 等大写词
+/// 匹配不到小写关键词表，导致本该归 db 的 case 被 timeout 抢先归到 network。
 fn lower(s: &str) -> String {
     let mut out = String::new();
-    let mut run = String::new();
-    crate::norm::norm_into(s, &mut out, &mut run);
+    crate::norm::push_analysis_lower(s, &mut out);
     out
 }
 
@@ -127,6 +142,18 @@ mod tests {
         assert_eq!(bucket_of(&[], &["cargo".into()], "error"), "build");
         assert_eq!(bucket_of(&[], &[], "NullPointerException stack"), "runtime");
         assert_eq!(bucket_of(&[], &[], "hello world"), "other");
+        // 大小写不能改变桶判定：`Jdbc.java` 必须先命中 db，而不是被
+        // 后面的 timeout 抢先归到 network。
+        assert_eq!(
+            bucket_of(&[], &["query".into(), "timeout".into()], "at Jdbc.java:88"),
+            "db"
+        );
+        assert_eq!(bucket_of(&[], &[], "DISK FULL"), "disk");
+        // `timeout` 不能盖过具体存储场景：disk/storage 优先于通用 network。
+        assert_eq!(
+            bucket_of(&[], &["disk".into(), "read".into(), "timeout".into()], ""),
+            "disk"
+        );
         // P4.4+ 优化：裸 "db" 词级精确匹配——terms 含独立 "db" 归 db 桶；
         // "db.java:4" 是单一 token，不得误归 db 场景桶（编译失败场景归 build）。
         assert_eq!(bucket_of(&[], &["db".into()], ""), "db");
@@ -156,5 +183,15 @@ mod tests {
             "子串不得乱扩 db 桶: {:?}",
             c5
         );
+        assert!(
+            candidate_buckets("timeout").is_empty(),
+            "通用 timeout 必须全量扫，不能硬筛 network"
+        );
+        assert!(
+            candidate_buckets("connection").is_empty(),
+            "通用 connection 必须全量扫"
+        );
+        assert!(candidate_buckets("socket timeout").contains(&"network".to_string()));
+        assert!(candidate_buckets("storage timeout").contains(&"disk".to_string()));
     }
 }

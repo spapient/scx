@@ -33,6 +33,7 @@ pub mod qmap;
 pub mod recall;
 pub mod stats;
 pub mod store;
+pub(crate) mod synonyms;
 pub mod util;
 
 pub use recall::RecallHit;
