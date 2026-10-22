@@ -34,7 +34,7 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 ## 记忆知识库（RAG，v0.4.1 之上的 P1–P4.3 增量；默认关闭，零依赖离线确定性）
 
 - `--store 1`：把本次压缩的证据块沉淀为记忆条目（默认不存，需显式开启；`--mem-dir DIR` 指定库目录，缺省 `~/.scx-memory`）。
-- `--recall K`：旁路召回最近 K 条相关经验（`mem:` 段，绝不进入正文）；`--recall-only` 只召回；`--recall-detail` 追加 `summary:` 要点行（error_code + file_loc + 错误行）。
+- `--recall K`：旁路召回最近 K 条相关经验（`mem:` 段，绝不进入正文）；`--recall-only` 只召回（查看模式：输出真实 top-k，不做 L1 过滤，方便调参/标注/演示）；`--recall-detail` 追加 `summary:` 要点行（error_code + file_loc + 错误行）。主流程 `--recall` 的 mem 段仍按 L1 置信判据直答输出。
 - `--rate good|bad <case-id>`：反馈标注（状态机 solved/regressed + 质量分 + 词级调权 + L1 基线自适应）。
 - `--rebuild` / `--gc` / `--delete <case-id>`：库维护（重建倒排索引 / 过期清理 / 删除条目）。
 - `--eval <baseline.json>`：冻结标注集重放，输出三层（literal/paraphrase/semantic）A/B 对拍表（A=完整统计管线 vs B=朴素 BM25）+ `l1:` 直答命中率；`--l1-hist`：运行期 [l1] 命中分布出表。标注采集见 `docs/eval-baseline-template.md`。

@@ -24,6 +24,8 @@ jobs:
         run: cargo test --manifest-path rs/Cargo.toml --locked
       - name: Release build
         run: cargo build --manifest-path rs/Cargo.toml --release --locked
+      - name: Bench (compress 50k lines)
+        run: cargo run --manifest-path rs/Cargo.toml --release --locked --example bench
       - name: CLI smoke (Unix)
         if: runner.os != 'Windows'
         run: sh bin/run --version

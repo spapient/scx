@@ -35,6 +35,23 @@
 - **golden 差分门**：`tests/golden.rs` 将 25 个代表性用例的 stdout/stderr/退出码与冻结基线（`tests/golden/expected/`）逐字节对比；有意变更语义时重冻基线：`cargo test --test golden update_baselines -- --ignored --nocapture`，并人工审查基线明细。CI 当前执行格式、clippy、单测、golden 和 release 构建。
 - **零依赖性能基准**：`examples/bench.rs`（50k 行约 2.5MB 全流程中位耗时，`std::time::Instant`，5 次采样取中位），防无声性能退化。运行：`cargo run --release --example bench --locked --target-dir "$TEMP/scx-cargo-target"`。
 
+## 快速体验（记忆库端到端演示）
+
+一键跑通 store → recall（literal/变体/实体）→ rate 反馈 → eval 对拍 → l1-hist → rebuild（Windows PowerShell）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
+```
+
+脚本用临时库（`$TEMP\scx-demo-mem`）沉淀 16 个真实感问题 case 并跑全链路；演示 case 同时是人工标注（`docs/eval-baseline-template.md`）的现成素材。手动体验的最短路径：
+
+```bash
+# 1) 沉淀经验（日志/报错先经 scx 压缩再入库）
+scx --query "db timeout" --store 1 --mem-dir D:\scx-mem err.log
+# 2) 同类问题二次遇到：本地召回直答（--recall-only 看真实 top-k；--recall-detail 带要点行）
+scx --query "数据库连接池超时" --recall 3 --recall-detail --mem-dir D:\scx-mem
+```
+
 ## 版本变动
 
 - **0.4.1 + 记忆库（P1–P4.3，2026-10-22）**：`scx::memory` 知识库落地——存储/摄取/召回（自研统计向量：BM25+字段加权+时间衰减+MMR+词级调权+场景桶+实体边一跳）、qmap 记忆图、反馈双环、倒排索引（mmap+坏段自愈）、库维护（rebuild/gc/delete）、评估系统（--eval A/B 对拍 + l1 命中率 + --l1-hist）、要点摘要（--recall-detail）；门禁终态 71 库 + 8 CLI + 4 集成 + golden 25 例全绿，1 万条库召回中位 2.1ms。设计/计划/标注模板见 docs/。

@@ -1,6 +1,6 @@
 # scx 记忆知识库（RAG）实施计划
 
-版本：v1.6（可执行计划，基于设计稿 v0.2）
+版本：v1.7（可执行计划，基于设计稿 v0.2；v1.7 增补 --recall-only 查看模式口径修正 + 演示脚本 scripts/demo.ps1）
 日期：2026-10-22
 作者：scx 项目组
 状态：P1 已完成；P2 已完成；P3 已完成；P4.1/P4.2/P4.3 已完成（评估 A/B 对拍 + L1 命中率出表 + --l1-hist + 要点摘要 + 实体边一跳）；P4.4/P4.5 可选未启动（按触发条件）
@@ -195,6 +195,7 @@
 - [x] 报告行：`eval: cases=N layers=...` + 每层 `layer X: n=.. A r@5/mrr/ndcg | B r@5/mrr/ndcg` + **`l1: hits=.. total=.. rate=..`（P2 阶段门残余补全：L1 直答命中率出表，top1 命中相关 case 中满足置信判据的比例，判据参数 l1_base/margin 随库自适应）**。
 - [x] **`--l1-hist`（P2 阶段门残余补全之二）**：读 meta.toml [l1] hist（recall 侧每次 push top1.sim 的滑动历史）出运行期直答分布——`l1hist: n=.. mean=.. p50=.. p90=.. over_base=.. (base=..)`；冒烟验证：store+recall 一次后 `n=1 mean=1.000 over_base=1`。
 - [x] CLI 接线（豁免 --query）+ 4 单测（dcg 标准公式 / metric recall·mrr·ndcg / baseline 严格容错解析 / summary 300 字符截断）+ golden `memory_eval`（重冻含 l1 行）。
+- [x] **`--recall-only` 口径修正（查看模式）**：原 P2.6 对 --recall-only 也做 L1 自适应过滤（hits 不达置信判据时整段滤空，演示/标注时看不到真实召回）→ 改为输出真实 top-k；主流程 `--recall` 的 mem 段保持 L1 直答过滤不变。golden 25 例零漂移（既有用例本就达判据，输出不变）。
 - **验证**：golden 25 例冻结；库 71 测试全绿；clippy/release/行数门禁过。
 - **初测发现（诚实记录）**：3 例合成标注中 literal/semantic 层 A=B=1.0；paraphrase 层 A mrr=0.5 vs B=1.0（单例，PRF/MMR 使相关 case 排第 2）——说明统计向量在释义层无优势属预期（与设计稿 §10 判断一致）；l1 首测 hits=1 total=2 rate=0.500（literal 字段精确命中过判据；semantic 未过；paraphrase 相关 case 未进 top1 不计分母）。多例标注集上线后由本系统出正式对拍表。
 - **标注采集就绪**：`docs/eval-baseline-template.md`（v1.0）给出 baseline.json 格式、三层造例规则、rel 分级、id 获取流程（--recall-detail 核对）与红线——30-50 组人工标注的采集门槛已文档化，只差人工产出。

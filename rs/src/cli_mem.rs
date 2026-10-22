@@ -3,9 +3,7 @@
 //! 红线：记忆只做旁路（mem 段）或评分先验，绝不注入压缩正文；本模块不触碰
 //! compress 引擎（N1/N2/N3）。库路径与参数已在 Opts 解析，此处只负责调用。
 
-use scx::memory::{
-    l1_params, l1_qualified, recall_cases, store_case, CaseStats, Memory, RecallHit,
-};
+use scx::memory::{recall_cases, store_case, CaseStats, Memory, RecallHit};
 use std::io::{self, Write};
 
 /// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
@@ -33,6 +31,8 @@ pub(crate) fn write_mem_lines(
 }
 
 /// 召回路径：先按 query 召回（线性扫描 BM25+字段加权），只输出 mem 段。
+/// `--recall-only` 是查看模式：输出真实 top-k（不做 L1 过滤，方便调参/标注/演示）；
+/// 主流程 `--recall` 的 mem 段仍走 L1 直答过滤（见 main.rs，同 §5.1 口径）。
 pub(crate) fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) {
     let m = match Memory::open(mem_dir) {
         Ok(m) => m,
@@ -48,18 +48,9 @@ pub(crate) fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) {
             std::process::exit(2);
         }
     };
-    // P2.6：L1 自适应过滤（§5.1），与主流程同口径。
-    let (base, margin) = l1_params(&m.root);
-    let top1 = hits.first().map(|h| h.sim).unwrap_or(0.0);
-    let top2 = hits.get(1).map(|h| h.sim).unwrap_or(0.0);
-    let qualified: Vec<_> = if l1_qualified(top1, top2, base, margin, 1.0) {
-        hits
-    } else {
-        Vec::new()
-    };
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    if let Err(e) = write_mem_lines(&mut out, &qualified, &m.root, detail) {
+    if let Err(e) = write_mem_lines(&mut out, &hits, &m.root, detail) {
         report_write_error(e);
     }
 }
