@@ -67,6 +67,10 @@ scx --query "db timeout conn_id" --recall-only --recall 5 --recall-detail --mem-
 
 ## 5. 推荐采集流程（照做即可）
 
+> 不想手写 JSON：先运行 `powershell -ExecutionPolicy Bypass -File scripts\real-eval-build.ps1`。
+> 首次会生成 `eval-real\cases.csv`（列：`query,layer,case_id,note`）；填 30+ 行后再运行一次，
+> 脚本会生成 `eval-real\baseline.json`：literal 自动 `rel=2`，paraphrase/semantic 自动 `judge:null`。
+
 1. 挑 30-50 个真实问题（日志/报错/diff 复盘记录），每个问题选 1 个代表 case。
 2. 每个 case 写 1 条 literal + 1 条 paraphrase（同一问题可多条变体）；semantic 层按主题另造。
 3. 全部 expected 用 `--recall-detail` 核对过 id 后填入。
