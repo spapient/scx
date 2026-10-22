@@ -57,14 +57,23 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
     Ok(removed)
 }
 
-/// 删除一个 case（物理删除 + 惰性作废索引）。返回是否存在。
+/// 删除一个 case（物理删除 + 惰性作废索引 + 库代际前进）。
+/// id 先过白名单校验（P4.4 评审处置：禁 `..`/路径分隔符逃逸）。
+/// 返回是否存在。
 pub(crate) fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
+    if !store::valid_id(id) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid case id: {id}"),
+        ));
+    }
     let dir = Path::new(root).join("cases").join(id);
     if !dir.exists() {
         return Ok(false);
     }
     fs::remove_dir_all(dir)?;
     store::bump_case_count(root)?;
+    crate::memory::meta::bump_gen(root)?;
     // 惰性作废：删除即失效，不重建（回退线性；rebuild/自动构建恢复）。
     index::invalidate(root);
     let _ = fs::remove_file(qmap_path(root));
@@ -75,8 +84,11 @@ fn qmap_path(root: &str) -> PathBuf {
     Path::new(root).join("index").join("qmap.bin")
 }
 
-/// 写 meta.toml [df] 快照（来自 index::build）+ [params] index_force=1
-/// （rebuild 副作用，失败静默旁路）。
+/// 写 meta.toml [df] 快照（来自 index::build）。
+/// P4.4 评审处置：**不再写 index_force** —— 索引只是缓存，重建不得改变召回语义
+/// （线性路径 df/avgdl 为候选桶口径，索引路径为全库口径，强制切换会让排序跳变、
+/// A/B 评估不可比）。索引启用只由规模阈值决定；强制索引走独立测试参数（预留）。
+/// 失败静默旁路。
 fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
     let p = Path::new(root).join("meta.toml");
     let Ok(txt) = fs::read_to_string(&p) else {
@@ -84,7 +96,6 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
     };
     let mut out: Vec<String> = Vec::new();
     let mut wrote_df = false;
-    let mut wrote_force = false;
     for line in txt.lines() {
         let t = line.trim();
         if t.starts_with('[') && t.ends_with(']') {
@@ -106,11 +117,6 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
             out.push(format!("case_count = {n_docs}"));
             continue;
         }
-        if t.starts_with("index_force") {
-            out.push("index_force = 1".to_string());
-            wrote_force = true;
-            continue;
-        }
         out.push(line.to_string());
     }
     if !wrote_df && !df.is_empty() {
@@ -119,10 +125,6 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
             out.push(format!("{k} = {v}"));
         }
         out.push("".to_string());
-    }
-    if !wrote_force {
-        out.push("[params]".to_string());
-        out.push("index_force = 1".to_string());
     }
     let mut body = out.join("\n");
     body.push('\n');
@@ -179,10 +181,12 @@ mod tests {
         assert!(index::load(&root).unwrap().is_some(), "索引已建");
         let m = store::load_meta(&root).unwrap();
         assert!(
-            m.params
-                .iter()
-                .any(|(k, v)| k == "index_force" && *v == 1.0),
-            "rebuild 后 index_force=1（小库强制索引）"
+            !m.params.iter().any(|(k, _)| k == "index_force"),
+            "P4.4 评审处置：rebuild 不再写 index_force（索引只是缓存，重建不得改变召回语义）"
+        );
+        assert!(
+            m.df.iter().any(|(k, _)| k == "alpha"),
+            "rebuild 落 df 快照（领域 IDF 数据源）"
         );
         let _ = fs::remove_dir_all(&root);
     }
@@ -218,7 +222,7 @@ mod tests {
         let now = store::utc_now();
         let older = format!("2020-01-01{}", &now[10..]);
         c.updated_at = older;
-        store::write_case(&root, &c, &[]).unwrap();
+        store::write_case(&root, &c).unwrap();
         let removed = gc(&root).unwrap();
         assert_eq!(removed, 1, "regressed 超期应被清");
         assert_eq!(store::list_ids(&root).unwrap().len(), 1);

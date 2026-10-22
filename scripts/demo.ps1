@@ -43,7 +43,7 @@ foreach ($c in $cases) {
 }
 Write-Host "   库已建：$mem"
 
-# 返回完整 case id（--rate 需要完整 id）；eval 用 hash8 后缀。
+# 返回完整 case id（--rate 需要完整 id；id 为 <日期>_<16 位 hex>，eval 可只用 hash16/hash8 后缀）。
 function CaseId([string]$q) {
     foreach ($d in Get-ChildItem "$mem\cases" -Directory) {
         $cj = Get-Content (Join-Path $d.FullName "case.json") -Raw -ErrorAction SilentlyContinue

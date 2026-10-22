@@ -42,8 +42,10 @@ type Df = HashMap<String, usize>;
 
 /// 归一化得分 → 排序；sim 独立供 L1 置信判定。
 pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<RecallHit>> {
+    let meta = store::load_meta(root)?;
     // O2 query 记忆图：精确同指纹直接返回历史 top-k（跳过整个 BM25 管线）。
-    if let Some((_, qhits, 0)) = crate::memory::qmap::lookup(root, query, 2)? {
+    // 代际失效：条目 gen < 当前 meta.gen 视为过期（库已变化，走 BM25 重算）。
+    if let Some((_, qhits, 0)) = crate::memory::qmap::lookup(root, query, 2, meta.gen)? {
         let mut hits: Vec<RecallHit> = qhits
             .into_iter()
             .map(|h| RecallHit {
@@ -55,7 +57,6 @@ pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<R
         hits.truncate(k);
         return Ok(hits);
     }
-    let meta = store::load_meta(root)?;
     // P3.1 倒排路径：规模达标或 --rebuild 强制（index_force=1）时启用。
     // 索引缺失/坏段（P3.2）→ 自动重建覆盖（build 确定性），重建失败回退线性扫描。
     let idx = if index::use_index(&meta) {
@@ -470,7 +471,7 @@ mod tests {
         let now = store::utc_now();
         let older = format!("2024-07-24{}", &now[10..]);
         c.updated_at = older;
-        store::write_case(&root, &c, &[]).unwrap();
+        store::write_case(&root, &c).unwrap();
 
         let hits = recall(&root, "数据库连接超时", 2).unwrap();
         assert_eq!(hits.len(), 2);

@@ -1,12 +1,11 @@
-//! 存储层：case.json / vec.bin 的读写与目录布局。
+//! 存储层：case.json 的读写与目录布局。
 //!
-//! 布局（与设计 v0.2 一致）：
+//! 布局（与设计 v0.2 一致；P4.4 评审处置移除 vec.bin——无效产物不再落盘）：
 //! ```text
 //! <root>/
-//! ├── meta.toml              # meta.rs：schema 版本、引擎版本、case 数、参数
+//! ├── meta.toml              # meta.rs：schema 版本、引擎版本、case 数、代际、参数
 //! ├── cases/<id>/
-//! │   ├── case.json          # 文档 + 元数据（序列化在本文件）
-//! │   └── vec.bin            # 稀疏向量（词ID→u16 量化权重）
+//! │   └── case.json          # 文档 + 元数据（序列化在本文件）
 //! └── index/                 # 索引缓存（P3 起）
 //! ```
 //!
@@ -22,7 +21,6 @@ pub(crate) use crate::memory::model::SCHEMA;
 pub use crate::memory::model::{Case, CaseStats, Feedback, Fields};
 pub(crate) use crate::memory::util::{case_id, fnv1a, utc_now};
 use std::fs;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 // ---- case 读写（JSON 子集）----
@@ -189,15 +187,36 @@ pub(crate) fn val_to_case(v: &Val) -> Case {
     c
 }
 
-/// 写一个 case 到库（含 case.json + vec.bin 骨架）。
-pub(crate) fn write_case(root: &str, c: &Case, sparse: &[(u32, u16)]) -> std::io::Result<()> {
+/// 原子写：临时文件 + rename（std::fs::rename 在 Windows 上以 ReplaceFile 语义覆盖目标）。
+/// 防崩溃/磁盘满留下半写文件；并发写以最后一次 rename 为准。
+pub(crate) fn atomic_write(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = p.with_extension("tmp");
+    fs::write(&tmp, bytes)?;
+    fs::rename(&tmp, p)
+}
+
+/// 写一个 case 到库（原子写 case.json）。
+/// P4.4 评审处置：不再生成 vec.bin（实际始终以空稀疏写入、召回从未使用，
+/// 属无效产物，徒增 I/O 与 schema 维护成本）；每次写 case 视为库状态变化，
+/// 自动 bump 库代际（qmap/会话缓存据此失效，保证新 case/反馈对同 query 召回可见）。
+pub(crate) fn write_case(root: &str, c: &Case) -> std::io::Result<()> {
     let dir = Path::new(root).join("cases").join(&c.id);
     fs::create_dir_all(&dir)?;
     let mut json_txt = json::write(&case_to_val(c));
     json_txt.push('\n');
-    fs::write(dir.join("case.json"), json_txt.as_bytes())?;
-    write_vec(&dir.join("vec.bin"), c.id.as_bytes(), sparse)?;
-    Ok(())
+    atomic_write(&dir.join("case.json"), json_txt.as_bytes())?;
+    crate::memory::meta::bump_gen(root)
+}
+
+/// case id 合法性（P4.4 评审处置）：白名单字符集，禁路径分隔符与 `..` 逃逸。
+/// 任何以 id 拼接路径的入口（--delete/--rate/gc）必须先过此校验。
+pub(crate) fn valid_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && !id.contains("..")
 }
 
 /// 读一个 case。
@@ -250,63 +269,13 @@ pub(crate) fn bump_case_count(root: &str) -> std::io::Result<()> {
     }
     let mut body = out_lines.join("\n");
     body.push('\n');
-    fs::write(&p, body.as_bytes())?;
+    atomic_write(&p, body.as_bytes())?;
     Ok(())
 }
 
 // ---- vec.bin（稀疏向量二进制）----
-// [magic u32 "SCCV"][version u16][case_id_len u16][case_id bytes]
-// [nonzero_count u16][ (word_id u32)(weight u16) * N ]
-
-const VEC_MAGIC: u32 = 0x5643_4353; // "SCCV" little-endian
-
-pub(crate) fn write_vec(p: &Path, case_id: &[u8], sparse: &[(u32, u16)]) -> std::io::Result<()> {
-    let mut buf: Vec<u8> = Vec::with_capacity(16 + case_id.len() + sparse.len() * 6);
-    buf.extend_from_slice(&VEC_MAGIC.to_le_bytes());
-    buf.extend_from_slice(&1u16.to_le_bytes());
-    buf.extend_from_slice(&(case_id.len() as u16).to_le_bytes());
-    buf.extend_from_slice(case_id);
-    buf.extend_from_slice(&(sparse.len() as u16).to_le_bytes());
-    for (wid, w) in sparse {
-        buf.extend_from_slice(&wid.to_le_bytes());
-        buf.extend_from_slice(&w.to_le_bytes());
-    }
-    let mut f = fs::File::create(p)?;
-    f.write_all(&buf)?;
-    Ok(())
-}
-
-pub(crate) fn read_vec(p: &Path) -> std::io::Result<(String, Vec<(u32, u16)>)> {
-    let mut f = fs::File::open(p)?;
-    let mut buf = Vec::new();
-    f.read_to_end(&mut buf)?;
-    if buf.len() < 10 {
-        return Err(std::io::Error::other("vec.bin too short"));
-    }
-    let magic = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-    if magic != VEC_MAGIC {
-        return Err(std::io::Error::other("vec.bin bad magic"));
-    }
-    let _ver = u16::from_le_bytes(buf[4..6].try_into().unwrap());
-    let id_len = u16::from_le_bytes(buf[6..8].try_into().unwrap()) as usize;
-    if buf.len() < 8 + id_len + 2 {
-        return Err(std::io::Error::other("vec.bin truncated id"));
-    }
-    let id = String::from_utf8_lossy(&buf[8..8 + id_len]).into_owned();
-    let n = u16::from_le_bytes(buf[8 + id_len..10 + id_len].try_into().unwrap()) as usize;
-    let rest = &buf[10 + id_len..];
-    if rest.len() < n * 6 {
-        return Err(std::io::Error::other("vec.bin truncated sparse"));
-    }
-    let mut sparse = Vec::with_capacity(n);
-    for i in 0..n {
-        let base = i * 6;
-        let wid = u32::from_le_bytes(rest[base..base + 4].try_into().unwrap());
-        let w = u16::from_le_bytes(rest[base + 4..base + 6].try_into().unwrap());
-        sparse.push((wid, w));
-    }
-    Ok((id, sparse))
-}
+// P4.4 评审处置：vec.bin 始终以空稀疏写入、召回从未使用，属无效产物；
+// 读写函数与 VEC_MAGIC 已整体移除，schema 2 兼容读（老库遗留文件被忽略）。
 
 #[cfg(test)]
 mod tests {
@@ -338,13 +307,17 @@ mod tests {
         c.feedback = Feedback { good: 2, bad: 0 };
         c.quality = 1.0;
 
-        write_case(root, &c, &[(7, 3000), (42, 1200)]).unwrap();
+        write_case(root, &c).unwrap();
         let loaded = read_case(root, &id).unwrap();
         assert_eq!(loaded, c, "case 往返必须逐字段一致");
-
-        let (vid, sparse) = read_vec(&case_path(root, &id).with_file_name("vec.bin")).unwrap();
-        assert_eq!(vid, id);
-        assert_eq!(sparse, vec![(7, 3000), (42, 1200)]);
+        assert!(
+            !Path::new(root)
+                .join("cases")
+                .join(&id)
+                .join("vec.bin")
+                .exists(),
+            "vec.bin 已移除：无效产物不再落盘"
+        );
 
         let ids = list_ids(root).unwrap();
         assert_eq!(ids, vec![id]);

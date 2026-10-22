@@ -64,7 +64,7 @@ fn main() {
             let dst = cases_dir.join(&new_id);
             std::fs::create_dir(&dst).unwrap();
             std::fs::copy(src.join("case.json"), dst.join("case.json")).unwrap();
-            std::fs::copy(src.join("vec.bin"), dst.join("vec.bin")).unwrap();
+            // P4.4 评审处置：vec.bin 已移除（无效产物），不再复制。
             let p = dst.join("case.json");
             let txt = std::fs::read_to_string(&p).unwrap();
             std::fs::write(
@@ -89,11 +89,12 @@ fn main() {
 
     // 4) 召回基准：5 个词面不同的 query（词面差异 >2 编辑距离，规避 qmap 直达，
     //    强制走倒排索引路径）；每个 query 命中同一子集（fam{..} 每份 50 条）。
+    //    只读模式（read_only=true）：基准不得污染库状态（qmap/L1 历史）。
     let mut samples: Vec<u128> = Vec::new();
     for i in 0..5 {
         let q = format!("fam{} cid{} tail{}", letters(42), letters(42), letters(i));
         let t = Instant::now();
-        let hits = recall_cases(&root, &q, 5).expect("召回失败");
+        let hits = recall_cases(&root, &q, 5, true).expect("召回失败");
         samples.push(t.elapsed().as_micros());
         assert!(!hits.is_empty(), "bench query 必须召回");
     }
@@ -103,7 +104,14 @@ fn main() {
         "recall: median {} us | samples {:?} us | top1 sim={}",
         med,
         samples,
-        recall_cases(&root, &format!("fam{} cid{}", letters(42), letters(42)), 1).unwrap()[0].sim
+        recall_cases(
+            &root,
+            &format!("fam{} cid{}", letters(42), letters(42)),
+            1,
+            true
+        )
+        .unwrap()[0]
+            .sim
     );
     if med < 5_000 {
         println!("P3 gate: PASS (10k recall < 5ms)");

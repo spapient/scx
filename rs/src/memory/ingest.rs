@@ -15,6 +15,10 @@ use crate::memory::store::{self, Case, CaseStats};
 use std::fs;
 use std::path::Path;
 
+/// 单 case 文本上限（P4.4 评审处置）：64 MiB 输入不得直接变 64 MiB case；
+/// 超过上限拒绝摄取并明确报错（旁路，不影响压缩主流程）。
+pub(crate) const MAX_CASE_TEXT: usize = 1024 * 1024; // 1 MiB
+
 /// 计算去重指纹（确定性、无随机源）。
 pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut q = String::new();
@@ -52,13 +56,23 @@ pub(crate) fn ingest(
     forces: Vec<String>,
 ) -> std::io::Result<bool> {
     store::ensure_root(root)?;
+    if text.len() > MAX_CASE_TEXT {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "case text too large: {} bytes > {} (scx-memory MAX_CASE_TEXT)",
+                text.len(),
+                MAX_CASE_TEXT
+            ),
+        ));
+    }
     let fp = fingerprint(query, text);
     if let Some(existing) = find_by_fp(root, &fp)? {
         let mut c = store::read_case(root, &existing)?;
         let now = store::utc_now();
         c.updated_at = now;
         // 反馈/状态等历史字段保留，仅刷新元数据。
-        store::write_case(root, &c, &[])?;
+        store::write_case(root, &c)?;
         return Ok(false);
     }
     let now = store::utc_now();
@@ -73,19 +87,26 @@ pub(crate) fn ingest(
     // O6：摄取即分桶（error_code 家族哈希），检索时按候选桶过滤扫描。
     let fvec = c.fields.error_code.clone();
     c.bucket = crate::memory::bucket::bucket_of(&fvec, &c.terms, text);
-    store::write_case(root, &c, &[])?;
+    store::write_case(root, &c)?;
     store::bump_case_count(root)?;
     Ok(true)
 }
 
 /// 按 id 删除一个 case（tombstone 化前的简单物理删除，P3 换惰性标记）。
 pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
+    if !store::valid_id(id) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid case id: {id}"),
+        ));
+    }
     let dir = Path::new(root).join("cases").join(id);
     if !dir.exists() {
         return Ok(false);
     }
     fs::remove_dir_all(dir)?;
     store::bump_case_count(root)?; // 先减后加语义由 bump 内部处理（见 store.rs）
+    crate::memory::meta::bump_gen(root)?;
     Ok(true)
 }
 

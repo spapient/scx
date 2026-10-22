@@ -3,7 +3,11 @@
 //! `--eval <baseline.json>`：冻结评估输入重放——标注集（query → expected case + 分层 +
 //! 相关度 0..2）上分三层（literal/paraphrase/semantic）输出 Recall@5 / MRR / NDCG@10。
 //! 对拍：A = 完整统计管线（recall::recall，字段加权+PRF+衰减+MMR+反馈+桶过滤），
-//! B = 朴素 BM25 基线（`plain`：全库候选、纯词面 BM25、无任何增强），A/B 差异即增强项收益。
+//! B = 朴素词面基线（`plain`：全库候选、纯词面匹配 + 长度归一化、无任何增强）。
+//!
+//! 口径说明（P4.4 评审处置）：打分词表两边都是去重词表（tf 恒 1），实际是
+//! "二值词面匹配 + 长度归一化 + 字段加权"，不是严格 BM25（tf 项恒为 1）。
+//! A/B 同词表对比仍公平，但任何结论须按此口径引用，不宣称"BM25 增益"。
 //! 确定性：无随机源，同 baseline + 同库 → 同输出，可重放存档。
 //!
 //! `case_summary`：L1 直答要点行（error_code + file_loc + 证据块首个非空行，≤300 字符），
@@ -83,18 +87,31 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
     Ok(out)
 }
 
-/// expected/rel 的 id 匹配：支持完整 id 或 hash8 后缀（golden 免日期漂移）。
+/// expected/rel 的 id 匹配：支持完整 id、hash 后缀（tail）或 hash 后缀的后 8 位
+/// （P4.4 评审处置：case id 由 32 位升级 64 位后 tail=16 hex，标注集里的旧 8 位
+/// hash 仍须匹配，golden 免日期漂移）。
 fn hit_expected(exp: &[String], id: &str) -> bool {
     let tail = id.rsplit('_').next().unwrap_or(id);
-    exp.iter().any(|e| e == id || e == tail)
+    let tail8 = if tail.len() >= 8 {
+        &tail[tail.len() - 8..]
+    } else {
+        tail
+    };
+    exp.iter().any(|e| e == id || e == tail || e == tail8)
 }
 
 fn rel_of(c: &EvalCase, id: &str) -> f64 {
     let tail = id.rsplit('_').next().unwrap_or(id);
+    let tail8 = if tail.len() >= 8 {
+        &tail[tail.len() - 8..]
+    } else {
+        tail
+    };
     c.rel
         .get(id)
         .copied()
         .or_else(|| c.rel.get(tail).copied())
+        .or_else(|| c.rel.get(tail8).copied())
         .unwrap_or(0.0)
 }
 

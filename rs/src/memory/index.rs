@@ -26,7 +26,6 @@
 
 #![cfg_attr(not(test), allow(dead_code))]
 
-use crate::memory::mmap;
 use crate::memory::postings::{
     self, crc32, postings_path, varint_get, varint_put, POST_MAGIC, POST_VER,
 };
@@ -175,7 +174,10 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
 }
 
 /// 加载索引。不存在 → Ok(None)；校验失败 → Err(corrupt)（调用方重建或回退线性）。
-/// 命中进程内缓存（root+mtime 键）直接复用 Arc，零重复 parse；否则 mmap 优先解析。
+/// 命中进程内缓存（root+mtime 键）直接复用 Arc，零重复 parse；否则整文件 fs::read
+/// 一次读入解析（P4.4 评审处置：移除手写 unsafe mmap FFI——无文件锁前提下
+/// 另一进程 rebuild/truncate 会使映射失效；1 万条库 postings 仅数 MB，fs::read
+/// 在页缓存下开销可忽略，契约零 unsafe）。
 pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
     let p = postings_path(root);
     if !p.exists() {
@@ -190,12 +192,8 @@ pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
             }
         }
     }
-    let parsed: Option<Index> = if let Ok(m) = mmap::Mmap::open(&p) {
-        parse(m.as_slice()).map(Some)
-    } else {
-        let buf = fs::read(&p)?;
-        parse(&buf).map(Some)
-    }?;
+    let buf = fs::read(&p)?;
+    let parsed: Option<Index> = parse(&buf).map(Some)?;
     let arc = parsed.map(Arc::new);
     if let (Some(mt), Some(idx)) = (mtime, arc.as_ref()) {
         let mut g = cache().lock().unwrap();
@@ -204,7 +202,7 @@ pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
     Ok(arc)
 }
 
-/// 解析字节切片为内存索引（纯函数，输入来自 mmap 或 fs::read）。
+/// 解析字节切片为内存索引（纯函数，输入来自 fs::read）。
 pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
     let corrupt = |m: &str| std::io::Error::other(format!("postings.bin corrupt: {m}"));
     if buf.len() < 14 {

@@ -12,11 +12,12 @@ pub(crate) fn fnv1a(s: &str) -> u64 {
     h
 }
 
-/// case id：`<YYYY-MM-DD>_<hash8>`，hash = FNV(query‖\0‖text) 低 32 位 hex。
+/// case id：`<YYYY-MM-DD>_<hash16>`，hash = FNV-1a(query‖\0‖text) 全 64 位 hex。
+/// 64 位避免持久化资产的生日碰撞（32 位在 1 万条时碰撞率 ≈1.2%）。
 pub(crate) fn case_id(now: &str, query: &str, text: &str) -> String {
     let day = &now[0..10]; // YYYY-MM-DD
     let h = fnv1a(&format!("{query}\u{0}{text}"));
-    format!("{day}_{:08x}", h & 0xffff_ffff)
+    format!("{day}_{h:016x}")
 }
 
 /// UTC 时间戳（秒精度，ISO-8601 `YYYY-MM-DDTHH:MM:SSZ`，零依赖自算日历）。
@@ -152,7 +153,7 @@ mod tests {
     fn case_id_shape() {
         let id = case_id("2026-10-22T00:00:00Z", "q", "t");
         assert!(id.starts_with("2026-10-22_"));
-        assert_eq!(id.len(), 11 + 8);
+        assert_eq!(id.len(), 11 + 16, "64 位 hash = 16 hex");
         assert_eq!(id, case_id("2026-10-22T00:00:00Z", "q", "t"));
     }
 

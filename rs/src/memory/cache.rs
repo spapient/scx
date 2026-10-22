@@ -19,6 +19,9 @@ pub(crate) struct CacheHit {
     pub hits: Vec<(String, f64, f64)>,
     /// 首次命中时间（Unix 秒），用于窗口判定。
     pub born: u64,
+    /// 写入时的库代际（P4.4 评审处置）：与当前 meta gen 不符即 miss，
+    /// 防止 store/rate/delete 后会话缓存仍返回旧快照。
+    pub gen: u64,
 }
 
 struct Cache {
@@ -46,10 +49,17 @@ impl Cache {
         }
     }
 
-    fn get(&mut self, key: u64, now: u64) -> Option<CacheHit> {
+    fn get(&mut self, key: u64, now: u64, gen: u64) -> Option<CacheHit> {
         match self.map.get(&key) {
             Some(h) => {
-                if now.saturating_sub(h.born) > WINDOW_SECS {
+                if h.gen != gen {
+                    // 库代际变化（store/rate/delete）：快照过期，清键走正常召回。
+                    self.map.remove(&key);
+                    if let Some(pos) = self.q.iter().position(|k| *k == key) {
+                        self.q.remove(pos);
+                    }
+                    None
+                } else if now.saturating_sub(h.born) > WINDOW_SECS {
                     // 窗口外：清除该键（会话级过期，非 LRU 淘汰）。
                     self.map.remove(&key);
                     if let Some(pos) = self.q.iter().position(|k| *k == key) {
@@ -93,23 +103,24 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// 窗口内命中 → Some(快照)；否则 None（调用方走正常召回）。
-pub(crate) fn get(query: &str) -> Option<Vec<(String, f64, f64)>> {
+/// 窗口内且代际一致命中 → Some(快照)；否则 None（调用方走正常召回）。
+pub(crate) fn get(query: &str, gen: u64) -> Option<Vec<(String, f64, f64)>> {
     let key = qkey(query);
     let now = now_secs();
     cache()
         .lock()
         .ok()
-        .and_then(|mut c| c.get(key, now))
+        .and_then(|mut c| c.get(key, now, gen))
         .map(|h| h.hits)
 }
 
 /// 写入缓存（召回成功后调用；快照含 score/sim，供 L1 过滤复用）。
-pub(crate) fn put(query: &str, hits: Vec<(String, f64, f64)>) {
+/// 记录写入时的库代际，代际变化后自动失效。
+pub(crate) fn put(query: &str, hits: Vec<(String, f64, f64)>, gen: u64) {
     let key = qkey(query);
     let born = now_secs();
     if let Ok(mut c) = cache().lock() {
-        c.put(key, CacheHit { hits, born });
+        c.put(key, CacheHit { hits, born, gen });
     }
 }
 
@@ -125,19 +136,26 @@ mod tests {
     #[test]
     fn session_cache_hit_within_window() {
         reset();
-        assert_eq!(get("缓存命中测试 query alpha"), None, "首次必 miss");
+        assert_eq!(get("缓存命中测试 query alpha", 1), None, "首次必 miss");
         put(
             "缓存命中测试 query alpha",
             vec![("c1".to_string(), 1.5, 0.9), ("c2".to_string(), 1.2, 0.8)],
+            1,
         );
-        let hit = get("缓存命中测试 query alpha").unwrap();
+        let hit = get("缓存命中测试 query alpha", 1).unwrap();
         assert_eq!(
             hit,
             vec![("c1".to_string(), 1.5, 0.9), ("c2".to_string(), 1.2, 0.8)],
             "窗口内二次命中（快照逐字段一致）"
         );
         // 变体 query（词面不同，指纹不同）不命中。
-        assert_eq!(get("缓存命中测试 query beta"), None);
+        assert_eq!(get("缓存命中测试 query beta", 1), None);
+        // 代际变化：库 gen 前进后同 query 必须 miss（走正常召回）。
+        assert_eq!(
+            get("缓存命中测试 query alpha", 2),
+            None,
+            "gen 不符必须 miss"
+        );
     }
 
     #[test]
@@ -148,8 +166,9 @@ mod tests {
         let old = CacheHit {
             hits: vec![("cx".to_string(), 1.0, 1.0)],
             born: now_secs() - WINDOW_SECS - 1,
+            gen: 0,
         };
         cache().lock().unwrap().put(key, old);
-        assert_eq!(get("过期测试 query"), None, "窗口外必须 miss");
+        assert_eq!(get("过期测试 query", 0), None, "窗口外必须 miss");
     }
 }

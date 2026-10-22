@@ -41,7 +41,8 @@ pub(crate) fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) {
             std::process::exit(2);
         }
     };
-    let hits = match recall_cases(&m.root, query, k) {
+    // 查看模式：只读召回，零库状态写入（qmap/会话缓存/L1 历史）。
+    let hits = match recall_cases(&m.root, query, k, true) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("scx: memory recall failed: {}", e);

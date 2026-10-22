@@ -1,14 +1,18 @@
 //! query 记忆图（O2）：query 指纹 → top-k (case_id, score, sim) 有向映射，append-only。
 //!
-//! 二进制布局（自产自销，零依赖）：
+//! 二进制布局（自产自销，零依赖；v2 起条目带库代际 gen）：
 //! ```text
 //! [magic u32 "QMAP"][version u16]
-//! (rec)*  每条： [qlen u16][norm(query) bytes][n u16][(idlen u8)(id bytes)(score f32)(sim f32)*n][recency u32]
+//! (rec)*  每条： [qlen u16][norm(query) bytes][n u16][(idlen u8)(id bytes)(score f32)(sim f32)*n][recency u32][gen u64]
 //! ```
 //! 查询：归一化 query → 精确匹配直达（跳过 BM25，直接还原 score/sim 快照）；
 //! 编辑距离 ≤2 变体走轻量重排（新词面仍参与 BM25，见 recall 接线）。
 //! 同指纹多条时取 recency 最新。append-only：新条目追加；`rebuild` 合并（P3 落地，
 //! 本文件提供 load+write 原语）。
+//!
+//! 代际失效（P4.4 评审处置）：条目记录写入时的库 gen；lookup 时 `entry.gen < 当前 gen`
+//! 的条目一律视为过期（新 case / 反馈 / 删除后，同 query 必须走 BM25 重算，
+//! 快照不得遮挡新状态）。
 
 use crate::memory::util::{edit_dist, fnv1a, utc_now};
 use std::fs;
@@ -16,7 +20,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 const QMAP_MAGIC: u32 = 0x5041_4d51; // "QMAP"
-const QMAP_VER: u16 = 1;
+const QMAP_VER: u16 = 2;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct QHit {
@@ -32,14 +36,21 @@ pub(crate) struct QEntry {
     pub hits: Vec<QHit>,
     /// recency：Unix 秒（取 UTC 时间戳）。
     pub recency: u32,
+    /// 写入时的库代际；低于当前 meta gen 即过期。
+    pub gen: u64,
 }
 
 fn qmap_path(root: &str) -> PathBuf {
     Path::new(root).join("index").join("qmap.bin")
 }
 
-/// 追加一条记忆图记录（不查重，rebuild 时合并）。
-pub(crate) fn append(root: &str, query: &str, hits: &[(String, f64, f64)]) -> std::io::Result<()> {
+/// 追加一条记忆图记录（不查重，rebuild 时合并）；记录写入时的库代际 `gen`。
+pub(crate) fn append(
+    root: &str,
+    query: &str,
+    hits: &[(String, f64, f64)],
+    gen: u64,
+) -> std::io::Result<()> {
     let q = norm_query(query);
     let mut buf: Vec<u8> = Vec::with_capacity(64 + hits.iter().map(|h| h.0.len()).sum::<usize>());
     buf.extend_from_slice(&(q.len() as u16).to_le_bytes());
@@ -53,6 +64,7 @@ pub(crate) fn append(root: &str, query: &str, hits: &[(String, f64, f64)]) -> st
     }
     let now = utc_now();
     buf.extend_from_slice(&(fnv1a(&now) as u32).to_le_bytes());
+    buf.extend_from_slice(&gen.to_le_bytes());
 
     let p = qmap_path(root);
     let mut f = if p.exists() {
@@ -133,22 +145,31 @@ pub(crate) fn load_all(root: &str) -> std::io::Result<Vec<QEntry>> {
         if !ok {
             break; // 尾部损坏：丢弃该残段（append-only 下无影响，rebuild 可重建）
         }
-        if i + 4 > buf.len() {
+        if i + 12 > buf.len() {
             break;
         }
         let recency = u32::from_le_bytes(buf[i..i + 4].try_into().unwrap());
-        i += 4;
-        out.push(QEntry { q, hits, recency });
+        let gen = u64::from_le_bytes(buf[i + 4..i + 12].try_into().unwrap());
+        i += 12;
+        out.push(QEntry {
+            q,
+            hits,
+            recency,
+            gen,
+        });
     }
     Ok(out)
 }
 
 /// 精确或编辑距离 ≤ max 的记忆图命中（取 recency 最新；精确优先）。
+/// `meta_gen` = 当前库代际：`entry.gen < meta_gen` 的旧快照视为过期（跳过），
+/// 保证 store/rate/delete 后的库变化不被快照遮挡。
 /// 返回 (命中的归一化 query, hits, 编辑距离)。
 pub(crate) fn lookup(
     root: &str,
     query: &str,
     max: usize,
+    meta_gen: u64,
 ) -> std::io::Result<Option<(String, Vec<QHit>, usize)>> {
     let q = norm_query(query);
     let entries = load_all(root)?;
@@ -156,6 +177,9 @@ pub(crate) fn lookup(
     let mut best: Option<(String, Vec<QHit>, usize)> = None;
     let mut best_rec: u32 = 0;
     for e in entries {
+        if e.gen < meta_gen {
+            continue; // 库已变化：快照过期，不走直达。
+        }
         if e.q == q {
             exact = Some((e.q.clone(), e.hits.clone(), 0));
         }
@@ -206,6 +230,7 @@ pub(crate) fn merge(root: &str) -> std::io::Result<()> {
             buf.extend_from_slice(&h.sim.to_le_bytes());
         }
         buf.extend_from_slice(&e.recency.to_le_bytes());
+        buf.extend_from_slice(&e.gen.to_le_bytes());
     }
     fs::write(&p, buf)
 }
@@ -229,9 +254,10 @@ mod tests {
             &root,
             "数据库连接超时",
             &[("c1".to_string(), 1.19, 1.0), ("c2".to_string(), 0.8, 0.6)],
+            3,
         )
         .unwrap();
-        let hit = lookup(&root, "数据库连接超时", 0).unwrap();
+        let hit = lookup(&root, "数据库连接超时", 0, 3).unwrap();
         assert_eq!(
             hit,
             Some((
@@ -252,25 +278,28 @@ mod tests {
             ))
         );
         // 编辑距离 1 变体：加一字。
-        let v = lookup(&root, "数据库连接超时了", 2).unwrap();
+        let v = lookup(&root, "数据库连接超时了", 2, 3).unwrap();
         assert!(v.is_some(), "≤2 变体应命中记忆图");
         assert_eq!(v.unwrap().2, 1);
         // 编辑距离 4：不命中。
-        let far = lookup(&root, "磁盘空间不足了", 2).unwrap();
+        let far = lookup(&root, "磁盘空间不足了", 2, 3).unwrap();
         assert!(far.is_none());
+        // 代际失效：库 gen 前进后，同 gen 快照必须过期（走 BM25 重算）。
+        let stale = lookup(&root, "数据库连接超时", 0, 4).unwrap();
+        assert!(stale.is_none(), "gen 落后的快照不得直达");
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
     fn qmap_append_only_and_latest_wins() {
         let root = tmp_root("ap");
-        append(&root, "q", &[("a".to_string(), 1.0, 0.9)]).unwrap();
-        append(&root, "q", &[("b".to_string(), 0.7, 0.5)]).unwrap();
+        append(&root, "q", &[("a".to_string(), 1.0, 0.9)], 1).unwrap();
+        append(&root, "q", &[("b".to_string(), 0.7, 0.5)], 1).unwrap();
         let all = load_all(&root).unwrap();
         assert_eq!(all.len(), 2, "append-only：两次追加为两条");
         // lookup 精确命中取 recency 最新——两条 recency 相同(同一秒)时取先写，
         // 因此断言至少能命中且 id 为其中一条。
-        let hit = lookup(&root, "q", 0).unwrap().unwrap();
+        let hit = lookup(&root, "q", 0, 1).unwrap().unwrap();
         assert!(hit.1[0].id == "a" || hit.1[0].id == "b");
         let _ = fs::remove_dir_all(&root);
     }
@@ -278,13 +307,13 @@ mod tests {
     #[test]
     fn qmap_handles_corrupt_tail() {
         let root = tmp_root("cor");
-        append(&root, "数据库超时", &[("c1".to_string(), 1.0, 0.9)]).unwrap();
+        append(&root, "数据库超时", &[("c1".to_string(), 1.0, 0.9)], 1).unwrap();
         // 截断尾部：损坏最后 2 字节。
         let p = qmap_path(&root);
         let mut buf = fs::read(&p).unwrap();
         buf.truncate(buf.len() - 2);
         fs::write(&p, &buf).unwrap();
-        let r = lookup(&root, "数据库超时", 0);
+        let r = lookup(&root, "数据库超时", 0, 1);
         assert!(r.is_ok(), "尾部损坏必须容错，不崩溃");
         // 残段被丢弃（该条 recency 缺失）→ 命中可为空；rebuild 后恢复。
         let _ = fs::remove_dir_all(&root);

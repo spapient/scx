@@ -28,6 +28,10 @@ pub(crate) fn ensure_root(root: &str) -> std::io::Result<()> {
 
 pub(crate) struct Meta {
     pub case_count: usize,
+    /// 库代际（P4.4 评审处置）：任何 case 写入 / 删除都 +1；
+    /// qmap 快照与会话缓存条目记录写入时的 gen，`gen < 当前` 视为过期
+    /// （新 case / 反馈 / 删除必须对同 query 召回可见）。
+    pub gen: u64,
     pub df: Vec<(String, usize)>,
     pub params: Vec<(String, f64)>,
     /// O5 词级调权表：词 → 增量权重（Rocchio 简化版，§3.9），无词条=0。
@@ -42,6 +46,7 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
     let p = Path::new(root).join("meta.toml");
     let txt = fs::read_to_string(p)?;
     let mut case_count = 0usize;
+    let mut gen = 0u64;
     let mut df = Vec::new();
     let mut params = Vec::new();
     let mut word_w = Vec::new();
@@ -63,6 +68,8 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
             "" => {
                 if k == "case_count" {
                     case_count = v.parse().unwrap_or(0);
+                } else if k == "gen" {
+                    gen = v.parse().unwrap_or(0);
                 }
             }
             "df" => {
@@ -94,11 +101,55 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
     }
     Ok(Meta {
         case_count,
+        gen,
         df,
         params,
         word_w,
         l1_hist,
     })
+}
+
+/// 库代际 +1 并原子写回（case 写入/删除的兜底失效信号；失败返回 Err，
+/// 由调用方决定是否致命——case 已写盘，gen 落后只会多一次重算，不丢数据）。
+pub(crate) fn bump_gen(root: &str) -> std::io::Result<()> {
+    let p = Path::new(root).join("meta.toml");
+    let txt = fs::read_to_string(&p)?;
+    let mut next: Option<u64> = None;
+    let mut out: Vec<String> = Vec::new();
+    for line in txt.lines() {
+        let t = line.trim();
+        if !t.starts_with('[') && !t.starts_with('#') {
+            if let Some(eq) = t.find('=') {
+                if t[..eq].trim() == "gen" {
+                    if let Ok(v) = t[eq + 1..].trim().parse::<u64>() {
+                        next = Some(v + 1);
+                        out.push(format!("gen = {}", next.unwrap()));
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push(line.to_string());
+    }
+    let gen = next.unwrap_or(1);
+    if next.is_none() {
+        // 无 gen 行（老库）：在 case_count 之后补一行。
+        if let Some(ci) = out.iter().position(|l| l.trim().starts_with("case_count")) {
+            out.insert(ci + 1, format!("gen = {gen}"));
+        } else {
+            out.push(format!("gen = {gen}"));
+        }
+    }
+    let mut body = out.join("\n");
+    body.push('\n');
+    atomic_write(&p, body.as_bytes())
+}
+
+/// 原子写 meta.toml（临时文件 + rename；防崩溃半写）。
+fn atomic_write(p: &Path, body: &[u8]) -> std::io::Result<()> {
+    let tmp = p.with_extension("tmp");
+    fs::write(&tmp, body)?;
+    fs::rename(&tmp, p)
 }
 
 /// 追加一条 top1_sim 到 L1 历史并重写 meta.toml（O5 自适应基线数据源）。
@@ -144,7 +195,7 @@ pub(crate) fn push_l1_hist(root: &str, sim: f64) {
     }
     let mut body = out.join("\n");
     body.push('\n');
-    let _ = fs::write(&p, body.as_bytes());
+    let _ = atomic_write(&p, body.as_bytes());
 }
 
 /// 词级调权：good 词 +step / bad 词 −step（上下限 ±0.5，§3.9），重写 [word_w] 节。
@@ -203,7 +254,7 @@ pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
     }
     let mut body = out.join("\n");
     body.push('\n');
-    let _ = fs::write(&p, body.as_bytes());
+    let _ = atomic_write(&p, body.as_bytes());
 }
 
 /// 写/更新 [params] 单个参数：节内有 key 原位替换，无则节内末尾插入，无节则文件尾建节。
@@ -244,12 +295,12 @@ pub(crate) fn set_param(root: &str, key: &str, val: f64) -> std::io::Result<()> 
     }
     let mut body = lines.join("\n");
     body.push('\n');
-    fs::write(&p, body.as_bytes())
+    atomic_write(&p, body.as_bytes())
 }
 
 fn meta_toml(case_count: usize) -> String {
     format!(
-        "schema = {SCHEMA}\nembed_engine = \"{ENG_VER}\"\ncreated_at = \"{}\"\ncase_count = {case_count}\n\n[params]\nbm25_k1 = 1.2\nbm25_b = 0.75\nfield_weight_error_code = 3.0\nfield_weight_file_loc = 2.5\nfield_weight_symbol = 2.0\nfield_weight_num_fp = 2.0\ndecay_tau_days = 90\ndecay_tau_solved = 180\ndecay_tau_regressed = 30\nmmr_lambda = 0.5\nfeedback_step = 0.1\ncache_sim_threshold = 0.85\nl1_base = 0.55\nl1_margin_min = 0.15\nquality_prior = 0.5\ngc_ttl_regressed = 180\ngc_ttl_stale = 365\nedge_enable = 1\nedge_weight = 1.0\n",
+        "schema = {SCHEMA}\nembed_engine = \"{ENG_VER}\"\ncreated_at = \"{}\"\ncase_count = {case_count}\ngen = 0\n\n[params]\nbm25_k1 = 1.2\nbm25_b = 0.75\nfield_weight_error_code = 3.0\nfield_weight_file_loc = 2.5\nfield_weight_symbol = 2.0\nfield_weight_num_fp = 2.0\ndecay_tau_days = 90\ndecay_tau_solved = 180\ndecay_tau_regressed = 30\nmmr_lambda = 0.5\nfeedback_step = 0.1\ncache_sim_threshold = 0.85\nl1_base = 0.55\nl1_margin_min = 0.15\nquality_prior = 0.5\ngc_ttl_regressed = 180\ngc_ttl_stale = 365\nedge_enable = 1\nedge_weight = 1.0\n",
         utc_now()
     )
 }

@@ -12,6 +12,8 @@ const FAMILIES: [(&str, &[&str]); 5] = [
     (
         "db",
         &[
+            "db", // P4.4 评审处置：裸 "db" 补齐桶判定不对称（query "db timeout" 此前
+            // 只命中 network 家族 → 与 case 主桶 db 不匹配 → 漏召）。
             "conn_id",
             "jdbc",
             "mysql",
@@ -122,5 +124,12 @@ mod tests {
         assert!(c2.contains(&"build".to_string()) && c2.contains(&"disk".to_string()));
         let c3 = candidate_buckets("普通问题");
         assert!(c3.is_empty(), "无家族命中时空候选桶 = 全量扫（防漏召）");
+        // P4.4 评审处置：裸 "db" 词必须命中 db 家族（桶判定对称，防漏召）。
+        let c4 = candidate_buckets("db timeout");
+        assert!(
+            c4.contains(&"db".to_string()),
+            "裸 db 应命中 db 桶: {:?}",
+            c4
+        );
     }
 }

@@ -214,8 +214,10 @@ fn main() {
         }
     }
     // 召回：--recall K 时把本地记忆命中段追加到 stdout（旁路，L1 自适应置信过滤）。
+    // 主流程是"学习路径"：召回回流 qmap/缓存/L1 历史（read_only=false）。
     if opts.recall > 0 {
-        if let Ok(hits) = scx::memory::recall_cases(&opts.mem_dir, &opts.query, opts.recall) {
+        if let Ok(hits) = scx::memory::recall_cases(&opts.mem_dir, &opts.query, opts.recall, false)
+        {
             let (base, margin) = scx::memory::l1_params(&opts.mem_dir);
             let top1 = hits.first().map(|h| h.sim).unwrap_or(0.0);
             let top2 = hits.get(1).map(|h| h.sim).unwrap_or(0.0);

@@ -21,7 +21,6 @@ pub mod index;
 pub mod ingest;
 pub mod json;
 pub mod meta;
-pub mod mmap;
 pub mod mmr;
 pub mod model;
 pub mod postings;
@@ -72,13 +71,23 @@ pub fn store_case(
 
 /// 门面：按 query 召回 top-k case（会话缓存 → qmap 直达 → BM25+字段加权+衰减+桶过滤）。
 ///
-/// O3 会话缓存：进程内存 30 分钟窗口，窗口内同 query 直接返回快照（零磁盘）；
+/// O3 会话缓存：进程内存 30 分钟窗口，窗口内同 query 直接返回快照（零磁盘），
+/// 快照记录写入时的库代际，store/rate/delete 后自动失效（P4.4 评审处置）；
 /// O2 记忆图：recall 成功后把 (query → top-k id/score/sim) 回流写入 qmap.bin
-/// （append-only）；二次同指纹 query 直接命中（跳过 BM25），编辑距离 ≤2 变体
-/// 走轻量重排。回流失败静默（旁路原则：记忆图只是加速，不影响召回正确性）。
-pub fn recall_cases(root: &str, query: &str, k: usize) -> std::io::Result<Vec<RecallHit>> {
+/// （append-only，带代际），二次同指纹 query 直接命中（跳过 BM25），编辑距离 ≤2
+/// 变体走轻量重排。回流失败静默（旁路原则：记忆图只是加速，不影响召回正确性）。
+///
+/// `read_only`：查看模式（--recall-only / 评估）不写任何库状态
+/// （qmap / 会话缓存 / L1 历史），保证查看、标注、演示零副作用。
+pub fn recall_cases(
+    root: &str,
+    query: &str,
+    k: usize,
+    read_only: bool,
+) -> std::io::Result<Vec<RecallHit>> {
+    let meta = store::load_meta(root)?;
     // O3：会话缓存命中直接返回快照（含 score/sim，L1 过滤可复用）。
-    if let Some(hits) = cache::get(query) {
+    if let Some(hits) = cache::get(query, meta.gen) {
         let mut out: Vec<RecallHit> = hits
             .into_iter()
             .map(|(id, score, sim)| RecallHit { id, score, sim })
@@ -87,14 +96,14 @@ pub fn recall_cases(root: &str, query: &str, k: usize) -> std::io::Result<Vec<Re
         return Ok(out);
     }
     let hits = recall::recall(root, query, k)?;
-    if !hits.is_empty() {
+    if !hits.is_empty() && !read_only {
         let snap: Vec<(String, f64, f64)> = hits
             .iter()
             .map(|h| (h.id.clone(), h.score, h.sim))
             .collect();
-        cache::put(query, snap.clone());
-        let _ = qmap::append(root, query, &snap); // 回流失败忽略
-                                                  // O5 L1 自适应：记录 top1.sim 到滑动历史（旁路，失败静默）。
+        cache::put(query, snap.clone(), meta.gen);
+        let _ = qmap::append(root, query, &snap, meta.gen); // 回流失败忽略
+                                                            // O5 L1 自适应：记录 top1.sim 到滑动历史（旁路，失败静默）。
         meta::push_l1_hist(root, hits[0].sim);
     }
     Ok(hits)

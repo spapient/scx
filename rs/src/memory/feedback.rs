@@ -61,6 +61,12 @@ pub(crate) fn rate(
     id: &str,
     good: bool,
 ) -> std::io::Result<crate::memory::model::Case> {
+    if !store::valid_id(id) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid case id: {id}"),
+        ));
+    }
     let mut c = store::read_case(root, id)?;
     let fb = if good {
         Feedback {
@@ -97,10 +103,8 @@ pub(crate) fn rate(
     if good || c.status == "regressed" {
         meta::bump_word_w(root, &terms, good);
     }
-    // 写回 case（保留原 vec 骨架）。
-    let sparse = store::read_vec(&store::case_path(root, &c.id).with_file_name("vec.bin"))?;
-    store::write_case(root, &c, &sparse.1)?;
-    store::bump_case_count(root)?;
+    // 写回 case（原子写；write_case 内部 bump gen，qmap/缓存随之失效）。
+    store::write_case(root, &c)?;
     // L1 自适应：基于 [l1] 历史重算 l1_base。
     if let Ok(m) = meta::load_meta(root) {
         adapt_l1_base(root, &m);
