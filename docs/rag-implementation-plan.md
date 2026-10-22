@@ -390,4 +390,18 @@ P3 ──► P4.1 评估 ──► P4.2 要点摘要 ──► P4.3 实体边 �
 **门禁终态**：76 库 + 8 CLI + 4 集成 + golden 28 例全绿；fmt/clippy 0；release ✓。
 **语义边界**：passthrough/failopen 无保留行 → kept_lno 空 → 仅存压缩快照（text），低信号记忆语义不变（§16 口径）；`evidence` 是"保留行的原始文本"，与压缩结果同一行集，非全量输入原文。
 
+## 19. P4.4+ 优化⑥实施记录（智能标注器 --annotate，2026-10-22，已提交）
+
+**背景**：M4 证据门（30–50 组人工标注）长期未产出，是唯一未闭环的评审项。用户要求以"顶级智能标注"替代人工——实现**零依赖智能标注器**：不凭空造标注，每条 query 变体先经召回管线自检（目标 case 必须进 top-5），证据链随标注落盘。
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| 三层生成 | `annotate::annotate(root, seed, max_cases)`：literal=case.query 原样（rel=2，证据 `fingerprint`）；paraphrase=seed 驱动的 SYN 同义词表字面替换（词边界保护，~45% 概率逐词 + 强制保底替换保证 ≠ 原 query），自检放行 rel=2/1（sim≥0.5 分档），证据 `synonym`+`recall sim/score/rank`；semantic=根因行（Root cause/cause/原因）词反译构造（与 query token 几乎不共享），自检放行 rel=1 | 单测 4：三层自检证据在链上、baseline roundtrip 进 eval、同 seed 逐字可重放、词边界替换不误伤（"db"→database 不碰 database 内嵌） |
+| 自检 | `self_check` 走 `recall::recall`（纯检索零写入）top-5 查目标 tail16；未放行变体显式丢弃（dropped 计数），宁缺毋滥不编造 | 端到端：2 case 库 → 6 组（2×3 层），semantic query "root cause: 连接池 排查原因" 与 literal 零共享词 |
+| CLI 接线 | `--annotate`（豁免 --query）、`--annotate-out <path>`（缺省 `<mem-dir>/baseline-auto.json`）、`--seed N`（缺省 0，确定性可重放）；`--annotate` 禁与 --eval/--l1-hist 同用 | cli_args 单测沿用；端到端：annotate → baseline → `--eval baseline-auto.json` 闭环出对拍表（A/B 全 1.0） |
+| 输出 | baseline.json 兼容 eval 解析（extra 键 evidence/note 被忽略）；stdout 报告层分布/rel 分布 + out 文件名（相对，防跨机漂移）；expected 用 hash16 免日期漂移 | golden `memory_annotate` 第 29 例冻结：`cases=6 rel2=2 rel1=4`、layer literal/paraphrase/semantic=2、`out: baseline-auto.json` |
+
+**门禁终态**：80 库 + 8 CLI + 4 集成 + golden 29 例全绿；fmt/clippy 0；release ✓。
+**服务目标**：M4 证据门自动产出 30–50 组（16 case × 3 层 = 48 组），每条带证据链可审计；`--seed` 变化生成不同变体池，多 seed 融合可扩充。人工标注流程（docs/eval-baseline-template.md）保留作复核/抽样。
+
 
