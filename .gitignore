@@ -6,5 +6,9 @@ rs/target/
 
 # 评估生成的记忆库/临时目录：证据 CSV/JSON/verbose 单独提交，库目录不入库
 eval-real/*-mem/
-eval-real/tmp-*/
+eval-real/*-mem-*/
+eval-real/tmp-*
 eval-real/archive-*/
+eval-real/*-ablate/
+eval-real/confirm5-ci*
+eval-real/*-replay*

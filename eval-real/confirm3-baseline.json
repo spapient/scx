@@ -1,0 +1,2254 @@
+{
+    "cases":  [
+                  {
+                      "query":  "cloudflare edge routers crash router rule",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_e3d1d888b346bb3e"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e3d1d888b346bb3e":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=e3d1d888b346bb3e source=https://web.archive.org/web/20211006135542/https://blog.cloudflare.com/todays-outage-post-mortem-82515/"
+                  },
+                  {
+                      "query":  "bad router rule console command edge fleet",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_a5b1e2afb0a90fe4"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a5b1e2afb0a90fe4":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a5b1e2afb0a90fe4 source=https://web.archive.org/web/20211006135542/https://blog.cloudflare.com/todays-outage-post-mortem-82515/"
+                  },
+                  {
+                      "query":  "the edge router fleet collapsed after a router rule was pushed",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_4c3fd24609517142"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_4c3fd24609517142":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=4c3fd24609517142 source=https://web.archive.org/web/20211006135542/https://blog.cloudflare.com/todays-outage-post-mortem-82515/"
+                  },
+                  {
+                      "query":  "pushing a bad router rule took down all cloudflare edge routers",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_c4cc5e5943c46992"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_c4cc5e5943c46992":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=c4cc5e5943c46992 source=https://web.archive.org/web/20211006135542/https://blog.cloudflare.com/todays-outage-post-mortem-82515/"
+                  },
+                  {
+                      "query":  "一条坏路由规则下发后边缘路由器集体崩溃，Cloudflare 全球挂掉",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_a2bf8583810bdbbe"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a2bf8583810bdbbe":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a2bf8583810bdbbe source=https://web.archive.org/web/20211006135542/https://blog.cloudflare.com/todays-outage-post-mortem-82515/"
+                  },
+                  {
+                      "query":  "bgp prefix ordering disabled advertised prefixes",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_43908243dce6dc07"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_43908243dce6dc07":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=43908243dce6dc07 source=https://web.archive.org/web/20220621124002/https://blog.cloudflare.com/cloudflare-outage-on-june-21-2022/"
+                  },
+                  {
+                      "query":  "cloudflare nineteen datacenters bgp ordering",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_e9f3ad822fa01fef"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e9f3ad822fa01fef":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=e9f3ad822fa01fef source=https://web.archive.org/web/20220621124002/https://blog.cloudflare.com/cloudflare-outage-on-june-21-2022/"
+                  },
+                  {
+                      "query":  "a bgp prefix ordering error caused failures across nineteen datacenters",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_6699d0ca39bcf92f"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6699d0ca39bcf92f":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6699d0ca39bcf92f source=https://web.archive.org/web/20220621124002/https://blog.cloudflare.com/cloudflare-outage-on-june-21-2022/"
+                  },
+                  {
+                      "query":  "wrong ordering in the disabled bgp prefix list affected nineteen cloudflare sites",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_06fdf36827ebec57"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_06fdf36827ebec57":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=06fdf36827ebec57 source=https://web.archive.org/web/20220621124002/https://blog.cloudflare.com/cloudflare-outage-on-june-21-2022/"
+                  },
+                  {
+                      "query":  "禁用 BGP 前缀列表的顺序配错，19 个 Cloudflare 数据中心一起故障",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_282f527bfe152ba1"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_282f527bfe152ba1":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=282f527bfe152ba1 source=https://web.archive.org/web/20220621124002/https://blog.cloudflare.com/cloudflare-outage-on-june-21-2022/"
+                  },
+                  {
+                      "query":  "facebook instagram bad config outage",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_8d124c2af2cc9adb"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8d124c2af2cc9adb":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8d124c2af2cc9adb source=https://blog.thousandeyes.com/facebook-outage-deep-dive/"
+                  },
+                  {
+                      "query":  "bad configuration facebook instagram offline",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_1fe16e530cb3e177"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_1fe16e530cb3e177":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=1fe16e530cb3e177 source=https://blog.thousandeyes.com/facebook-outage-deep-dive/"
+                  },
+                  {
+                      "query":  "engineers traced the facebook and instagram outage to a bad config",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_e7236744de2445d5"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e7236744de2445d5":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=e7236744de2445d5 source=https://blog.thousandeyes.com/facebook-outage-deep-dive/"
+                  },
+                  {
+                      "query":  "the same bad configuration knocked facebook and instagram offline",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_9a1555c5d0bf031b"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9a1555c5d0bf031b":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9a1555c5d0bf031b source=https://blog.thousandeyes.com/facebook-outage-deep-dive/"
+                  },
+                  {
+                      "query":  "一处坏配置把 Facebook 和 Instagram 一起打挂",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_8bf7c56baefd7f47"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8bf7c56baefd7f47":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8bf7c56baefd7f47 source=https://blog.thousandeyes.com/facebook-outage-deep-dive/"
+                  },
+                  {
+                      "query":  "gcve legacy fixed term automatic deletion",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_2422c27a0ef167d2"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_2422c27a0ef167d2":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=2422c27a0ef167d2 source=https://cloud.google.com/blog/products/infrastructure/details-of-google-cloud-gcve-incident"
+                  },
+                  {
+                      "query":  "google cloud vmware engine expired contract",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_b1aeed07ae8e72e2"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_b1aeed07ae8e72e2":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=b1aeed07ae8e72e2 source=https://cloud.google.com/blog/products/infrastructure/details-of-google-cloud-gcve-incident"
+                  },
+                  {
+                      "query":  "a legacy fixed term contract caused google cloud vmware engine resources to be deleted",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_ab106c4fb2e750c6"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_ab106c4fb2e750c6":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=ab106c4fb2e750c6 source=https://cloud.google.com/blog/products/infrastructure/details-of-google-cloud-gcve-incident"
+                  },
+                  {
+                      "query":  "provisioning with a legacy fixed term option led to automatic deletion of the gcve environment",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_a10b957b3dc2734e"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a10b957b3dc2734e":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a10b957b3dc2734e source=https://cloud.google.com/blog/products/infrastructure/details-of-google-cloud-gcve-incident"
+                  },
+                  {
+                      "query":  "GCVE 一开始用了旧的固定期限模式，合同到期后环境被自动删掉",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_f6e8e2d2e09fbd40"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_f6e8e2d2e09fbd40":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=f6e8e2d2e09fbd40 source=https://cloud.google.com/blog/products/infrastructure/details-of-google-cloud-gcve-incident"
+                  },
+                  {
+                      "query":  "quota service bad config gmail outage",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_678f5070fe516acd"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_678f5070fe516acd":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=678f5070fe516acd source=https://web.archive.org/web/20151008061104/http://code.google.com/p/chromium/issues/detail?id=165171"
+                  },
+                  {
+                      "query":  "chromium issue quota service multiple services",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_54557d06cecf4d29"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_54557d06cecf4d29":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=54557d06cecf4d29 source=https://web.archive.org/web/20151008061104/http://code.google.com/p/chromium/issues/detail?id=165171"
+                  },
+                  {
+                      "query":  "the quota service failure propagated to gmail and other google products",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_6630788489ae107d"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6630788489ae107d":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6630788489ae107d source=https://web.archive.org/web/20151008061104/http://code.google.com/p/chromium/issues/detail?id=165171"
+                  },
+                  {
+                      "query":  "a broken quota service configuration cascaded into gmail and multiple google systems",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_75b9ce1792ca233b"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_75b9ce1792ca233b":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=75b9ce1792ca233b source=https://web.archive.org/web/20151008061104/http://code.google.com/p/chromium/issues/detail?id=165171"
+                  },
+                  {
+                      "query":  "配额服务配置写坏，Gmail 和一堆 Google 服务跟着挂了",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_1c631be16b03b9b5"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_1c631be16b03b9b5":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=1c631be16b03b9b5 source=https://web.archive.org/web/20151008061104/http://code.google.com/p/chromium/issues/detail?id=165171"
+                  },
+                  {
+                      "query":  "load balancer config rollout error rate twenty two minutes",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_522f4707b91a8131"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_522f4707b91a8131":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=522f4707b91a8131 source=https://status.cloud.google.com/incident/compute/17007#5659118702428160"
+                  },
+                  {
+                      "query":  "google compute 17007 load balancer bug",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_12e9225d8d4fd259"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_12e9225d8d4fd259":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=12e9225d8d4fd259 source=https://status.cloud.google.com/incident/compute/17007#5659118702428160"
+                  },
+                  {
+                      "query":  "the bad load balancer configuration rollout lasted about twenty two minutes",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_d973f454a9873e87"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_d973f454a9873e87":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=d973f454a9873e87 source=https://status.cloud.google.com/incident/compute/17007#5659118702428160"
+                  },
+                  {
+                      "query":  "for twenty two minutes a bad load balancer rollout produced elevated error rates",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_9976adec6d483709"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9976adec6d483709":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9976adec6d483709 source=https://status.cloud.google.com/incident/compute/17007#5659118702428160"
+                  },
+                  {
+                      "query":  "负载均衡配置发布有 bug，错误率高了 22 分钟",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_6c802234cbed0c77"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6c802234cbed0c77":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6c802234cbed0c77 source=https://status.cloud.google.com/incident/compute/17007#5659118702428160"
+                  },
+                  {
+                      "query":  "filestore global api throttling internal service",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_63783793c245a605"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_63783793c245a605":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=63783793c245a605 source=https://status.cloud.google.com/incidents/X8SNkK2BPyCrc1sveeiu"
+                  },
+                  {
+                      "query":  "filestore read only api unavailable three hours",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_274c755aa416cf23"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_274c755aa416cf23":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=274c755aa416cf23 source=https://status.cloud.google.com/incidents/X8SNkK2BPyCrc1sveeiu"
+                  },
+                  {
+                      "query":  "global filestore api throttling made read only access unavailable for over three hours",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_8dc4d1a72cc0d0f3"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8dc4d1a72cc0d0f3":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8dc4d1a72cc0d0f3 source=https://status.cloud.google.com/incidents/X8SNkK2BPyCrc1sveeiu"
+                  },
+                  {
+                      "query":  "filestore read apis stayed throttled until the malfunctioning internal service was paused",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_fe81c087ad35f443"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_fe81c087ad35f443":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=fe81c087ad35f443 source=https://status.cloud.google.com/incidents/X8SNkK2BPyCrc1sveeiu"
+                  },
+                  {
+                      "query":  "内部服务抽风狂打 Filestore API，触发全局限流，只读操作三小时多不可用",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_3f7efbb8751821db"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_3f7efbb8751821db":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=3f7efbb8751821db source=https://status.cloud.google.com/incidents/X8SNkK2BPyCrc1sveeiu"
+                  },
+                  {
+                      "query":  "bigquery streaming write api rpc deadlock",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_54900c5d88578353"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_54900c5d88578353":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=54900c5d88578353 source=https://status.cloud.google.com/incidents/mREMLwZFe3FuLLn3zfTw"
+                  },
+                  {
+                      "query":  "logging traffic internal streaming rpc library",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_3d77ce04e589efcd"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_3d77ce04e589efcd":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=3d77ce04e589efcd source=https://status.cloud.google.com/incidents/mREMLwZFe3FuLLn3zfTw"
+                  },
+                  {
+                      "query":  "the streaming rpc deadlock overloaded bigquery write api for five hours",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_e7839244e01b7f0f"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e7839244e01b7f0f":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=e7839244e01b7f0f source=https://status.cloud.google.com/incidents/mREMLwZFe3FuLLn3zfTw"
+                  },
+                  {
+                      "query":  "the bigquery storage write api stayed degraded while the streaming rpc deadlock was resolved",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_d65881afe0c16ba3"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_d65881afe0c16ba3":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=d65881afe0c16ba3 source=https://status.cloud.google.com/incidents/mREMLwZFe3FuLLn3zfTw"
+                  },
+                  {
+                      "query":  "日志量突然上来，内部流式 RPC 库死锁，BigQuery 写入接口错误了五小时",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_9f853d778f2e787d"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9f853d778f2e787d":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9f853d778f2e787d source=https://status.cloud.google.com/incidents/mREMLwZFe3FuLLn3zfTw"
+                  },
+                  {
+                      "query":  "service control null pointer blank policy fields",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_2f54e47207da0cc8"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_2f54e47207da0cc8":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=2f54e47207da0cc8 source=https://status.cloud.google.com/incidents/ow5i3PPK96RduMcb1SsW"
+                  },
+                  {
+                      "query":  "policy replication crash loop spanner thundering herd",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_775ba3029497d7ea"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_775ba3029497d7ea":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=775ba3029497d7ea source=https://status.cloud.google.com/incidents/ow5i3PPK96RduMcb1SsW"
+                  },
+                  {
+                      "query":  "service control crash looped across regions and restarting tasks overloaded spanner",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_9d5fda20f1484e1a"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9d5fda20f1484e1a":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9d5fda20f1484e1a source=https://status.cloud.google.com/incidents/ow5i3PPK96RduMcb1SsW"
+                  },
+                  {
+                      "query":  "restarting service control tasks created a thundering herd that overloaded spanner",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_0abd9e8a90bfd0da"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_0abd9e8a90bfd0da":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=0abd9e8a90bfd0da source=https://status.cloud.google.com/incidents/ow5i3PPK96RduMcb1SsW"
+                  },
+                  {
+                      "query":  "策略里有空字段，Service Control 空指针崩溃，全球重启时惊群打爆 Spanner",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_67ff7c1803595622"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_67ff7c1803595622":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=67ff7c1803595622 source=https://status.cloud.google.com/incidents/ow5i3PPK96RduMcb1SsW"
+                  },
+                  {
+                      "query":  "owasa water plant fluoride wrong button",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_f80b765253a6c019"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_f80b765253a6c019":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=f80b765253a6c019 source=https://web.archive.org/web/20210226170650/https://indyweek.com/news/archives/human-error-caused-owasa-fluoride-overdose-owasa-sorry/"
+                  },
+                  {
+                      "query":  "fluoride overdose treatment plant shutdown human error",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_d5da18f45a8afedb"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_d5da18f45a8afedb":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=d5da18f45a8afedb source=https://web.archive.org/web/20210226170650/https://indyweek.com/news/archives/human-error-caused-owasa-fluoride-overdose-owasa-sorry/"
+                  },
+                  {
+                      "query":  "the plant stopped operating because too much fluoride entered the water after a human error",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_90858cb98d071cdb"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_90858cb98d071cdb":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=90858cb98d071cdb source=https://web.archive.org/web/20210226170650/https://indyweek.com/news/archives/human-error-caused-owasa-fluoride-overdose-owasa-sorry/"
+                  },
+                  {
+                      "query":  "the wrong control command caused a fluoride overdose and shutdown",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_32cc6a5e07781a3b"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_32cc6a5e07781a3b":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=32cc6a5e07781a3b source=https://web.archive.org/web/20210226170650/https://indyweek.com/news/archives/human-error-caused-owasa-fluoride-overdose-owasa-sorry/"
+                  },
+                  {
+                      "query":  "操作员按错按钮，氟化物加多了，水厂只能停机",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_e8c5de134abc70bb"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e8c5de134abc70bb":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=e8c5de134abc70bb source=https://web.archive.org/web/20210226170650/https://indyweek.com/news/archives/human-error-caused-owasa-fluoride-overdose-owasa-sorry/"
+                  },
+                  {
+                      "query":  "sentry s3 backup bucket public data leak",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_46f6c1ce75b0a374"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_46f6c1ce75b0a374":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=46f6c1ce75b0a374 source=https://blog.sentry.io/2016/06/14/security-incident-june-12-2016"
+                  },
+                  {
+                      "query":  "amazon s3 settings backup credentials exposed",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_0cfa41411d465182"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_0cfa41411d465182":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=0cfa41411d465182 source=https://blog.sentry.io/2016/06/14/security-incident-june-12-2016"
+                  },
+                  {
+                      "query":  "misconfigured s3 backup permissions leaked sensitive sentry information",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_3deec8175daa191e"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_3deec8175daa191e":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=3deec8175daa191e source=https://blog.sentry.io/2016/06/14/security-incident-june-12-2016"
+                  },
+                  {
+                      "query":  "an s3 permission mistake allowed public access to sentry backups",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_f6d4ef75b17851da"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_f6d4ef75b17851da":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=f6d4ef75b17851da source=https://blog.sentry.io/2016/06/14/security-incident-june-12-2016"
+                  },
+                  {
+                      "query":  "Sentry 的 S3 备份权限配错，备份数据能被公开访问",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_f6da82a8733f3782"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_f6da82a8733f3782":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=f6da82a8733f3782 source=https://blog.sentry.io/2016/06/14/security-incident-june-12-2016"
+                  },
+                  {
+                      "query":  "sentry postgres transaction id wraparound outage",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_4b773c08a371b1e0"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_4b773c08a371b1e0":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=4b773c08a371b1e0 source=https://blog.sentry.io/2015/07/23/transaction-id-wraparound-in-postgres"
+                  },
+                  {
+                      "query":  "postgres xid wraparound working day downtime",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_9bb9cb9c7a13c5f4"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9bb9cb9c7a13c5f4":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9bb9cb9c7a13c5f4 source=https://blog.sentry.io/2015/07/23/transaction-id-wraparound-in-postgres"
+                  },
+                  {
+                      "query":  "the database stopped accepting work when its transaction ids wrapped around",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_7d32fe1efde9c122"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_7d32fe1efde9c122":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=7d32fe1efde9c122 source=https://blog.sentry.io/2015/07/23/transaction-id-wraparound-in-postgres"
+                  },
+                  {
+                      "query":  "transaction id exhaustion forced a long postgres recovery and kept sentry offline",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_60bdad3b75950ab6"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_60bdad3b75950ab6":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=60bdad3b75950ab6 source=https://blog.sentry.io/2015/07/23/transaction-id-wraparound-in-postgres"
+                  },
+                  {
+                      "query":  "Postgres 事务 ID 回绕，Sentry 停了快一整天",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_6fad4447d047bc26"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6fad4447d047bc26":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6fad4447d047bc26 source=https://blog.sentry.io/2015/07/23/transaction-id-wraparound-in-postgres"
+                  },
+                  {
+                      "query":  "travis ci incomplete password rotation leaked vms",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_fa2f1af49b8aafea"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_fa2f1af49b8aafea":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=fa2f1af49b8aafea source=https://www.traviscistatus.com/incidents/khzk8bg4p9sy"
+                  },
+                  {
+                      "query":  "build queue elevated leaked workers credentials",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_6081922281685eea"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6081922281685eea":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6081922281685eea source=https://www.traviscistatus.com/incidents/khzk8bg4p9sy"
+                  },
+                  {
+                      "query":  "old credentials kept workers alive after rotation and inflated the build queue",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_9884ffb14313540a"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9884ffb14313540a":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9884ffb14313540a source=https://www.traviscistatus.com/incidents/khzk8bg4p9sy"
+                  },
+                  {
+                      "query":  "the partial credential rotation caused virtual machines to leak and queues to grow",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_a094bd15b2437cea"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a094bd15b2437cea":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a094bd15b2437cea source=https://www.traviscistatus.com/incidents/khzk8bg4p9sy"
+                  },
+                  {
+                      "query":  "密码没轮换全，VM 泄漏不回收，构建队列越来越长",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_a5d4ebd6decabaea"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a5d4ebd6decabaea":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a5d4ebd6decabaea source=https://www.traviscistatus.com/incidents/khzk8bg4p9sy"
+                  },
+                  {
+                      "query":  "tui load sheet miss counted as child",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_bfa43d947864b65f"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_bfa43d947864b65f":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=bfa43d947864b65f source=https://assets.publishing.service.gov.uk/media/604f423be90e077fdf88493f/Boeing_737-8K5_G-TAWG_04-21.pdf"
+                  },
+                  {
+                      "query":  "boeing seven three seven takeoff mass female passengers children",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_ed4be9bbd382d76d"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_ed4be9bbd382d76d":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=ed4be9bbd382d76d source=https://assets.publishing.service.gov.uk/media/604f423be90e077fdf88493f/Boeing_737-8K5_G-TAWG_04-21.pdf"
+                  },
+                  {
+                      "query":  "a load sheet bug assigned child weight to adult passengers and left the aircraft over a tonne heavier than recorded",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_d2d09dee7e88d577"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_d2d09dee7e88d577":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=d2d09dee7e88d577 source=https://assets.publishing.service.gov.uk/media/604f423be90e077fdf88493f/Boeing_737-8K5_G-TAWG_04-21.pdf"
+                  },
+                  {
+                      "query":  "the upgraded reservation system misclassified miss as a child title and understated the takeoff mass",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_6e3413c0ab193965"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6e3413c0ab193965":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6e3413c0ab193965 source=https://assets.publishing.service.gov.uk/media/604f423be90e077fdf88493f/Boeing_737-8K5_G-TAWG_04-21.pdf"
+                  },
+                  {
+                      "query":  "订票系统把 Miss 当儿童，38 名女乘客按儿童体重算，起飞重量少记了 1244 公斤",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_f9a7e6061525055d"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_f9a7e6061525055d":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=f9a7e6061525055d source=https://assets.publishing.service.gov.uk/media/604f423be90e077fdf88493f/Boeing_737-8K5_G-TAWG_04-21.pdf"
+                  },
+                  {
+                      "query":  "cloudflare flexential data center power failure",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_7f23fa2cba1d74d5"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_7f23fa2cba1d74d5":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=7f23fa2cba1d74d5 source=https://blog.cloudflare.com/post-mortem-on-cloudflare-control-plane-and-analytics-outage/"
+                  },
+                  {
+                      "query":  "control plane analytics outage power loss",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_abcce1820f905395"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_abcce1820f905395":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=abcce1820f905395 source=https://blog.cloudflare.com/post-mortem-on-cloudflare-control-plane-and-analytics-outage/"
+                  },
+                  {
+                      "query":  "loss of power at the flexential facility took down cloudflare control plane services",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_516a6e2dc5706221"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_516a6e2dc5706221":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=516a6e2dc5706221 source=https://blog.cloudflare.com/post-mortem-on-cloudflare-control-plane-and-analytics-outage/"
+                  },
+                  {
+                      "query":  "a facility power failure at flexential interrupted cloudflare control plane and analytics",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_0b81fdad05d9ac29"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_0b81fdad05d9ac29":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=0b81fdad05d9ac29 source=https://blog.cloudflare.com/post-mortem-on-cloudflare-control-plane-and-analytics-outage/"
+                  },
+                  {
+                      "query":  "Flexential 机房断电，Cloudflare 控制面和分析服务全断",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_5ebb0979b35218cd"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_5ebb0979b35218cd":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=5ebb0979b35218cd source=https://blog.cloudflare.com/post-mortem-on-cloudflare-control-plane-and-analytics-outage/"
+                  },
+                  {
+                      "query":  "firstenergy two thousand three blackout alarm bug foliage",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_24a808539bd92e1d"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_24a808539bd92e1d":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=24a808539bd92e1d source=https://en.wikipedia.org/wiki/Northeast_blackout_of_2003"
+                  },
+                  {
+                      "query":  "ge monitoring system missed transmission alarm",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_6e7202f4c60899c7"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6e7202f4c60899c7":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6e7202f4c60899c7 source=https://en.wikipedia.org/wiki/Northeast_blackout_of_2003"
+                  },
+                  {
+                      "query":  "operators never saw the local line failure because the alarm system failed",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_3901147d637bb175"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_3901147d637bb175":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=3901147d637bb175 source=https://en.wikipedia.org/wiki/Northeast_blackout_of_2003"
+                  },
+                  {
+                      "query":  "an untriggered alarm let the local firstenergy fault cascade into a regional blackout",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_a3fbc1a64076a891"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a3fbc1a64076a891":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a3fbc1a64076a891 source=https://en.wikipedia.org/wiki/Northeast_blackout_of_2003"
+                  },
+                  {
+                      "query":  "GE 监控有 bug，线路碰到树枝的告警没弹出来，局部故障滚成 2003 大停电",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_430ec7d52fd40bbf"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_430ec7d52fd40bbf":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=430ec7d52fd40bbf source=https://en.wikipedia.org/wiki/Northeast_blackout_of_2003"
+                  },
+                  {
+                      "query":  "github mysql network partition master failover",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_8d735e424ae94751"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8d735e424ae94751":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8d735e424ae94751 source=https://blog.github.com/2018-10-30-oct21-post-incident-analysis/"
+                  },
+                  {
+                      "query":  "cross continent replication lag writes lost",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_2b3e0fc6abe5cb53"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_2b3e0fc6abe5cb53":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=2b3e0fc6abe5cb53 source=https://blog.github.com/2018-10-30-oct21-post-incident-analysis/"
+                  },
+                  {
+                      "query":  "cross continent latency left the promoted mysql master missing writes and forced a day of reconciliation",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_5fce1c1b2dba07e9"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_5fce1c1b2dba07e9":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=5fce1c1b2dba07e9 source=https://blog.github.com/2018-10-30-oct21-post-incident-analysis/"
+                  },
+                  {
+                      "query":  "a brief partition promoted a lagging mysql master and required more than a day of data repair",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_0fa01e34c69db6ad"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_0fa01e34c69db6ad":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=0fa01e34c69db6ad source=https://blog.github.com/2018-10-30-oct21-post-incident-analysis/"
+                  },
+                  {
+                      "query":  "43 秒网络分区让 MySQL 切主，新主少了最近几秒写入，修数据修了一天多",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_a7d494c6aa542e27"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a7d494c6aa542e27":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a7d494c6aa542e27 source=https://blog.github.com/2018-10-30-oct21-post-incident-analysis/"
+                  },
+                  {
+                      "query":  "github scoped tokens int32 max failures",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_4db4d4e4fe60468b"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_4db4d4e4fe60468b":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=4db4d4e4fe60468b source=https://github.blog/news-insights/company-news/github-availability-report-may-2021/"
+                  },
+                  {
+                      "query":  "actions pages token column overflow migration int64",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_671f5f13d74fac53"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_671f5f13d74fac53":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=671f5f13d74fac53 source=https://github.blog/news-insights/company-news/github-availability-report-may-2021/"
+                  },
+                  {
+                      "query":  "a primary key overflow forced a long migration to int64 and degraded github for almost ten hours",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_089f73ebb7ed2f01"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_089f73ebb7ed2f01":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=089f73ebb7ed2f01 source=https://github.blog/news-insights/company-news/github-availability-report-may-2021/"
+                  },
+                  {
+                      "query":  "scoped token failures lasted nearly ten hours until the column was migrated to int64",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_8bbbcc0eda619791"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8bbbcc0eda619791":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8bbbcc0eda619791 source=https://github.blog/news-insights/company-news/github-availability-report-may-2021/"
+                  },
+                  {
+                      "query":  "scoped-tokens 主键到了 INT32 上限，Actions、Pages 和 Git 令牌操作大面积失败",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_b09d6f485fdd7ccf"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_b09d6f485fdd7ccf":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=b09d6f485fdd7ccf source=https://github.blog/news-insights/company-news/github-availability-report-may-2021/"
+                  },
+                  {
+                      "query":  "github proxysql connections exhausted peak load",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_a2a344cbce5263cd"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a2a344cbce5263cd":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a2a344cbce5263cd source=https://github.blog/2022-03-23-an-update-on-recent-service-disruptions/"
+                  },
+                  {
+                      "query":  "mysql1 cluster four primary failovers webhooks",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_d652153468bf3239"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_d652153468bf3239":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=d652153468bf3239 source=https://github.blog/2022-03-23-an-update-on-recent-service-disruptions/"
+                  },
+                  {
+                      "query":  "the shared mysql cluster ran out of proxysql capacity and github throttled webhooks and actions",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_a0f412987463b671"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a0f412987463b671":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a0f412987463b671 source=https://github.blog/2022-03-23-an-update-on-recent-service-disruptions/"
+                  },
+                  {
+                      "query":  "four primary failovers followed repeated proxysql connection exhaustion at peak hour",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_4e685ff12e9c1179"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_4e685ff12e9c1179":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=4e685ff12e9c1179 source=https://github.blog/2022-03-23-an-update-on-recent-service-disruptions/"
+                  },
+                  {
+                      "query":  "高峰时 ProxySQL 连接被打满，mysql1 集群连着切了四次主库",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_89b0fb608a657241"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_89b0fb608a657241":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=89b0fb608a657241 source=https://github.blog/2022-03-23-an-update-on-recent-service-disruptions/"
+                  },
+                  {
+                      "query":  "github schema migration semaphore deadlock read replicas",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_5b3d6bbbe5a3b715"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_5b3d6bbbe5a3b715":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=5b3d6bbbe5a3b715 source=https://github.blog/2021-12-01-github-availability-report-november-2021/"
+                  },
+                  {
+                      "query":  "mysql table rename replica crash recovery",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_4f98dd13716b7831"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_4f98dd13716b7831":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=4f98dd13716b7831 source=https://github.blog/2021-12-01-github-availability-report-november-2021/"
+                  },
+                  {
+                      "query":  "replicas entered crash recovery and the remaining healthy replicas could not carry production reads",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_73868371a0797647"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_73868371a0797647":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=73868371a0797647 source=https://github.blog/2021-12-01-github-availability-report-november-2021/"
+                  },
+                  {
+                      "query":  "cascading replica recovery left too few healthy nodes for production traffic",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_4fe264f545f04d15"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_4fe264f545f04d15":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=4fe264f545f04d15 source=https://github.blog/2021-12-01-github-availability-report-november-2021/"
+                  },
+                  {
+                      "query":  "大表迁移最后一步重命名让只读副本信号量死锁，副本连环崩溃，健康节点扛不住流量",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_91312e8eac11c557"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_91312e8eac11c557":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=91312e8eac11c557 source=https://github.blog/2021-12-01-github-availability-report-november-2021/"
+                  },
+                  {
+                      "query":  "knight capital conflicting versions reused flag",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_668375682abd2747"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_668375682abd2747":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=668375682abd2747 source=https://dougseven.com/2014/04/17/knightmare-a-devops-cautionary-tale/"
+                  },
+                  {
+                      "query":  "deployment bit old code four hundred sixty million loss",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_e3a970f9ea98382f"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e3a970f9ea98382f":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=e3a970f9ea98382f source=https://dougseven.com/2014/04/17/knightmare-a-devops-cautionary-tale/"
+                  },
+                  {
+                      "query":  "the deployment reused a retired bit and activated unintended trading code",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_591d492e637df1b7"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_591d492e637df1b7":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=591d492e637df1b7 source=https://dougseven.com/2014/04/17/knightmare-a-devops-cautionary-tale/"
+                  },
+                  {
+                      "query":  "a partial deployment and recycled control bit caused unintended trades",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_8495894cb15dc037"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8495894cb15dc037":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8495894cb15dc037 source=https://dougseven.com/2014/04/17/knightmare-a-devops-cautionary-tale/"
+                  },
+                  {
+                      "query":  "Knight 部署版本不一致，又复用了旧标志位，错误交易代码上线亏了 4.6 亿美元",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_59a6ddc5bdd9b217"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_59a6ddc5bdd9b217":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=59a6ddc5bdd9b217 source=https://dougseven.com/2014/04/17/knightmare-a-devops-cautionary-tale/"
+                  },
+                  {
+                      "query":  "webkit repository sha1 collision dedup",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_8d3614d83fa23c72"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8d3614d83fa23c72":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8d3614d83fa23c72 source=https://web.archive.org/web/20210306015541/https://digital.ai/catalyst-blog/subversion-sha1-collision-problem-statement-prevention-and-remediation-options"
+                  },
+                  {
+                      "query":  "subversion checkout consistency check failed",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_f4503052a99bf0ba"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_f4503052a99bf0ba":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=f4503052a99bf0ba source=https://web.archive.org/web/20210306015541/https://digital.ai/catalyst-blog/subversion-sha1-collision-problem-statement-prevention-and-remediation-options"
+                  },
+                  {
+                      "query":  "the repository checkout failed because two colliding files had different md5 sums",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_e876b4d4bc322aba"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e876b4d4bc322aba":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=e876b4d4bc322aba source=https://web.archive.org/web/20210306015541/https://digital.ai/catalyst-blog/subversion-sha1-collision-problem-statement-prevention-and-remediation-options"
+                  },
+                  {
+                      "query":  "a sha1 collision in deduplicated webkit test data made the repository unavailable",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_6347aa42917b62a4"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6347aa42917b62a4":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6347aa42917b62a4 source=https://web.archive.org/web/20210306015541/https://digital.ai/catalyst-blog/subversion-sha1-collision-problem-statement-prevention-and-remediation-options"
+                  },
+                  {
+                      "query":  "WebKit 的 SVN 去重仓库里两个文件 SHA-1 撞了，检出时一致性校验失败",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_c160b731a94a7f94"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_c160b731a94a7f94":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=c160b731a94a7f94 source=https://web.archive.org/web/20210306015541/https://digital.ai/catalyst-blog/subversion-sha1-collision-problem-statement-prevention-and-remediation-options"
+                  },
+                  {
+                      "query":  "linux leap second realtime timer early expiry",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_4a7891c8ca53e169"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_4a7891c8ca53e169":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=4a7891c8ca53e169 source=https://web.archive.org/web/20220320100036/https://lkml.org/lkml/2012/7/1/203"
+                  },
+                  {
+                      "query":  "hrtimer offset spinwait high load two thousand twelve",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_55fa1da36aff3825"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_55fa1da36aff3825":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=55fa1da36aff3825 source=https://web.archive.org/web/20220320100036/https://lkml.org/lkml/2012/7/1/203"
+                  },
+                  {
+                      "query":  "applications spun instead of sleeping after the clock step and many services went down",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_b84da860fbcc8391"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_b84da860fbcc8391":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=b84da860fbcc8391 source=https://web.archive.org/web/20220320100036/https://lkml.org/lkml/2012/7/1/203"
+                  },
+                  {
+                      "query":  "sub second sleeps expired immediately and produced a spinwait load spike",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_9dfe411a8f03c0c9"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9dfe411a8f03c0c9":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9dfe411a8f03c0c9 source=https://web.archive.org/web/20220320100036/https://lkml.org/lkml/2012/7/1/203"
+                  },
+                  {
+                      "query":  "闰秒把 CLOCK_REALTIME 往回拨，hrtimer 偏移没更新，短 sleep 立刻到期，应用空转把机器打满",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_e9710de37722f013"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e9710de37722f013":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=e9710de37722f013 source=https://web.archive.org/web/20220320100036/https://lkml.org/lkml/2012/7/1/203"
+                  },
+                  {
+                      "query":  "firefox addons certificate expired",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_a07509e2c728bbc2"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a07509e2c728bbc2":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a07509e2c728bbc2 source=https://web.archive.org/web/20250303152906/https://hacks.mozilla.org/2019/07/add-ons-outage-post-mortem-result/"
+                  },
+                  {
+                      "query":  "mozilla addon signing chain invalid nine hours",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_c3f3142e1aac5dc2"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_c3f3142e1aac5dc2":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=c3f3142e1aac5dc2 source=https://web.archive.org/web/20250303152906/https://hacks.mozilla.org/2019/07/add-ons-outage-post-mortem-result/"
+                  },
+                  {
+                      "query":  "mozilla pushed a privileged addon to restore a valid certificate chain",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_507cf090ce298dc2"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_507cf090ce298dc2":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=507cf090ce298dc2 source=https://web.archive.org/web/20250303152906/https://hacks.mozilla.org/2019/07/add-ons-outage-post-mortem-result/"
+                  },
+                  {
+                      "query":  "about fifteen thousand addons stopped working until a valid chain was restored",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_84b8d9b6476bd8aa"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_84b8d9b6476bd8aa":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=84b8d9b6476bd8aa source=https://web.archive.org/web/20250303152906/https://hacks.mozilla.org/2019/07/add-ons-outage-post-mortem-result/"
+                  },
+                  {
+                      "query":  "Firefox 扩展签名证书过期，1.5 万个扩展全失效，后来靠特权扩展修证书链",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_67a1dc248a375872"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_67a1dc248a375872":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=67a1dc248a375872 source=https://web.archive.org/web/20250303152906/https://hacks.mozilla.org/2019/07/add-ons-outage-post-mortem-result/"
+                  },
+                  {
+                      "query":  "circleci workflows database stale statistics blue green",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_2f4c27cd12839211"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_2f4c27cd12839211":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=2f4c27cd12839211 source=https://discuss.circleci.com/t/post-incident-report-april-4-2025-delays-in-starting-workflows/53113"
+                  },
+                  {
+                      "query":  "post cutover queries scanned disk analyze regression",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_26aefa0aedaf1f01"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_26aefa0aedaf1f01":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=26aefa0aedaf1f01 source=https://discuss.circleci.com/t/post-incident-report-april-4-2025-delays-in-starting-workflows/53113"
+                  },
+                  {
+                      "query":  "the slow workflows database caused jobs to exhaust retries and forced a rollback to the blue database",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_36604070e5b03ce1"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_36604070e5b03ce1":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=36604070e5b03ce1 source=https://discuss.circleci.com/t/post-incident-report-april-4-2025-delays-in-starting-workflows/53113"
+                  },
+                  {
+                      "query":  "stale statistics removed usable indexes and workflows latency spiked after cutover",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_9c23afad02dc8fc9"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9c23afad02dc8fc9":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9c23afad02dc8fc9 source=https://discuss.circleci.com/t/post-incident-report-april-4-2025-delays-in-starting-workflows/53113"
+                  },
+                  {
+                      "query":  "Workflows 蓝绿升级后统计信息过期，查询全走磁盘，任务等超时只能切回旧库",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_9b153822eeac04e5"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9b153822eeac04e5":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9b153822eeac04e5 source=https://discuss.circleci.com/t/post-incident-report-april-4-2025-delays-in-starting-workflows/53113"
+                  },
+                  {
+                      "query":  "circleci rabbitmq consumer ack timeout vm destroyer",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_28201aab429a063f"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_28201aab429a063f":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=28201aab429a063f source=https://discuss.circleci.com/t/postmortem-may-21-2021-delay-in-starting-docker-jobs-machine-remote-docker-environments-blocked/40274"
+                  },
+                  {
+                      "query":  "queue zero consumers blocked docker machine jobs",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_6c7abd7df6f1a171"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6c7abd7df6f1a171":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=6c7abd7df6f1a171 source=https://discuss.circleci.com/t/postmortem-may-21-2021-delay-in-starting-docker-jobs-machine-remote-docker-environments-blocked/40274"
+                  },
+                  {
+                      "query":  "without consumers the vm queue backed up and blocked docker and machine jobs for twelve hours",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_ecf963f751c1d75b"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_ecf963f751c1d75b":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=ecf963f751c1d75b source=https://discuss.circleci.com/t/postmortem-may-21-2021-delay-in-starting-docker-jobs-machine-remote-docker-environments-blocked/40274"
+                  },
+                  {
+                      "query":  "vm deletion stopped and creation backed up because the destroyer queue lost its consumers",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_9fd67f609931d3ef"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_9fd67f609931d3ef":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=9fd67f609931d3ef source=https://discuss.circleci.com/t/postmortem-may-21-2021-delay-in-starting-docker-jobs-machine-remote-docker-environments-blocked/40274"
+                  },
+                  {
+                      "query":  "RabbitMQ 升级后确认超时变成 15 分钟，VM 销毁队列消费者全掉，创建也被堵了十二小时",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_afeb74c3f16153e3"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_afeb74c3f16153e3":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=afeb74c3f16153e3 source=https://discuss.circleci.com/t/postmortem-may-21-2021-delay-in-starting-docker-jobs-machine-remote-docker-environments-blocked/40274"
+                  },
+                  {
+                      "query":  "s3 message corruption server state overwhelm",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_dee21b7e03ce3340"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_dee21b7e03ce3340":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=dee21b7e03ce3340 source=https://web.archive.org/web/20220403060108/https://status.aws.amazon.com/s3-20080720.html"
+                  },
+                  {
+                      "query":  "two thousand eight s3 request fleet resource exhaustion",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_3ad6172b7ba06876"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_3ad6172b7ba06876":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=3ad6172b7ba06876 source=https://web.archive.org/web/20220403060108/https://status.aws.amazon.com/s3-20080720.html"
+                  },
+                  {
+                      "query":  "corrupted messages exhausted resources and caused the two thousand eight s3 outage",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_a01d08d57a75f5aa"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a01d08d57a75f5aa":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a01d08d57a75f5aa source=https://web.archive.org/web/20220403060108/https://status.aws.amazon.com/s3-20080720.html"
+                  },
+                  {
+                      "query":  "resource exhaustion in the s3 request fleet followed corrupted distributed state messages",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_907c3e3cbf131c46"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_907c3e3cbf131c46":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=907c3e3cbf131c46 source=https://web.archive.org/web/20220403060108/https://status.aws.amazon.com/s3-20080720.html"
+                  },
+                  {
+                      "query":  "S3 的服务器状态消息损坏，状态服务把请求处理集群资源耗光",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_3f2bfd521911ea66"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_3f2bfd521911ea66":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=3f2bfd521911ea66 source=https://web.archive.org/web/20220403060108/https://status.aws.amazon.com/s3-20080720.html"
+                  },
+                  {
+                      "query":  "ebs reporting agent memory leak collection server",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_61e4a3b007ace18b"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_61e4a3b007ace18b":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=61e4a3b007ace18b source=https://aws.amazon.com/message/680342/"
+                  },
+                  {
+                      "query":  "storage server memory exhaustion failover",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_8ac1c3b6d4a9e55f"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8ac1c3b6d4a9e55f":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8ac1c3b6d4a9e55f source=https://aws.amazon.com/message/680342/"
+                  },
+                  {
+                      "query":  "monitoring missed the growing leak and failover could not save the affected ebs storage servers",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_67b15209242eb333"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_67b15209242eb333":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=67b15209242eb333 source=https://aws.amazon.com/message/680342/"
+                  },
+                  {
+                      "query":  "memory pressure from the reporting agent made ebs storage servers unable to handle requests and failover failed",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_21d2710b953c030b"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_21d2710b953c030b":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=21d2710b953c030b source=https://aws.amazon.com/message/680342/"
+                  },
+                  {
+                      "query":  "EBS 上报代理连不上采集服务，一直重试泄漏内存，存储节点内存耗尽，切换也失败",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_b96bf3396c0c38fb"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_b96bf3396c0c38fb":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=b96bf3396c0c38fb source=https://aws.amazon.com/message/680342/"
+                  },
+                  {
+                      "query":  "crowdstrike content update out of bounds windows bsod",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_a5115a824d715cb7"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a5115a824d715cb7":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=a5115a824d715cb7 source=https://www.crowdstrike.com/falcon-content-update-remediation-and-guidance-hub/"
+                  },
+                  {
+                      "query":  "falcon content validator bug eight and a half million",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_fe343aed74331303"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_fe343aed74331303":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=fe343aed74331303 source=https://www.crowdstrike.com/falcon-content-update-remediation-and-guidance-hub/"
+                  },
+                  {
+                      "query":  "the bad driver content crashed eight and a half million windows machines before it was reverted",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_8a972e14f2ef0a37"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_8a972e14f2ef0a37":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=8a972e14f2ef0a37 source=https://www.crowdstrike.com/falcon-content-update-remediation-and-guidance-hub/"
+                  },
+                  {
+                      "query":  "a Windows kernel crash followed the invalid Falcon content update on millions of hosts",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_b343053bca7ad65f"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_b343053bca7ad65f":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=b343053bca7ad65f source=https://www.crowdstrike.com/falcon-content-update-remediation-and-guidance-hub/"
+                  },
+                  {
+                      "query":  "Falcon 内容更新校验器漏了错误，驱动越界读取，850 万台 Windows 蓝屏",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_eefd208bdbb8ef07"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_eefd208bdbb8ef07":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=eefd208bdbb8ef07 source=https://www.crowdstrike.com/falcon-content-update-remediation-and-guidance-hub/"
+                  },
+                  {
+                      "query":  "datadog automatic upgrade removed cilium network rules",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_22b5aaf1a22320b0"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_22b5aaf1a22320b0":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=22b5aaf1a22320b0 source=https://www.datadoghq.com/blog/2023-03-08-multiregion-infrastructure-connectivity-issue/"
+                  },
+                  {
+                      "query":  "multiregion kubernetes connectivity outage all clouds",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_62a0a5d0e971184a"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_62a0a5d0e971184a":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=62a0a5d0e971184a source=https://www.datadoghq.com/blog/2023-03-08-multiregion-infrastructure-connectivity-issue/"
+                  },
+                  {
+                      "query":  "the missing network rules broke connectivity in every region and cloud provider for a day",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_fff93aebacf26220"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_fff93aebacf26220":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=fff93aebacf26220 source=https://www.datadoghq.com/blog/2023-03-08-multiregion-infrastructure-connectivity-issue/"
+                  },
+                  {
+                      "query":  "connectivity failed across regions and clouds until the removed network rules were restored",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_3c9bf34105a00ba2"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_3c9bf34105a00ba2":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=3c9bf34105a00ba2 source=https://www.datadoghq.com/blog/2023-03-08-multiregion-infrastructure-connectivity-issue/"
+                  },
+                  {
+                      "query":  "Datadog 自动升级把 Cilium 网络规则全删了，所有区域和云的 K8s 集群断了一天",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_d6b7b35016407da0"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_d6b7b35016407da0":  2
+                              },
+                      "judge":  {
+                                    "by":  "mechanical-target-confirm3-v1",
+                                    "date":  "2026-10-23T00:00:00Z"
+                                },
+                      "note":  "target-only; target=d6b7b35016407da0 source=https://www.datadoghq.com/blog/2023-03-08-multiregion-infrastructure-connectivity-issue/"
+                  }
+              ]
+}

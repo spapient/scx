@@ -1,0 +1,17 @@
+eval: cases=150 layers=literal,paraphrase,semantic multi-rel=0 single-rel=150 (NDCG strength)
+layer literal: n=60 A r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=1.000 ci95=[1.000,1.000] | B r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=1.000 ci95=[1.000,1.000]
+layer paraphrase: n=60 A r@5=0.900 mrr=0.499 ci95=[0.412,0.582] ndcg@10=0.607 ci95=[0.531,0.676] | B r@5=0.883 mrr=0.487 ci95=[0.404,0.569] ndcg@10=0.597 ci95=[0.524,0.663]
+layer semantic: n=30 A r@10=1.000 mrr=0.841 ci95=[0.729,0.947] ndcg@10=0.880 ci95=[0.795,0.959] | B r@10=1.000 mrr=0.567 ci95=[0.448,0.706] ndcg@10=0.671 ci95=[0.581,0.777]
+l1: hits=61 total=99 rate=0.616
+gate: total=150 need>=30 (target 30-50) PASS
+gate: layer literal n=60 need>=10 PASS
+gate: layer paraphrase n=60 need>=10 PASS
+gate: layer semantic n=30 need>=10 PASS
+gate: judge metadata nonliteral=90 (need real by+date) PASS
+gate: layer literal A r@5=1.000 vs B=1.000 PASS; A mrr=1.000 vs B=1.000 PASS
+gate: layer paraphrase A r@5=0.900 vs B=0.883 PASS; A mrr=0.499 vs B=0.487 PASS
+gate: layer semantic A r@10=1.000 vs B=1.000 PASS; A mrr=0.841 vs B=0.567 PASS
+gate: rel distribution 2=150 1=0 0=0
+gate: warning all labels are 2 (no weak/negative controls)
+gate: discrimination A!=B layers=2/3
+gate: PASS
