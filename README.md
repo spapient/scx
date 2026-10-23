@@ -87,7 +87,7 @@ scx --stats --mem-dir D:\scx-mem
 
 ## 入口与自举语义（推荐用法）
 
-- Windows：`bin\run.cmd <scx 参数...>`；macOS / Linux：`bin/run <scx 参数...>`（必要时 `sh bin/run` 或先 `chmod +x`）。
+- Windows：`bin\run.cmd <scx 参数...>`；macOS / Linux：`bin/run <scx 参数...>`（仓库保留可执行位；若文件系统丢失执行位，用 `sh bin/run`）。
 - 自举行为：入口自动检测本平台状态；Unix 在二进制缺失或 `rs/src`、`Cargo.toml`、`Cargo.lock` 更新时自动构建；Windows 在 cargo 可用时每次执行增量 `cargo build`，然后安装并转发参数。构建失败不会继续运行旧二进制。
 - 跨机器策略：只需携带技能目录的文本与源码；不需要同步任何平台的二进制。需要目标机有 Rust。
 
