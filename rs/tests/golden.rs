@@ -7,7 +7,8 @@
 //! 2) 常规回归（CI 执行）：`cargo test --test golden`。
 //!
 //! 语义约束：本测试只对比当前实现与冻结基线的字节一致性，不判断对错；
-//! 基线合理性由人工审查 + 库/CLI 单元测试共同保证。
+//! 基线合理性由人工审查 + 库/CLI 单元测试共同保证。`case=` 后的
+//! `YYYY-MM-DD_` 前缀是摄取当天的元数据，不属于输出语义，比较前统一归一化。
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -38,6 +39,37 @@ fn run_scx(args: &[&str], input: &str) -> (String, String, i32) {
         String::from_utf8_lossy(&out.stderr).into_owned(),
         out.status.code().unwrap_or(-1),
     )
+}
+
+/// 归一化 `case=YYYY-MM-DD_<hash16>` 中的日期前缀。
+/// 只处理已校验的日期与 16 位十六进制 hash，避免误改普通日志内容。
+fn normalize_case_dates(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let mut copied = 0usize;
+    let mut i = 0usize;
+    while i + 32 <= bytes.len() {
+        let date = &bytes[i + 5..i + 15];
+        let is_case_date = bytes[i..i + 5] == *b"case="
+            && date[4] == b'-'
+            && date[7] == b'-'
+            && date
+                .iter()
+                .enumerate()
+                .all(|(j, b)| j == 4 || j == 7 || b.is_ascii_digit())
+            && bytes[i + 15] == b'_'
+            && bytes[i + 16..i + 32].iter().all(|b| b.is_ascii_hexdigit());
+        if is_case_date {
+            out.push_str(&text[copied..i + 5]);
+            out.push_str("<date>_");
+            i += 16;
+            copied = i;
+        } else {
+            i += 1;
+        }
+    }
+    out.push_str(&text[copied..]);
+    out
 }
 
 fn cases() -> Vec<(String, Vec<&'static str>, String)> {
@@ -681,9 +713,30 @@ fn golden_gate() {
             .parse::<i32>()
             .unwrap();
         assert_eq!(code, exp_code, "[{name}] 退出码漂移");
-        assert_eq!(err, exp_err, "[{name}] stderr 漂移");
-        assert_eq!(out, exp_out, "[{name}] stdout 漂移");
+        assert_eq!(
+            normalize_case_dates(&err),
+            normalize_case_dates(&exp_err),
+            "[{name}] stderr 漂移"
+        );
+        assert_eq!(
+            normalize_case_dates(&out),
+            normalize_case_dates(&exp_out),
+            "[{name}] stdout 漂移"
+        );
     }
+}
+
+#[test]
+fn case_date_normalization_is_scoped() {
+    let older = "stored case=2026-10-22_123e7decc4c4a423 added=yes";
+    let newer = "stored case=2026-10-23_123e7decc4c4a423 added=yes";
+    assert_eq!(normalize_case_dates(older), normalize_case_dates(newer));
+    assert_eq!(
+        normalize_case_dates(older),
+        "stored case=<date>_123e7decc4c4a423 added=yes"
+    );
+    let unrelated = "date=2026-10-22_123e7decc4c4a423";
+    assert_eq!(normalize_case_dates(unrelated), unrelated);
 }
 
 #[test]
