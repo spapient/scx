@@ -1,0 +1,894 @@
+{
+    "cases":  [
+                  {
+                      "query":  "waf regex catastrophic backtracking cpu",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_92191a0c19bc547f"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_92191a0c19bc547f":  2,
+                                  "2026-10-22_e87e4e6e598abb6d":  1,
+                                  "2026-10-22_10d888a62cdf49e3":  1
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "edge 502 bad gateway spike",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_abf8478c778e3616"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_abf8478c778e3616":  2,
+                                  "2026-10-22_10d888a62cdf49e3":  1,
+                                  "2026-10-22_e87e4e6e598abb6d":  1,
+                                  "2026-10-22_92191a0c19bc547f":  1
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "waf regex caused catastrophic backtracking that pegged every edge cpu",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_e87e4e6e598abb6d"
+                                   ],
+                      "note":  "target=e87e4e6e598abb6d hint=[WAF 正则回溯导致边缘节点 CPU 100% 返回 502] fix=[回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布]",
+                      "rel":  {
+                                  "2026-10-22_92191a0c19bc547f":  1,
+                                  "2026-10-22_e87e4e6e598abb6d":  2,
+                                  "2026-10-22_10d888a62cdf49e3":  1,
+                                  "2026-10-22_3877738ad0b3ed10":  0,
+                                  "2026-10-22_abf8478c778e3616":  1,
+                                  "2026-10-22_0381300ca324d79a":  0,
+                                  "2026-10-22_fcd3914c33630f77":  0,
+                                  "2026-10-22_cac21e45bfc14ded":  0,
+                                  "2026-10-22_18dd0d2f00e369ee":  0,
+                                  "2026-10-22_e496c0b197861d18":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "网站全部返回 502 因为边缘节点 edge CPU 被打满",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_10d888a62cdf49e3"
+                                   ],
+                      "note":  "target=10d888a62cdf49e3 hint=[边缘节点 CPU 100%，全球 502 错误] fix=[回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布]",
+                      "rel":  {
+                                  "2026-10-22_10d888a62cdf49e3":  2,
+                                  "2026-10-22_92191a0c19bc547f":  1,
+                                  "2026-10-22_e87e4e6e598abb6d":  1,
+                                  "2026-10-22_abf8478c778e3616":  1,
+                                  "2026-10-22_3877738ad0b3ed10":  0,
+                                  "2026-10-22_73884c828073973f":  0,
+                                  "2026-10-22_e77765a11cd3d74f":  0,
+                                  "2026-10-22_3abbd81ca72d18b9":  0,
+                                  "2026-10-22_a52592b979147085":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "database replication failure data loss",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_cac21e45bfc14ded"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_cac21e45bfc14ded":  2,
+                                  "2026-10-22_f78446fa4913c20d":  1,
+                                  "2026-10-22_18dd0d2f00e369ee":  1,
+                                  "2026-10-22_f1273497e714ab3c":  0,
+                                  "2026-10-22_ebe5dffb6ce803c2":  0,
+                                  "2026-10-22_cb0b78dc412f1353":  1,
+                                  "2026-10-22_3b74c878e5554bc9":  0,
+                                  "2026-10-22_e496c0b197861d18":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "primary database directory was accidentally removed while fixing replica lag",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_18dd0d2f00e369ee"
+                                   ],
+                      "note":  "target=18dd0d2f00e369ee hint=[数据库复制故障叠加主库目录误删导致 6 小时数据丢失] fix=[从备份恢复，修复复制与备份流程并加安全操作护栏]",
+                      "rel":  {
+                                  "2026-10-22_18dd0d2f00e369ee":  2,
+                                  "2026-10-22_f78446fa4913c20d":  1,
+                                  "2026-10-22_f1273497e714ab3c":  0,
+                                  "2026-10-22_3b74c878e5554bc9":  0,
+                                  "2026-10-22_cac21e45bfc14ded":  1,
+                                  "2026-10-22_ebe5dffb6ce803c2":  0,
+                                  "2026-10-22_cb0b78dc412f1353":  1,
+                                  "2026-10-22_e496c0b197861d18":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "误删数据库主目录导致 database data 丢失 6 小时",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_f78446fa4913c20d"
+                                   ],
+                      "note":  "target=f78446fa4913c20d hint=[误删数据库主目录，6 小时数据丢失] fix=[从备份恢复，修复复制与备份流程并加安全操作护栏]",
+                      "rel":  {
+                                  "2026-10-22_f78446fa4913c20d":  2,
+                                  "2026-10-22_f1273497e714ab3c":  0,
+                                  "2026-10-22_cac21e45bfc14ded":  1,
+                                  "2026-10-22_3b74c878e5554bc9":  0,
+                                  "2026-10-22_cb0b78dc412f1353":  1,
+                                  "2026-10-22_ebe5dffb6ce803c2":  0,
+                                  "2026-10-22_18dd0d2f00e369ee":  1,
+                                  "2026-10-22_e496c0b197861d18":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "recovery from backup after accidental primary deletion took about six hours",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_cb0b78dc412f1353"
+                                   ],
+                      "note":  "target=cb0b78dc412f1353 hint=[误删主库后从备份恢复耗时约 6 小时] fix=[从备份恢复，修复复制与备份流程并加安全操作护栏]",
+                      "rel":  {
+                                  "2026-10-22_cb0b78dc412f1353":  2,
+                                  "2026-10-22_ed851aaca896fdc0":  0,
+                                  "2026-10-22_3aa4a70ed9da6f8a":  0,
+                                  "2026-10-22_3b74c878e5554bc9":  0,
+                                  "2026-10-22_f78446fa4913c20d":  1,
+                                  "2026-10-22_e77765a11cd3d74f":  0,
+                                  "2026-10-22_18dd0d2f00e369ee":  1,
+                                  "2026-10-22_cac21e45bfc14ded":  1,
+                                  "2026-10-22_3abbd81ca72d18b9":  0,
+                                  "2026-10-22_e496c0b197861d18":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "mysql network partition split brain",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_e496c0b197861d18"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e496c0b197861d18":  2,
+                                  "2026-10-22_ebe5dffb6ce803c2":  1,
+                                  "2026-10-22_3b74c878e5554bc9":  1,
+                                  "2026-10-22_f1273497e714ab3c":  1,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_0381300ca324d79a":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_488c208db561a61a":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "primary failover during network partition",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_3b74c878e5554bc9"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_3b74c878e5554bc9":  2,
+                                  "2026-10-22_e496c0b197861d18":  1,
+                                  "2026-10-22_f1273497e714ab3c":  1,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_18dd0d2f00e369ee":  0,
+                                  "2026-10-22_0381300ca324d79a":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_ebe5dffb6ce803c2":  1
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "network partition caused database split brain and inconsistent metadata",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_ebe5dffb6ce803c2"
+                                   ],
+                      "note":  "target=ebe5dffb6ce803c2 hint=[网络分区导致 MySQL 主从裂脑与元数据不一致] fix=[恢复拓扑，加主从选举护栏与分区检测]",
+                      "rel":  {
+                                  "2026-10-22_ebe5dffb6ce803c2":  2,
+                                  "2026-10-22_e496c0b197861d18":  1,
+                                  "2026-10-22_3b74c878e5554bc9":  1,
+                                  "2026-10-22_3877738ad0b3ed10":  0,
+                                  "2026-10-22_f78446fa4913c20d":  0,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_f1273497e714ab3c":  1,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_cac21e45bfc14ded":  0,
+                                  "2026-10-22_0381300ca324d79a":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "网络分区引发 database failover 主备裂脑、数据不一致",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_f1273497e714ab3c"
+                                   ],
+                      "note":  "target=f1273497e714ab3c hint=[数据库主备裂脑，元数据不一致] fix=[恢复拓扑，加主从选举护栏与分区检测]",
+                      "rel":  {
+                                  "2026-10-22_f1273497e714ab3c":  2,
+                                  "2026-10-22_ebe5dffb6ce803c2":  1,
+                                  "2026-10-22_e496c0b197861d18":  1,
+                                  "2026-10-22_3b74c878e5554bc9":  1,
+                                  "2026-10-22_a13c5b39d36f3324":  0,
+                                  "2026-10-22_cac21e45bfc14ded":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_18dd0d2f00e369ee":  0,
+                                  "2026-10-22_e77765a11cd3d74f":  0,
+                                  "2026-10-22_488c208db561a61a":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "kubernetes upgrade route reflector breakage",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_4bbea51dee9b6a0e"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_4bbea51dee9b6a0e":  2,
+                                  "2026-10-22_8e4b9492f5629bcc":  1,
+                                  "2026-10-22_87021c381b74b275":  1
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "cluster upgrade to 1.24 broke route reflector label configuration",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_87021c381b74b275"
+                                   ],
+                      "note":  "target=87021c381b74b275 hint=[K8s 1.23 到 1.24 升级触发 route reflector 标签冲突致站点中断] fix=[回滚升级，对齐 route reflector 配置并清理旧版命令]",
+                      "rel":  {
+                                  "2026-10-22_8e4b9492f5629bcc":  1,
+                                  "2026-10-22_87021c381b74b275":  2,
+                                  "2026-10-22_4bbea51dee9b6a0e":  1,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_488c208db561a61a":  0,
+                                  "2026-10-22_0381300ca324d79a":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "Kubernetes 集群升级后 route reflector 配置冲突导致服务中断",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_8e4b9492f5629bcc"
+                                   ],
+                      "note":  "target=8e4b9492f5629bcc hint=[Kubernetes 集群升级后 route reflector 配置冲突，服务中断] fix=[回滚升级，对齐 route reflector 配置并清理旧版命令]",
+                      "rel":  {
+                                  "2026-10-22_8e4b9492f5629bcc":  2,
+                                  "2026-10-22_4bbea51dee9b6a0e":  1,
+                                  "2026-10-22_87021c381b74b275":  1,
+                                  "2026-10-22_488c208db561a61a":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_abc183e225726832":  0,
+                                  "2026-10-22_8111c3eb263e355b":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "config change triggers software bug outage",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_2df4ae3c1f2f5eac"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_2df4ae3c1f2f5eac":  2,
+                                  "2026-10-22_dc1dc4c39cd4d520":  1,
+                                  "2026-10-22_488c208db561a61a":  1,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_8e4b9492f5629bcc":  0,
+                                  "2026-10-22_a52592b979147085":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_73884c828073973f":  0,
+                                  "2026-10-22_11b00b6f51bcab1d":  0,
+                                  "2026-10-22_0381300ca324d79a":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "a valid customer configuration change activated a latent software bug and took the network down",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_dc1dc4c39cd4d520"
+                                   ],
+                      "note":  "target=dc1dc4c39cd4d520 hint=[合法客户配置变更触发未发现软件缺陷，85% 网络报错] fix=[回滚配置并修复缺陷，补回归测试]",
+                      "rel":  {
+                                  "2026-10-22_dc1dc4c39cd4d520":  2,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  1,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_3aa4a70ed9da6f8a":  0,
+                                  "2026-10-22_0381300ca324d79a":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_a52592b979147085":  0,
+                                  "2026-10-22_488c208db561a61a":  1,
+                                  "2026-10-22_6dc8acb771d36a10":  0,
+                                  "2026-10-22_8e4b9492f5629bcc":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_488c208db561a61a"
+                                   ],
+                      "note":  "target=488c208db561a61a hint=[合法配置变更触发未发现缺陷，全球 CDN 故障] fix=[回滚配置并修复缺陷，补回归测试]",
+                      "rel":  {
+                                  "2026-10-22_488c208db561a61a":  2,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  1,
+                                  "2026-10-22_dc1dc4c39cd4d520":  1,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_0381300ca324d79a":  0,
+                                  "2026-10-22_8e4b9492f5629bcc":  0,
+                                  "2026-10-22_92191a0c19bc547f":  0,
+                                  "2026-10-22_87021c381b74b275":  0,
+                                  "2026-10-22_73884c828073973f":  0,
+                                  "2026-10-22_f0aa4f92b475f669":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "script wrong mode deletes customer data",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_6dc8acb771d36a10"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_6dc8acb771d36a10":  2,
+                                  "2026-10-22_f78446fa4913c20d":  0,
+                                  "2026-10-22_ed851aaca896fdc0":  1,
+                                  "2026-10-22_7d30b4959ba43c0c":  1,
+                                  "2026-10-22_cac21e45bfc14ded":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_cb0b78dc412f1353":  0,
+                                  "2026-10-22_18dd0d2f00e369ee":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "maintenance script executed with wrong mode and wrong id list erased customer sites",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_7d30b4959ba43c0c"
+                                   ],
+                      "note":  "target=7d30b4959ba43c0c hint=[维护脚本以错误执行模式与错误 ID 列表误删客户数据] fix=[引入软删除策略，复核脚本与 runbook 并恢复数据]",
+                      "rel":  {
+                                  "2026-10-22_6dc8acb771d36a10":  1,
+                                  "2026-10-22_7d30b4959ba43c0c":  2,
+                                  "2026-10-22_ed851aaca896fdc0":  1,
+                                  "2026-10-22_3aa4a70ed9da6f8a":  0,
+                                  "2026-10-22_cb0b78dc412f1353":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_f78446fa4913c20d":  0,
+                                  "2026-10-22_cac21e45bfc14ded":  0,
+                                  "2026-10-22_18dd0d2f00e369ee":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_ed851aaca896fdc0"
+                                   ],
+                      "note":  "target=ed851aaca896fdc0 hint=[运维脚本用错执行模式和 ID 列表，误删客户数据] fix=[引入软删除策略，复核脚本与 runbook 并恢复数据]",
+                      "rel":  {
+                                  "2026-10-22_ed851aaca896fdc0":  2,
+                                  "2026-10-22_7d30b4959ba43c0c":  1,
+                                  "2026-10-22_6dc8acb771d36a10":  1,
+                                  "2026-10-22_cb0b78dc412f1353":  0,
+                                  "2026-10-22_cac21e45bfc14ded":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_e496c0b197861d18":  0,
+                                  "2026-10-22_f1273497e714ab3c":  0,
+                                  "2026-10-22_f78446fa4913c20d":  0,
+                                  "2026-10-22_3b74c878e5554bc9":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "bgp routes withdrawn dns unavailable",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_abc183e225726832"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_abc183e225726832":  2,
+                                  "2026-10-22_beb67945a220a8ed":  1,
+                                  "2026-10-22_3aa4a70ed9da6f8a":  1,
+                                  "2026-10-22_3abbd81ca72d18b9":  1,
+                                  "2026-10-22_f0aa4f92b475f669":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "a maintenance command on the backbone withdrew all bgp routes and took dns offline",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_beb67945a220a8ed"
+                                   ],
+                      "note":  "target=beb67945a220a8ed hint=[骨干维护命令导致 BGP 路由撤回、DNS 不可用] fix=[恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护]",
+                      "rel":  {
+                                  "2026-10-22_beb67945a220a8ed":  2,
+                                  "2026-10-22_3aa4a70ed9da6f8a":  1,
+                                  "2026-10-22_abc183e225726832":  1,
+                                  "2026-10-22_7d30b4959ba43c0c":  0,
+                                  "2026-10-22_f0aa4f92b475f669":  0,
+                                  "2026-10-22_3abbd81ca72d18b9":  1,
+                                  "2026-10-22_0fe428f375dbd78c":  0,
+                                  "2026-10-22_e77765a11cd3d74f":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_3abbd81ca72d18b9"
+                                   ],
+                      "note":  "target=3abbd81ca72d18b9 hint=[BGP 路由全部撤回，域名解析不可用] fix=[恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护]",
+                      "rel":  {
+                                  "2026-10-22_3abbd81ca72d18b9":  2,
+                                  "2026-10-22_abc183e225726832":  1,
+                                  "2026-10-22_3aa4a70ed9da6f8a":  1,
+                                  "2026-10-22_beb67945a220a8ed":  1,
+                                  "2026-10-22_e87e4e6e598abb6d":  0,
+                                  "2026-10-22_e77765a11cd3d74f":  0,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_f0aa4f92b475f669":  0,
+                                  "2026-10-22_73884c828073973f":  0,
+                                  "2026-10-22_6dc8acb771d36a10":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "a backbone maintenance window took down both dns and bgp at the same time",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_3aa4a70ed9da6f8a"
+                                   ],
+                      "note":  "target=3aa4a70ed9da6f8a hint=[骨干维护同时打挂 DNS 与 BGP] fix=[恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护]",
+                      "rel":  {
+                                  "2026-10-22_3aa4a70ed9da6f8a":  2,
+                                  "2026-10-22_beb67945a220a8ed":  1,
+                                  "2026-10-22_abc183e225726832":  1,
+                                  "2026-10-22_3abbd81ca72d18b9":  1,
+                                  "2026-10-22_7d30b4959ba43c0c":  0,
+                                  "2026-10-22_f0aa4f92b475f669":  0,
+                                  "2026-10-22_e77765a11cd3d74f":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "dnssec rollout servfail wildcard bug",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_a52592b979147085"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a52592b979147085":  2,
+                                  "2026-10-22_3877738ad0b3ed10":  1,
+                                  "2026-10-22_73884c828073973f":  1,
+                                  "2026-10-22_f0aa4f92b475f669":  1,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_3877738ad0b3ed10"
+                                   ],
+                      "note":  "target=3877738ad0b3ed10 hint=[DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL] fix=[回退签名，改 ALIAS 记录并修复 NSEC]",
+                      "rel":  {
+                                  "2026-10-22_a52592b979147085":  1,
+                                  "2026-10-22_3877738ad0b3ed10":  2,
+                                  "2026-10-22_f0aa4f92b475f669":  1,
+                                  "2026-10-22_73884c828073973f":  1,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_fcd3914c33630f77":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_8111c3eb263e355b":  0,
+                                  "2026-10-22_0fe428f375dbd78c":  0,
+                                  "2026-10-22_488c208db561a61a":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_73884c828073973f"
+                                   ],
+                      "note":  "target=73884c828073973f hint=[DNSSEC 上线后域名解析返回 SERVFAIL] fix=[回退签名，改 ALIAS 记录并修复 NSEC]",
+                      "rel":  {
+                                  "2026-10-22_73884c828073973f":  2,
+                                  "2026-10-22_3abbd81ca72d18b9":  0,
+                                  "2026-10-22_f0aa4f92b475f669":  1,
+                                  "2026-10-22_3877738ad0b3ed10":  1,
+                                  "2026-10-22_92191a0c19bc547f":  0,
+                                  "2026-10-22_a52592b979147085":  1,
+                                  "2026-10-22_e87e4e6e598abb6d":  0,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_beb67945a220a8ed":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_f0aa4f92b475f669"
+                                   ],
+                      "note":  "target=f0aa4f92b475f669 hint=[DNS 签名回滚时遇到 NSEC 错误，解析持续失败] fix=[回退签名，改 ALIAS 记录并修复 NSEC]",
+                      "rel":  {
+                                  "2026-10-22_f0aa4f92b475f669":  2,
+                                  "2026-10-22_fcd3914c33630f77":  0,
+                                  "2026-10-22_3877738ad0b3ed10":  1,
+                                  "2026-10-22_a52592b979147085":  1,
+                                  "2026-10-22_73884c828073973f":  1,
+                                  "2026-10-22_3abbd81ca72d18b9":  0,
+                                  "2026-10-22_0fe428f375dbd78c":  0,
+                                  "2026-10-22_10d888a62cdf49e3":  0,
+                                  "2026-10-22_3aa4a70ed9da6f8a":  0,
+                                  "2026-10-22_8111c3eb263e355b":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "ebs re-mirroring storm capacity shortage",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_a13c5b39d36f3324"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_a13c5b39d36f3324":  2,
+                                  "2026-10-22_e77765a11cd3d74f":  1,
+                                  "2026-10-22_0a9bb5ed8ad9b83a":  1,
+                                  "2026-10-22_65f4ac561d3909b4":  1
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "ebs volume stuck re-mirroring state",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_65f4ac561d3909b4"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_65f4ac561d3909b4":  2,
+                                  "2026-10-22_0a9bb5ed8ad9b83a":  1,
+                                  "2026-10-22_e77765a11cd3d74f":  1,
+                                  "2026-10-22_a13c5b39d36f3324":  1
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_0a9bb5ed8ad9b83a"
+                                   ],
+                      "note":  "target=0a9bb5ed8ad9b83a hint=[网络事件引发 EBS re-mirroring 风暴与容量耗尽] fix=[扩容并修复控制面，错峰 re-mirroring]",
+                      "rel":  {
+                                  "2026-10-22_a13c5b39d36f3324":  1,
+                                  "2026-10-22_e77765a11cd3d74f":  1,
+                                  "2026-10-22_0a9bb5ed8ad9b83a":  2,
+                                  "2026-10-22_65f4ac561d3909b4":  1,
+                                  "2026-10-22_3877738ad0b3ed10":  0,
+                                  "2026-10-22_e628f14213e5a56c":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_0381300ca324d79a":  0,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_e77765a11cd3d74f"
+                                   ],
+                      "note":  "target=e77765a11cd3d74f hint=[云盘大规模重新镜像，可用区容量打满] fix=[扩容并修复控制面，错峰 re-mirroring]",
+                      "rel":  {
+                                  "2026-10-22_e77765a11cd3d74f":  2,
+                                  "2026-10-22_0a9bb5ed8ad9b83a":  1,
+                                  "2026-10-22_65f4ac561d3909b4":  1,
+                                  "2026-10-22_a13c5b39d36f3324":  1,
+                                  "2026-10-22_10d888a62cdf49e3":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_abc183e225726832":  0,
+                                  "2026-10-22_488c208db561a61a":  0,
+                                  "2026-10-22_3aa4a70ed9da6f8a":  0,
+                                  "2026-10-22_e87e4e6e598abb6d":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "network configuration change congestion outage",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_e628f14213e5a56c"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_e628f14213e5a56c":  2,
+                                  "2026-10-22_0381300ca324d79a":  1,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  1,
+                                  "2026-10-22_488c208db561a61a":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_11b00b6f51bcab1d":  0,
+                                  "2026-10-22_8e4b9492f5629bcc":  0,
+                                  "2026-10-22_73884c828073973f":  0,
+                                  "2026-10-22_3abbd81ca72d18b9":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "a configuration change plus software bugs caused multi-region network congestion for hours",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_0381300ca324d79a"
+                                   ],
+                      "note":  "target=0381300ca324d79a hint=[配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时] fix=[回滚配置并修复缺陷]",
+                      "rel":  {
+                                  "2026-10-22_0381300ca324d79a":  2,
+                                  "2026-10-22_e628f14213e5a56c":  1,
+                                  "2026-10-22_2df4ae3c1f2f5eac":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  1,
+                                  "2026-10-22_3877738ad0b3ed10":  0,
+                                  "2026-10-22_488c208db561a61a":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_a52592b979147085":  0,
+                                  "2026-10-22_7d30b4959ba43c0c":  0,
+                                  "2026-10-22_ed851aaca896fdc0":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_189c0264fc39cc3c"
+                                   ],
+                      "note":  "target=189c0264fc39cc3c hint=[配置变更叠加缺陷，多区域网络拥塞] fix=[回滚配置并修复缺陷]",
+                      "rel":  {
+                                  "2026-10-22_189c0264fc39cc3c":  2,
+                                  "2026-10-22_e628f14213e5a56c":  1,
+                                  "2026-10-22_0381300ca324d79a":  1,
+                                  "2026-10-22_488c208db561a61a":  0,
+                                  "2026-10-22_dc1dc4c39cd4d520":  0,
+                                  "2026-10-22_abc183e225726832":  0,
+                                  "2026-10-22_8e4b9492f5629bcc":  0,
+                                  "2026-10-22_e77765a11cd3d74f":  0,
+                                  "2026-10-22_3877738ad0b3ed10":  0,
+                                  "2026-10-22_f0aa4f92b475f669":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "signing key rotation token validation failure",
+                      "layer":  "literal",
+                      "expected":  [
+                                       "2026-10-22_fcd3914c33630f77"
+                                   ],
+                      "rel":  {
+                                  "2026-10-22_fcd3914c33630f77":  2,
+                                  "2026-10-22_8111c3eb263e355b":  1,
+                                  "2026-10-22_f0aa4f92b475f669":  0,
+                                  "2026-10-22_11b00b6f51bcab1d":  1,
+                                  "2026-10-22_3877738ad0b3ed10":  0,
+                                  "2026-10-22_cac21e45bfc14ded":  0,
+                                  "2026-10-22_0fe428f375dbd78c":  1,
+                                  "2026-10-22_e87e4e6e598abb6d":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_e496c0b197861d18":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "routine signing key rotation mistakenly removed a critical key and broke token validation",
+                      "layer":  "paraphrase",
+                      "expected":  [
+                                       "2026-10-22_8111c3eb263e355b"
+                                   ],
+                      "note":  "target=8111c3eb263e355b hint=[签名密钥轮换错误移除关键密钥导致令牌校验失败] fix=[回滚元数据，修复轮换逻辑并加速缓存恢复]",
+                      "rel":  {
+                                  "2026-10-22_fcd3914c33630f77":  1,
+                                  "2026-10-22_8111c3eb263e355b":  2,
+                                  "2026-10-22_3877738ad0b3ed10":  0,
+                                  "2026-10-22_18dd0d2f00e369ee":  0,
+                                  "2026-10-22_f0aa4f92b475f669":  0,
+                                  "2026-10-22_11b00b6f51bcab1d":  1,
+                                  "2026-10-22_0fe428f375dbd78c":  1,
+                                  "2026-10-22_e87e4e6e598abb6d":  0,
+                                  "2026-10-22_beb67945a220a8ed":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_11b00b6f51bcab1d"
+                                   ],
+                      "note":  "target=11b00b6f51bcab1d hint=[签名密钥轮换出错，令牌校验大面积失败] fix=[回滚元数据，修复轮换逻辑并加速缓存恢复]",
+                      "rel":  {
+                                  "2026-10-22_0fe428f375dbd78c":  1,
+                                  "2026-10-22_11b00b6f51bcab1d":  2,
+                                  "2026-10-22_8111c3eb263e355b":  1,
+                                  "2026-10-22_f0aa4f92b475f669":  0,
+                                  "2026-10-22_fcd3914c33630f77":  1,
+                                  "2026-10-22_e496c0b197861d18":  0,
+                                  "2026-10-22_ebe5dffb6ce803c2":  0,
+                                  "2026-10-22_92191a0c19bc547f":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_beb67945a220a8ed":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  },
+                  {
+                      "query":  "企业单点登录 single sign on 大面积失败，用户无法登录办公套件",
+                      "layer":  "semantic",
+                      "expected":  [
+                                       "2026-10-22_0fe428f375dbd78c"
+                                   ],
+                      "note":  "target=0fe428f375dbd78c hint=[企业单点登录大面积失败，用户无法登录] fix=[回滚元数据，修复轮换逻辑并加速缓存恢复]",
+                      "rel":  {
+                                  "2026-10-22_0fe428f375dbd78c":  2,
+                                  "2026-10-22_11b00b6f51bcab1d":  1,
+                                  "2026-10-22_65f4ac561d3909b4":  0,
+                                  "2026-10-22_8111c3eb263e355b":  1,
+                                  "2026-10-22_f0aa4f92b475f669":  0,
+                                  "2026-10-22_fcd3914c33630f77":  1,
+                                  "2026-10-22_e87e4e6e598abb6d":  0,
+                                  "2026-10-22_beb67945a220a8ed":  0,
+                                  "2026-10-22_189c0264fc39cc3c":  0,
+                                  "2026-10-22_e496c0b197861d18":  0
+                              },
+                      "judge":  {
+                                    "by":  "fei",
+                                    "date":  "2026-10-22T18:26:01Z"
+                                }
+                  }
+              ]
+}

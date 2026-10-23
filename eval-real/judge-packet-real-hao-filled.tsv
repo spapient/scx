@@ -1,0 +1,345 @@
+row	case_index	layer	query	candidate	summary	fix	rel
+1	0	literal	waf regex catastrophic backtracking cpu	2026-10-22_92191a0c19bc547f	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+2	0	literal	waf regex catastrophic backtracking cpu	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+3	0	literal	waf regex catastrophic backtracking cpu	2026-10-22_10d888a62cdf49e3	边缘节点 CPU 100%，全球 502 错误	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+4	1	literal	edge 502 bad gateway spike	2026-10-22_abf8478c778e3616	边缘节点 502 Bad Gateway 请求激增	回滚触发规则并监控边缘 502 率	2
+5	1	literal	edge 502 bad gateway spike	2026-10-22_10d888a62cdf49e3	边缘节点 CPU 100%，全球 502 错误	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+6	1	literal	edge 502 bad gateway spike	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+7	1	literal	edge 502 bad gateway spike	2026-10-22_92191a0c19bc547f	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+8	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_92191a0c19bc547f	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+9	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+10	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_10d888a62cdf49e3	边缘节点 CPU 100%，全球 502 错误	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+11	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+12	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_abf8478c778e3616	边缘节点 502 Bad Gateway 请求激增	回滚触发规则并监控边缘 502 率	2
+13	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+14	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_fcd3914c33630f77	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+15	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+16	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+17	2	paraphrase	waf regex caused catastrophic backtracking that pegged every edge cpu	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	0
+18	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_10d888a62cdf49e3	边缘节点 CPU 100%，全球 502 错误	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+19	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_92191a0c19bc547f	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+20	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	2
+21	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_abf8478c778e3616	边缘节点 502 Bad Gateway 请求激增	回滚触发规则并监控边缘 502 率	2
+22	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+23	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	1
+24	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	1
+25	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+26	3	semantic	网站全部返回 502 因为边缘节点 edge CPU 被打满	2026-10-22_a52592b979147085	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+27	4	literal	database replication failure data loss	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+28	4	literal	database replication failure data loss	2026-10-22_f78446fa4913c20d	误删数据库主目录，6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+29	4	literal	database replication failure data loss	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+30	4	literal	database replication failure data loss	2026-10-22_f1273497e714ab3c	数据库主备裂脑，元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+31	4	literal	database replication failure data loss	2026-10-22_ebe5dffb6ce803c2	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+32	4	literal	database replication failure data loss	2026-10-22_cb0b78dc412f1353	误删主库后从备份恢复耗时约 6 小时	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+33	4	literal	database replication failure data loss	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	1
+34	4	literal	database replication failure data loss	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+35	5	paraphrase	primary database directory was accidentally removed while fixing replica lag	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+36	5	paraphrase	primary database directory was accidentally removed while fixing replica lag	2026-10-22_f78446fa4913c20d	误删数据库主目录，6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+37	5	paraphrase	primary database directory was accidentally removed while fixing replica lag	2026-10-22_f1273497e714ab3c	数据库主备裂脑，元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+38	5	paraphrase	primary database directory was accidentally removed while fixing replica lag	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	1
+39	5	paraphrase	primary database directory was accidentally removed while fixing replica lag	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+40	5	paraphrase	primary database directory was accidentally removed while fixing replica lag	2026-10-22_ebe5dffb6ce803c2	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+41	5	paraphrase	primary database directory was accidentally removed while fixing replica lag	2026-10-22_cb0b78dc412f1353	误删主库后从备份恢复耗时约 6 小时	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+42	5	paraphrase	primary database directory was accidentally removed while fixing replica lag	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+43	6	semantic	误删数据库主目录导致 database data 丢失 6 小时	2026-10-22_f78446fa4913c20d	误删数据库主目录，6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+44	6	semantic	误删数据库主目录导致 database data 丢失 6 小时	2026-10-22_f1273497e714ab3c	数据库主备裂脑，元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+45	6	semantic	误删数据库主目录导致 database data 丢失 6 小时	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+46	6	semantic	误删数据库主目录导致 database data 丢失 6 小时	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	1
+47	6	semantic	误删数据库主目录导致 database data 丢失 6 小时	2026-10-22_cb0b78dc412f1353	误删主库后从备份恢复耗时约 6 小时	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+48	6	semantic	误删数据库主目录导致 database data 丢失 6 小时	2026-10-22_ebe5dffb6ce803c2	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+49	6	semantic	误删数据库主目录导致 database data 丢失 6 小时	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+50	6	semantic	误删数据库主目录导致 database data 丢失 6 小时	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+51	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_cb0b78dc412f1353	误删主库后从备份恢复耗时约 6 小时	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+52	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_ed851aaca896fdc0	运维脚本用错执行模式和 ID 列表，误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	0
+53	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	0
+54	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	1
+55	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_f78446fa4913c20d	误删数据库主目录，6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+56	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	0
+57	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+58	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	2
+59	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	0
+60	7	paraphrase	recovery from backup after accidental primary deletion took about six hours	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	1
+61	8	literal	mysql network partition split brain	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+62	8	literal	mysql network partition split brain	2026-10-22_ebe5dffb6ce803c2	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+63	8	literal	mysql network partition split brain	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	2
+64	8	literal	mysql network partition split brain	2026-10-22_f1273497e714ab3c	数据库主备裂脑，元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+65	8	literal	mysql network partition split brain	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	0
+66	8	literal	mysql network partition split brain	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	0
+67	8	literal	mysql network partition split brain	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	0
+68	8	literal	mysql network partition split brain	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	0
+69	8	literal	mysql network partition split brain	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	0
+70	8	literal	mysql network partition split brain	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	0
+71	9	literal	primary failover during network partition	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	2
+72	9	literal	primary failover during network partition	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+73	9	literal	primary failover during network partition	2026-10-22_f1273497e714ab3c	数据库主备裂脑，元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+74	9	literal	primary failover during network partition	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	0
+75	9	literal	primary failover during network partition	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	0
+76	9	literal	primary failover during network partition	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	1
+77	9	literal	primary failover during network partition	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	0
+78	9	literal	primary failover during network partition	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	0
+79	9	literal	primary failover during network partition	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	0
+80	9	literal	primary failover during network partition	2026-10-22_ebe5dffb6ce803c2	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+81	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_ebe5dffb6ce803c2	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+82	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+83	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	2
+84	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	0
+85	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_f78446fa4913c20d	误删数据库主目录，6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	1
+86	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	0
+87	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_f1273497e714ab3c	数据库主备裂脑，元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+88	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	0
+89	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	1
+90	10	paraphrase	network partition caused database split brain and inconsistent metadata	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	0
+91	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_f1273497e714ab3c	数据库主备裂脑，元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+92	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_ebe5dffb6ce803c2	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+93	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	2
+94	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	2
+95	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_a13c5b39d36f3324	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	0
+96	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	1
+97	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	0
+98	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	1
+99	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	0
+100	11	semantic	网络分区引发 database failover 主备裂脑、数据不一致	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	0
+101	12	literal	kubernetes upgrade route reflector breakage	2026-10-22_4bbea51dee9b6a0e	K8s 1.23 到 1.24 升级触发 route reflector 标签冲突致站点中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+102	12	literal	kubernetes upgrade route reflector breakage	2026-10-22_8e4b9492f5629bcc	Kubernetes 集群升级后 route reflector 配置冲突，服务中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+103	12	literal	kubernetes upgrade route reflector breakage	2026-10-22_87021c381b74b275	K8s 1.23 到 1.24 升级触发 route reflector 标签冲突致站点中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+104	13	paraphrase	cluster upgrade to 1.24 broke route reflector label configuration	2026-10-22_8e4b9492f5629bcc	Kubernetes 集群升级后 route reflector 配置冲突，服务中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+105	13	paraphrase	cluster upgrade to 1.24 broke route reflector label configuration	2026-10-22_87021c381b74b275	K8s 1.23 到 1.24 升级触发 route reflector 标签冲突致站点中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+106	13	paraphrase	cluster upgrade to 1.24 broke route reflector label configuration	2026-10-22_4bbea51dee9b6a0e	K8s 1.23 到 1.24 升级触发 route reflector 标签冲突致站点中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+107	13	paraphrase	cluster upgrade to 1.24 broke route reflector label configuration	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+108	13	paraphrase	cluster upgrade to 1.24 broke route reflector label configuration	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+109	13	paraphrase	cluster upgrade to 1.24 broke route reflector label configuration	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+110	13	paraphrase	cluster upgrade to 1.24 broke route reflector label configuration	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	1
+111	13	paraphrase	cluster upgrade to 1.24 broke route reflector label configuration	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+112	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_8e4b9492f5629bcc	Kubernetes 集群升级后 route reflector 配置冲突，服务中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+113	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_4bbea51dee9b6a0e	K8s 1.23 到 1.24 升级触发 route reflector 标签冲突致站点中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+114	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_87021c381b74b275	K8s 1.23 到 1.24 升级触发 route reflector 标签冲突致站点中断	回滚升级，对齐 route reflector 配置并清理旧版命令	2
+115	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	1
+116	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+117	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+118	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+119	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+120	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_abc183e225726832	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+121	14	semantic	Kubernetes 集群升级后 route reflector 配置冲突导致服务中断	2026-10-22_8111c3eb263e355b	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+122	15	literal	config change triggers software bug outage	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	2
+123	15	literal	config change triggers software bug outage	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	2
+124	15	literal	config change triggers software bug outage	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	2
+125	15	literal	config change triggers software bug outage	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+126	15	literal	config change triggers software bug outage	2026-10-22_8e4b9492f5629bcc	Kubernetes 集群升级后 route reflector 配置冲突，服务中断	回滚升级，对齐 route reflector 配置并清理旧版命令	1
+127	15	literal	config change triggers software bug outage	2026-10-22_a52592b979147085	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+128	15	literal	config change triggers software bug outage	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+129	15	literal	config change triggers software bug outage	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	1
+130	15	literal	config change triggers software bug outage	2026-10-22_11b00b6f51bcab1d	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+131	15	literal	config change triggers software bug outage	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+132	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	2
+133	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	2
+134	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+135	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+136	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+137	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+138	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_a52592b979147085	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+139	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	2
+140	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_6dc8acb771d36a10	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	1
+141	16	paraphrase	a valid customer configuration change activated a latent software bug and took the network down	2026-10-22_8e4b9492f5629bcc	Kubernetes 集群升级后 route reflector 配置冲突，服务中断	回滚升级，对齐 route reflector 配置并清理旧版命令	1
+142	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	2
+143	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	2
+144	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	2
+145	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+146	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+147	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_8e4b9492f5629bcc	Kubernetes 集群升级后 route reflector 配置冲突，服务中断	回滚升级，对齐 route reflector 配置并清理旧版命令	1
+148	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_92191a0c19bc547f	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+149	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_87021c381b74b275	K8s 1.23 到 1.24 升级触发 route reflector 标签冲突致站点中断	回滚升级，对齐 route reflector 配置并清理旧版命令	1
+150	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	1
+151	17	semantic	客户改了一个合法 config 就触发未发现缺陷导致全球 CDN 故障	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+152	18	literal	script wrong mode deletes customer data	2026-10-22_6dc8acb771d36a10	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+153	18	literal	script wrong mode deletes customer data	2026-10-22_f78446fa4913c20d	误删数据库主目录，6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+154	18	literal	script wrong mode deletes customer data	2026-10-22_ed851aaca896fdc0	运维脚本用错执行模式和 ID 列表，误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+155	18	literal	script wrong mode deletes customer data	2026-10-22_7d30b4959ba43c0c	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+156	18	literal	script wrong mode deletes customer data	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+157	18	literal	script wrong mode deletes customer data	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+158	18	literal	script wrong mode deletes customer data	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+159	18	literal	script wrong mode deletes customer data	2026-10-22_cb0b78dc412f1353	误删主库后从备份恢复耗时约 6 小时	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+160	18	literal	script wrong mode deletes customer data	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+161	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_6dc8acb771d36a10	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+162	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_7d30b4959ba43c0c	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+163	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_ed851aaca896fdc0	运维脚本用错执行模式和 ID 列表，误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+164	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+165	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_cb0b78dc412f1353	误删主库后从备份恢复耗时约 6 小时	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+166	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+167	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+168	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_f78446fa4913c20d	误删数据库主目录，6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+169	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+170	19	paraphrase	maintenance script executed with wrong mode and wrong id list erased customer sites	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+171	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_ed851aaca896fdc0	运维脚本用错执行模式和 ID 列表，误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+172	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_7d30b4959ba43c0c	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+173	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_6dc8acb771d36a10	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	2
+174	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_cb0b78dc412f1353	误删主库后从备份恢复耗时约 6 小时	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+175	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+176	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+177	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	0
+178	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_f1273497e714ab3c	数据库主备裂脑，元数据不一致	恢复拓扑，加主从选举护栏与分区检测	0
+179	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_f78446fa4913c20d	误删数据库主目录，6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+180	20	semantic	运维 script 用错执行模式和 ID 列表，误删 deletion 客户数据	2026-10-22_3b74c878e5554bc9	网络分区期间数据库主库故障切换	恢复拓扑，加主从选举护栏与分区检测	0
+181	21	literal	bgp routes withdrawn dns unavailable	2026-10-22_abc183e225726832	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+182	21	literal	bgp routes withdrawn dns unavailable	2026-10-22_beb67945a220a8ed	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+183	21	literal	bgp routes withdrawn dns unavailable	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+184	21	literal	bgp routes withdrawn dns unavailable	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+185	21	literal	bgp routes withdrawn dns unavailable	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+186	22	paraphrase	a maintenance command on the backbone withdrew all bgp routes and took dns offline	2026-10-22_beb67945a220a8ed	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+187	22	paraphrase	a maintenance command on the backbone withdrew all bgp routes and took dns offline	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+188	22	paraphrase	a maintenance command on the backbone withdrew all bgp routes and took dns offline	2026-10-22_abc183e225726832	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+189	22	paraphrase	a maintenance command on the backbone withdrew all bgp routes and took dns offline	2026-10-22_7d30b4959ba43c0c	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	1
+190	22	paraphrase	a maintenance command on the backbone withdrew all bgp routes and took dns offline	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+191	22	paraphrase	a maintenance command on the backbone withdrew all bgp routes and took dns offline	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+192	22	paraphrase	a maintenance command on the backbone withdrew all bgp routes and took dns offline	2026-10-22_0fe428f375dbd78c	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+193	22	paraphrase	a maintenance command on the backbone withdrew all bgp routes and took dns offline	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	1
+194	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+195	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_abc183e225726832	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+196	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+197	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_beb67945a220a8ed	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+198	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+199	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	1
+200	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+201	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+202	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	1
+203	23	semantic	骨干网维护命令导致 BGP 路由全部撤回，域名 DNS 解析随之不可用	2026-10-22_6dc8acb771d36a10	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	1
+204	24	paraphrase	a backbone maintenance window took down both dns and bgp at the same time	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+205	24	paraphrase	a backbone maintenance window took down both dns and bgp at the same time	2026-10-22_beb67945a220a8ed	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+206	24	paraphrase	a backbone maintenance window took down both dns and bgp at the same time	2026-10-22_abc183e225726832	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+207	24	paraphrase	a backbone maintenance window took down both dns and bgp at the same time	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	2
+208	24	paraphrase	a backbone maintenance window took down both dns and bgp at the same time	2026-10-22_7d30b4959ba43c0c	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	1
+209	24	paraphrase	a backbone maintenance window took down both dns and bgp at the same time	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+210	24	paraphrase	a backbone maintenance window took down both dns and bgp at the same time	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	1
+211	25	literal	dnssec rollout servfail wildcard bug	2026-10-22_a52592b979147085	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	2
+212	25	literal	dnssec rollout servfail wildcard bug	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	2
+213	25	literal	dnssec rollout servfail wildcard bug	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	2
+214	25	literal	dnssec rollout servfail wildcard bug	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	2
+215	25	literal	dnssec rollout servfail wildcard bug	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+216	25	literal	dnssec rollout servfail wildcard bug	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+217	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_a52592b979147085	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	2
+218	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	2
+219	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	2
+220	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	2
+221	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+222	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_fcd3914c33630f77	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+223	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+224	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_8111c3eb263e355b	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+225	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_0fe428f375dbd78c	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+226	26	paraphrase	enabling dnssec signing on the domain triggered a provider wildcard bug and nsec error causing servfail	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	1
+227	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	2
+228	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+229	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	2
+230	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	2
+231	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_92191a0c19bc547f	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+232	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_a52592b979147085	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	2
+233	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+234	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+235	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_beb67945a220a8ed	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+236	27	semantic	上线 DNSSEC 后域名解析返回 SERVFAIL 持续近一天	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+237	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	2
+238	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_fcd3914c33630f77	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+239	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	2
+240	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_a52592b979147085	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	2
+241	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	2
+242	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+243	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_0fe428f375dbd78c	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+244	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_10d888a62cdf49e3	边缘节点 CPU 100%，全球 502 错误	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+245	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+246	28	semantic	DNS signing 签名 rollback 回滚时又遇到 NSEC 错误导致解析失败	2026-10-22_8111c3eb263e355b	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+247	29	literal	ebs re-mirroring storm capacity shortage	2026-10-22_a13c5b39d36f3324	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	2
+248	29	literal	ebs re-mirroring storm capacity shortage	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	2
+249	29	literal	ebs re-mirroring storm capacity shortage	2026-10-22_0a9bb5ed8ad9b83a	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	2
+250	29	literal	ebs re-mirroring storm capacity shortage	2026-10-22_65f4ac561d3909b4	EBS 卷卡在 re-mirroring 状态无法恢复	扩容并修复控制面，错峰 re-mirroring	2
+251	30	literal	ebs volume stuck re-mirroring state	2026-10-22_65f4ac561d3909b4	EBS 卷卡在 re-mirroring 状态无法恢复	扩容并修复控制面，错峰 re-mirroring	2
+252	30	literal	ebs volume stuck re-mirroring state	2026-10-22_0a9bb5ed8ad9b83a	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	2
+253	30	literal	ebs volume stuck re-mirroring state	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	2
+254	30	literal	ebs volume stuck re-mirroring state	2026-10-22_a13c5b39d36f3324	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	2
+255	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_a13c5b39d36f3324	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	2
+256	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	2
+257	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_0a9bb5ed8ad9b83a	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	2
+258	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_65f4ac561d3909b4	EBS 卷卡在 re-mirroring 状态无法恢复	扩容并修复控制面，错峰 re-mirroring	2
+259	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+260	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+261	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+262	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	1
+263	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+264	31	paraphrase	a network event caused an ebs volume re-mirroring storm that exhausted capacity in one zone	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+265	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	2
+266	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_0a9bb5ed8ad9b83a	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	2
+267	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_65f4ac561d3909b4	EBS 卷卡在 re-mirroring 状态无法恢复	扩容并修复控制面，错峰 re-mirroring	2
+268	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_a13c5b39d36f3324	网络事件引发 EBS re-mirroring 风暴与容量耗尽	扩容并修复控制面，错峰 re-mirroring	2
+269	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_10d888a62cdf49e3	边缘节点 CPU 100%，全球 502 错误	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+270	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+271	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_abc183e225726832	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+272	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	1
+273	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_3aa4a70ed9da6f8a	骨干维护同时打挂 DNS 与 BGP	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+274	32	semantic	网络事件引发 cloud 云盘 volume 大规模重新镜像，整个可用区容量打满	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+275	33	literal	network configuration change congestion outage	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	2
+276	33	literal	network configuration change congestion outage	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	2
+277	33	literal	network configuration change congestion outage	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+278	33	literal	network configuration change congestion outage	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	2
+279	33	literal	network configuration change congestion outage	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	1
+280	33	literal	network configuration change congestion outage	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+281	33	literal	network configuration change congestion outage	2026-10-22_11b00b6f51bcab1d	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	1
+282	33	literal	network configuration change congestion outage	2026-10-22_8e4b9492f5629bcc	Kubernetes 集群升级后 route reflector 配置冲突，服务中断	回滚升级，对齐 route reflector 配置并清理旧版命令	1
+283	33	literal	network configuration change congestion outage	2026-10-22_73884c828073973f	根因: DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时	回退签名，改 ALIAS 记录并修复 NSEC	1
+284	33	literal	network configuration change congestion outage	2026-10-22_3abbd81ca72d18b9	BGP 路由全部撤回，域名解析不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+285	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	2
+286	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	2
+287	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_2df4ae3c1f2f5eac	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+288	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	2
+289	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+290	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	1
+291	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+292	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_a52592b979147085	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+293	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_7d30b4959ba43c0c	维护脚本以错误执行模式与错误 ID 列表误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	1
+294	34	paraphrase	a configuration change plus software bugs caused multi-region network congestion for hours	2026-10-22_ed851aaca896fdc0	运维脚本用错执行模式和 ID 列表，误删客户数据	引入软删除策略，复核脚本与 runbook 并恢复数据	1
+295	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	2
+296	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_e628f14213e5a56c	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	2
+297	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_0381300ca324d79a	配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时	回滚配置并修复缺陷	2
+298	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_488c208db561a61a	合法配置变更触发未发现缺陷，全球 CDN 故障	回滚配置并修复缺陷，补回归测试	1
+299	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_dc1dc4c39cd4d520	合法客户配置变更触发未发现软件缺陷，85% 网络报错	回滚配置并修复缺陷，补回归测试	1
+300	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_abc183e225726832	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+301	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_8e4b9492f5629bcc	Kubernetes 集群升级后 route reflector 配置冲突，服务中断	回滚升级，对齐 route reflector 配置并清理旧版命令	1
+302	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_e77765a11cd3d74f	云盘大规模重新镜像，可用区容量打满	扩容并修复控制面，错峰 re-mirroring	1
+303	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+304	35	semantic	一次 config 变更叠加缺陷导致多个 region network congestion 网络拥塞数小时	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+305	36	literal	signing key rotation token validation failure	2026-10-22_fcd3914c33630f77	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+306	36	literal	signing key rotation token validation failure	2026-10-22_8111c3eb263e355b	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+307	36	literal	signing key rotation token validation failure	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+308	36	literal	signing key rotation token validation failure	2026-10-22_11b00b6f51bcab1d	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+309	36	literal	signing key rotation token validation failure	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+310	36	literal	signing key rotation token validation failure	2026-10-22_cac21e45bfc14ded	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+311	36	literal	signing key rotation token validation failure	2026-10-22_0fe428f375dbd78c	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+312	36	literal	signing key rotation token validation failure	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+313	36	literal	signing key rotation token validation failure	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+314	36	literal	signing key rotation token validation failure	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	0
+315	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_fcd3914c33630f77	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+316	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_8111c3eb263e355b	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+317	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_3877738ad0b3ed10	DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误返回 SERVFAIL	回退签名，改 ALIAS 记录并修复 NSEC	1
+318	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_18dd0d2f00e369ee	数据库复制故障叠加主库目录误删导致 6 小时数据丢失	从备份恢复，修复复制与备份流程并加安全操作护栏	0
+319	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+320	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_11b00b6f51bcab1d	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+321	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_0fe428f375dbd78c	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+322	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+323	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_beb67945a220a8ed	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+324	37	paraphrase	routine signing key rotation mistakenly removed a critical key and broke token validation	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+325	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_0fe428f375dbd78c	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+326	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_11b00b6f51bcab1d	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+327	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_8111c3eb263e355b	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+328	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+329	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_fcd3914c33630f77	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+330	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	0
+331	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_ebe5dffb6ce803c2	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	0
+332	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_92191a0c19bc547f	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+333	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+334	38	semantic	身份认证签名 key rotation 轮换出错，登录令牌校验大面积失败	2026-10-22_beb67945a220a8ed	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+335	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_0fe428f375dbd78c	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+336	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_11b00b6f51bcab1d	根因: 密钥轮换错误移除关键密钥，令牌校验失败约 14 小时	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+337	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_65f4ac561d3909b4	EBS 卷卡在 re-mirroring 状态无法恢复	扩容并修复控制面，错峰 re-mirroring	1
+338	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_8111c3eb263e355b	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+339	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_f0aa4f92b475f669	DNS 签名回滚时遇到 NSEC 错误，解析持续失败	回退签名，改 ALIAS 记录并修复 NSEC	1
+340	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_fcd3914c33630f77	签名密钥轮换错误移除关键密钥导致令牌校验失败	回滚元数据，修复轮换逻辑并加速缓存恢复	2
+341	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_e87e4e6e598abb6d	WAF 正则回溯导致边缘节点 CPU 100% 返回 502	回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布	1
+342	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_beb67945a220a8ed	骨干维护命令导致 BGP 路由撤回、DNS 不可用	恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护	1
+343	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_189c0264fc39cc3c	配置变更叠加缺陷，多区域网络拥塞	回滚配置并修复缺陷	1
+344	39	semantic	企业单点登录 single sign on 大面积失败，用户无法登录办公套件	2026-10-22_e496c0b197861d18	网络分区导致 MySQL 主从裂脑与元数据不一致	恢复拓扑，加主从选举护栏与分区检测	0
