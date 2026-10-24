@@ -1,0 +1,3686 @@
+{
+ "name": "confirm5-human-policy-v1",
+ "provenance": "pooled A/B top-10 from eval-real/confirm5-eval-verbose-final.txt; labels are deterministic materialization of the frozen fei+hao rubric (not per-item human review)",
+ "cases": [
+  {
+   "query": "bintray jcenter malicious maven packages impersonation",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_337ecde86ee61f26"
+   ],
+   "rel": {
+    "337ecde86ee61f26": 2,
+    "9e7947edb32b8a78": 2,
+    "b45dd0323300995e": 2,
+    "a5e442f2d02a32de": 2,
+    "aee647e866e9bc74": 2,
+    "89f4b08be4ff0d53": 0,
+    "3525080179662493": 0,
+    "8cfc0f1aea4e39f1": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "android dependencies pulled malware from jcenter",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_a5e442f2d02a32de"
+   ],
+   "rel": {
+    "a5e442f2d02a32de": 2,
+    "337ecde86ee61f26": 2,
+    "b45dd0323300995e": 2,
+    "9e7947edb32b8a78": 2,
+    "aee647e866e9bc74": 2,
+    "b8e1883d6bdb545f": 0,
+    "92f332f1d214cf1c": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "an attacker impersonated a vendor and planted malicious maven artifacts in jcenter",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_9e7947edb32b8a78"
+   ],
+   "rel": {
+    "9e7947edb32b8a78": 2,
+    "b45dd0323300995e": 2,
+    "337ecde86ee61f26": 2,
+    "a5e442f2d02a32de": 2,
+    "aee647e866e9bc74": 2,
+    "3525080179662493": 0,
+    "8cfc0f1aea4e39f1": 0,
+    "89f4b08be4ff0d53": 0,
+    "88478eb8914dcae2": 0,
+    "f3e2d28767329a44": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "android apps included malware after resolving dependencies from the poisoned jcenter repository",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_b45dd0323300995e"
+   ],
+   "rel": {
+    "b45dd0323300995e": 2,
+    "a5e442f2d02a32de": 2,
+    "337ecde86ee61f26": 2,
+    "9e7947edb32b8a78": 2,
+    "aee647e866e9bc74": 2,
+    "b8e1883d6bdb545f": 0,
+    "7e2f2da98d962eb4": 0,
+    "a4569e4ba25a2a14": 0,
+    "2b571b4dce733a36": 0,
+    "3a38b670bb9cf70c": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "冒充发布的 Maven 包在 JCenter 待了一年多，Android 项目依赖后带进了恶意代码",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_aee647e866e9bc74"
+   ],
+   "rel": {
+    "aee647e866e9bc74": 2,
+    "337ecde86ee61f26": 2,
+    "a5e442f2d02a32de": 2,
+    "b45dd0323300995e": 2,
+    "9e7947edb32b8a78": 2,
+    "7da13d5430d6074f": 0,
+    "89f4b08be4ff0d53": 0,
+    "b8e1883d6bdb545f": 0,
+    "8cfc0f1aea4e39f1": 0,
+    "3525080179662493": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "bitly source repository leaked backup credentials",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_7e2f2da98d962eb4"
+   ],
+   "rel": {
+    "7e2f2da98d962eb4": 2,
+    "a4569e4ba25a2a14": 2,
+    "3a38b670bb9cf70c": 2,
+    "053e2b0634cc1412": 0,
+    "646e65df5e5a7962": 0,
+    "e51d6af1ed3acb04": 2,
+    "eca791f339bb5272": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "hashed passwords exposed through code repo secrets",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_e51d6af1ed3acb04"
+   ],
+   "rel": {
+    "e51d6af1ed3acb04": 2,
+    "90db563d25e153df": 0,
+    "3a38b670bb9cf70c": 2,
+    "5cf8681b4b03b945": 0,
+    "cc52450aacf9f5ef": 0,
+    "646e65df5e5a7962": 0,
+    "84a290002aa94d7a": 0,
+    "9e7947edb32b8a78": 0,
+    "42250921523d4c8f": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "secrets committed to a code repository exposed hashed passwords from bitly backups",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_3a38b670bb9cf70c"
+   ],
+   "rel": {
+    "3a38b670bb9cf70c": 2,
+    "e51d6af1ed3acb04": 2,
+    "7e2f2da98d962eb4": 2,
+    "a4569e4ba25a2a14": 2,
+    "90db563d25e153df": 0,
+    "5cf8681b4b03b945": 0,
+    "646e65df5e5a7962": 0,
+    "eca791f339bb5272": 2,
+    "3b896eb6a3d2777e": 0,
+    "138a3cfd46e66dc5": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the leaked repository credentials allowed access to backups containing password hashes",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_a4569e4ba25a2a14"
+   ],
+   "rel": {
+    "a4569e4ba25a2a14": 2,
+    "3a38b670bb9cf70c": 2,
+    "7e2f2da98d962eb4": 2,
+    "138a3cfd46e66dc5": 0,
+    "a1ea0a21d5b6a1d6": 0,
+    "cc52450aacf9f5ef": 0,
+    "064202bcfb968b36": 0,
+    "61e12c2718550630": 0,
+    "3b896eb6a3d2777e": 0,
+    "f3e2d28767329a44": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "代码托管仓库里放了能读备份的密钥，用户密码哈希随备份一起暴露",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_eca791f339bb5272"
+   ],
+   "rel": {
+    "eca791f339bb5272": 2,
+    "7e2f2da98d962eb4": 2,
+    "a4569e4ba25a2a14": 2,
+    "e51d6af1ed3acb04": 2,
+    "3a38b670bb9cf70c": 2,
+    "7da13d5430d6074f": 0,
+    "4f3a919ee7702d0f": 0,
+    "90db563d25e153df": 0,
+    "e8fb54ea773f7879": 0,
+    "4a66809c780990cf": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "browserstack old prototype shellshock production breach",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_0fb8157c6b5c9562"
+   ],
+   "rel": {
+    "0fb8157c6b5c9562": 2,
+    "f3e2d28767329a44": 2,
+    "84a290002aa94d7a": 2,
+    "1a5ecaede298121a": 2,
+    "39cc8f57d6c4ed70": 2,
+    "138a3cfd46e66dc5": 0,
+    "87e485f1f6abc88f": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "shellshock vulnerable machine held secret keys",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_1a5ecaede298121a"
+   ],
+   "rel": {
+    "1a5ecaede298121a": 2,
+    "f3e2d28767329a44": 2,
+    "84a290002aa94d7a": 2,
+    "0fb8157c6b5c9562": 2,
+    "39cc8f57d6c4ed70": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the forgotten prototype with shellshock exposed keys that led to a production breach",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_f3e2d28767329a44"
+   ],
+   "rel": {
+    "f3e2d28767329a44": 2,
+    "0fb8157c6b5c9562": 2,
+    "84a290002aa94d7a": 2,
+    "1a5ecaede298121a": 2,
+    "138a3cfd46e66dc5": 0,
+    "e51d6af1ed3acb04": 0,
+    "90db563d25e153df": 0,
+    "87e485f1f6abc88f": 0,
+    "39cc8f57d6c4ed70": 2,
+    "3b896eb6a3d2777e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "a prototype host missed patching and its secret keys compromised production",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_84a290002aa94d7a"
+   ],
+   "rel": {
+    "84a290002aa94d7a": 2,
+    "f3e2d28767329a44": 2,
+    "0fb8157c6b5c9562": 2,
+    "1a5ecaede298121a": 2,
+    "ec43ae825aef7f6f": 0,
+    "b8e1883d6bdb545f": 0,
+    "3525080179662493": 0,
+    "87e485f1f6abc88f": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "一台忘记下线的旧测试机带着 Shellshock 漏洞和密钥，最终让生产系统被攻破",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_39cc8f57d6c4ed70"
+   ],
+   "rel": {
+    "39cc8f57d6c4ed70": 2,
+    "0fb8157c6b5c9562": 2,
+    "1a5ecaede298121a": 2,
+    "f3e2d28767329a44": 2,
+    "84a290002aa94d7a": 2,
+    "070d88d6710f7148": 0,
+    "d0f053b5f4615678": 0,
+    "df89907559e21e8c": 0,
+    "e79e5e70a0ad14f8": 0,
+    "487839cb6fce6522": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "chef supermarket low health check timeout crash",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_c5cbfd523d83469e"
+   ],
+   "rel": {
+    "c5cbfd523d83469e": 2,
+    "0979030385032a92": 2,
+    "2b571b4dce733a36": 2,
+    "6a1208c3c02e6f6c": 2,
+    "b0ba9f93053ea106": 2,
+    "4cc66d3c8523c986": 0,
+    "a5bbd7ef9b797e14": 0,
+    "3b896eb6a3d2777e": 0,
+    "498f77d36b185304": 0,
+    "adedd9839862e576": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "health check timeout killed supermarket after launch",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_2b571b4dce733a36"
+   ],
+   "rel": {
+    "2b571b4dce733a36": 2,
+    "0979030385032a92": 2,
+    "c5cbfd523d83469e": 2,
+    "6a1208c3c02e6f6c": 2,
+    "4cc66d3c8523c986": 0,
+    "113e19ffb394b6d3": 1,
+    "b0ba9f93053ea106": 2,
+    "50f0cfe7971ce964": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the new recipe site failed because health checks timed out too aggressively",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_0979030385032a92"
+   ],
+   "rel": {
+    "0979030385032a92": 2,
+    "0b6b9b957fc93dc4": 0,
+    "f880ce4055f6bdde": 0,
+    "9c6117e6398aadd0": 0,
+    "50f0cfe7971ce964": 0,
+    "175ea410b8ddb06d": 0,
+    "90db563d25e153df": 0,
+    "c3665bb25b03b78e": 0,
+    "498f77d36b185304": 0,
+    "92f332f1d214cf1c": 0,
+    "a0826f92f1762ad8": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "supermarket went down after launch when its low timeout settings failed healthy nodes",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_6a1208c3c02e6f6c"
+   ],
+   "rel": {
+    "6a1208c3c02e6f6c": 2,
+    "2b571b4dce733a36": 2,
+    "0979030385032a92": 2,
+    "c5cbfd523d83469e": 2,
+    "113e19ffb394b6d3": 0,
+    "43a699de29d14332": 0,
+    "e79e5e70a0ad14f8": 0,
+    "ec43ae825aef7f6f": 0,
+    "30446501dc07e48d": 0,
+    "c3665bb25b03b78e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "Chef 的新社区站点刚上线，健康检查阈值太短把正常实例判死，服务很快挂了",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_b0ba9f93053ea106"
+   ],
+   "rel": {
+    "b0ba9f93053ea106": 2,
+    "c5cbfd523d83469e": 2,
+    "2b571b4dce733a36": 2,
+    "6a1208c3c02e6f6c": 2,
+    "0979030385032a92": 2,
+    "3999dc488a8129ce": 0,
+    "4cc66d3c8523c986": 0,
+    "50f0cfe7971ce964": 0,
+    "03a034ac59d1753a": 0,
+    "54c12fe0ba026338": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "mars climate orbiter metric english unit mismatch",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_bbf3685518ff2fcc"
+   ],
+   "rel": {
+    "bbf3685518ff2fcc": 2,
+    "7c49962c790320f4": 2,
+    "56bc9e5a501161ef": 0,
+    "fd124fd91e9e5898": 0,
+    "274346d4a28c73a8": 0,
+    "f33a724570ab80c0": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "navigation software used wrong thrust units",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_7d938a19ee1c3018"
+   ],
+   "rel": {
+    "7d938a19ee1c3018": 2,
+    "7c49962c790320f4": 2,
+    "2b245fc089d6a7f5": 0,
+    "4a66809c780990cf": 0,
+    "d21b81412680ce43": 0,
+    "f33a724570ab80c0": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "a unit mismatch between ground software and the spacecraft destroyed the mission",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_7c49962c790320f4"
+   ],
+   "rel": {
+    "7c49962c790320f4": 2,
+    "bbf3685518ff2fcc": 2,
+    "7d938a19ee1c3018": 2,
+    "f33a724570ab80c0": 2,
+    "a0826f92f1762ad8": 0,
+    "56bc9e5a501161ef": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the orbiter entered the atmosphere because navigation burned the wrong amount of fuel",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_f33a724570ab80c0"
+   ],
+   "rel": {
+    "f33a724570ab80c0": 2,
+    "7d938a19ee1c3018": 2,
+    "bbf3685518ff2fcc": 2,
+    "7c49962c790320f4": 2,
+    "6c0a814c2604c79f": 0,
+    "5de17370169dda46": 0,
+    "9c6117e6398aadd0": 0,
+    "0b6b9b957fc93dc4": 0,
+    "4a66809c780990cf": 0,
+    "a0826f92f1762ad8": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "地面软件按错单位算推力，火星气候探测器进入大气层烧毁",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_f656d7086c8af78e"
+   ],
+   "rel": {
+    "f656d7086c8af78e": 2,
+    "7d938a19ee1c3018": 2,
+    "bbf3685518ff2fcc": 2,
+    "7c49962c790320f4": 2,
+    "f33a724570ab80c0": 2,
+    "498f77d36b185304": 0,
+    "03e403ddb8b696b0": 0,
+    "92f332f1d214cf1c": 0,
+    "adedd9839862e576": 0,
+    "6498e19067c571ec": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "mozilla firefox addons certificate expired outage",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_5acd1e62d6834d1d"
+   ],
+   "rel": {
+    "5acd1e62d6834d1d": 2,
+    "0f3e5a41ef8fb3cf": 2,
+    "f06846b6fe1be699": 2,
+    "d21b81412680ce43": 2,
+    "cd218b6a82ae0ef9": 2,
+    "b3bc43fcd0d0da4e": 0,
+    "71d8ddbc60704138": 0,
+    "fb9213f2e7865cc9": 0,
+    "63225b2d4941613b": 0,
+    "0f1ad8bbcb716966": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "expired intermediate certificate disabled all addons",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_0f3e5a41ef8fb3cf"
+   ],
+   "rel": {
+    "0f3e5a41ef8fb3cf": 2,
+    "5acd1e62d6834d1d": 2,
+    "d21b81412680ce43": 2,
+    "f06846b6fe1be699": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "firefox could no longer validate extensions and almost all add-ons stopped working",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_d21b81412680ce43"
+   ],
+   "rel": {
+    "d21b81412680ce43": 2,
+    "0f3e5a41ef8fb3cf": 2,
+    "5acd1e62d6834d1d": 2,
+    "f06846b6fe1be699": 2,
+    "053e2b0634cc1412": 0,
+    "487839cb6fce6522": 0,
+    "5ae7d84ee5c4770d": 0,
+    "9c6117e6398aadd0": 0,
+    "cd218b6a82ae0ef9": 2,
+    "a4569e4ba25a2a14": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "add-ons returned only after a new valid certificate chain was injected",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_f06846b6fe1be699"
+   ],
+   "rel": {
+    "f06846b6fe1be699": 2,
+    "d21b81412680ce43": 2,
+    "5acd1e62d6834d1d": 2,
+    "0f3e5a41ef8fb3cf": 2,
+    "070d88d6710f7148": 0,
+    "4a66809c780990cf": 0,
+    "d0f053b5f4615678": 0,
+    "e79e5e70a0ad14f8": 0,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_cd218b6a82ae0ef9"
+   ],
+   "rel": {
+    "cd218b6a82ae0ef9": 2,
+    "5acd1e62d6834d1d": 2,
+    "0f3e5a41ef8fb3cf": 2,
+    "f06846b6fe1be699": 2,
+    "d21b81412680ce43": 2,
+    "064202bcfb968b36": 0,
+    "f1f29f6a59f4d2ac": 0,
+    "61e12c2718550630": 0,
+    "646e65df5e5a7962": 0,
+    "3e9b594775cafc56": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "stack exchange regex backtracking health check outage",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_4cc66d3c8523c986"
+   ],
+   "rel": {
+    "4cc66d3c8523c986": 2,
+    "03a034ac59d1753a": 2,
+    "50f0cfe7971ce964": 2,
+    "54c12fe0ba026338": 2,
+    "c5cbfd523d83469e": 0,
+    "2b571b4dce733a36": 0,
+    "6a1208c3c02e6f6c": 0,
+    "0979030385032a92": 0,
+    "070d88d6710f7148": 0,
+    "d0f053b5f4615678": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "expensive regex caused health checks to fail",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_50f0cfe7971ce964"
+   ],
+   "rel": {
+    "50f0cfe7971ce964": 2,
+    "0979030385032a92": 0,
+    "4cc66d3c8523c986": 2,
+    "c24a57092d2202c9": 0,
+    "03a034ac59d1753a": 2,
+    "54c12fe0ba026338": 2,
+    "c5cbfd523d83469e": 0,
+    "2b571b4dce733a36": 0,
+    "6a1208c3c02e6f6c": 0,
+    "71d8ddbc60704138": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the expensive regular expression made health checks fail and took stack exchange down",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_54c12fe0ba026338"
+   ],
+   "rel": {
+    "54c12fe0ba026338": 2,
+    "50f0cfe7971ce964": 2,
+    "4cc66d3c8523c986": 2,
+    "070d88d6710f7148": 0,
+    "d0f053b5f4615678": 0,
+    "df89907559e21e8c": 0,
+    "e79e5e70a0ad14f8": 0,
+    "487839cb6fce6522": 0,
+    "43a699de29d14332": 0,
+    "03a034ac59d1753a": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "load balancers removed instances after the regex stalled health checks",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_03a034ac59d1753a"
+   ],
+   "rel": {
+    "03a034ac59d1753a": 2,
+    "6a1208c3c02e6f6c": 0,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "50f0cfe7971ce964": 2,
+    "4cc66d3c8523c986": 2,
+    "61e12c2718550630": 0,
+    "4f2518def70f64e2": 0,
+    "829f36cf0b459818": 0,
+    "2f9e624f54e53393": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "一篇帖子触发正则灾难性回溯，健康检查全超时，Stack Exchange 实例被摘掉",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_3999dc488a8129ce"
+   ],
+   "rel": {
+    "3999dc488a8129ce": 2,
+    "4cc66d3c8523c986": 2,
+    "50f0cfe7971ce964": 2,
+    "03a034ac59d1753a": 2,
+    "54c12fe0ba026338": 2,
+    "b0ba9f93053ea106": 0,
+    "c5cbfd523d83469e": 0,
+    "2b571b4dce733a36": 0,
+    "6a1208c3c02e6f6c": 0,
+    "0979030385032a92": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "discord flapping service reconnection thundering herd",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_d8360a1f912bf7e3"
+   ],
+   "rel": {
+    "d8360a1f912bf7e3": 2,
+    "30446501dc07e48d": 2,
+    "6a1208c3c02e6f6c": 0,
+    "e3abd77a56afb8bd": 0,
+    "053e2b0634cc1412": 0,
+    "77b4fb9c3bd138ff": 2,
+    "42250921523d4c8f": 2,
+    "978cf805fc8bbf83": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "frontend memory exhausted by reconnect queues",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_77b4fb9c3bd138ff"
+   ],
+   "rel": {
+    "77b4fb9c3bd138ff": 2,
+    "42250921523d4c8f": 2,
+    "adedd9839862e576": 0,
+    "498f77d36b185304": 0,
+    "13a0222f4c1d995e": 0,
+    "4a66809c780990cf": 0,
+    "d8360a1f912bf7e3": 2,
+    "30446501dc07e48d": 2,
+    "03e403ddb8b696b0": 0,
+    "92f332f1d214cf1c": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "millions of clients reconnected at once and filled frontend queues until memory ran out",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_30446501dc07e48d"
+   ],
+   "rel": {
+    "30446501dc07e48d": 2,
+    "77b4fb9c3bd138ff": 2,
+    "42250921523d4c8f": 2,
+    "498f77d36b185304": 0,
+    "90db563d25e153df": 0,
+    "28176f3f0d8cccc8": 0,
+    "4f2518def70f64e2": 0,
+    "92f332f1d214cf1c": 0,
+    "adedd9839862e576": 0,
+    "5de17370169dda46": 0,
+    "5ae7d84ee5c4770d": 0,
+    "13a0222f4c1d995e": 0,
+    "84ddd95da8a9b142": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "frontend services ran out of memory because queued reconnects grew without bound",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_42250921523d4c8f"
+   ],
+   "rel": {
+    "42250921523d4c8f": 2,
+    "28176f3f0d8cccc8": 0,
+    "498f77d36b185304": 0,
+    "77b4fb9c3bd138ff": 2,
+    "90db563d25e153df": 0,
+    "adedd9839862e576": 0,
+    "13a0222f4c1d995e": 0,
+    "5de17370169dda46": 0,
+    "9c6117e6398aadd0": 0,
+    "0b6b9b957fc93dc4": 0,
+    "a0826f92f1762ad8": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "一个服务反复抖动后恢复，客户端同时重连把前端队列塞满，Discord 前端 OOM",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_978cf805fc8bbf83"
+   ],
+   "rel": {
+    "978cf805fc8bbf83": 2,
+    "77b4fb9c3bd138ff": 2,
+    "42250921523d4c8f": 2,
+    "d8360a1f912bf7e3": 2,
+    "30446501dc07e48d": 2,
+    "a5bbd7ef9b797e14": 0,
+    "e909ec08902d3102": 0,
+    "fd124fd91e9e5898": 0,
+    "a0826f92f1762ad8": 0,
+    "274346d4a28c73a8": 0,
+    "175ea410b8ddb06d": 0,
+    "49c7ac70b77a452b": 0,
+    "57d73c8eea1b9729": 0,
+    "87e485f1f6abc88f": 0,
+    "6b536046a4cdf2f5": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "duo request queue overloaded database capacity",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_374808474a724c07"
+   ],
+   "rel": {
+    "374808474a724c07": 2,
+    "19778742368c7305": 2,
+    "5ae7d84ee5c4770d": 2,
+    "d19f4a55250a2dc3": 2,
+    "a5bbd7ef9b797e14": 0,
+    "13a0222f4c1d995e": 0,
+    "155b7018000aee79": 2,
+    "4a66809c780990cf": 1,
+    "4f3a919ee7702d0f": 1,
+    "e8fb54ea773f7879": 1,
+    "183cc9d0d2e001d9": 0,
+    "c3920946bd71dd08": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "insufficient db capacity caused cascading failure",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_d19f4a55250a2dc3"
+   ],
+   "rel": {
+    "d19f4a55250a2dc3": 2,
+    "19778742368c7305": 2,
+    "e1dae40f2773be69": 1,
+    "374808474a724c07": 2,
+    "f880ce4055f6bdde": 0,
+    "0ff2e145486470c4": 1,
+    "a175a8e4a81bc8b6": 1,
+    "71d8ddbc60704138": 0,
+    "fb9213f2e7865cc9": 1,
+    "63225b2d4941613b": 1,
+    "183cc9d0d2e001d9": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "database capacity was too small for the queue and failures spread across the service",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_19778742368c7305"
+   ],
+   "rel": {
+    "19778742368c7305": 2,
+    "374808474a724c07": 2,
+    "5ae7d84ee5c4770d": 2,
+    "d19f4a55250a2dc3": 2,
+    "a175a8e4a81bc8b6": 1,
+    "a5bbd7ef9b797e14": 0,
+    "f880ce4055f6bdde": 0,
+    "0b6b9b957fc93dc4": 0,
+    "4f3a919ee7702d0f": 1,
+    "d8360a1f912bf7e3": 0,
+    "183cc9d0d2e001d9": 0,
+    "6a1208c3c02e6f6c": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "insufficient capacity planning and monitoring turned a request spike into a cascading outage",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_5ae7d84ee5c4770d"
+   ],
+   "rel": {
+    "5ae7d84ee5c4770d": 2,
+    "d19f4a55250a2dc3": 2,
+    "19778742368c7305": 2,
+    "374808474a724c07": 2,
+    "183cc9d0d2e001d9": 0,
+    "0bcf1dcdd5b711b9": 0,
+    "24c016f1bb80acd2": 1,
+    "13a0222f4c1d995e": 0,
+    "a175a8e4a81bc8b6": 1,
+    "2b245fc089d6a7f5": 0,
+    "b3bc43fcd0d0da4e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "Duo 的请求队列越积越多，数据库容量和监控都不够，最后整个服务级联失败",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_155b7018000aee79"
+   ],
+   "rel": {
+    "155b7018000aee79": 2,
+    "374808474a724c07": 2,
+    "19778742368c7305": 2,
+    "5ae7d84ee5c4770d": 2,
+    "d19f4a55250a2dc3": 2,
+    "978cf805fc8bbf83": 0,
+    "d8360a1f912bf7e3": 0,
+    "77b4fb9c3bd138ff": 0,
+    "42250921523d4c8f": 0,
+    "30446501dc07e48d": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "elastic cloud aws eu west region degradation",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_b4e76119f5a2051c"
+   ],
+   "rel": {
+    "b4e76119f5a2051c": 2,
+    "88478eb8914dcae2": 2,
+    "a1ea0a21d5b6a1d6": 2,
+    "0f1ad8bbcb716966": 2,
+    "a3d4283f8084561c": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "aws ireland outage degraded elastic clusters",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_0f1ad8bbcb716966"
+   ],
+   "rel": {
+    "0f1ad8bbcb716966": 2,
+    "88478eb8914dcae2": 2,
+    "a1ea0a21d5b6a1d6": 2,
+    "b4e76119f5a2051c": 2,
+    "a3d4283f8084561c": 2,
+    "b3bc43fcd0d0da4e": 0,
+    "71d8ddbc60704138": 0,
+    "fb9213f2e7865cc9": 0,
+    "63225b2d4941613b": 0,
+    "9c6117e6398aadd0": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "clusters in ireland became unavailable for twenty minutes during the regional incident",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_88478eb8914dcae2"
+   ],
+   "rel": {
+    "88478eb8914dcae2": 2,
+    "0f1ad8bbcb716966": 2,
+    "a1ea0a21d5b6a1d6": 2,
+    "f33a724570ab80c0": 0,
+    "af13338548a4d5b1": 0,
+    "1c7373257b3a9929": 0,
+    "46f77201f3d4f67d": 0,
+    "bcf7ce9802f3b1cd": 0,
+    "8cfc0f1aea4e39f1": 0,
+    "3a38b670bb9cf70c": 0,
+    "a175a8e4a81bc8b6": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "elastic cloud customers in eu west one saw degraded access and a brief full outage",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_a1ea0a21d5b6a1d6"
+   ],
+   "rel": {
+    "a1ea0a21d5b6a1d6": 2,
+    "88478eb8914dcae2": 2,
+    "b4e76119f5a2051c": 2,
+    "0f1ad8bbcb716966": 2,
+    "a3d4283f8084561c": 2,
+    "3a38b670bb9cf70c": 0,
+    "a175a8e4a81bc8b6": 0,
+    "54c12fe0ba026338": 0,
+    "adedd9839862e576": 0,
+    "b3bc43fcd0d0da4e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_a3d4283f8084561c"
+   ],
+   "rel": {
+    "a3d4283f8084561c": 2,
+    "b4e76119f5a2051c": 2,
+    "0f1ad8bbcb716966": 2,
+    "88478eb8914dcae2": 2,
+    "a1ea0a21d5b6a1d6": 2,
+    "d2ad735a4bd73ca5": 0,
+    "2725f0506ba08d09": 0,
+    "183cc9d0d2e001d9": 0,
+    "e3abd77a56afb8bd": 0,
+    "b8491275622d1811": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "eslint npm maintainer account malicious packages",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_89f4b08be4ff0d53"
+   ],
+   "rel": {
+    "89f4b08be4ff0d53": 2,
+    "3525080179662493": 2,
+    "8cfc0f1aea4e39f1": 2,
+    "b8e1883d6bdb545f": 2,
+    "7da13d5430d6074f": 2,
+    "337ecde86ee61f26": 0,
+    "9e7947edb32b8a78": 0,
+    "b45dd0323300995e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "compromised npm account published malware",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_b8e1883d6bdb545f"
+   ],
+   "rel": {
+    "b8e1883d6bdb545f": 2,
+    "3525080179662493": 2,
+    "89f4b08be4ff0d53": 2,
+    "a5e442f2d02a32de": 0,
+    "8cfc0f1aea4e39f1": 2,
+    "9e7947edb32b8a78": 0,
+    "7da13d5430d6074f": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the hijacked npm account pushed malware into the eslint package stream",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_3525080179662493"
+   ],
+   "rel": {
+    "3525080179662493": 2,
+    "b8e1883d6bdb545f": 2,
+    "89f4b08be4ff0d53": 2,
+    "8cfc0f1aea4e39f1": 2,
+    "7da13d5430d6074f": 2,
+    "a5e442f2d02a32de": 0,
+    "0bcf1dcdd5b711b9": 0,
+    "24c016f1bb80acd2": 0,
+    "a175a8e4a81bc8b6": 0,
+    "2b245fc089d6a7f5": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "developers installing eslint dependencies received packages published by the attacker",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_8cfc0f1aea4e39f1"
+   ],
+   "rel": {
+    "8cfc0f1aea4e39f1": 2,
+    "3525080179662493": 2,
+    "b8e1883d6bdb545f": 2,
+    "89f4b08be4ff0d53": 2,
+    "9e7947edb32b8a78": 0,
+    "a5e442f2d02a32de": 0,
+    "77b4fb9c3bd138ff": 0,
+    "7da13d5430d6074f": 2,
+    "337ecde86ee61f26": 0,
+    "b45dd0323300995e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "ESLint 维护者的 npm 账号被盗，攻击者用官方名义发了带恶意代码的包",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_7da13d5430d6074f"
+   ],
+   "rel": {
+    "7da13d5430d6074f": 2,
+    "89f4b08be4ff0d53": 2,
+    "3525080179662493": 2,
+    "b8e1883d6bdb545f": 2,
+    "8cfc0f1aea4e39f1": 2,
+    "337ecde86ee61f26": 0,
+    "a5e442f2d02a32de": 0,
+    "b45dd0323300995e": 0,
+    "9e7947edb32b8a78": 0,
+    "aee647e866e9bc74": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "etsy deploy upgraded live database int32 id overflow",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_49c7ac70b77a452b"
+   ],
+   "rel": {
+    "49c7ac70b77a452b": 2,
+    "57d73c8eea1b9729": 2,
+    "6b536046a4cdf2f5": 2,
+    "175ea410b8ddb06d": 2,
+    "87e485f1f6abc88f": 2,
+    "6c0a814c2604c79f": 1,
+    "487839cb6fce6522": 1,
+    "374808474a724c07": 1,
+    "19778742368c7305": 1,
+    "5ae7d84ee5c4770d": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "signed 32 bit id overflow forced site shutdown",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_175ea410b8ddb06d"
+   ],
+   "rel": {
+    "175ea410b8ddb06d": 2,
+    "57d73c8eea1b9729": 2,
+    "49c7ac70b77a452b": 2,
+    "87e485f1f6abc88f": 2,
+    "d0f053b5f4615678": 1,
+    "6b536046a4cdf2f5": 2,
+    "4f4c6c81af2ebf4b": 1,
+    "7491946d3025438b": 1,
+    "6c0a814c2604c79f": 1,
+    "fb9213f2e7865cc9": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the unexpected database upgrade and int32 overflow made etsy stop serving traffic",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_57d73c8eea1b9729"
+   ],
+   "rel": {
+    "57d73c8eea1b9729": 2,
+    "49c7ac70b77a452b": 2,
+    "175ea410b8ddb06d": 2,
+    "6b536046a4cdf2f5": 2,
+    "487839cb6fce6522": 1,
+    "c24a57092d2202c9": 1,
+    "46f77201f3d4f67d": 1,
+    "d21b81412680ce43": 0,
+    "bcf7ce9802f3b1cd": 1,
+    "d2ad735a4bd73ca5": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "etsy took the site down for integrity checks after the deploy and id overflow",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_87e485f1f6abc88f"
+   ],
+   "rel": {
+    "87e485f1f6abc88f": 2,
+    "175ea410b8ddb06d": 2,
+    "49c7ac70b77a452b": 2,
+    "57d73c8eea1b9729": 2,
+    "6b536046a4cdf2f5": 2,
+    "43a699de29d14332": 0,
+    "50f0cfe7971ce964": 0,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "113e19ffb394b6d3": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "一次小修复上线时顺手升级了生产库，ID 又超过 32 位有符号上限，Etsy 只能停站做完整性检查",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_6b536046a4cdf2f5"
+   ],
+   "rel": {
+    "6b536046a4cdf2f5": 2,
+    "175ea410b8ddb06d": 2,
+    "49c7ac70b77a452b": 2,
+    "57d73c8eea1b9729": 2,
+    "87e485f1f6abc88f": 2,
+    "39cc8f57d6c4ed70": 0,
+    "5e120b44ee18d3ef": 1,
+    "07d94240f552eb0f": 0,
+    "113e19ffb394b6d3": 0,
+    "bcf7ce9802f3b1cd": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "flowdock covid work from home load database hang",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_2f9e624f54e53393"
+   ],
+   "rel": {
+    "2f9e624f54e53393": 2,
+    "46f77201f3d4f67d": 2,
+    "e1dae40f2773be69": 2,
+    "5ae7d84ee5c4770d": 1,
+    "c24a57092d2202c9": 2,
+    "4f2518def70f64e2": 0,
+    "829f36cf0b459818": 0,
+    "c3920946bd71dd08": 0,
+    "487839cb6fce6522": 1,
+    "f0fe4836ea026e13": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "sudden remote work traffic caused db hang",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_e1dae40f2773be69"
+   ],
+   "rel": {
+    "e1dae40f2773be69": 2,
+    "46f77201f3d4f67d": 2,
+    "d19f4a55250a2dc3": 1,
+    "2f9e624f54e53393": 2,
+    "487839cb6fce6522": 1,
+    "5ae7d84ee5c4770d": 1,
+    "c3920946bd71dd08": 0,
+    "71d8ddbc60704138": 0,
+    "fb9213f2e7865cc9": 1,
+    "63225b2d4941613b": 1,
+    "d2ad735a4bd73ca5": 0,
+    "183cc9d0d2e001d9": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "flowdock could not handle the work from home load and lost some user data",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_46f77201f3d4f67d"
+   ],
+   "rel": {
+    "46f77201f3d4f67d": 2,
+    "2f9e624f54e53393": 2,
+    "e1dae40f2773be69": 2,
+    "4f2518def70f64e2": 0,
+    "5ae7d84ee5c4770d": 1,
+    "03e403ddb8b696b0": 1,
+    "0b6b9b957fc93dc4": 0,
+    "e8fb54ea773f7879": 1,
+    "829f36cf0b459818": 0,
+    "adedd9839862e576": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the service was unavailable for twenty four hours and some data was permanently lost",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_c24a57092d2202c9"
+   ],
+   "rel": {
+    "c24a57092d2202c9": 2,
+    "88478eb8914dcae2": 0,
+    "0979030385032a92": 0,
+    "6a1208c3c02e6f6c": 0,
+    "e3abd77a56afb8bd": 0,
+    "053e2b0634cc1412": 0,
+    "d8360a1f912bf7e3": 0,
+    "30446501dc07e48d": 0,
+    "f880ce4055f6bdde": 0,
+    "0b6b9b957fc93dc4": 0,
+    "4f2518def70f64e2": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_f0fe4836ea026e13"
+   ],
+   "rel": {
+    "f0fe4836ea026e13": 2,
+    "2f9e624f54e53393": 2,
+    "e1dae40f2773be69": 2,
+    "c24a57092d2202c9": 2,
+    "46f77201f3d4f67d": 2,
+    "3b93514b9a6fc646": 1,
+    "0ff2e145486470c4": 1,
+    "24c016f1bb80acd2": 1,
+    "adb791bf583fab70": 1,
+    "a175a8e4a81bc8b6": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "foursquare mongodb out of memory low locality reads",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_498f77d36b185304"
+   ],
+   "rel": {
+    "498f77d36b185304": 2,
+    "adedd9839862e576": 2,
+    "03e403ddb8b696b0": 2,
+    "90db563d25e153df": 1,
+    "92f332f1d214cf1c": 2,
+    "6498e19067c571ec": 2,
+    "77b4fb9c3bd138ff": 0,
+    "42250921523d4c8f": 0,
+    "5de17370169dda46": 0,
+    "0979030385032a92": 0,
+    "c5cbfd523d83469e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "checkin history query read entire user data",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_03e403ddb8b696b0"
+   ],
+   "rel": {
+    "03e403ddb8b696b0": 2,
+    "adedd9839862e576": 2,
+    "e8fb54ea773f7879": 1,
+    "070d88d6710f7148": 1,
+    "d0f053b5f4615678": 1,
+    "e79e5e70a0ad14f8": 1,
+    "a4569e4ba25a2a14": 0,
+    "f880ce4055f6bdde": 0,
+    "0b6b9b957fc93dc4": 0,
+    "4f2518def70f64e2": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "mongodb ran out of memory under the inefficient checkin query pattern",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_adedd9839862e576"
+   ],
+   "rel": {
+    "adedd9839862e576": 2,
+    "498f77d36b185304": 2,
+    "03e403ddb8b696b0": 2,
+    "92f332f1d214cf1c": 2,
+    "90db563d25e153df": 1,
+    "77b4fb9c3bd138ff": 0,
+    "42250921523d4c8f": 0,
+    "8cfc0f1aea4e39f1": 0,
+    "5de17370169dda46": 0,
+    "1c7373257b3a9929": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "monitoring missed the growing load and the outage lasted seventeen hours",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_92f332f1d214cf1c"
+   ],
+   "rel": {
+    "92f332f1d214cf1c": 2,
+    "88478eb8914dcae2": 0,
+    "0f1ad8bbcb716966": 0,
+    "5ae7d84ee5c4770d": 1,
+    "0979030385032a92": 0,
+    "4f2518def70f64e2": 0,
+    "829f36cf0b459818": 0,
+    "2f9e624f54e53393": 1,
+    "b3bc43fcd0d0da4e": 0,
+    "71d8ddbc60704138": 0,
+    "fb9213f2e7865cc9": 1,
+    "63225b2d4941613b": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_6498e19067c571ec"
+   ],
+   "rel": {
+    "6498e19067c571ec": 2,
+    "498f77d36b185304": 2,
+    "adedd9839862e576": 2,
+    "03e403ddb8b696b0": 2,
+    "92f332f1d214cf1c": 2,
+    "77b4fb9c3bd138ff": 0,
+    "42250921523d4c8f": 0,
+    "d8360a1f912bf7e3": 0,
+    "30446501dc07e48d": 0,
+    "978cf805fc8bbf83": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "github aggregation switch mlag failover stonith",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_5e120b44ee18d3ef"
+   ],
+   "rel": {
+    "5e120b44ee18d3ef": 2,
+    "bcf7ce9802f3b1cd": 2,
+    "0ff2e145486470c4": 1,
+    "24c016f1bb80acd2": 1,
+    "adb791bf583fab70": 1,
+    "064202bcfb968b36": 0,
+    "f1f29f6a59f4d2ac": 0,
+    "61e12c2718550630": 0,
+    "646e65df5e5a7962": 0,
+    "3e9b594775cafc56": 0,
+    "07d94240f552eb0f": 2,
+    "113e19ffb394b6d3": 2,
+    "0c0cf2ab8482553b": 2,
+    "d2ad735a4bd73ca5": 0,
+    "2725f0506ba08d09": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "pacemaker drbd nodes fenced each other",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_07d94240f552eb0f"
+   ],
+   "rel": {
+    "07d94240f552eb0f": 2,
+    "adedd9839862e576": 0,
+    "90db563d25e153df": 0,
+    "113e19ffb394b6d3": 2,
+    "c3665bb25b03b78e": 0,
+    "84ddd95da8a9b142": 0,
+    "28176f3f0d8cccc8": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the network freeze made pacemaker and drbd pairs stonith each other",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_bcf7ce9802f3b1cd"
+   ],
+   "rel": {
+    "bcf7ce9802f3b1cd": 2,
+    "07d94240f552eb0f": 2,
+    "113e19ffb394b6d3": 2,
+    "d21b81412680ce43": 0,
+    "183cc9d0d2e001d9": 0,
+    "5e120b44ee18d3ef": 2,
+    "0c0cf2ab8482553b": 2,
+    "adedd9839862e576": 1,
+    "90db563d25e153df": 1,
+    "c3665bb25b03b78e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "recovery required identifying the previously active node for every fenced pair",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_113e19ffb394b6d3"
+   ],
+   "rel": {
+    "113e19ffb394b6d3": 2,
+    "5de17370169dda46": 0,
+    "07d94240f552eb0f": 2,
+    "064202bcfb968b36": 0,
+    "f1f29f6a59f4d2ac": 0,
+    "61e12c2718550630": 0,
+    "646e65df5e5a7962": 0,
+    "3e9b594775cafc56": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_0c0cf2ab8482553b"
+   ],
+   "rel": {
+    "0c0cf2ab8482553b": 2,
+    "5e120b44ee18d3ef": 2,
+    "07d94240f552eb0f": 2,
+    "113e19ffb394b6d3": 2,
+    "bcf7ce9802f3b1cd": 2,
+    "c5cbfd523d83469e": 1,
+    "2b571b4dce733a36": 1,
+    "6a1208c3c02e6f6c": 0,
+    "0979030385032a92": 0,
+    "b0ba9f93053ea106": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "github ddos 1.35 tbps traffic flood",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_d2ad735a4bd73ca5"
+   ],
+   "rel": {
+    "d2ad735a4bd73ca5": 2,
+    "b8491275622d1811": 2,
+    "183cc9d0d2e001d9": 2,
+    "2725f0506ba08d09": 2,
+    "e3abd77a56afb8bd": 2,
+    "487839cb6fce6522": 0,
+    "e1dae40f2773be69": 0,
+    "46f77201f3d4f67d": 0,
+    "064202bcfb968b36": 0,
+    "f1f29f6a59f4d2ac": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "massive volumetric attack saturated github",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_2725f0506ba08d09"
+   ],
+   "rel": {
+    "2725f0506ba08d09": 2,
+    "e3abd77a56afb8bd": 2,
+    "9e7947edb32b8a78": 0,
+    "d2ad735a4bd73ca5": 2,
+    "183cc9d0d2e001d9": 2,
+    "b8491275622d1811": 2,
+    "064202bcfb968b36": 0,
+    "f1f29f6a59f4d2ac": 0,
+    "61e12c2718550630": 0,
+    "646e65df5e5a7962": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the volumetric flood saturated github's edge and took the site offline",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_e3abd77a56afb8bd"
+   ],
+   "rel": {
+    "e3abd77a56afb8bd": 2,
+    "2725f0506ba08d09": 2,
+    "d2ad735a4bd73ca5": 2,
+    "175ea410b8ddb06d": 0,
+    "183cc9d0d2e001d9": 2,
+    "b8491275622d1811": 2,
+    "064202bcfb968b36": 0,
+    "f1f29f6a59f4d2ac": 0,
+    "61e12c2718550630": 0,
+    "646e65df5e5a7962": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "github mitigated the record breaking ddos after a brief outage",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_183cc9d0d2e001d9"
+   ],
+   "rel": {
+    "183cc9d0d2e001d9": 2,
+    "d2ad735a4bd73ca5": 2,
+    "b8491275622d1811": 2,
+    "113e19ffb394b6d3": 1,
+    "2b571b4dce733a36": 1,
+    "0979030385032a92": 0,
+    "b3bc43fcd0d0da4e": 0,
+    "71d8ddbc60704138": 0,
+    "fb9213f2e7865cc9": 0,
+    "63225b2d4941613b": 0,
+    "0f1ad8bbcb716966": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_b8491275622d1811"
+   ],
+   "rel": {
+    "b8491275622d1811": 2,
+    "d2ad735a4bd73ca5": 2,
+    "2725f0506ba08d09": 2,
+    "183cc9d0d2e001d9": 2,
+    "e3abd77a56afb8bd": 2,
+    "0f1ad8bbcb716966": 0,
+    "b4e76119f5a2051c": 0,
+    "a1ea0a21d5b6a1d6": 0,
+    "88478eb8914dcae2": 0,
+    "a3d4283f8084561c": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "mandrill postgres transaction id wraparound",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_7491946d3025438b"
+   ],
+   "rel": {
+    "7491946d3025438b": 2,
+    "63225b2d4941613b": 2,
+    "4f4c6c81af2ebf4b": 2,
+    "6c0a814c2604c79f": 2,
+    "fb9213f2e7865cc9": 2,
+    "498f77d36b185304": 1,
+    "03e403ddb8b696b0": 1,
+    "92f332f1d214cf1c": 1,
+    "175ea410b8ddb06d": 1,
+    "49c7ac70b77a452b": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "txid wraparound caused day and a half outage",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_fb9213f2e7865cc9"
+   ],
+   "rel": {
+    "fb9213f2e7865cc9": 2,
+    "63225b2d4941613b": 2,
+    "71d8ddbc60704138": 0,
+    "c24a57092d2202c9": 1,
+    "7491946d3025438b": 2,
+    "6c0a814c2604c79f": 2,
+    "b3bc43fcd0d0da4e": 0,
+    "0f1ad8bbcb716966": 0,
+    "9c6117e6398aadd0": 0,
+    "88478eb8914dcae2": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "postgres exhausted its transaction id space and mandrill stopped serving some requests",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_63225b2d4941613b"
+   ],
+   "rel": {
+    "63225b2d4941613b": 2,
+    "7491946d3025438b": 2,
+    "4f4c6c81af2ebf4b": 2,
+    "6c0a814c2604c79f": 2,
+    "fb9213f2e7865cc9": 2,
+    "adedd9839862e576": 1,
+    "ec43ae825aef7f6f": 0,
+    "053e2b0634cc1412": 0,
+    "77b4fb9c3bd138ff": 0,
+    "42250921523d4c8f": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "recovery from the transaction id wraparound took roughly thirty six hours",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_6c0a814c2604c79f"
+   ],
+   "rel": {
+    "6c0a814c2604c79f": 2,
+    "7491946d3025438b": 2,
+    "63225b2d4941613b": 2,
+    "fb9213f2e7865cc9": 2,
+    "5de17370169dda46": 0,
+    "88478eb8914dcae2": 0,
+    "0979030385032a92": 0,
+    "4f4c6c81af2ebf4b": 2,
+    "498f77d36b185304": 1,
+    "03e403ddb8b696b0": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "Postgres 的事务 ID 用完了，Mandrill 进入回卷保护，部分功能停了一天半",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_4f4c6c81af2ebf4b"
+   ],
+   "rel": {
+    "4f4c6c81af2ebf4b": 2,
+    "7491946d3025438b": 2,
+    "63225b2d4941613b": 2,
+    "6c0a814c2604c79f": 2,
+    "fb9213f2e7865cc9": 2,
+    "4f3a919ee7702d0f": 1,
+    "90db563d25e153df": 1,
+    "e8fb54ea773f7879": 1,
+    "4a66809c780990cf": 1,
+    "070d88d6710f7148": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "mars pathfinder priority inversion system resets",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_fd124fd91e9e5898"
+   ],
+   "rel": {
+    "fd124fd91e9e5898": 2,
+    "274346d4a28c73a8": 2,
+    "e909ec08902d3102": 2,
+    "56bc9e5a501161ef": 0,
+    "bbf3685518ff2fcc": 0,
+    "f33a724570ab80c0": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "vxworks priority inversion watchdog reboot",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_e909ec08902d3102"
+   ],
+   "rel": {
+    "e909ec08902d3102": 2,
+    "fd124fd91e9e5898": 2,
+    "274346d4a28c73a8": 2,
+    "a0826f92f1762ad8": 2,
+    "cbb81edec0cff176": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the low priority weather task held a lock and blocked the high priority bus task",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_274346d4a28c73a8"
+   ],
+   "rel": {
+    "274346d4a28c73a8": 2,
+    "caff2a6a12fdfb48": 0,
+    "3b896eb6a3d2777e": 0,
+    "13a0222f4c1d995e": 0,
+    "1a5ecaede298121a": 0,
+    "c24a57092d2202c9": 0,
+    "f3e2d28767329a44": 0,
+    "f69d3ef55e07d747": 0,
+    "1c7373257b3a9929": 0,
+    "5de17370169dda46": 0,
+    "5cf8681b4b03b945": 0,
+    "f1f29f6a59f4d2ac": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "nasa remotely enabled priority inheritance to stop the resets",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_a0826f92f1762ad8"
+   ],
+   "rel": {
+    "a0826f92f1762ad8": 2,
+    "fd124fd91e9e5898": 2,
+    "274346d4a28c73a8": 2,
+    "e909ec08902d3102": 2,
+    "c24a57092d2202c9": 0,
+    "3b896eb6a3d2777e": 0,
+    "138a3cfd46e66dc5": 0,
+    "a1ea0a21d5b6a1d6": 0,
+    "3a38b670bb9cf70c": 0,
+    "f3e2d28767329a44": 0,
+    "7d938a19ee1c3018": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_cbb81edec0cff176"
+   ],
+   "rel": {
+    "cbb81edec0cff176": 2,
+    "e909ec08902d3102": 2,
+    "fd124fd91e9e5898": 2,
+    "a0826f92f1762ad8": 2,
+    "274346d4a28c73a8": 2,
+    "8d6a64062cfd9248": 0,
+    "9cf99d2f94bb8af8": 0,
+    "c3920946bd71dd08": 0,
+    "829f36cf0b459818": 0,
+    "a5bbd7ef9b797e14": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "apollo 11 rendezvous radar cpu overload restarts",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_8d6a64062cfd9248"
+   ],
+   "rel": {
+    "8d6a64062cfd9248": 2,
+    "829f36cf0b459818": 2,
+    "9cf99d2f94bb8af8": 2,
+    "c3920946bd71dd08": 2,
+    "37eff4286d447f68": 2,
+    "56bc9e5a501161ef": 0,
+    "2f9e624f54e53393": 0,
+    "e1dae40f2773be69": 0,
+    "c24a57092d2202c9": 0,
+    "46f77201f3d4f67d": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "radar design flaw caused computer alarms",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_9cf99d2f94bb8af8"
+   ],
+   "rel": {
+    "9cf99d2f94bb8af8": 2,
+    "c3920946bd71dd08": 2,
+    "829f36cf0b459818": 2,
+    "8d6a64062cfd9248": 2,
+    "71d8ddbc60704138": 0,
+    "fb9213f2e7865cc9": 0,
+    "d19f4a55250a2dc3": 0,
+    "63225b2d4941613b": 0,
+    "19778742368c7305": 0,
+    "0979030385032a92": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the guidance computer restarted during lunar descent because radar interrupts consumed its cycles",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_829f36cf0b459818"
+   ],
+   "rel": {
+    "829f36cf0b459818": 2,
+    "9cf99d2f94bb8af8": 2,
+    "c3920946bd71dd08": 2,
+    "8d6a64062cfd9248": 2,
+    "ec43ae825aef7f6f": 0,
+    "9c6117e6398aadd0": 0,
+    "0b6b9b957fc93dc4": 0,
+    "a0826f92f1762ad8": 0,
+    "af13338548a4d5b1": 0,
+    "1c7373257b3a9929": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the landing continued after the computer recovered from repeated overload",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_c3920946bd71dd08"
+   ],
+   "rel": {
+    "c3920946bd71dd08": 2,
+    "30446501dc07e48d": 0,
+    "274346d4a28c73a8": 0,
+    "56bc9e5a501161ef": 0,
+    "8d6a64062cfd9248": 2,
+    "9cf99d2f94bb8af8": 2,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "113e19ffb394b6d3": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "登月舱雷达不停占用计算资源，阿波罗 11 的计算机过载报警并反复重启",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_37eff4286d447f68"
+   ],
+   "rel": {
+    "37eff4286d447f68": 2,
+    "8d6a64062cfd9248": 2,
+    "9cf99d2f94bb8af8": 2,
+    "c3920946bd71dd08": 2,
+    "829f36cf0b459818": 2,
+    "cbb81edec0cff176": 0,
+    "e909ec08902d3102": 0,
+    "fd124fd91e9e5898": 0,
+    "a0826f92f1762ad8": 0,
+    "274346d4a28c73a8": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "openai chatgpt redis queue corruption data leak",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_4f3a919ee7702d0f"
+   ],
+   "rel": {
+    "4f3a919ee7702d0f": 2,
+    "e8fb54ea773f7879": 2,
+    "90db563d25e153df": 2,
+    "4a66809c780990cf": 2,
+    "1a58e4a7622acae7": 2,
+    "5de17370169dda46": 0,
+    "a5bbd7ef9b797e14": 0,
+    "374808474a724c07": 1,
+    "19778742368c7305": 1,
+    "5ae7d84ee5c4770d": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "out of order responses exposed other users data",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_90db563d25e153df"
+   ],
+   "rel": {
+    "90db563d25e153df": 2,
+    "498f77d36b185304": 1,
+    "4a66809c780990cf": 2,
+    "e51d6af1ed3acb04": 0,
+    "5de17370169dda46": 0,
+    "56bc9e5a501161ef": 0,
+    "c3665bb25b03b78e": 0,
+    "0bcf1dcdd5b711b9": 0,
+    "2b245fc089d6a7f5": 0,
+    "07d94240f552eb0f": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "responses went out of sequence and exposed app activity and billing information",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_4a66809c780990cf"
+   ],
+   "rel": {
+    "4a66809c780990cf": 2,
+    "90db563d25e153df": 2,
+    "498f77d36b185304": 1,
+    "e79e5e70a0ad14f8": 1,
+    "e51d6af1ed3acb04": 0,
+    "5de17370169dda46": 0,
+    "e3abd77a56afb8bd": 0,
+    "46f77201f3d4f67d": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "openai took chatgpt offline to repair the queue corruption and patch the data exposure",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_e8fb54ea773f7879"
+   ],
+   "rel": {
+    "e8fb54ea773f7879": 2,
+    "4f3a919ee7702d0f": 2,
+    "4a66809c780990cf": 2,
+    "90db563d25e153df": 2,
+    "1a58e4a7622acae7": 2,
+    "5de17370169dda46": 0,
+    "a5bbd7ef9b797e14": 0,
+    "374808474a724c07": 1,
+    "19778742368c7305": 1,
+    "5ae7d84ee5c4770d": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "ChatGPT 的 Redis 请求响应队列乱了，返回内容串到别人账号，暴露活动和账单数据",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_1a58e4a7622acae7"
+   ],
+   "rel": {
+    "1a58e4a7622acae7": 2,
+    "4f3a919ee7702d0f": 2,
+    "e8fb54ea773f7879": 2,
+    "90db563d25e153df": 2,
+    "4a66809c780990cf": 2,
+    "374808474a724c07": 1,
+    "19778742368c7305": 1,
+    "5ae7d84ee5c4770d": 1,
+    "d19f4a55250a2dc3": 1,
+    "155b7018000aee79": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "okta third party support engineer laptop compromise",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_648f63dda3c196bb"
+   ],
+   "rel": {
+    "648f63dda3c196bb": 2,
+    "cc52450aacf9f5ef": 2,
+    "16b82728b19e3113": 2,
+    "138a3cfd46e66dc5": 2,
+    "db5aa4f741afcd0d": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "support laptop access led to okta breach",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_138a3cfd46e66dc5"
+   ],
+   "rel": {
+    "138a3cfd46e66dc5": 2,
+    "cc52450aacf9f5ef": 2,
+    "648f63dda3c196bb": 2,
+    "a1ea0a21d5b6a1d6": 0,
+    "3a38b670bb9cf70c": 0,
+    "0fb8157c6b5c9562": 0,
+    "16b82728b19e3113": 2,
+    "db5aa4f741afcd0d": 2,
+    "064202bcfb968b36": 0,
+    "61e12c2718550630": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "a compromised support laptop let the intruders reach okta systems",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_cc52450aacf9f5ef"
+   ],
+   "rel": {
+    "cc52450aacf9f5ef": 2,
+    "138a3cfd46e66dc5": 2,
+    "648f63dda3c196bb": 2,
+    "b8e1883d6bdb545f": 0,
+    "3525080179662493": 0,
+    "16b82728b19e3113": 2,
+    "db5aa4f741afcd0d": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "okta investigated after attackers accessed systems from the support provider",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_16b82728b19e3113"
+   ],
+   "rel": {
+    "16b82728b19e3113": 2,
+    "cc52450aacf9f5ef": 2,
+    "138a3cfd46e66dc5": 2,
+    "648f63dda3c196bb": 2,
+    "ec43ae825aef7f6f": 0,
+    "84a290002aa94d7a": 0,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "113e19ffb394b6d3": 0,
+    "db5aa4f741afcd0d": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "攻击者先拿下第三方支持人员的电脑，再借它的访问进入 Okta",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_db5aa4f741afcd0d"
+   ],
+   "rel": {
+    "db5aa4f741afcd0d": 2,
+    "138a3cfd46e66dc5": 2,
+    "16b82728b19e3113": 2,
+    "648f63dda3c196bb": 2,
+    "cc52450aacf9f5ef": 2,
+    "337ecde86ee61f26": 0,
+    "a5e442f2d02a32de": 0,
+    "b45dd0323300995e": 0,
+    "9e7947edb32b8a78": 0,
+    "aee647e866e9bc74": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "platform sh zookeeper too much data boot failure",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_f880ce4055f6bdde"
+   ],
+   "rel": {
+    "f880ce4055f6bdde": 2,
+    "0b6b9b957fc93dc4": 2,
+    "4f2518def70f64e2": 2,
+    "5de17370169dda46": 0,
+    "487839cb6fce6522": 0,
+    "d19f4a55250a2dc3": 0,
+    "19778742368c7305": 0,
+    "9c6117e6398aadd0": 2,
+    "0ff2e145486470c4": 0,
+    "effec5631bd99aa8": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "maintenance outage because zookeeper could not start",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_9c6117e6398aadd0"
+   ],
+   "rel": {
+    "9c6117e6398aadd0": 2,
+    "0b6b9b957fc93dc4": 2,
+    "4f2518def70f64e2": 2,
+    "a0826f92f1762ad8": 0,
+    "b3bc43fcd0d0da4e": 0,
+    "f880ce4055f6bdde": 2,
+    "71d8ddbc60704138": 0,
+    "effec5631bd99aa8": 2,
+    "487839cb6fce6522": 0,
+    "5ae7d84ee5c4770d": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "a scheduled maintenance outage extended when zookeeper failed to come up",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_0b6b9b957fc93dc4"
+   ],
+   "rel": {
+    "0b6b9b957fc93dc4": 2,
+    "9c6117e6398aadd0": 2,
+    "f880ce4055f6bdde": 2,
+    "ec43ae825aef7f6f": 0,
+    "30446501dc07e48d": 0,
+    "c3665bb25b03b78e": 1,
+    "92f332f1d214cf1c": 0,
+    "b3bc43fcd0d0da4e": 0,
+    "71d8ddbc60704138": 0,
+    "4f2518def70f64e2": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "platform sh stayed down while engineers reduced the zookeeper dataset",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_4f2518def70f64e2"
+   ],
+   "rel": {
+    "4f2518def70f64e2": 2,
+    "f880ce4055f6bdde": 2,
+    "43a699de29d14332": 0,
+    "a1ea0a21d5b6a1d6": 0,
+    "5de17370169dda46": 0,
+    "5cf8681b4b03b945": 0,
+    "487839cb6fce6522": 0,
+    "87e485f1f6abc88f": 0,
+    "9c6117e6398aadd0": 2,
+    "0b6b9b957fc93dc4": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_effec5631bd99aa8"
+   ],
+   "rel": {
+    "effec5631bd99aa8": 2,
+    "9c6117e6398aadd0": 2,
+    "f880ce4055f6bdde": 2,
+    "0b6b9b957fc93dc4": 2,
+    "4f2518def70f64e2": 2,
+    "0889b89322f206a2": 0,
+    "6b536046a4cdf2f5": 0,
+    "84ddd95da8a9b142": 0,
+    "053e2b0634cc1412": 0,
+    "c3665bb25b03b78e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "roblox consul streaming boltdb seventy three hour outage",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_b3bc43fcd0d0da4e"
+   ],
+   "rel": {
+    "b3bc43fcd0d0da4e": 2,
+    "71d8ddbc60704138": 2,
+    "0889b89322f206a2": 2,
+    "43a699de29d14332": 2,
+    "5de17370169dda46": 2,
+    "88478eb8914dcae2": 0,
+    "e3abd77a56afb8bd": 0,
+    "fb9213f2e7865cc9": 0,
+    "63225b2d4941613b": 0,
+    "0f1ad8bbcb716966": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "consul and boltdb issues kept roblox down",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_43a699de29d14332"
+   ],
+   "rel": {
+    "43a699de29d14332": 2,
+    "b3bc43fcd0d0da4e": 2,
+    "5de17370169dda46": 2,
+    "0889b89322f206a2": 2,
+    "71d8ddbc60704138": 2,
+    "5ae7d84ee5c4770d": 0,
+    "13a0222f4c1d995e": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the service stayed down for three days while consul and storage recovery failed",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_71d8ddbc60704138"
+   ],
+   "rel": {
+    "71d8ddbc60704138": 2,
+    "43a699de29d14332": 2,
+    "5de17370169dda46": 2,
+    "b3bc43fcd0d0da4e": 2,
+    "0889b89322f206a2": 2,
+    "e3abd77a56afb8bd": 0,
+    "c3665bb25b03b78e": 0,
+    "5cf8681b4b03b945": 0,
+    "92f332f1d214cf1c": 0,
+    "87e485f1f6abc88f": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "roblox returned after engineers repaired consul and the boltdb state",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_5de17370169dda46"
+   ],
+   "rel": {
+    "5de17370169dda46": 2,
+    "43a699de29d14332": 2,
+    "b3bc43fcd0d0da4e": 2,
+    "0889b89322f206a2": 2,
+    "71d8ddbc60704138": 2,
+    "e8fb54ea773f7879": 0,
+    "4a66809c780990cf": 0,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "113e19ffb394b6d3": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "Consul 流式复制和 BoltDB 存储一起出问题，Roblox 停了三天才恢复",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_0889b89322f206a2"
+   ],
+   "rel": {
+    "0889b89322f206a2": 2,
+    "43a699de29d14332": 2,
+    "b3bc43fcd0d0da4e": 2,
+    "5de17370169dda46": 2,
+    "71d8ddbc60704138": 2,
+    "5acd1e62d6834d1d": 0,
+    "0f3e5a41ef8fb3cf": 0,
+    "f06846b6fe1be699": 0,
+    "d8360a1f912bf7e3": 0,
+    "77b4fb9c3bd138ff": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "salesforce datacenter power failure database failover",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_0ff2e145486470c4"
+   ],
+   "rel": {
+    "0ff2e145486470c4": 2,
+    "a175a8e4a81bc8b6": 2,
+    "24c016f1bb80acd2": 2,
+    "adb791bf583fab70": 2,
+    "19778742368c7305": 1,
+    "d19f4a55250a2dc3": 1,
+    "f880ce4055f6bdde": 0,
+    "5e120b44ee18d3ef": 1,
+    "3b93514b9a6fc646": 2,
+    "bcf7ce9802f3b1cd": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "power loss cascaded into cross datacenter failover",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_24c016f1bb80acd2"
+   ],
+   "rel": {
+    "24c016f1bb80acd2": 2,
+    "a175a8e4a81bc8b6": 2,
+    "adb791bf583fab70": 2,
+    "0ff2e145486470c4": 2,
+    "0bcf1dcdd5b711b9": 0,
+    "42250921523d4c8f": 0,
+    "2b245fc089d6a7f5": 0,
+    "5e120b44ee18d3ef": 1,
+    "bcf7ce9802f3b1cd": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the outage spread across datacenters when failover could not reconcile database state",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_a175a8e4a81bc8b6"
+   ],
+   "rel": {
+    "a175a8e4a81bc8b6": 2,
+    "487839cb6fce6522": 1,
+    "0ff2e145486470c4": 2,
+    "9c6117e6398aadd0": 0,
+    "adb791bf583fab70": 2,
+    "5ae7d84ee5c4770d": 1,
+    "e8fb54ea773f7879": 1,
+    "30446501dc07e48d": 0,
+    "b3bc43fcd0d0da4e": 0,
+    "71d8ddbc60704138": 0,
+    "24c016f1bb80acd2": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "salesforce recovered after restoring power and reconciling data across sites",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_adb791bf583fab70"
+   ],
+   "rel": {
+    "adb791bf583fab70": 2,
+    "0ff2e145486470c4": 2,
+    "24c016f1bb80acd2": 2,
+    "a175a8e4a81bc8b6": 2,
+    "3b93514b9a6fc646": 2,
+    "30446501dc07e48d": 0,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "113e19ffb394b6d3": 0,
+    "f880ce4055f6bdde": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "一个机房断电后数据库和文件状态对不上，Salesforce 跨机房切换也失败",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_3b93514b9a6fc646"
+   ],
+   "rel": {
+    "3b93514b9a6fc646": 2,
+    "0ff2e145486470c4": 2,
+    "24c016f1bb80acd2": 2,
+    "adb791bf583fab70": 2,
+    "a175a8e4a81bc8b6": 2,
+    "175ea410b8ddb06d": 1,
+    "49c7ac70b77a452b": 1,
+    "57d73c8eea1b9729": 1,
+    "87e485f1f6abc88f": 1,
+    "6b536046a4cdf2f5": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "linux leap second printk deadlock xtime lock",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_f69d3ef55e07d747"
+   ],
+   "rel": {
+    "f69d3ef55e07d747": 2,
+    "1c7373257b3a9929": 2,
+    "5cf8681b4b03b945": 2,
+    "af13338548a4d5b1": 2,
+    "cfe0ec748606e177": 2,
+    "e3abd77a56afb8bd": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "timer interrupt deadlock during leap second",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_af13338548a4d5b1"
+   ],
+   "rel": {
+    "af13338548a4d5b1": 2,
+    "5cf8681b4b03b945": 2,
+    "f69d3ef55e07d747": 2,
+    "1c7373257b3a9929": 2,
+    "e3abd77a56afb8bd": 0,
+    "f33a724570ab80c0": 0,
+    "46f77201f3d4f67d": 0,
+    "bcf7ce9802f3b1cd": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "klogd tried to read time, waited on xtime lock, and deadlocked the kernel",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_5cf8681b4b03b945"
+   ],
+   "rel": {
+    "5cf8681b4b03b945": 2,
+    "f69d3ef55e07d747": 2,
+    "1c7373257b3a9929": 2,
+    "cfe0ec748606e177": 2,
+    "caff2a6a12fdfb48": 0,
+    "070d88d6710f7148": 0,
+    "13a0222f4c1d995e": 0,
+    "d0f053b5f4615678": 0,
+    "e79e5e70a0ad14f8": 0,
+    "af13338548a4d5b1": 2,
+    "84a290002aa94d7a": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the leap second handler deadlocked the timer interrupt and hung systems",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_1c7373257b3a9929"
+   ],
+   "rel": {
+    "1c7373257b3a9929": 2,
+    "af13338548a4d5b1": 2,
+    "5cf8681b4b03b945": 2,
+    "f69d3ef55e07d747": 2,
+    "46f77201f3d4f67d": 0,
+    "e3abd77a56afb8bd": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_cfe0ec748606e177"
+   ],
+   "rel": {
+    "cfe0ec748606e177": 2,
+    "f69d3ef55e07d747": 2,
+    "af13338548a4d5b1": 2,
+    "1c7373257b3a9929": 2,
+    "5cf8681b4b03b945": 2,
+    "43a699de29d14332": 0,
+    "b3bc43fcd0d0da4e": 0,
+    "5de17370169dda46": 0,
+    "0889b89322f206a2": 0,
+    "71d8ddbc60704138": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "stackdriver cassandra crash queue blocking",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_a5bbd7ef9b797e14"
+   ],
+   "rel": {
+    "a5bbd7ef9b797e14": 2,
+    "3b896eb6a3d2777e": 2,
+    "caff2a6a12fdfb48": 2,
+    "13a0222f4c1d995e": 2,
+    "416fe10c4316ace8": 2,
+    "c5cbfd523d83469e": 0,
+    "374808474a724c07": 0,
+    "0979030385032a92": 0,
+    "19778742368c7305": 0,
+    "5ae7d84ee5c4770d": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "message bus producers blocked on cassandra",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_caff2a6a12fdfb48"
+   ],
+   "rel": {
+    "caff2a6a12fdfb48": 2,
+    "3b896eb6a3d2777e": 2,
+    "13a0222f4c1d995e": 2,
+    "54c12fe0ba026338": 0,
+    "5de17370169dda46": 0,
+    "a5bbd7ef9b797e14": 2,
+    "416fe10c4316ace8": 2,
+    "84a290002aa94d7a": 0,
+    "6c0a814c2604c79f": 0,
+    "274346d4a28c73a8": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "queue inserts stalled and the failure spread to the whole application",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_3b896eb6a3d2777e"
+   ],
+   "rel": {
+    "3b896eb6a3d2777e": 2,
+    "19778742368c7305": 0,
+    "d19f4a55250a2dc3": 0,
+    "374808474a724c07": 0,
+    "5ae7d84ee5c4770d": 0,
+    "a5bbd7ef9b797e14": 2,
+    "46f77201f3d4f67d": 0,
+    "4f3a919ee7702d0f": 0,
+    "e8fb54ea773f7879": 0,
+    "f880ce4055f6bdde": 0,
+    "0ff2e145486470c4": 0,
+    "a175a8e4a81bc8b6": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "stackdriver recovered after the cassandra cluster and message pipeline were restored",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_13a0222f4c1d995e"
+   ],
+   "rel": {
+    "13a0222f4c1d995e": 2,
+    "3b896eb6a3d2777e": 2,
+    "caff2a6a12fdfb48": 2,
+    "a5bbd7ef9b797e14": 2,
+    "416fe10c4316ace8": 2,
+    "30446501dc07e48d": 0,
+    "4f2518def70f64e2": 0,
+    "2b571b4dce733a36": 0,
+    "adb791bf583fab70": 0,
+    "0979030385032a92": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_416fe10c4316ace8"
+   ],
+   "rel": {
+    "416fe10c4316ace8": 2,
+    "a5bbd7ef9b797e14": 2,
+    "caff2a6a12fdfb48": 2,
+    "3b896eb6a3d2777e": 2,
+    "13a0222f4c1d995e": 2,
+    "4f3a919ee7702d0f": 0,
+    "e8fb54ea773f7879": 0,
+    "374808474a724c07": 0,
+    "90db563d25e153df": 0,
+    "4a66809c780990cf": 0,
+    "1a58e4a7622acae7": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "stack exchange sql server bugcheck read only",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_070d88d6710f7148"
+   ],
+   "rel": {
+    "070d88d6710f7148": 2,
+    "e79e5e70a0ad14f8": 2,
+    "d0f053b5f4615678": 2,
+    "df89907559e21e8c": 2,
+    "487839cb6fce6522": 2,
+    "4cc66d3c8523c986": 0,
+    "3999dc488a8129ce": 0,
+    "50f0cfe7971ce964": 0,
+    "03a034ac59d1753a": 0,
+    "54c12fe0ba026338": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "primary sql server bugcheck forced read only",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_d0f053b5f4615678"
+   ],
+   "rel": {
+    "d0f053b5f4615678": 2,
+    "e79e5e70a0ad14f8": 2,
+    "070d88d6710f7148": 2,
+    "df89907559e21e8c": 2,
+    "487839cb6fce6522": 2,
+    "175ea410b8ddb06d": 1,
+    "a4569e4ba25a2a14": 0,
+    "03e403ddb8b696b0": 1,
+    "92f332f1d214cf1c": 1,
+    "adedd9839862e576": 1
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "a sql server bugcheck made the sites reject writes and then go fully offline",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_e79e5e70a0ad14f8"
+   ],
+   "rel": {
+    "e79e5e70a0ad14f8": 2,
+    "070d88d6710f7148": 2,
+    "d0f053b5f4615678": 2,
+    "df89907559e21e8c": 2,
+    "487839cb6fce6522": 2,
+    "d21b81412680ce43": 0,
+    "6c0a814c2604c79f": 1,
+    "c3665bb25b03b78e": 0,
+    "57d73c8eea1b9729": 1,
+    "84ddd95da8a9b142": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "stack exchange recovered after restarting the sql server and restoring writes",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_487839cb6fce6522"
+   ],
+   "rel": {
+    "487839cb6fce6522": 2,
+    "070d88d6710f7148": 2,
+    "d0f053b5f4615678": 2,
+    "df89907559e21e8c": 2,
+    "e79e5e70a0ad14f8": 2,
+    "4cc66d3c8523c986": 0,
+    "50f0cfe7971ce964": 0,
+    "03a034ac59d1753a": 0,
+    "54c12fe0ba026338": 0,
+    "3999dc488a8129ce": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "主 SQL Server 进程触发 bugcheck，Stack Exchange 先变只读，后来整个站都打不开",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_df89907559e21e8c"
+   ],
+   "rel": {
+    "df89907559e21e8c": 2,
+    "070d88d6710f7148": 2,
+    "d0f053b5f4615678": 2,
+    "e79e5e70a0ad14f8": 2,
+    "487839cb6fce6522": 2,
+    "4cc66d3c8523c986": 0,
+    "50f0cfe7971ce964": 0,
+    "03a034ac59d1753a": 0,
+    "54c12fe0ba026338": 0,
+    "3999dc488a8129ce": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "tarsnap batch log filled filesystem",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_84ddd95da8a9b142"
+   ],
+   "rel": {
+    "84ddd95da8a9b142": 2,
+    "28176f3f0d8cccc8": 2,
+    "c3665bb25b03b78e": 2,
+    "053e2b0634cc1412": 2,
+    "350afa7138f79e2c": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "unbounded log growth stopped backup service",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_053e2b0634cc1412"
+   ],
+   "rel": {
+    "053e2b0634cc1412": 2,
+    "7e2f2da98d962eb4": 0,
+    "a4569e4ba25a2a14": 0,
+    "84ddd95da8a9b142": 2,
+    "28176f3f0d8cccc8": 2,
+    "6a1208c3c02e6f6c": 0,
+    "e3abd77a56afb8bd": 0,
+    "d8360a1f912bf7e3": 0,
+    "30446501dc07e48d": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "failed block cleanup retries wrote endless logs and tarsnap could not write data",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_28176f3f0d8cccc8"
+   ],
+   "rel": {
+    "28176f3f0d8cccc8": 2,
+    "c3665bb25b03b78e": 2,
+    "0b6b9b957fc93dc4": 1,
+    "4f2518def70f64e2": 0,
+    "f880ce4055f6bdde": 0,
+    "92f332f1d214cf1c": 0,
+    "487839cb6fce6522": 0,
+    "84ddd95da8a9b142": 2,
+    "053e2b0634cc1412": 2,
+    "5ae7d84ee5c4770d": 0,
+    "9c6117e6398aadd0": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "removing the oversized log file restored the tarsnap service",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_c3665bb25b03b78e"
+   ],
+   "rel": {
+    "c3665bb25b03b78e": 2,
+    "053e2b0634cc1412": 2,
+    "84ddd95da8a9b142": 2,
+    "28176f3f0d8cccc8": 2,
+    "adb791bf583fab70": 0,
+    "a175a8e4a81bc8b6": 0,
+    "6a1208c3c02e6f6c": 0,
+    "e3abd77a56afb8bd": 0,
+    "d8360a1f912bf7e3": 0,
+    "30446501dc07e48d": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_350afa7138f79e2c"
+   ],
+   "rel": {
+    "350afa7138f79e2c": 2,
+    "84ddd95da8a9b142": 2,
+    "053e2b0634cc1412": 2,
+    "c3665bb25b03b78e": 2,
+    "28176f3f0d8cccc8": 2,
+    "e909ec08902d3102": 0,
+    "fd124fd91e9e5898": 0,
+    "a0826f92f1762ad8": 0,
+    "274346d4a28c73a8": 0,
+    "cbb81edec0cff176": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "trivago azure ad security group removal github access",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_064202bcfb968b36"
+   ],
+   "rel": {
+    "064202bcfb968b36": 2,
+    "61e12c2718550630": 2,
+    "646e65df5e5a7962": 2,
+    "f1f29f6a59f4d2ac": 2,
+    "3e9b594775cafc56": 2,
+    "138a3cfd46e66dc5": 0,
+    "cc52450aacf9f5ef": 0,
+    "a1ea0a21d5b6a1d6": 0,
+    "3a38b670bb9cf70c": 0,
+    "d2ad735a4bd73ca5": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "manual task deleted group controlling github org",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_f1f29f6a59f4d2ac"
+   ],
+   "rel": {
+    "f1f29f6a59f4d2ac": 2,
+    "61e12c2718550630": 2,
+    "064202bcfb968b36": 2,
+    "646e65df5e5a7962": 2,
+    "a0826f92f1762ad8": 0,
+    "d2ad735a4bd73ca5": 0,
+    "2725f0506ba08d09": 0,
+    "183cc9d0d2e001d9": 0,
+    "e3abd77a56afb8bd": 0,
+    "b8491275622d1811": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "all engineers lost github organization access after the group was deleted",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_61e12c2718550630"
+   ],
+   "rel": {
+    "61e12c2718550630": 2,
+    "f1f29f6a59f4d2ac": 2,
+    "064202bcfb968b36": 2,
+    "646e65df5e5a7962": 2,
+    "113e19ffb394b6d3": 0,
+    "0f3e5a41ef8fb3cf": 0,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "138a3cfd46e66dc5": 0,
+    "cc52450aacf9f5ef": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "trivago restored access after recreating the group and its memberships",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_646e65df5e5a7962"
+   ],
+   "rel": {
+    "646e65df5e5a7962": 2,
+    "064202bcfb968b36": 2,
+    "61e12c2718550630": 2,
+    "f1f29f6a59f4d2ac": 2,
+    "ec43ae825aef7f6f": 0,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "113e19ffb394b6d3": 0,
+    "138a3cfd46e66dc5": 0,
+    "cc52450aacf9f5ef": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_3e9b594775cafc56"
+   ],
+   "rel": {
+    "3e9b594775cafc56": 2,
+    "064202bcfb968b36": 2,
+    "61e12c2718550630": 2,
+    "646e65df5e5a7962": 2,
+    "f1f29f6a59f4d2ac": 2,
+    "db5aa4f741afcd0d": 0,
+    "138a3cfd46e66dc5": 0,
+    "16b82728b19e3113": 0,
+    "648f63dda3c196bb": 0,
+    "cc52450aacf9f5ef": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "zerodha order management system million unit order overload",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_56bc9e5a501161ef"
+   ],
+   "rel": {
+    "56bc9e5a501161ef": 2,
+    "2b245fc089d6a7f5": 2,
+    "0bcf1dcdd5b711b9": 2,
+    "f33a724570ab80c0": 0,
+    "8d6a64062cfd9248": 0,
+    "bbf3685518ff2fcc": 0,
+    "90db563d25e153df": 0,
+    "ec43ae825aef7f6f": 2,
+    "fd124fd91e9e5898": 0,
+    "274346d4a28c73a8": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "penny stock order split into hundred thousand trades",
+   "layer": "literal",
+   "expected": [
+    "2026-10-22_0bcf1dcdd5b711b9"
+   ],
+   "rel": {
+    "0bcf1dcdd5b711b9": 2,
+    "2b245fc089d6a7f5": 2,
+    "56bc9e5a501161ef": 2,
+    "24c016f1bb80acd2": 0,
+    "a175a8e4a81bc8b6": 0,
+    "90db563d25e153df": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "the unexpected trade count collapsed the order management system",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_2b245fc089d6a7f5"
+   ],
+   "rel": {
+    "2b245fc089d6a7f5": 2,
+    "56bc9e5a501161ef": 2,
+    "6a1208c3c02e6f6c": 0,
+    "0bcf1dcdd5b711b9": 2,
+    "90db563d25e153df": 0,
+    "fd124fd91e9e5898": 0,
+    "274346d4a28c73a8": 0,
+    "f33a724570ab80c0": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "zerodha and refinitiv restored order processing after the oms collapse",
+   "layer": "paraphrase",
+   "expected": [
+    "2026-10-22_ec43ae825aef7f6f"
+   ],
+   "rel": {
+    "ec43ae825aef7f6f": 2,
+    "56bc9e5a501161ef": 2,
+    "0bcf1dcdd5b711b9": 2,
+    "2b245fc089d6a7f5": 2,
+    "488a36ea327fa62b": 2,
+    "2b571b4dce733a36": 0,
+    "0979030385032a92": 0,
+    "90db563d25e153df": 0,
+    "113e19ffb394b6d3": 0
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  },
+  {
+   "query": "一笔百万股的仙股订单被拆成十几万笔，Zerodha 的 OMS 从没见过这种量，直接崩了",
+   "layer": "semantic",
+   "expected": [
+    "2026-10-22_488a36ea327fa62b"
+   ],
+   "rel": {
+    "488a36ea327fa62b": 2,
+    "56bc9e5a501161ef": 2,
+    "0bcf1dcdd5b711b9": 2,
+    "ec43ae825aef7f6f": 2,
+    "2b245fc089d6a7f5": 2
+   },
+   "judge": {
+    "by": "fei+hao-policy-v1",
+    "date": "2026-10-24T00:00:00Z",
+    "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
+   },
+   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+  }
+ ]
+}

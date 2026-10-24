@@ -8,7 +8,7 @@ use cli_args::{parse_args, Opts};
 use cli_io::read_input;
 use cli_mem::{run_recall, store, write_mem_lines};
 use scx::memory::CaseStats;
-use scx::{compress, Config, Outcome};
+use scx::{compress, Outcome};
 use std::io::{self, Write};
 use std::sync::mpsc;
 
@@ -42,7 +42,7 @@ fn early_exit(args: &[String]) -> bool {
             continue;
         }
         if !after_terminator && (a == "--help" || a == "-h") {
-            println!("{}", cli_args::USAGE);
+            println!("{}", cli_args::usage());
             return true;
         }
         if !after_terminator && (a == "--version" || a == "-V") {
@@ -67,7 +67,11 @@ fn main() {
     // P4.4+ 优化④：--eval-verbose 时追加逐 case A/B top-10 候选诊断（服务 M4 标注校准）。
     if let Some(path) = &opts.eval {
         // P4.4+ 优化⑭：--gate 在报告后机械校验 M4 证据门；失败 exit 2。
-        let res: std::io::Result<(Vec<String>, bool)> = if opts.eval_gate {
+        let res: std::io::Result<(Vec<String>, bool)> = if opts.eval_gate_human {
+            scx::memory::eval_cases_gate_human(&opts.mem_dir, path, opts.eval_verbose)
+        } else if opts.eval_gate_items {
+            scx::memory::eval_cases_gate_items(&opts.mem_dir, path, opts.eval_verbose)
+        } else if opts.eval_gate {
             scx::memory::eval_cases_gate(&opts.mem_dir, path, opts.eval_verbose)
         } else if opts.eval_verbose {
             scx::memory::eval_cases_verbose(&opts.mem_dir, path).map(|lines| (lines, false))
@@ -249,16 +253,7 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let cfg = Config {
-        ratio: opts.ratio,
-        context: opts.context,
-        window: opts.window,
-        elide: opts.elide,
-        risk_gate: opts.risk_gate,
-        lineno: opts.lineno,
-        forces: opts.forces.clone(),
-    };
-    let o = compress(&text, &opts.query, &cfg);
+    let o = compress(&text, &opts.query, &opts.config);
     let stdout = io::stdout();
     let mut out = stdout.lock();
     if !opts.stat {
@@ -346,7 +341,7 @@ pass --fix \"...\" after a verified fix (HARD discipline)"
                 &o.text,
                 &opts.files,
                 &stats,
-                &opts.forces,
+                &opts.config.forces,
                 &fix,
                 &evidence_lno,
                 &evidence,
@@ -357,7 +352,7 @@ pass --fix \"...\" after a verified fix (HARD discipline)"
             let query = opts.query.clone();
             let text = o.text.clone();
             let files = opts.files.clone();
-            let forces = opts.forces.clone();
+            let forces = opts.config.forces.clone();
             let fix = fix.clone();
             let ev_lno = evidence_lno.clone();
             let ev = evidence.clone();

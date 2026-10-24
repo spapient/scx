@@ -26,8 +26,6 @@
 //! - 口径说明：索引路径 df/avgdl 为全库口径（区别于线性路径的候选桶内口径），
 //!   同一路径内确定；P4 评估统一以索引路径为准。
 
-#![cfg_attr(not(test), allow(dead_code))]
-
 use crate::memory::postings::{
     self, crc32, postings_path, varint_get, varint_put, POST_MAGIC, POST_VER,
 };
@@ -90,6 +88,7 @@ pub(crate) fn invalidate_locked(root: &str) {
 
 /// 惰性作废索引（新增/删除 case 后调用）：删 postings.bin，召回回退线性/按需重建。
 /// 锁失败必须上抛：静默失败会让新 case 永远被旧索引漏掉。
+#[cfg(test)]
 pub(crate) fn invalidate(root: &str) -> std::io::Result<()> {
     let _g = lock(root)?;
     invalidate_locked(root);
@@ -433,16 +432,8 @@ pub(crate) fn term_df(idx: &Index, t: &str) -> usize {
 
 /// 是否启用倒排路径：规模达标（meta 可覆盖）或 --rebuild 后强制（index_force=1）。
 pub(crate) fn use_index(meta: &Meta) -> bool {
-    let force = param(meta, "index_force", 0.0) > 0.0;
+    let force = meta.param("index_force") > 0.0;
     force || meta.case_count >= INDEX_MIN_DOCS
-}
-
-fn param(m: &Meta, key: &str, dflt: f64) -> f64 {
-    m.params
-        .iter()
-        .find(|(k, _)| k == key)
-        .map(|(_, v)| *v)
-        .unwrap_or(dflt)
 }
 
 #[cfg(test)]

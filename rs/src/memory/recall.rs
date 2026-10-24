@@ -88,9 +88,10 @@ pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<R
     let cand = candidate_buckets(query);
     // 消融开关（默认全开）：bucket_enable/prf_enable 只服务可复现的 A−组件对拍，
     // 不改变默认检索行为。
-    let mut use_buckets = !cand.is_empty() && param(&meta, "bucket_enable", 1.0) > 0.0;
-    let qf_weight = param(&meta, "query_field_weight", 1.0);
-    let qf_trigger = param(&meta, "query_field_trigger_sim", 0.30);
+    let mut use_buckets = !cand.is_empty() && meta.param("bucket_enable") > 0.0;
+    let qf_weight = meta.param("query_field_weight");
+    let qf_trigger = meta.param("query_field_trigger_sim");
+    let high_sim = meta.param("confidence_high_sim");
     let mut hits = score_pass(
         root,
         query,
@@ -109,7 +110,7 @@ pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<R
     // 在排序前直接删掉目标，任何字段重排都救不回来。此时退回无桶候选，
     // 保留 BM25 全量排序；高置信查询仍走桶过滤以控制扫描范围。
     let first_sim = hits.first().map(|h| h.sim).unwrap_or(0.0);
-    let bucket_bypass_sim = param(&meta, "bucket_bypass_sim", 0.30);
+    let bucket_bypass_sim = meta.param("bucket_bypass_sim");
     if use_buckets && first_sim < bucket_bypass_sim {
         if let Ok(full_hits) = score_pass(
             root,
@@ -132,7 +133,7 @@ pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<R
     // （top1.sim<query_field_trigger_sim，默认 0.30）；
     // ②top1/top2 都是满分、但排序按正文长度/字段打破时（同事故兄弟 case 竞争）。
     // 高置信且无并列的 query 不改排序，避免把同域候选抬上来。
-    let exact_tie = hits.len() >= 2 && hits[0].sim >= 0.99 && hits[1].sim >= 0.99;
+    let exact_tie = hits.len() >= 2 && hits[0].sim >= high_sim && hits[1].sim >= high_sim;
     let low_semantic = hits.first().is_some_and(|h| h.sim < qf_trigger);
     // qf 强度随词面置信度下降而平滑增大：just-below-trigger 的查询只得到
     // 很小的重排推力，避免一个宽泛的 case-query 词组（如 “retry storm”）
@@ -176,10 +177,9 @@ pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<R
             }
         }
     }
-    // P2.3 PRF：低置信（top1.sim < 0.99）时粗召回 top-K 扩展查询再召一轮。
+    // P2.3 PRF：低置信（top1.sim < confidence_high_sim）时粗召回 top-K 扩展查询再召一轮。
     // 编辑距离 ≤2 变体命中也在本轮覆盖（轻量重排 = 词面重新打分）。
-    let low_conf =
-        param(&meta, "prf_enable", 1.0) > 0.0 && hits.first().is_some_and(|h| h.sim < 0.99);
+    let low_conf = meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
     if low_conf {
         if let Ok(ext) = crate::memory::prf::expand(root, &hits, query, &meta) {
             if !ext.is_empty() {
@@ -264,19 +264,21 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     let use_buckets = ctx.use_buckets;
     let qf_weight = ctx.qf_weight;
     let qf_exact_only = ctx.qf_exact_only;
-    let k1 = param(meta, "bm25_k1", 1.2);
-    let b = param(meta, "bm25_b", 0.75);
-    let tau = param(meta, "decay_tau_days", 90.0);
+    let k1 = meta.param("bm25_k1");
+    let b = meta.param("bm25_b");
+    let tau = meta.param("decay_tau_days");
+    let tau_solved = meta.param("decay_tau_solved");
+    let tau_regressed = meta.param("decay_tau_regressed");
     let fw = [
-        param(meta, "field_weight_error_code", 3.0),
-        param(meta, "field_weight_file_loc", 2.5),
-        param(meta, "field_weight_symbol", 2.0),
-        param(meta, "field_weight_num_fp", 2.0),
+        meta.param("field_weight_error_code"),
+        meta.param("field_weight_file_loc"),
+        meta.param("field_weight_symbol"),
+        meta.param("field_weight_num_fp"),
     ];
     // P4.3 实体边：共享实体加权（0 则关，兼容老 meta 缺省开 1.0）。
-    let edge_w = param(meta, "edge_weight", 1.0);
+    let edge_w = meta.param("edge_weight");
     let orig_qterms = build_mem_terms(query);
-    let qterms = if param(meta, "synonyms_enable", 1.0) > 0.0 {
+    let qterms = if meta.param("synonyms_enable") > 0.0 {
         synonyms::expand_terms(&orig_qterms)
     } else {
         orig_qterms.clone()
@@ -284,10 +286,10 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     // 同义扩展是补召回机制，不应与用户原词等权：等权时一个宽泛的扩展词
     // 可以把同域兄弟 case 抬到精确目标之前（confirm3 paraphrase 回归）。
     // 半权是“保留补召回、限制误抬升”的默认折中；置 1 可恢复旧行为。
-    let syn_w = param(meta, "synonym_weight", 0.5).clamp(0.0, 1.0);
+    let syn_w = meta.param("synonym_weight").clamp(0.0, 1.0);
     // `other` = 分类器没有强家族证据；默认放行（宁多勿漏）。
     // 置 0 可恢复旧的硬筛行为（仅用于对拍）。
-    let allow_other = param(meta, "bucket_allow_other", 1.0) > 0.0;
+    let allow_other = meta.param("bucket_allow_other") > 0.0;
     let qfields = field::extract(query);
     let qf = [
         &qfields.error_code,
@@ -327,8 +329,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         }
         // P4.3 实体边一跳：query 实体 → 兄弟 case 兜底并入（df/avgdl 保持 idx 全库口径）。
         let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.clone()).collect();
-        let (bridges, _) =
-            crate::memory::edge::bridge_cases(root, &meta.params, &q_ent_list, &exist_ids)?;
+        let (bridges, _) = crate::memory::edge::bridge_cases(root, meta, &q_ent_list, &exist_ids)?;
         for b in bridges {
             docs.push((
                 b.id,
@@ -398,8 +399,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         }
         // P4.3 实体边一跳：桥 case 并入后 avgdl 重算（df 保持词面候选口径）。
         let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.clone()).collect();
-        let (bridges, _) =
-            crate::memory::edge::bridge_cases(root, &meta.params, &q_ent_list, &exist_ids)?;
+        let (bridges, _) = crate::memory::edge::bridge_cases(root, meta, &q_ent_list, &exist_ids)?;
         for b in bridges {
             docs.push((
                 b.id,
@@ -427,14 +427,14 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     // O5 词级调权表：query 词命中时按词权重加成（§3.9，无词条=0）。
     let ww: HashMap<&str, f64> = meta.word_w.iter().map(|(k, v)| (k.as_str(), *v)).collect();
     // O5 quality 排序先验（§4.1）：solved 且质量高的 case 提分。
-    let q_prior = param(meta, "quality_prior", 0.5);
+    let q_prior = meta.param("quality_prior");
     // score_max：原始 query 词 idf 加字段全命中，作 sim 归一化分母。
     // 同义扩展只增加命中机会，不得抬高分母把原始 query 的 sim 稀释。
     // 直觉：query 每个词在 case 中都命中一次 ≈ sim=1（tf>1 或字段命中可再溢出）。
     let mut sm = 0.0;
     for qt in &orig_qterms {
         let d = *df.get(qt).unwrap_or(&0) as f64;
-        sm += ((1.0 + (n - d + 0.5) / (d + 0.5)).ln()).max(0.0);
+        sm += crate::memory::bm25::idf(n, d);
     }
     for (f_list, w) in qf.iter().zip(fw.iter()) {
         sm += f_list.len() as f64 * w;
@@ -443,10 +443,9 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     let mut hits: Vec<RecallHit> = Vec::with_capacity(docs.len());
     for (id, dctx) in &docs {
         let dl = dctx.terms.len() as f64;
-        let mut tf: HashMap<&str, usize> = HashMap::new();
-        for t in &dctx.terms {
-            *tf.entry(t.as_str()).or_insert(0) += 1;
-        }
+        // terms 在建库/桥接/线性路径均已 sort+dedup，tf 恒为 1；直接二分查存在性，
+        // 避免每个候选文档分配一张 tf HashMap。
+        let denom = crate::memory::bm25::denom(k1, b, dl, avgdl);
         let mut score = 0.0;
         for qt in &qterms {
             let term_w = if orig_qterms.iter().any(|t| t == qt) {
@@ -455,11 +454,9 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
                 syn_w
             };
             let d = *df.get(qt).unwrap_or(&0) as f64;
-            let idf = ((1.0 + (n - d + 0.5) / (d + 0.5)).ln()).max(0.0);
-            let f = *tf.get(qt.as_str()).unwrap_or(&0) as f64;
-            if f > 0.0 {
-                let denom = f + k1 * (1.0 - b + b * dl / avgdl);
-                score += term_w * idf * f * (k1 + 1.0) / denom;
+            let idf = crate::memory::bm25::idf(n, d);
+            if dctx.terms.binary_search(qt).is_ok() {
+                score += term_w * crate::memory::bm25::score(idf, k1, denom);
                 // 词级调权：命中词权重叠加（可正可负）。
                 if let Some(w) = ww.get(qt.as_str()) {
                     score += term_w * idf * w;
@@ -500,7 +497,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
                 for qt in qf_terms {
                     if dctx.query_terms.iter().any(|t| t == qt) {
                         let d = *df.get(qt).unwrap_or(&0) as f64;
-                        let idf = ((1.0 + (n - d + 0.5) / (d + 0.5)).ln()).max(0.0);
+                        let idf = crate::memory::bm25::idf(n, d);
                         let term_w = if orig_qterms.iter().any(|t| t == qt) {
                             1.0
                         } else {
@@ -523,8 +520,8 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         let support = score + fb;
         // O4 时间衰减：age 用 updated_at（去重/反馈会刷新它），τ 随状态动态。
         let tau_eff = match dctx.status.as_str() {
-            "solved" => param(meta, "decay_tau_solved", 180.0),
-            "regressed" => param(meta, "decay_tau_regressed", 30.0),
+            "solved" => tau_solved,
+            "regressed" => tau_regressed,
             _ => tau,
         };
         let upd_s = crate::memory::util::parse_utc_secs(&dctx.updated_at);
@@ -540,10 +537,20 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         if support <= 0.0 {
             continue;
         }
-        let ranked = (score + fb) * decay;
+        let mut ranked = (score + fb) * decay;
         // query-field 只改排序，不伪造词面置信：sim 用不含 qf 的词面/字段分，
         // 否则同 query 的 sim 会因重排项而低于 1，误触发 PRF。
-        let lexical = (score + fb - qf_add) * decay;
+        let mut lexical = (score + fb - qf_add) * decay;
+        // 词面证据过弱时不允许 qf 重排“救活”候选：否则一个泛化的 CJK
+        // bigram 命中就能把跨事故 case 抬进 top-10（Flowdock 语义查询实测
+        // sim=0.04 的 Tarsnap case 被抬到第 7）。阈值只作用于重排项，
+        // 不影响纯词面/字段分，也不改变目标 case 的召回资格。
+        let qf_min_sim = meta.param("query_field_min_sim");
+        if qf_add > 0.0 && sm > 0.0 && lexical / sm < qf_min_sim {
+            score -= qf_add;
+            lexical = (score + fb) * decay;
+            ranked = (score + fb) * decay;
+        }
         hits.push(RecallHit {
             id: id.clone(),
             score: ranked,
@@ -556,17 +563,28 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     }
 
     // P2.5 MMR：得分排序后按多样性去冗余（λ 从 meta 读）。
-    let mut order: Vec<usize> = (0..hits.len()).collect();
-    order.sort_by(|&a, &b| {
-        hits[b]
-            .score
-            .partial_cmp(&hits[a].score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let lambda = param(meta, "mmr_lambda", 0.5);
+    let mut order = order_by_score(&hits);
+    // 同事故兄弟 case 往往共享完整根因段，词面高度重合。首轮用整篇词表做
+    // Jaccard 聚类，把 top1 的同族 case 收紧到 top1 之后：同一事故的兄弟
+    // 在人工口径里通常同为 rel=2，散落在弱相关候选之后会拉低 NDCG。
+    // 只重排 top1 同族，且要求分数不低于 top1 的 40%，避免把“同根因但明显
+    // 更弱”的候选抬上来；不改变 top1 自身位置。
+    // 同族收紧只在 top1 有足够词面证据时启用。弱词面锚点通常意味着查询与
+    // 候选只是共享少量泛化词；此时把整族候选前移会压过更强的跨族结果。
+    let sibling_anchor_ok = hits
+        .first()
+        .is_some_and(|h| h.sim >= meta.param("sibling_min_sim"));
+    if meta.param("sibling_coherence") > 0.0 && sibling_anchor_ok && hits.len() > 1 {
+        let terms_by_id: HashMap<&str, &[String]> = docs
+            .iter()
+            .map(|(id, d)| (id.as_str(), d.terms.as_slice()))
+            .collect();
+        order = group_siblings(order, &hits, &terms_by_id, k);
+    }
+    let lambda = meta.param("mmr_lambda");
     // MMR 默认关闭：v2 对拍显示 λ=0.5 会把同事故的精确目标挤出 top-5
     // （paraphrase r@5 0.783→0.867 当关闭）。需要多样性时置 mmr_enable=1。
-    let picked = if param(meta, "mmr_enable", 0.0) > 0.0 {
+    let picked = if meta.param("mmr_enable") > 0.0 {
         let scores_norm: Vec<f64> = hits.iter().map(|h| h.sim).collect();
         let doc_terms: Vec<Vec<String>> = docs.iter().map(|(_, d)| d.terms.clone()).collect();
         crate::memory::mmr::select(&order, &doc_terms, &scores_norm, k, lambda)
@@ -580,12 +598,88 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     Ok(out)
 }
 
-fn param(m: &Meta, key: &str, dflt: f64) -> f64 {
-    m.params
-        .iter()
-        .find(|(k, _)| k == key)
-        .map(|(_, v)| *v)
-        .unwrap_or(dflt)
+/// 确定性排序：分数降序，同分按 case id 升序。
+///
+/// `sort_by` 稳定，但输入 `docs` 的顺序来自倒排/哈希遍历，跨进程不保证；
+/// 不设次级键会让同分兄弟 case 的 NDCG 每次运行不同（MRR 因目标不并列而看似稳定）。
+fn order_by_score(hits: &[RecallHit]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..hits.len()).collect();
+    order.sort_by(|&a, &b| {
+        hits[b]
+            .score
+            .partial_cmp(&hits[a].score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| hits[a].id.cmp(&hits[b].id))
+    });
+    order
+}
+
+/// 同族阈值：confirm5 同事故兄弟整篇词表 Jaccard 为 0.64–0.67，跨事故为
+/// 0.06–0.07；0.35 位于两者之间，留足跨语料余量。
+const SIBLING_JACCARD: f64 = 0.35;
+/// 同族候选的最低相对分：低于 top1 的 40% 视为“同根因但更弱”，不抬升。
+const SIBLING_SCORE_RATIO: f64 = 0.40;
+
+/// 把 top1 的同族候选稳定地移到 top1 之后（保持各自原有先后），其余顺序不变。
+/// 只看前 `3*k` 个候选：同事故兄弟在 confirm5 均落在 top-10 内，避免全库两两比较。
+fn group_siblings(
+    order: Vec<usize>,
+    hits: &[RecallHit],
+    terms_by_id: &HashMap<&str, &[String]>,
+    k: usize,
+) -> Vec<usize> {
+    if order.len() < 2 {
+        return order;
+    }
+    let top = order[0];
+    let Some(top_terms) = terms_by_id.get(hits[top].id.as_str()) else {
+        return order;
+    };
+    if top_terms.is_empty() {
+        return order;
+    }
+    let window = (3 * k.max(1)).min(order.len());
+    let top_score = hits[top].score.max(1e-9);
+    let (mut family, mut rest) = (Vec::new(), Vec::new());
+    for &i in &order[1..window] {
+        let sibling = terms_by_id
+            .get(hits[i].id.as_str())
+            .is_some_and(|t| jaccard(top_terms, t) >= SIBLING_JACCARD)
+            && hits[i].score >= top_score * SIBLING_SCORE_RATIO;
+        if sibling {
+            family.push(i);
+        } else {
+            rest.push(i);
+        }
+    }
+    let mut out = Vec::with_capacity(order.len());
+    out.push(top);
+    out.extend(family);
+    out.extend(rest);
+    out.extend_from_slice(&order[window..]);
+    out
+}
+
+/// 已排序去重词表的 Jaccard；双指针避免构造临时集合。
+fn jaccard(a: &[String], b: &[String]) -> f64 {
+    let (mut i, mut j, mut inter) = (0, 0, 0);
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            std::cmp::Ordering::Less => i += 1,
+            std::cmp::Ordering::Greater => j += 1,
+            std::cmp::Ordering::Equal => {
+                inter += 1;
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    let union = a.len() + b.len() - inter;
+    if union == 0 {
+        0.0
+    } else {
+        inter as f64 / union as f64
+    }
 }
 
 #[cfg(test)]
@@ -633,6 +727,60 @@ mod tests {
             query_field_strength(1.0, 0.30, 0.80, false, false, false),
             0.0
         );
+    }
+
+    #[test]
+    fn equal_scores_order_by_case_id() {
+        let hit = |id: &str, score: f64| RecallHit {
+            id: id.to_string(),
+            score,
+            sim: 1.0,
+        };
+        let hits = vec![hit("d", 2.0), hit("b", 2.0), hit("c", 2.0), hit("a", 1.0)];
+        let ids: Vec<&str> = order_by_score(&hits)
+            .into_iter()
+            .map(|i| hits[i].id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["b", "c", "d", "a"]);
+    }
+
+    #[test]
+    fn jaccard_is_symmetric_and_bounded() {
+        let a = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let b = vec!["b".to_string(), "c".to_string(), "d".to_string()];
+        assert!((jaccard(&a, &b) - 0.5).abs() < 1e-9);
+        assert!((jaccard(&b, &a) - 0.5).abs() < 1e-9);
+        assert_eq!(jaccard(&[], &b), 0.0);
+    }
+
+    #[test]
+    fn siblings_group_after_top1_and_weak_stays_below() {
+        let hit = |id: &str, score: f64| RecallHit {
+            id: id.to_string(),
+            score,
+            sim: score / 10.0,
+        };
+        let hits = vec![
+            hit("top", 10.0),
+            hit("sib1", 8.0),
+            hit("weak", 9.0),
+            hit("sib2", 7.0),
+            hit("other", 6.0),
+        ];
+        let terms = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let top = terms(&["a", "b", "c", "d"]);
+        let sib = terms(&["a", "b", "c", "d"]);
+        let weak = terms(&["a", "e"]);
+        let other = terms(&["z"]);
+        let map: HashMap<&str, &[String]> = HashMap::from([
+            ("top", top.as_slice()),
+            ("sib1", sib.as_slice()),
+            ("weak", weak.as_slice()),
+            ("sib2", sib.as_slice()),
+            ("other", other.as_slice()),
+        ]);
+        let out = group_siblings(vec![0, 2, 1, 3, 4], &hits, &map, 5);
+        assert_eq!(out, vec![0, 1, 3, 2, 4]);
     }
 
     #[test]

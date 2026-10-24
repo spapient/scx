@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible defect in scx
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please remove credentials, customer data, and private logs before posting.
+        Security vulnerabilities must be reported privately via SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: "0.4.1 or commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact scx invocation, with secrets removed.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exit code and relevant stderr/stdout tails.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: A short synthetic input is much more useful than a full production dump.

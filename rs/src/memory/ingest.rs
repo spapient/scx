@@ -9,8 +9,6 @@
 //!
 //! 阶段化开发过渡：P1.2 落地摄取，CLI 接线在 P1.5，非 test 构建暂放宽 dead_code。
 
-#![cfg_attr(not(test), allow(dead_code))]
-
 use crate::memory::store::{self, Case, CaseStats};
 
 /// 单 case 文本上限（P4.4 评审处置）：64 MiB 输入不得直接变 64 MiB case；
@@ -212,6 +210,7 @@ fn ingest_impl(
 }
 
 /// 按 id 删除一个 case（tombstone 化前的简单物理删除，P3 换惰性标记）。
+#[cfg(test)]
 pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
     crate::memory::housekeep::delete_case(root, id)
 }

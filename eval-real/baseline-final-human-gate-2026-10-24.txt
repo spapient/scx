@@ -1,0 +1,146 @@
+eval: cases=40 layers=literal,paraphrase,semantic multi-rel=10 single-rel=30 (NDCG strength)
+layer literal: n=14 A r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=1.000 ci95=[1.000,1.000] | B r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=1.000 ci95=[1.000,1.000]
+layer paraphrase: n=13 A r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.994 ci95=[0.982,1.000] | B r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.976 ci95=[0.939,1.000]
+layer semantic: n=13 A r@10=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.996 ci95=[0.989,1.000] | B r@10=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.945 ci95=[0.889,1.000]
+l1: hits=18 total=40 rate=0.450
+gate: mode=human
+gate: total=40 need>=30 (target 30-50) PASS
+gate: layer literal n=14 need>=10 PASS
+gate: layer paraphrase n=13 need>=10 PASS
+gate: layer semantic n=13 need>=10 PASS
+gate: judge metadata nonliteral=26 (need real by+date) PASS
+gate: human judge metadata all=40 judges=fei PASS
+gate: human controls weak=11>=10 negative=64>=10 layers=3>=2 PASS
+gate: layer literal ndcg@10 A=1.000 vs B=1.000 PASS
+gate: layer paraphrase ndcg@10 A=0.994 vs B=0.976 PASS
+gate: layer semantic ndcg@10 A=0.996 vs B=0.945 PASS
+gate: layer literal A r@5=1.000 vs B=1.000 PASS; A mrr=1.000 vs B=1.000 PASS
+gate: layer literal absolute A/B r@5=1.000/1.000>=0.20 PASS; mrr=1.000/1.000>=0.10 PASS
+gate: layer paraphrase A r@5=1.000 vs B=1.000 PASS; A mrr=1.000 vs B=1.000 PASS
+gate: layer paraphrase absolute A/B r@5=1.000/1.000>=0.20 PASS; mrr=1.000/1.000>=0.10 PASS
+gate: layer semantic A r@10=1.000 vs B=1.000 PASS; A mrr=1.000 vs B=1.000 PASS
+gate: layer semantic absolute A/B r@10=1.000/1.000>=0.20 PASS; mrr=1.000/1.000>=0.10 PASS
+gate: rel distribution 2=41 1=11 0=64
+gate: discrimination A!=B layers=0/3
+gate: warning A=B on all layers (no measurable advantage)
+gate: PASS
+case 1/40 q="db pool exhausted conn"
+  A: 1) abaf2e6abd6340b5 sim=0.97 score=11.32 [hit] | 2) 807c3e0123aaba50 sim=0.20 score=2.35 [miss] | 3) 40b320a57f499b41 sim=0.11 score=1.30 [miss] | 4) 82b40814212b033f sim=0.10 score=1.18 [miss]
+  B: 1) abaf2e6abd6340b5 sim=0.89 score=10.40 [hit] | 2) 56565ac2cb4217bf sim=0.26 score=3.01 [miss] | 3) 7cdb627f999924aa sim=0.26 score=3.01 [miss] | 4) 807c3e0123aaba50 sim=0.20 score=2.38 [miss]
+case 2/40 q="db write no space errno 28"
+  A: 1) 807c3e0123aaba50 sim=0.76 score=15.81 [hit] | 2) 82b40814212b033f sim=0.13 score=2.68 [miss] | 3) abaf2e6abd6340b5 sim=0.12 score=2.45 [miss] | 4) 40b320a57f499b41 sim=0.07 score=2.60 [miss]
+  B: 1) 807c3e0123aaba50 sim=0.85 score=16.04 [hit] | 2) 82b40814212b033f sim=0.14 score=2.72 [miss] | 3) abaf2e6abd6340b5 sim=0.13 score=2.49 [miss]
+case 3/40 q="transaction deadlock wait chain detected"
+  A: 1) afc0bf11a6631ef9 sim=0.96 score=15.85 [hit]
+  B: 1) afc0bf11a6631ef9 sim=0.97 score=16.09 [hit]
+case 4/40 q="replication delay 420 seconds behind primary"
+  A: 1) 222da484455fd597 sim=0.49 score=12.44 [hit] | 2) 6a2b72ac28299150 sim=0.06 score=1.41 [miss] | 3) ea56c1f5707cafb3 sim=0.04 score=1.58 [miss] | 4) 1313b5ac83024c66 sim=0.04 score=1.51 [miss] | 5) be0f4227503925c5 sim=0.04 score=1.51 [miss] | 6) db3b673bac89a95c sim=0.04 score=1.51 [miss] | 7) add820664490ff52 sim=0.04 score=1.44 [miss]
+  B: 1) 222da484455fd597 sim=0.42 score=9.65 [hit]
+case 5/40 q="unique constraint violation"
+  A: 1) 50b29016ada33d46 sim=0.88 score=8.69 [hit]
+  B: 1) 50b29016ada33d46 sim=0.89 score=8.82 [hit]
+case 6/40 q="database query timeout after 30 seconds"
+  A: 1) 4ae5949cdd36db56 sim=0.38 score=8.27 [hit] | 2) 222da484455fd597 sim=0.15 score=3.17 [miss] | 3) abaf2e6abd6340b5 sim=0.13 score=2.90 [miss] | 4) 22450a5024ae68c9 sim=0.10 score=2.13 [miss] | 5) a4c338a5f907faa1 sim=0.09 score=2.02 [miss] | 6) bc4f427ccb15e8d4 sim=0.09 score=1.93 [miss] | 7) 67507d4d60ee0d5e sim=0.09 score=1.93 [miss]
+  B: 1) 4ae5949cdd36db56 sim=0.43 score=8.39 [hit] | 2) 222da484455fd597 sim=0.16 score=3.22 [miss] | 3) abaf2e6abd6340b5 sim=0.15 score=2.94 [miss] | 4) 22450a5024ae68c9 sim=0.11 score=2.16 [miss] | 5) a4c338a5f907faa1 sim=0.10 score=2.05 [miss] | 6) 67507d4d60ee0d5e sim=0.10 score=1.95 [miss] | 7) bc4f427ccb15e8d4 sim=0.10 score=1.95 [miss]
+case 7/40 q="disk full inode exhausted"
+  A: 1) 7cdb627f999924aa sim=1.00 score=12.38 [hit] | 2) 1313b5ac83024c66 sim=0.23 score=2.68 [miss] | 3) 67507d4d60ee0d5e sim=0.23 score=2.68 [miss]
+  B: 1) 7cdb627f999924aa sim=1.00 score=12.57 [hit] | 2) 1313b5ac83024c66 sim=0.23 score=2.72 [miss] | 3) 67507d4d60ee0d5e sim=0.23 score=2.72 [miss] | 4) abaf2e6abd6340b5 sim=0.21 score=2.49 [miss]
+case 8/40 q="storage read timeout on device sda"
+  A: 1) 67507d4d60ee0d5e sim=0.49 score=9.12 [hit] | 2) 807c3e0123aaba50 sim=0.28 score=5.13 [miss] | 3) 6646afc2577b88ae sim=0.27 score=5.12 [miss] | 4) 22450a5024ae68c9 sim=0.11 score=2.13 [miss] | 5) a4c338a5f907faa1 sim=0.11 score=2.02 [miss] | 6) bc4f427ccb15e8d4 sim=0.10 score=1.93 [miss] | 7) 4ae5949cdd36db56 sim=0.10 score=1.93 [miss] | 8) 7cdb627f999924aa sim=0.08 score=1.48 [miss]
+  B: 1) 67507d4d60ee0d5e sim=0.42 score=7.89 [hit] | 2) 807c3e0123aaba50 sim=0.28 score=5.20 [miss] | 3) 6646afc2577b88ae sim=0.28 score=5.20 [miss] | 4) 22450a5024ae68c9 sim=0.12 score=2.16 [miss] | 5) a4c338a5f907faa1 sim=0.11 score=2.05 [miss] | 6) 4ae5949cdd36db56 sim=0.10 score=1.95 [miss] | 7) bc4f427ccb15e8d4 sim=0.10 score=1.95 [miss]
+case 9/40 q="文件系统只读 read-only 导致写入失败"
+  A: 1) 6646afc2577b88ae sim=0.03 score=3.03 [hit] | 2) afbc07779b9aa14b sim=0.03 score=2.68 [miss]
+  B: 1) 6646afc2577b88ae sim=0.03 score=3.07 [hit]
+case 10/40 q="too many open files"
+  A: 1) 6c09dd737d691352 sim=1.00 score=12.80 [hit] | 2) 1313b5ac83024c66 sim=0.21 score=2.68 [miss]
+  B: 1) 6c09dd737d691352 sim=1.00 score=12.99 [hit] | 2) 1313b5ac83024c66 sim=0.21 score=2.72 [miss]
+case 11/40 q="nfs mount reports stale file handle"
+  A: 1) afbc07779b9aa14b sim=0.75 score=15.36 [hit] | 2) 6646afc2577b88ae sim=0.13 score=2.56 [miss]
+  B: 1) afbc07779b9aa14b sim=0.76 score=15.59 [hit] | 2) 6646afc2577b88ae sim=0.13 score=2.60 [miss]
+case 12/40 q="Java 进程内存耗尽 out of memory 崩溃"
+  A: 1) ede30dd4578eded3 sim=0.19 score=16.00 [hit] | 2) 1313b5ac83024c66 sim=0.03 score=1.59 [miss] | 3) c0338bfa6b1db084 sim=0.03 score=1.59 [miss] | 4) 6a2b72ac28299150 sim=0.02 score=1.58 [miss] | 5) ea56c1f5707cafb3 sim=0.02 score=1.58 [miss] | 6) be0f4227503925c5 sim=0.02 score=1.51 [miss] | 7) db3b673bac89a95c sim=0.02 score=1.51 [miss] | 8) 222da484455fd597 sim=0.02 score=1.51 [miss] | 9) add820664490ff52 sim=0.02 score=1.44 [miss]
+  B: 1) ede30dd4578eded3 sim=0.16 score=10.13 [hit]
+case 13/40 q="oom killer invoked"
+  A: 1) c0338bfa6b1db084 sim=0.96 score=9.51 [hit] | 2) ede30dd4578eded3 sim=0.17 score=1.66 [miss] | 3) 1313b5ac83024c66 sim=0.07 score=1.59 [miss]
+  B: 1) c0338bfa6b1db084 sim=0.97 score=9.65 [hit]
+case 14/40 q="container cpu throttling by cgroup quota"
+  A: 1) db3b673bac89a95c sim=0.43 score=9.51 [hit] | 2) 82b40814212b033f sim=0.14 score=3.17 [miss] | 3) abaf2e6abd6340b5 sim=0.10 score=3.60 [miss] | 4) 40b320a57f499b41 sim=0.08 score=2.60 [miss]
+  B: 1) db3b673bac89a95c sim=0.44 score=9.65 [hit] | 2) 82b40814212b033f sim=0.15 score=3.22 [miss]
+case 15/40 q="垃圾回收 gc 长时间停顿导致应用卡顿"
+  A: 1) 1313b5ac83024c66 sim=0.03 score=3.17 [hit]
+  B: 1) 1313b5ac83024c66 sim=0.03 score=3.22 [hit]
+case 16/40 q="connection reset peer"
+  A: 1) 82b40814212b033f sim=0.96 score=8.70 [hit] | 2) abaf2e6abd6340b5 sim=0.40 score=3.60 [miss] | 3) 40b320a57f499b41 sim=0.29 score=2.60 [miss] | 4) 56565ac2cb4217bf sim=0.14 score=2.96 [miss] | 5) 7cdb627f999924aa sim=0.14 score=2.96 [miss]
+  B: 1) 82b40814212b033f sim=0.97 score=8.83 [hit] | 2) 40b320a57f499b41 sim=0.29 score=2.64 [miss] | 3) abaf2e6abd6340b5 sim=0.24 score=2.19 [miss]
+case 17/40 q="dns resolution failure for api.example.com host"
+  A: 1) 32a0f9ea7eb073d7 sim=0.59 score=11.10 [hit] | 2) 22450a5024ae68c9 sim=0.06 score=1.17 [miss] | 3) 4e61729a20c5d5e8 sim=0.06 score=1.17 [miss] | 4) 4297069b8187ef63 sim=0.06 score=1.11 [miss]
+  B: 1) 32a0f9ea7eb073d7 sim=0.54 score=10.13 [hit]
+case 18/40 q="证书过期导致 tls 握手失败"
+  A: 1) a4c338a5f907faa1 sim=0.05 score=3.33 [hit] | 2) 22450a5024ae68c9 sim=0.03 score=2.13 [miss] | 3) bc4f427ccb15e8d4 sim=0.02 score=1.93 [miss] | 4) 67507d4d60ee0d5e sim=0.02 score=1.93 [miss] | 5) 4ae5949cdd36db56 sim=0.02 score=1.93 [miss]
+  B: 1) a4c338a5f907faa1 sim=0.05 score=3.38 [hit]
+case 19/40 q="port already in use"
+  A: 1) 0f2553a4408b5221 sim=1.00 score=10.50 [hit]
+  B: 1) 0f2553a4408b5221 sim=1.00 score=10.66 [hit]
+case 20/40 q="upstream connection refused on 10.0.3.7 port 5432"
+  A: 1) 40b320a57f499b41 sim=0.37 score=9.61 [hit] | 2) abaf2e6abd6340b5 sim=0.14 score=3.60 [miss] | 3) 0f2553a4408b5221 sim=0.13 score=3.50 [miss] | 4) 6646afc2577b88ae sim=0.10 score=2.56 [miss] | 5) 82b40814212b033f sim=0.09 score=2.36 [miss] | 6) 807c3e0123aaba50 sim=0.09 score=2.35 [miss]
+  B: 1) 40b320a57f499b41 sim=0.41 score=9.75 [hit] | 2) 0f2553a4408b5221 sim=0.15 score=3.55 [miss] | 3) 6646afc2577b88ae sim=0.11 score=2.60 [miss] | 4) 82b40814212b033f sim=0.10 score=2.39 [miss] | 5) 807c3e0123aaba50 sim=0.10 score=2.38 [miss] | 6) abaf2e6abd6340b5 sim=0.09 score=2.19 [miss]
+case 21/40 q="packet loss causing retransmissions"
+  A: 1) ea56c1f5707cafb3 sim=0.43 score=6.66 [hit]
+  B: 1) ea56c1f5707cafb3 sim=0.44 score=6.76 [hit]
+case 22/40 q="queue overflow backlog"
+  A: 1) cd871a1ba968273f sim=1.00 score=9.98 [hit]
+  B: 1) cd871a1ba968273f sim=1.00 score=10.13 [hit]
+case 23/40 q="kafka consumer group falling behind partition 3"
+  A: 1) 6a2b72ac28299150 sim=0.26 score=6.66 [hit] | 2) 222da484455fd597 sim=0.13 score=3.17 [miss] | 3) ea56c1f5707cafb3 sim=0.04 score=1.58 [miss] | 4) 1313b5ac83024c66 sim=0.04 score=1.51 [miss] | 5) be0f4227503925c5 sim=0.04 score=1.51 [miss] | 6) c0338bfa6b1db084 sim=0.04 score=1.51 [miss] | 7) db3b673bac89a95c sim=0.04 score=1.51 [miss] | 8) add820664490ff52 sim=0.04 score=1.44 [miss]
+  B: 1) 6a2b72ac28299150 sim=0.29 score=6.76 [hit] | 2) 222da484455fd597 sim=0.14 score=3.22 [miss]
+case 24/40 q="thread pool 线程池饱和导致任务被拒绝"
+  A: 1) 56565ac2cb4217bf sim=0.07 score=11.10 [hit] | 2) abaf2e6abd6340b5 sim=0.03 score=2.45 [miss] | 3) 7cdb627f999924aa sim=0.03 score=2.96 [miss]
+  B: 1) 56565ac2cb4217bf sim=0.07 score=6.56 [hit] | 2) abaf2e6abd6340b5 sim=0.03 score=2.49 [miss]
+case 25/40 q="redis maxmemory eviction"
+  A: 1) be0f4227503925c5 sim=0.96 score=9.51 [hit]
+  B: 1) be0f4227503925c5 sim=0.97 score=9.65 [hit]
+case 26/40 q="cargo compilation failed for hello crate"
+  A: 1) 82b100df80067a04 sim=0.36 score=6.34 [hit] | 2) 4e61729a20c5d5e8 sim=0.13 score=2.34 [miss] | 3) 4297069b8187ef63 sim=0.13 score=2.22 [miss]
+  B: 1) 82b100df80067a04 sim=0.36 score=6.44 [hit] | 2) 22450a5024ae68c9 sim=0.13 score=2.37 [miss] | 3) 4e61729a20c5d5e8 sim=0.13 score=2.37 [miss] | 4) 32a0f9ea7eb073d7 sim=0.13 score=2.26 [miss] | 5) 4297069b8187ef63 sim=0.13 score=2.26 [miss]
+case 27/40 q="return value mismatched types"
+  A: 1) fd0e5fee4032ca5c sim=0.49 score=7.00 [hit] | 2) 50b29016ada33d46 sim=0.20 score=2.90 [miss]
+  B: 1) fd0e5fee4032ca5c sim=0.50 score=7.11 [hit] | 2) 50b29016ada33d46 sim=0.21 score=2.94 [miss]
+case 28/40 q="maven package not found"
+  A: 1) d8b453619b2fd910 sim=0.96 score=9.02 [hit] | 2) 5f800b928807ed21 sim=0.28 score=2.68 [miss]
+  B: 1) d8b453619b2fd910 sim=0.97 score=9.16 [hit] | 2) 5f800b928807ed21 sim=0.29 score=2.72 [miss]
+case 29/40 q="kubectl executable not found in shell path"
+  A: 1) 5f800b928807ed21 sim=0.26 score=5.85 [hit] | 2) 0f2553a4408b5221 sim=0.15 score=3.50 [miss] | 3) d8b453619b2fd910 sim=0.12 score=2.68 [miss]
+  B: 1) 5f800b928807ed21 sim=0.26 score=5.94 [hit] | 2) 0f2553a4408b5221 sim=0.16 score=3.55 [miss] | 3) d8b453619b2fd910 sim=0.12 score=2.72 [miss]
+case 30/40 q="镜像仓库 pull access denied 鉴权失败"
+  A: 1) 11087530aa3b0577 sim=0.14 score=9.02 [hit] | 2) 4dca5e6ca503cfc7 sim=0.08 score=4.97 [miss]
+  B: 1) 11087530aa3b0577 sim=0.15 score=9.16 [hit] | 2) 4dca5e6ca503cfc7 sim=0.05 score=3.17 [miss]
+case 31/40 q="helm release pending upgrade"
+  A: 1) bc4f427ccb15e8d4 sim=0.96 score=12.68 [hit]
+  B: 1) bc4f427ccb15e8d4 sim=0.97 score=12.87 [hit]
+case 32/40 q="pytest test_api assertion failed with status 500"
+  A: 1) 4297069b8187ef63 sim=0.71 score=15.53 [hit] | 2) 22450a5024ae68c9 sim=0.11 score=2.34 [miss] | 3) 4e61729a20c5d5e8 sim=0.11 score=2.34 [miss] | 4) 32a0f9ea7eb073d7 sim=0.10 score=2.22 [miss]
+  B: 1) 4297069b8187ef63 sim=0.79 score=15.77 [hit] | 2) 22450a5024ae68c9 sim=0.12 score=2.37 [miss] | 3) 4e61729a20c5d5e8 sim=0.12 score=2.37 [miss] | 4) 32a0f9ea7eb073d7 sim=0.11 score=2.26 [miss]
+case 33/40 q="jest 前端测试用例执行超时"
+  A: 1) 22450a5024ae68c9 sim=0.05 score=3.50 [hit] | 2) a4c338a5f907faa1 sim=0.03 score=2.02 [miss] | 3) bc4f427ccb15e8d4 sim=0.03 score=1.93 [miss] | 4) 67507d4d60ee0d5e sim=0.03 score=1.93 [miss] | 5) 4ae5949cdd36db56 sim=0.03 score=1.93 [miss]
+  B: 1) 22450a5024ae68c9 sim=0.05 score=3.55 [hit]
+case 34/40 q="flaky integration test"
+  A: 1) 4e61729a20c5d5e8 sim=1.00 score=9.96 [hit] | 2) 22450a5024ae68c9 sim=0.31 score=2.96 [miss]
+  B: 1) 4e61729a20c5d5e8 sim=1.00 score=10.11 [hit] | 2) 22450a5024ae68c9 sim=0.32 score=3.01 [miss]
+case 35/40 q="jwt token signature verification failed"
+  A: 1) 9e0a6144c79a780a sim=0.42 score=7.39 [hit] | 2) 22450a5024ae68c9 sim=0.13 score=2.34 [miss] | 3) 4e61729a20c5d5e8 sim=0.13 score=2.34 [miss] | 4) 4297069b8187ef63 sim=0.13 score=2.22 [miss] | 5) 32a0f9ea7eb073d7 sim=0.13 score=2.22 [miss]
+  B: 1) 9e0a6144c79a780a sim=0.43 score=7.50 [hit] | 2) 22450a5024ae68c9 sim=0.13 score=2.37 [miss] | 3) 4e61729a20c5d5e8 sim=0.13 score=2.37 [miss] | 4) 32a0f9ea7eb073d7 sim=0.13 score=2.26 [miss] | 5) 4297069b8187ef63 sim=0.13 score=2.26 [miss]
+case 36/40 q="部署脚本缺少 sudo 执行权限"
+  A: 1) 4dca5e6ca503cfc7 sim=0.08 score=5.54 [hit] | 2) 11087530aa3b0577 sim=0.03 score=2.68 [miss]
+  B: 1) 4dca5e6ca503cfc7 sim=0.05 score=3.75 [hit]
+case 37/40 q="ssl certificate expired"
+  A: 1) 12d3d47bbe4db705 sim=1.00 score=10.51 [hit] | 2) a4c338a5f907faa1 sim=0.48 score=4.48 [miss]
+  B: 1) 12d3d47bbe4db705 sim=1.00 score=10.67 [hit] | 2) a4c338a5f907faa1 sim=0.30 score=2.86 [miss]
+case 38/40 q="服务启动缺少 config 配置项"
+  A: 1) 528f1e6d3d6e33b1 sim=0.05 score=3.33 [hit] | 2) 50b29016ada33d46 sim=0.04 score=2.45 [miss]
+  B: 1) 528f1e6d3d6e33b1 sim=0.06 score=3.38 [hit]
+case 39/40 q="服务器 timezone 时区与本地时间不一致"
+  A: 1) add820664490ff52 sim=0.03 score=3.03 [hit]
+  B: 1) add820664490ff52 sim=0.04 score=3.07 [hit]
+case 40/40 q="接口调用 rate limit 限流需要退避重试"
+  A: 1) 83589a6d0661b757 sim=0.07 score=10.42 [hit] | 2) cd871a1ba968273f sim=0.03 score=2.81 [miss]
+  B: 1) 83589a6d0661b757 sim=0.07 score=5.94 [hit] | 2) cd871a1ba968273f sim=0.04 score=2.86 [miss]

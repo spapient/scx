@@ -2,7 +2,7 @@
 //!
 //! - rebuild：全量重建 postings.bin（index::build）+ qmap 合并（同指纹取 recency
 //!   最新）+ df 快照写回 meta.toml [df]（领域 IDF 数据源，P4 评估用）+ 写
-//!   index_force=1（小库也可强制启用倒排路径，供测试/评估）。
+//!   不改变索引启用策略（索引只是可丢弃缓存）。
 //! - gc：expire 双条件（meta [params] gc_ttl_regressed=180 / gc_ttl_stale=365）：
 //!   regressed 且超期，或从未反馈（quality=0）且陈旧 → 物理删除 + 索引作废。
 //! - delete_case：物理删除 + 惰性作废索引（删 postings.bin，回退线性；重建由
@@ -11,10 +11,7 @@
 //! 索引是可丢弃缓存（index/）：任何维护操作不触碰 cases/ 资产；坏段由
 //! index::load 校验报告，重建覆盖。
 
-#![cfg_attr(not(test), allow(dead_code))]
-
 use crate::memory::index;
-use crate::memory::meta::Meta;
 use crate::memory::qmap;
 use crate::memory::store;
 use crate::memory::util::{parse_utc_secs, utc_now};
@@ -28,7 +25,7 @@ pub(crate) fn rebuild(root: &str) -> std::io::Result<(usize, usize)> {
     let (n_docs, n_terms, df) = index::build(root)?;
     // 2) qmap 合并：同归一化 query 只留 recency 最新一条。
     qmap::merge(root)?;
-    // 3) df 快照写 meta.toml [df] + index_force=1（小库强制索引，供评估）。
+    // 3) df 快照写 meta.toml [df]；不改 index_force（重建不得改变召回语义）。
     write_meta_index(root, n_docs, &df);
     Ok((n_docs, n_terms))
 }
@@ -36,8 +33,8 @@ pub(crate) fn rebuild(root: &str) -> std::io::Result<(usize, usize)> {
 /// 过期清理：删除满足 expire 双条件的 case。返回删除数。
 pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
     let meta = store::load_meta(root)?;
-    let ttl_regressed = param(&meta, "gc_ttl_regressed", 180.0);
-    let ttl_stale = param(&meta, "gc_ttl_stale", 365.0);
+    let ttl_regressed = meta.param("gc_ttl_regressed");
+    let ttl_stale = meta.param("gc_ttl_stale");
     let now_s = parse_utc_secs(&utc_now());
     let mut removed = 0usize;
     for id in store::list_ids(root)? {
@@ -161,14 +158,6 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
     let _ = crate::memory::lock::atomic_write(&p, body.as_bytes());
 }
 
-fn param(m: &Meta, key: &str, dflt: f64) -> f64 {
-    m.params
-        .iter()
-        .find(|(k, _)| k == key)
-        .map(|(_, v)| *v)
-        .unwrap_or(dflt)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_builds_index_and_force_flag() {
+    fn rebuild_builds_index_without_forcing_flag() {
         let root = tmp_root("rb");
         let s = stats();
         ingest(
@@ -205,14 +194,16 @@ mod tests {
             vec![],
         )
         .unwrap();
+        crate::memory::meta::set_param(&root, "index_force", 1.0).unwrap();
         let (n_docs, n_terms) = rebuild(&root).unwrap();
         assert_eq!(n_docs, 1);
         assert!(n_terms > 0);
         assert!(index::load(&root).unwrap().is_some(), "索引已建");
         let m = store::load_meta(&root).unwrap();
-        assert!(
-            !m.params.iter().any(|(k, _)| k == "index_force"),
-            "P4.4 评审处置：rebuild 不再写 index_force（索引只是缓存，重建不得改变召回语义）"
+        assert_eq!(
+            m.param("index_force"),
+            1.0,
+            "rebuild 不得改写 index_force（索引只是缓存，重建不得改变召回语义）"
         );
         assert!(
             m.df.iter().any(|(k, _)| k == "alpha"),

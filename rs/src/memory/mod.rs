@@ -11,6 +11,7 @@
 //! ingest/field/recall 与 CLI 门面。
 
 pub mod annotate;
+mod bm25;
 pub mod bucket;
 pub mod cache;
 pub mod edge;
@@ -145,7 +146,7 @@ pub fn read_case(root: &str, id: &str) -> std::io::Result<model::Case> {
 
 /// 门面：按 query 召回 top-k case（会话缓存 → qmap 直达 → BM25+字段加权+衰减+桶过滤）。
 ///
-/// O3 会话缓存：进程内存 30 分钟窗口，窗口内同 query 直接返回快照（零磁盘），
+/// O3 会话缓存：进程内存可配置窗口（默认 30 分钟），窗口内同 query 直接返回快照（零磁盘），
 /// 快照记录写入时的库代际，store/rate/delete 后自动失效（P4.4 评审处置）；
 /// O2 记忆图：recall 成功后把 (query → top-k id/score/sim) 回流写入 qmap.bin
 /// （append-only，带代际），二次同指纹 query 直接命中（跳过 BM25），编辑距离 ≤2
@@ -161,7 +162,8 @@ pub fn recall_cases(
 ) -> std::io::Result<Vec<RecallHit>> {
     let meta = store::load_meta(root)?;
     // O3：会话缓存命中直接返回快照（含 score/sim，L1 过滤可复用）。
-    if let Some(hits) = cache::get(query, meta.gen) {
+    let cache_window = (meta.param("session_cache_minutes").max(0.0) * 60.0) as u64;
+    if let Some(hits) = cache::get(query, meta.gen, cache_window) {
         let mut out: Vec<RecallHit> = hits
             .into_iter()
             .map(|(id, score, sim)| RecallHit { id, score, sim })
@@ -194,11 +196,14 @@ pub fn l1_qualified(top1_sim: f64, top2_sim: f64, l1_base: f64, margin: f64, ext
     feedback::l1_qualified(top1_sim, top2_sim, l1_base, margin, ext_hit)
 }
 
-/// 门面：meta 中 L1 参数（base/margin，缺省 0.55/0.15）。
+/// 门面：meta 中 L1 参数；缺省值由 `meta::DEFAULT_PARAMS` 单一来源提供。
 pub fn l1_params(root: &str) -> (f64, f64) {
     match store::load_meta(root) {
         Ok(m) => feedback::l1_params(&m),
-        Err(_) => (0.55, 0.15),
+        Err(_) => (
+            crate::memory::meta::default_param("l1_base"),
+            crate::memory::meta::default_param("l1_margin_min"),
+        ),
     }
 }
 
@@ -207,7 +212,7 @@ pub fn list_cases(root: &str) -> std::io::Result<Vec<String>> {
     store::list_ids(root)
 }
 
-/// 门面：重建索引（postings 全量重建 + qmap 合并 + df 快照 + index_force=1）。
+/// 门面：重建索引（postings 全量重建 + qmap 合并 + df 快照）。
 /// 返回 (n_docs, n_terms)。索引是可丢弃缓存，任何时刻可安全重建。
 pub fn rebuild(root: &str) -> std::io::Result<(usize, usize)> {
     housekeep::rebuild(root)
@@ -243,6 +248,32 @@ pub fn eval_cases_gate(
         eval::run_gate_verbose(root, path)
     } else {
         eval::run_gate(root, path)
+    }
+}
+
+/// 门面：`--eval --gate-human` 的人工弱相关/负例闭环门。
+pub fn eval_cases_gate_human(
+    root: &str,
+    path: &str,
+    verbose: bool,
+) -> std::io::Result<(Vec<String>, bool)> {
+    if verbose {
+        eval::run_gate_human_verbose(root, path)
+    } else {
+        eval::run_gate_human(root, path)
+    }
+}
+
+/// 门面：`--eval --gate-items` 的逐候选裁决门（允许非人类裁决人）。
+pub fn eval_cases_gate_items(
+    root: &str,
+    path: &str,
+    verbose: bool,
+) -> std::io::Result<(Vec<String>, bool)> {
+    if verbose {
+        eval::run_gate_items_verbose(root, path)
+    } else {
+        eval::run_gate_items(root, path)
     }
 }
 

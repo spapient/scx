@@ -12,3 +12,16 @@ eval-real/archive-*/
 eval-real/*-ablate/
 eval-real/confirm5-ci*
 eval-real/*-replay*
+
+# 本地环境、密钥与系统/编辑器杂项
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]

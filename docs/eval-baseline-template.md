@@ -34,7 +34,7 @@
 | layer | string | literal / paraphrase / semantic 三选一（分层定义见 §2） |
 | expected | string[] | 相关 case id 列表（完整 id 或 hash16/hash8 后缀均可，后缀免日期漂移） |
 | rel | object（可选） | case id → 相关度 0..2；缺省时 expected 内视为 1 |
-| judge | object/null（可选） | 人工裁决元数据 `{"by":"姓名","date":"UTC"}`；`null` = 待 `--judge` 裁决。非 literal 条目必须有 by+date 才能过 `--gate` |
+| judge | object/null（可选） | 裁决元数据 `{"by":"姓名","date":"UTC","method":"可选"}`；`null` = 待 `--judge` 裁决。非 literal 条目必须有 by+date 才能过 `--gate`。`method=policy-materialized-*` 表示人工规则物化；`--gate-human` 会以 provenance 失败，不能再写“人工闭环” |
 | note | string（可选） | 盲测摘要，建议 `target=<hash16> hint=[首行] fix=[修复结论]`；`--judge` 只显示 query+note，不显示 A/B 分数 |
 
 ## 2. 三层定义与造例规则
@@ -76,8 +76,9 @@ scx --query "db timeout conn_id" --recall-only --recall 5 --recall-detail --mem-
 3. 全部 expected 用 `--recall-detail` 核对过 id 后填入。
 4. 保存为 `baseline.json`（建议放 `docs/eval/` 下，与日期/库版本一起留档）。
 5. 盲测裁决：`scx --judge baseline.json --judge-by <姓名>`（只对 `judge:null` 的 paraphrase/semantic 逐条输入 `2/1/0/s`；literal 可由指纹机械判定，保留 rel 即可）。
-6. 跑机械门：`scx --eval baseline.json --gate --eval-verbose --mem-dir <库目录>`；`gate: PASS` 才可作为 M4 证据，`FAIL` 时按输出补齐样本/元数据或修召回。
-7. 把 `--judge` 后的 JSON、`--eval --gate` 输出、裁决人/日期/seed 一起留档；报告行贴进 `docs/rag-implementation-plan.md` §7 P4.1 的验证记录。
+6. 先跑机械门：`scx --eval baseline.json --gate --eval-verbose --mem-dir <库目录>`；它只检查样本量、分层、裁决元数据和 A 不劣于 B，不代表弱相关/负例已闭环。
+7. 闭环门：补完 0/1 控制标签后跑 `scx --eval baseline.json --gate-human --eval-verbose --mem-dir <库目录>`；只有 `gate: mode=human` + `gate: PASS` 才能写“人工弱相关/负例闭环”。
+8. 把 `--judge` 后的 JSON、两次 gate 输出、裁决人/日期/seed 一起留档；报告行贴进 `docs/rag-implementation-plan.md` §7 P4.1 的验证记录。
 
 ## 5.1 弱相关/负例 + 第二裁决人（2026-10-23 新增脚本）
 
@@ -109,6 +110,9 @@ gate 会一直告警 `all labels are 2`。要补弱相关/负例并支持第二�
 
 > 红线：包内没有 target id 也没有 A/B 分数；不要用自动 rel 或 AI 自动标替人裁决——
 > `judge.by` 必须是真人姓名，AI/脚本标的一律不算“独立人工证据”。
+> 例外仅限**已经冻结的人工裁决规则**：可以物化为 `judge.method=policy-materialized-v1`
+> 的替代控制集，但 `--gate-human` 必须失败；只能报替代指标，不能写“gate-human PASS”
+> 或“逐条人工盲审闭环”。
 
 ## 6. 约束与红线
 
@@ -117,14 +121,40 @@ gate 会一直告警 `all labels are 2`。要补弱相关/负例并支持第二�
 - 分层标签要稳定：literal 只含词面命中例；paraphrase 必须与 literal 词面不同；semantic 几乎无共享词。
 - 数量口径：30-50 组是下限建议，多多益善；每层独立统计，层内样本太少（<5）时报告会暴露 n，请勿拿单例下结论。
 
-## 7. M4 机械门（`--gate`）与真实语料红线
+## 7. M4 两道门（`--gate` / `--gate-human`）与真实语料红线
 
-`--eval --gate` 只认同时满足以下条件的 baseline：
+`--eval --gate` 是**机械资格门**，只认同时满足以下条件的 baseline：
 
 - 总组数 ≥30；literal / paraphrase / semantic 各 ≥10；
 - 非 literal 条目必须有 `judge.by` + `judge.date`（`--judge` 自动写入）；
 - 每层 A 的预声明主指标（literal/paraphrase r@5；semantic r@10）与 MRR 都不低于 B；
+- 每层 A/B 的主指标均 ≥0.20 且 MRR 均 ≥0.10（绝对地板：拒绝全 miss 或退化基线下的“相对优势”）；
 - 不允许三层之外的 layer 凑数。
+
+`--eval --gate-human` 是**人工弱相关/负例闭环门**，在机械门之上再要求：
+
+- 每条 case（含 literal）都有非机械/非 AI 的 `judge.by` + `judge.date`；
+- `rel` 的每个候选键都必须在 `judge_items` 有独立真人条目，且
+  `judge.method` 为 `per-item-*`；整包签名不算逐条裁决；
+- 全语料至少有 10 条 `rel=1` 弱相关和 10 条 `rel=0` 负例；
+- 至少两层同时包含弱相关与负例（防止控制全部堆在一层）；
+- 每层 NDCG@10 A ≥ B（主指标持平时仍能验证弱相关/负例排序）。
+
+`--eval --gate-items` 是**逐候选裁决门**：条件与 human 门相同，但允许非人类
+裁决人（AI 记 `judge.by=codex`、`judge.method=per-item-ai-v1`）。输出固定包含
+`adjudicator=... non-human`，PASS 只代表 E3 逐条裁决，不得写成人工闭环。
+
+红线：
+
+- confirm5 的 `rel` 全是 2，`--gate` 可以证明目标排序，`--gate-human` 必须失败；
+- `eval-real/confirm5-baseline-human.json`（115 弱/665 负，policy 物化）`--gate-human` FAIL；只能报替代指标，不算逐条人工；
+- `eval-real/baseline-final.json`（11/64 控制，逐条双人裁决）、
+  `real-baseline-arb.json`（151/46）与 `v2-baseline-arb.json`（312/77）
+  在旧门（仅案例级 `judge.by`）通过；逐候选门禁收紧后三者均为 FAIL
+  （baseline 未带 `judge_items`，依次 0/116、0/344、0/821）；
+- confirm5 的 40/150 预注册盲审包是当前唯一可直接补齐逐候选证据的路径
+  （`eval-real/confirm5-blind40-preregistration.md`），未填完前闭环不成立；
+- 自动标注集、AI 草案、机械 target 规则都不能冒充人工闭环。
 
 因此：
 

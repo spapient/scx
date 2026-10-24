@@ -104,16 +104,11 @@ pub(crate) struct BridgeCase {
 /// 仅当 edge_enable>0 且 query 确有实体时触发。
 pub(crate) fn bridge_cases(
     root: &str,
-    params: &[(String, f64)],
+    meta: &store::Meta,
     qf_ents: &[String],
     exist: &[String],
 ) -> std::io::Result<(Vec<BridgeCase>, usize)> {
-    let edge_on = params
-        .iter()
-        .find(|(k, _)| k == "edge_enable")
-        .map(|(_, v)| *v)
-        .unwrap_or(1.0);
-    if edge_on <= 0.0 {
+    if meta.param("edge_enable") <= 0.0 {
         return Ok((Vec::new(), 0));
     }
     let mut ents: Vec<String> = qf_ents.to_vec();

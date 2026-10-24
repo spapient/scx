@@ -81,7 +81,7 @@ pub(crate) fn expand(
             continue;
         }
         let d = *df.get(t).unwrap_or(&0) as f64;
-        let idf = ((1.0 + (n - d + 0.5) / (d + 0.5)).ln()).max(0.0);
+        let idf = crate::memory::bm25::idf(n, d);
         if idf > IDF_MIN {
             cand.push((t.clone(), idf));
         }

@@ -6,8 +6,8 @@
 - 机械门（`--gate`）在**机器草案裁决**上 **PASS**：三层 A ≥ B；但
   `discrimination A!=B layers=1/3`，paraphrase MRR 仅高 0.008，
   hard 层 ΔMRR=+0.010，paired bootstrap 95% CI [-0.0025, 0.0254]，permutation p=0.212。
-- 在 v2 语料上结论只能是“**未观察到 A 劣于 B**”，不是“A 优于 B”。
-  **v2 本身的质量优势仍未成立。**
+- 在**旧 binary** 的 v2 语料上结论只能是“**未观察到 A 劣于 B**”，不是“A 优于 B”。
+  **旧 binary 的 v2 质量优势未成立。**
 - **后续 confirm5 已在另一套 30 起公开事故、150 条机械目标标签语料上完成
   预注册独立确认**：hard n=69，ΔMRR=+0.0669，95% CI [0.0238, 0.1176]，
   permutation p=0.0020，gate exit 0。完整证据见
@@ -15,11 +15,42 @@
 - **v2 AI 辅助基准已补**（`eval-real/v2-baseline-codex.json`）：312 行同桶跨事故边界
   按“具体故障机制”逐对裁决，`rel 2=432 / 1=192 / 0=197`，`--gate` PASS（exit 0）。
   MRR 与草案完全相同，只改变 NDCG；这**不是独立人工证据**，仅用于人工审核前的草案。
-- **真人双裁决已完成**（2026-10-23）：fei/hao 各自审核 312/312 行，
-  `review_state=human-reviewed`；两人均把 312 条同桶跨事故标为 `1`，
-  一致性 `raw=1.000 / kappa=1.000`，0 处分歧，仲裁日志为空。
-- 最终人工基准 `v2-baseline-arb.json`：`rel 2=432 / 1=312 / 0=77`，gate PASS。
-  但 312 条弱边界全部为 `1`，没有产生弱相关负例；质量优势仍未成立。
+- **AI 预填的人工审核已完成**（2026-10-23）：fei/hao 各自审核 312/312 行，
+  `review_state=human-reviewed`；但原始建议均为 `suggested_by=codex-ai`，两人
+  全部采纳，`raw=1.000 / kappa=1.000`，0 处分歧。这是“人工采纳”，不是
+  独立盲审；不能据此写“人工闭环已独立建立”。
+- 最终人工采纳基准 `v2-baseline-arb.json`：`rel 2=432 / 1=312 / 0=77`，gate PASS。
+  但 312 条弱边界全部为 `1`，没有产生弱相关负例；旧 binary 的质量优势未成立。
+- **2026-10-24 优化后复跑（v2 开发集，非独立确认）**：sibling-coherence +
+  query-field 低词面保护 + 确定性排序后，hard 层 ΔMRR **+0.0772**，
+  CI **[0.0271, 0.1371]**，p=**0.0022**；paraphrase r@5 0.917 vs 0.867
+  （MRR 0.566 vs 0.550），semantic MRR 0.696 vs 0.484，三层 NDCG A>B，
+  旧门 `--gate-human` PASS；逐候选 `judge_items` 收紧后 FAIL（0/821）。
+  312 条弱相关是 AI 预填后由 fei/hao 采纳，
+  不是独立盲审；v2 还参与过调参，因此这是“人工采纳标签上的开发集证据”，
+  不能当独立确认。confirm5 的机械 target 独立确认仍然成立，但其 policy
+  控制集因 provenance 规则明确 FAIL，人工弱相关/负例闭环仍未建立。
+
+### 1.1 优化后复跑明细（2026-10-24）
+
+| 组 | n | A MRR | B MRR | Δ | 95% CI | p |
+|---|---:|---:|---:|---:|---|---:|
+| literal | 60 | 1.0000 | 1.0000 | 0 | [0, 0] | 1.000 |
+| paraphrase | 60 | 0.5662 | 0.5496 | +0.0166 | [0.0034, 0.0333] | 0.0481 |
+| semantic | 30 | 0.6959 | 0.4842 | +0.2117 | [0.1033, 0.3433] | 0.0039 |
+| **tier:hard** | 55 | **0.4072** | **0.3300** | **+0.0772** | **[0.0271, 0.1371]** | **0.0022** |
+| all | 150 | 0.7656 | 0.7167 | +0.0490 | [0.0223, 0.0798] | 0.0002 |
+
+目标排名相对归档：18 条变化，16 条改善、2 条退化（rank 2→5、4→5，均仍在
+top-5，r@5 不变）。复现：
+
+```bash
+python3 eval-real/significance.py \
+  --baseline eval-real/v2-baseline-arb.json \
+  --verbose eval-real/v2-human-gate-final-2026-10-24.txt \
+  --strata eval-real/v2-strata.csv \
+  --out eval-real/v2-human-significance.csv
+```
 
 ## 2 语料与构建
 
@@ -187,7 +218,7 @@ A/B 排序差异不变：
 两种口径下 paraphrase MRR 均为 0.558 vs 0.550，hard ΔMRR 均为 +0.010；
 结论对弱相关边界不敏感，仍不支持“A 优于 B”。
 
-### 5.4 真人双裁决结果（2026-10-23）
+### 5.4 AI 预填的人工审核结果（2026-10-23）
 
 fei/hao 两份审核文件均为 `312/312 human-reviewed`，`reviewed_by` 分别为
 `fei`/`hao`。两人对 312 行同桶跨事故全部判 `1`；仲裁无分歧：
@@ -199,7 +230,7 @@ disagreements: 0
 arbitration log: header only
 ```
 
-最终人工基准 `eval-real/v2-baseline-arb.json`（`judge.by=fei+hao`）门禁：
+最终人工采纳基准 `eval-real/v2-baseline-arb.json`（`judge.by=fei+hao`）门禁：
 
 ```text
 layer literal: n=60 A r@5=1.000 mrr=1.000 ndcg@10=0.977 | B r@5=1.000 mrr=1.000 ndcg@10=0.951
@@ -213,8 +244,9 @@ gate: PASS
 人工统计与草案一致（`eval-real/v2-significance-human.csv`）：
 paraphrase ΔMRR=+0.0083，CI [-0.0028, 0.0222]，p=0.288；
 hard Δ=+0.0100，CI [-0.0025, 0.0254]，p=0.212；全部 `advantage=False`。
-因此人工闭环成立，但**质量优势仍不成立**；且 312 条弱边界全部为 1，
-说明这轮人工裁决没有提供弱相关负例区分度。
+因此可以写“312 条 AI 预填建议被两名审核人全部采纳、机械门 PASS”，
+但**不能写“独立人工盲审闭环”**，且质量优势仍不成立；312 条弱边界全部为 1，
+说明这轮标签没有提供弱相关负例区分度。
 
 ## 6 证据强度与限制
 
@@ -229,12 +261,13 @@ hard Δ=+0.0100，CI [-0.0025, 0.0254]，p=0.212；全部 `advantage=False`。
 4. **v1 仍 PASS**：40 组真实语料在默认行为变更后仍 exit 0，但
    `discrimination 0/3`（MMR 关闭后 paraphrase MRR 由 0.756 降到 0.744，与 B 持平）。
    详见 `docs/m4-real-corpus-report.md`。
-5. **v2 人工闭环已完成，但 v2 质量优势不成立**：fei/hao 均完成 312/312 审核，
-   一致率和 kappa 都是 1.000；但两人都把同桶跨事故标为 1，弱相关负例为 0 条。
+5. **v2 人工审核已完成，但不是独立盲审**：fei/hao 均完成 312/312 审核，
+   一致率和 kappa 都是 1.000；但两人都全盘采纳了 AI 预填，且同桶跨事故全为 1，
+   弱相关负例为 0 条。v2 质量优势不成立。
    机械门 PASS 只证明 A 不劣于 B，不能外推为 v2 的召回质量优势。
    confirm5 的独立确认是另一套语料上的结论，见 `docs/m4-confirm5-report.md`。
 
-## 7 真人双裁决记录与复现命令（已完成）
+## 7 AI 预填人工审核记录与复现命令（已完成）
 
 压缩包 `eval-real/v2-judge-compact.tsv`：822 行 / 150 case（约 5.5 行/案），
 每条含 target + 同来源兄弟 + 同桶 near-miss + 异桶对照，行内已确定性打乱。

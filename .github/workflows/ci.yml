@@ -1,19 +1,32 @@
-name: ci
+name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
       - name: Format
@@ -37,10 +50,13 @@ jobs:
   quality:
     # Frozen confirm5 regression: rebuild the corpus from its incident source,
     # then fail if the pre-registered hard-query advantage disappears.
+    timeout-minutes: 45
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
       - name: Build release
@@ -60,6 +76,64 @@ jobs:
             Get-Content .\eval-real\confirm5-ci.err -Tail 40
             throw "confirm5 gate failed with exit $LASTEXITCODE"
           }
+      - name: Reject policy labels as human closure
+        shell: pwsh
+        run: |
+          .\rs\target\release\scx.exe --eval .\eval-real\confirm5-baseline-human.json --gate-human --mem-dir .\eval-real\confirm5-ci-mem 1> .\eval-real\confirm5-policy-human-gate.txt 2> .\eval-real\confirm5-policy-human-gate.err
+          if ($LASTEXITCODE -ne 2) {
+            Get-Content .\eval-real\confirm5-policy-human-gate.txt -Tail 40
+            throw "policy-materialized labels must not pass --gate-human (exit $LASTEXITCODE)"
+          }
+          $global:LASTEXITCODE = 0
+      - name: Rebuild real-incident corpus
+        shell: pwsh
+        run: ./eval-real/seed-real.ps1 -Force -MemDir .\eval-real\real-ci-mem -Csv .\eval-real\real-ci-cases.csv
+      - name: Frozen per-item blind packet
+        shell: pwsh
+        run: |
+          $want = 'b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f'
+          $got = (Get-FileHash .\eval-real\confirm5-blind40-packet.tsv -Algorithm SHA256).Hash.ToLower()
+          if ($got -ne $want) { throw "blind packet drifted: $got" }
+      - name: AI per-item gate passes, human gate still rejects
+        shell: pwsh
+        run: |
+          .\rs\target\release\scx.exe --eval .\eval-real\confirm5-blind40-ai.json --gate-items --mem-dir .\eval-real\confirm5-ci-mem 1> .\eval-real\ai-items-gate.txt 2> $null
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content .\eval-real\ai-items-gate.txt -Tail 30
+            throw "AI per-item gate failed with exit $LASTEXITCODE"
+          }
+          if ((Get-Content .\eval-real\ai-items-gate.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
+            throw "AI gate must declare non-human adjudication"
+          }
+          .\rs\target\release\scx.exe --eval .\eval-real\confirm5-blind40-ai.json --gate-human --mem-dir .\eval-real\confirm5-ci-mem 1> $null 2> $null
+          if ($LASTEXITCODE -ne 2) { throw "AI labels must not pass --gate-human (exit $LASTEXITCODE)" }
+          $global:LASTEXITCODE = 0
+      - name: Case-level signoff must fail per-item gate (real incidents)
+        shell: pwsh
+        run: |
+          .\rs\target\release\scx.exe --eval .\eval-real\real-baseline-arb.json --gate-human --mem-dir .\eval-real\real-ci-mem 1> .\eval-real\real-ci-gate.txt 2> .\eval-real\real-ci-gate.err
+          if ($LASTEXITCODE -ne 2) {
+            Get-Content .\eval-real\real-ci-gate.txt -Tail 40
+            Get-Content .\eval-real\real-ci-gate.err -Tail 40
+            throw "case-level signoff must not pass per-item gate (exit $LASTEXITCODE)"
+          }
+          if ((Get-Content .\eval-real\real-ci-gate.txt -Raw) -notmatch 'human per-item provenance items=0/\d+') {
+            throw "missing per-item provenance failure line"
+          }
+          $global:LASTEXITCODE = 0
+      - name: Case-level signoff must fail per-item gate (baseline-final)
+        shell: pwsh
+        run: |
+          .\rs\target\release\scx.exe --eval .\eval-real\baseline-final.json --gate-human --mem-dir .\eval-real\mem 1> .\eval-real\baseline-human-gate.txt 2> .\eval-real\baseline-human-gate.err
+          if ($LASTEXITCODE -ne 2) {
+            Get-Content .\eval-real\baseline-human-gate.txt -Tail 40
+            Get-Content .\eval-real\baseline-human-gate.err -Tail 40
+            throw "baseline-final case-level signoff must fail per-item gate (exit $LASTEXITCODE)"
+          }
+          if ((Get-Content .\eval-real\baseline-human-gate.txt -Raw) -notmatch 'human per-item provenance items=0/116') {
+            throw "missing per-item provenance failure line"
+          }
+          $global:LASTEXITCODE = 0
       - name: Compute confirm5 statistics
         shell: pwsh
         run: |

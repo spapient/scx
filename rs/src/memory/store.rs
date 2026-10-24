@@ -13,8 +13,6 @@
 //! 数据模型在 model.rs、哈希/时间在 util.rs、meta 在 meta.rs；本文件只负责
 //! case 的 JSON 序列化、读写与库内 case 枚举。
 
-#![cfg_attr(not(test), allow(dead_code))]
-
 use crate::memory::json::{self, Val};
 pub(crate) use crate::memory::meta::{ensure_root, load_meta, Meta};
 pub(crate) use crate::memory::model::SCHEMA;

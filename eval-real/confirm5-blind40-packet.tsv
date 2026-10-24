@@ -1,0 +1,385 @@
+row	case_index	layer	query	candidate	hint	grade
+1	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	0b6b9b957fc93dc4	zookeeper could not boot because the stored data volume was too large || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+2	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	053e2b0634cc1412	unbounded log growth stopped backup service || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+3	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	c3665bb25b03b78e	the disk filled with retry logs and other filesystem writes failed || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+4	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	effec5631bd99aa8	Platform.sh ZooKeeper 数据量过大无法启动，维护窗口变成故障 || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+5	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	9c6117e6398aadd0	maintenance outage because zookeeper could not start || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+6	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	f880ce4055f6bdde	platform sh zookeeper too much data boot failure || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+7	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	84ddd95da8a9b142	tarsnap batch log filled filesystem || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+8	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	0889b89322f206a2	Roblox Consul streaming 与 BoltDB 故障导致 73 小时停机 || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+9	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	6b536046a4cdf2f5	Etsy 部署意外升级生产数据库，INT32 ID 溢出迫使全站停机检查 || fix: 回滚部署、迁移 ID 类型并隔离数据库升级流程	
+10	109	semantic	维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理	4f2518def70f64e2	the cluster configuration data exceeded what zookeeper could load at startup || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+11	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	f1f29f6a59f4d2ac	manual task deleted group controlling github org || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+12	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	064202bcfb968b36	trivago azure ad security group removal github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+13	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	648f63dda3c196bb	okta third party support engineer laptop compromise || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+14	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	646e65df5e5a7962	the azure ad group removal cut off the central source code platform || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+15	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	16b82728b19e3113	the third party endpoint was the entry point for the okta compromise || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+16	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	cc52450aacf9f5ef	attackers gained access through a third party support engineer's laptop || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+17	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	db5aa4f741afcd0d	Okta 第三方支持工程师笔记本被入侵，成为攻击入口 || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+18	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	138a3cfd46e66dc5	support laptop access led to okta breach || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+19	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	61e12c2718550630	a manual repetitive task removed the azure ad security group that controlled github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+20	144	semantic	重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库	3e9b594775cafc56	trivago 手工操作误删 Azure AD 安全组，所有工程师失去 GitHub 访问 || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+21	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	6b536046a4cdf2f5	Etsy 部署意外升级生产数据库，INT32 ID 溢出迫使全站停机检查 || fix: 回滚部署、迁移 ID 类型并隔离数据库升级流程	
+22	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	113e19ffb394b6d3	both nodes in active passive pairs powered off after missing heartbeats || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+23	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	175ea410b8ddb06d	signed 32 bit id overflow forced site shutdown || fix: 回滚部署、迁移 ID 类型并隔离数据库升级流程	
+24	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	43a699de29d14332	consul and boltdb issues kept roblox down || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+25	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	50f0cfe7971ce964	expensive regex caused health checks to fail || fix: 限制正则回溯并修复健康检查超时	
+26	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	49c7ac70b77a452b	etsy deploy upgraded live database int32 id overflow || fix: 回滚部署、迁移 ID 类型并隔离数据库升级流程	
+27	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+28	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	87e485f1f6abc88f	id values exceeded the signed int range while the deploy changed production databases || fix: 回滚部署、迁移 ID 类型并隔离数据库升级流程	
+29	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	2b571b4dce733a36	health check timeout killed supermarket after launch || fix: 调高健康检查超时并修正实例摘除策略	
+30	58	paraphrase	etsy took the site down for integrity checks after the deploy and id overflow	57d73c8eea1b9729	a bugfix deploy upgraded live databases and a signed 32 bit id overflow broke writes || fix: 回滚部署、迁移 ID 类型并隔离数据库升级流程	
+31	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	064202bcfb968b36	trivago azure ad security group removal github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+32	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	f06846b6fe1be699	the certificate chain expired and Mozilla had to push a privileged fix || fix: 签发新证书并推送特权扩展修复验证链	
+33	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	5acd1e62d6834d1d	mozilla firefox addons certificate expired outage || fix: 签发新证书并推送特权扩展修复验证链	
+34	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	3e9b594775cafc56	trivago 手工操作误删 Azure AD 安全组，所有工程师失去 GitHub 访问 || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+35	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	f1f29f6a59f4d2ac	manual task deleted group controlling github org || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+36	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	0f3e5a41ef8fb3cf	expired intermediate certificate disabled all addons || fix: 签发新证书并推送特权扩展修复验证链	
+37	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	646e65df5e5a7962	the azure ad group removal cut off the central source code platform || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+38	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	61e12c2718550630	a manual repetitive task removed the azure ad security group that controlled github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+39	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	d21b81412680ce43	an expired intermediate certificate used to verify add-ons made firefox disable them || fix: 签发新证书并推送特权扩展修复验证链	
+40	29	semantic	Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复	cd218b6a82ae0ef9	Mozilla Firefox 扩展签名证书过期，几乎所有附加组件被禁用 || fix: 签发新证书并推送特权扩展修复验证链	
+41	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	cd218b6a82ae0ef9	Mozilla Firefox 扩展签名证书过期，几乎所有附加组件被禁用 || fix: 签发新证书并推送特权扩展修复验证链	
+42	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	d21b81412680ce43	an expired intermediate certificate used to verify add-ons made firefox disable them || fix: 签发新证书并推送特权扩展修复验证链	
+43	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	a4569e4ba25a2a14	a repository contained credentials that could read the backup store || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+44	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	0f3e5a41ef8fb3cf	expired intermediate certificate disabled all addons || fix: 签发新证书并推送特权扩展修复验证链	
+45	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	5ae7d84ee5c4770d	the queue kept growing until the database could not accept more work || fix: 扩容数据库、限制队列并补充容量监控	
+46	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	f06846b6fe1be699	the certificate chain expired and Mozilla had to push a privileged fix || fix: 签发新证书并推送特权扩展修复验证链	
+47	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	487839cb6fce6522	the database process crashed and the platform could not serve normal traffic || fix: 重启 SQL Server、恢复数据库并排查 bugcheck 根因	
+48	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	9c6117e6398aadd0	maintenance outage because zookeeper could not start || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+49	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	053e2b0634cc1412	unbounded log growth stopped backup service || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+50	27	paraphrase	firefox could no longer validate extensions and almost all add-ons stopped working	5acd1e62d6834d1d	mozilla firefox addons certificate expired outage || fix: 签发新证书并推送特权扩展修复验证链	
+51	141	literal	manual task deleted group controlling github org	f1f29f6a59f4d2ac	manual task deleted group controlling github org || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+52	141	literal	manual task deleted group controlling github org	183cc9d0d2e001d9	traffic from a huge botnet overwhelmed network capacity || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+53	141	literal	manual task deleted group controlling github org	646e65df5e5a7962	the azure ad group removal cut off the central source code platform || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+54	141	literal	manual task deleted group controlling github org	d2ad735a4bd73ca5	github ddos 1.35 tbps traffic flood || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+55	141	literal	manual task deleted group controlling github org	e3abd77a56afb8bd	a distributed denial of service attack reached one point three five terabits per second || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+56	141	literal	manual task deleted group controlling github org	2725f0506ba08d09	massive volumetric attack saturated github || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+57	141	literal	manual task deleted group controlling github org	61e12c2718550630	a manual repetitive task removed the azure ad security group that controlled github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+58	141	literal	manual task deleted group controlling github org	064202bcfb968b36	trivago azure ad security group removal github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+59	141	literal	manual task deleted group controlling github org	a0826f92f1762ad8	watchdog timers rebooted the spacecraft because the critical task could not run || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+60	141	literal	manual task deleted group controlling github org	b8491275622d1811	GitHub 遭遇 1.35 Tbps 超大流量 DDoS，边缘网络被打满 || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+61	142	paraphrase	all engineers lost github organization access after the group was deleted	cc52450aacf9f5ef	attackers gained access through a third party support engineer's laptop || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+62	142	paraphrase	all engineers lost github organization access after the group was deleted	113e19ffb394b6d3	both nodes in active passive pairs powered off after missing heartbeats || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+63	142	paraphrase	all engineers lost github organization access after the group was deleted	138a3cfd46e66dc5	support laptop access led to okta breach || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+64	142	paraphrase	all engineers lost github organization access after the group was deleted	646e65df5e5a7962	the azure ad group removal cut off the central source code platform || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+65	142	paraphrase	all engineers lost github organization access after the group was deleted	2b571b4dce733a36	health check timeout killed supermarket after launch || fix: 调高健康检查超时并修正实例摘除策略	
+66	142	paraphrase	all engineers lost github organization access after the group was deleted	064202bcfb968b36	trivago azure ad security group removal github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+67	142	paraphrase	all engineers lost github organization access after the group was deleted	0f3e5a41ef8fb3cf	expired intermediate certificate disabled all addons || fix: 签发新证书并推送特权扩展修复验证链	
+68	142	paraphrase	all engineers lost github organization access after the group was deleted	61e12c2718550630	a manual repetitive task removed the azure ad security group that controlled github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+69	142	paraphrase	all engineers lost github organization access after the group was deleted	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+70	142	paraphrase	all engineers lost github organization access after the group was deleted	f1f29f6a59f4d2ac	manual task deleted group controlling github org || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+71	143	paraphrase	trivago restored access after recreating the group and its memberships	ec43ae825aef7f6f	the provider had never seen such a burst and its oms could not keep up || fix: 限制拆单规模并扩容 OMS 处理能力	
+72	143	paraphrase	trivago restored access after recreating the group and its memberships	138a3cfd46e66dc5	support laptop access led to okta breach || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+73	143	paraphrase	trivago restored access after recreating the group and its memberships	646e65df5e5a7962	the azure ad group removal cut off the central source code platform || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+74	143	paraphrase	trivago restored access after recreating the group and its memberships	cc52450aacf9f5ef	attackers gained access through a third party support engineer's laptop || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+75	143	paraphrase	trivago restored access after recreating the group and its memberships	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+76	143	paraphrase	trivago restored access after recreating the group and its memberships	61e12c2718550630	a manual repetitive task removed the azure ad security group that controlled github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+77	143	paraphrase	trivago restored access after recreating the group and its memberships	2b571b4dce733a36	health check timeout killed supermarket after launch || fix: 调高健康检查超时并修正实例摘除策略	
+78	143	paraphrase	trivago restored access after recreating the group and its memberships	064202bcfb968b36	trivago azure ad security group removal github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+79	143	paraphrase	trivago restored access after recreating the group and its memberships	113e19ffb394b6d3	both nodes in active passive pairs powered off after missing heartbeats || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+80	143	paraphrase	trivago restored access after recreating the group and its memberships	f1f29f6a59f4d2ac	manual task deleted group controlling github org || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+81	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	24c016f1bb80acd2	power loss cascaded into cross datacenter failover || fix: 恢复供电、核对数据并修复跨站切换流程	
+82	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	13a0222f4c1d995e	services waiting on cassandra kept retrying and blocked their own request queues || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+83	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	183cc9d0d2e001d9	traffic from a huge botnet overwhelmed network capacity || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+84	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	b3bc43fcd0d0da4e	roblox consul streaming boltdb seventy three hour outage || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+85	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	d19f4a55250a2dc3	insufficient db capacity caused cascading failure || fix: 扩容数据库、限制队列并补充容量监控	
+86	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	a175a8e4a81bc8b6	a power failure in one datacenter cascaded into database and file consistency failures || fix: 恢复供电、核对数据并修复跨站切换流程	
+87	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	19778742368c7305	a request queue overloaded the existing database capacity and caused a cascading failure || fix: 扩容数据库、限制队列并补充容量监控	
+88	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	5ae7d84ee5c4770d	the queue kept growing until the database could not accept more work || fix: 扩容数据库、限制队列并补充容量监控	
+89	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	374808474a724c07	duo request queue overloaded database capacity || fix: 扩容数据库、限制队列并补充容量监控	
+90	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	2b245fc089d6a7f5	an order for one million penny stock units was split into over one hundred thousand trades || fix: 限制拆单规模并扩容 OMS 处理能力	
+91	43	paraphrase	insufficient capacity planning and monitoring turned a request spike into a cascading outage	0bcf1dcdd5b711b9	penny stock order split into hundred thousand trades || fix: 限制拆单规模并扩容 OMS 处理能力	
+92	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	3b93514b9a6fc646	Salesforce 机房断电引发数据库与文件不一致，跨机房切换失败 || fix: 恢复供电、核对数据并修复跨站切换流程	
+93	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	24c016f1bb80acd2	power loss cascaded into cross datacenter failover || fix: 恢复供电、核对数据并修复跨站切换流程	
+94	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	f0fe4836ea026e13	Flowdock 疫情期间远程办公流量激增，CPU 高企拖死数据库并丢失部分数据 || fix: 扩容容量、限流并修复数据库恢复与备份	
+95	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	a175a8e4a81bc8b6	a power failure in one datacenter cascaded into database and file consistency failures || fix: 恢复供电、核对数据并修复跨站切换流程	
+96	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	e1dae40f2773be69	sudden remote work traffic caused db hang || fix: 扩容容量、限流并修复数据库恢复与备份	
+97	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	adb791bf583fab70	database cluster and file discrepancies blocked a clean cross datacenter failover || fix: 恢复供电、核对数据并修复跨站切换流程	
+98	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	0ff2e145486470c4	salesforce datacenter power failure database failover || fix: 恢复供电、核对数据并修复跨站切换流程	
+99	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	46f77201f3d4f67d	a sudden surge of remote work traffic during covid raised cpu and hung the application database || fix: 扩容容量、限流并修复数据库恢复与备份	
+100	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	2f9e624f54e53393	flowdock covid work from home load database hang || fix: 扩容容量、限流并修复数据库恢复与备份	
+101	64	semantic	疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据	c24a57092d2202c9	high cpu from pandemic usage caused the database to stop responding for about a day || fix: 扩容容量、限流并修复数据库恢复与备份	
+102	140	literal	trivago azure ad security group removal github access	a1ea0a21d5b6a1d6	the AWS region problem reduced access to hosted elasticsearch clusters || fix: 等待区域恢复并改进跨区容灾	
+103	140	literal	trivago azure ad security group removal github access	cc52450aacf9f5ef	attackers gained access through a third party support engineer's laptop || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+104	140	literal	trivago azure ad security group removal github access	3e9b594775cafc56	trivago 手工操作误删 Azure AD 安全组，所有工程师失去 GitHub 访问 || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+105	140	literal	trivago azure ad security group removal github access	61e12c2718550630	a manual repetitive task removed the azure ad security group that controlled github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+106	140	literal	trivago azure ad security group removal github access	d2ad735a4bd73ca5	github ddos 1.35 tbps traffic flood || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+107	140	literal	trivago azure ad security group removal github access	064202bcfb968b36	trivago azure ad security group removal github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+108	140	literal	trivago azure ad security group removal github access	f1f29f6a59f4d2ac	manual task deleted group controlling github org || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+109	140	literal	trivago azure ad security group removal github access	138a3cfd46e66dc5	support laptop access led to okta breach || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+110	140	literal	trivago azure ad security group removal github access	646e65df5e5a7962	the azure ad group removal cut off the central source code platform || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+111	140	literal	trivago azure ad security group removal github access	3a38b670bb9cf70c	credentials in a hosted source code repository granted access to bitly backups || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+112	46	literal	aws ireland outage degraded elastic clusters	a1ea0a21d5b6a1d6	the AWS region problem reduced access to hosted elasticsearch clusters || fix: 等待区域恢复并改进跨区容灾	
+113	46	literal	aws ireland outage degraded elastic clusters	88478eb8914dcae2	an AWS eu west one outage degraded elastic cloud deployments for about three hours || fix: 等待区域恢复并改进跨区容灾	
+114	46	literal	aws ireland outage degraded elastic clusters	0f1ad8bbcb716966	aws ireland outage degraded elastic clusters || fix: 等待区域恢复并改进跨区容灾	
+115	46	literal	aws ireland outage degraded elastic clusters	fb9213f2e7865cc9	txid wraparound caused day and a half outage || fix: 执行 VACUUM FREEZE 并监控事务 ID 年龄	
+116	46	literal	aws ireland outage degraded elastic clusters	63225b2d4941613b	a postgres transaction id wraparound caused a partial outage for a day and a half || fix: 执行 VACUUM FREEZE 并监控事务 ID 年龄	
+117	46	literal	aws ireland outage degraded elastic clusters	9c6117e6398aadd0	maintenance outage because zookeeper could not start || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+118	46	literal	aws ireland outage degraded elastic clusters	71d8ddbc60704138	problems with consul streaming and boltdb caused a seventy three hour outage || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+119	46	literal	aws ireland outage degraded elastic clusters	b4e76119f5a2051c	elastic cloud aws eu west region degradation || fix: 等待区域恢复并改进跨区容灾	
+120	46	literal	aws ireland outage degraded elastic clusters	b3bc43fcd0d0da4e	roblox consul streaming boltdb seventy three hour outage || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+121	46	literal	aws ireland outage degraded elastic clusters	a3d4283f8084561c	Elastic Cloud 受 AWS eu-west-1 区域故障影响，集群降级约三小时 || fix: 等待区域恢复并改进跨区容灾	
+122	101	literal	support laptop access led to okta breach	3a38b670bb9cf70c	credentials in a hosted source code repository granted access to bitly backups || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+123	101	literal	support laptop access led to okta breach	61e12c2718550630	a manual repetitive task removed the azure ad security group that controlled github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+124	101	literal	support laptop access led to okta breach	db5aa4f741afcd0d	Okta 第三方支持工程师笔记本被入侵，成为攻击入口 || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+125	101	literal	support laptop access led to okta breach	0fb8157c6b5c9562	browserstack old prototype shellshock production breach || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+126	101	literal	support laptop access led to okta breach	138a3cfd46e66dc5	support laptop access led to okta breach || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+127	101	literal	support laptop access led to okta breach	16b82728b19e3113	the third party endpoint was the entry point for the okta compromise || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+128	101	literal	support laptop access led to okta breach	648f63dda3c196bb	okta third party support engineer laptop compromise || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+129	101	literal	support laptop access led to okta breach	cc52450aacf9f5ef	attackers gained access through a third party support engineer's laptop || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+130	101	literal	support laptop access led to okta breach	064202bcfb968b36	trivago azure ad security group removal github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+131	101	literal	support laptop access led to okta breach	a1ea0a21d5b6a1d6	the AWS region problem reduced access to hosted elasticsearch clusters || fix: 等待区域恢复并改进跨区容灾	
+132	26	literal	expired intermediate certificate disabled all addons	5acd1e62d6834d1d	mozilla firefox addons certificate expired outage || fix: 签发新证书并推送特权扩展修复验证链	
+133	26	literal	expired intermediate certificate disabled all addons	0f3e5a41ef8fb3cf	expired intermediate certificate disabled all addons || fix: 签发新证书并推送特权扩展修复验证链	
+134	26	literal	expired intermediate certificate disabled all addons	d21b81412680ce43	an expired intermediate certificate used to verify add-ons made firefox disable them || fix: 签发新证书并推送特权扩展修复验证链	
+135	26	literal	expired intermediate certificate disabled all addons	f06846b6fe1be699	the certificate chain expired and Mozilla had to push a privileged fix || fix: 签发新证书并推送特权扩展修复验证链	
+136	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	2b571b4dce733a36	health check timeout killed supermarket after launch || fix: 调高健康检查超时并修正实例摘除策略	
+137	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	337ecde86ee61f26	bintray jcenter malicious maven packages impersonation || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+138	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	a5e442f2d02a32de	android dependencies pulled malware from jcenter || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+139	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	a4569e4ba25a2a14	a repository contained credentials that could read the backup store || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+140	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	b8e1883d6bdb545f	compromised npm account published malware || fix: 撤销恶意版本、重置账号并启用双因素认证	
+141	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	3a38b670bb9cf70c	credentials in a hosted source code repository granted access to bitly backups || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+142	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	aee647e866e9bc74	Bintray JCenter 恶意 Maven 包冒充合法依赖，Android 应用被植入木马 || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+143	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	7e2f2da98d962eb4	bitly source repository leaked backup credentials || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+144	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	9e7947edb32b8a78	malicious maven packages were published to jcenter through an impersonation attack || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+145	3	paraphrase	android apps included malware after resolving dependencies from the poisoned jcenter repository	b45dd0323300995e	jcenter hosted the impersonated maven packages for more than a year || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+146	6	literal	hashed passwords exposed through code repo secrets	9e7947edb32b8a78	malicious maven packages were published to jcenter through an impersonation attack || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+147	6	literal	hashed passwords exposed through code repo secrets	84a290002aa94d7a	attackers reached production through secret keys stored on an unpatched prototype || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+148	6	literal	hashed passwords exposed through code repo secrets	646e65df5e5a7962	the azure ad group removal cut off the central source code platform || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+149	6	literal	hashed passwords exposed through code repo secrets	cc52450aacf9f5ef	attackers gained access through a third party support engineer's laptop || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+150	6	literal	hashed passwords exposed through code repo secrets	90db563d25e153df	out of order responses exposed other users data || fix: 下线修复队列、清除损坏缓存并修补隔离逻辑	
+151	6	literal	hashed passwords exposed through code repo secrets	e51d6af1ed3acb04	hashed passwords exposed through code repo secrets || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+152	6	literal	hashed passwords exposed through code repo secrets	3a38b670bb9cf70c	credentials in a hosted source code repository granted access to bitly backups || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+153	6	literal	hashed passwords exposed through code repo secrets	42250921523d4c8f	the reconnect storm exhausted frontend memory and cascaded through discord services || fix: 限制重连速率并保护前端队列	
+154	6	literal	hashed passwords exposed through code repo secrets	5cf8681b4b03b945	leap second code in the timer interrupt called printk while holding xtime lock || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+155	31	literal	expensive regex caused health checks to fail	4cc66d3c8523c986	stack exchange regex backtracking health check outage || fix: 限制正则回溯并修复健康检查超时	
+156	31	literal	expensive regex caused health checks to fail	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+157	31	literal	expensive regex caused health checks to fail	6a1208c3c02e6f6c	aggressive health check timeouts removed healthy instances and the service collapsed || fix: 调高健康检查超时并修正实例摘除策略	
+158	31	literal	expensive regex caused health checks to fail	71d8ddbc60704138	problems with consul streaming and boltdb caused a seventy three hour outage || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+159	31	literal	expensive regex caused health checks to fail	c24a57092d2202c9	high cpu from pandemic usage caused the database to stop responding for about a day || fix: 扩容容量、限流并修复数据库恢复与备份	
+160	31	literal	expensive regex caused health checks to fail	50f0cfe7971ce964	expensive regex caused health checks to fail || fix: 限制正则回溯并修复健康检查超时	
+161	31	literal	expensive regex caused health checks to fail	54c12fe0ba026338	a regex in the engine backtracked excessively on one post and blocked request handling || fix: 限制正则回溯并修复健康检查超时	
+162	31	literal	expensive regex caused health checks to fail	03a034ac59d1753a	a single post triggered catastrophic regex backtracking in the platform || fix: 限制正则回溯并修复健康检查超时	
+163	31	literal	expensive regex caused health checks to fail	c5cbfd523d83469e	chef supermarket low health check timeout crash || fix: 调高健康检查超时并修正实例摘除策略	
+164	31	literal	expensive regex caused health checks to fail	2b571b4dce733a36	health check timeout killed supermarket after launch || fix: 调高健康检查超时并修正实例摘除策略	
+165	91	literal	radar design flaw caused computer alarms	71d8ddbc60704138	problems with consul streaming and boltdb caused a seventy three hour outage || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+166	91	literal	radar design flaw caused computer alarms	8d6a64062cfd9248	apollo 11 rendezvous radar cpu overload restarts || fix: 利用优先级调度让关键制导任务继续执行	
+167	91	literal	radar design flaw caused computer alarms	19778742368c7305	a request queue overloaded the existing database capacity and caused a cascading failure || fix: 扩容数据库、限制队列并补充容量监控	
+168	91	literal	radar design flaw caused computer alarms	c3920946bd71dd08	unneeded radar work overloaded the computer and triggered program alarms || fix: 利用优先级调度让关键制导任务继续执行	
+169	91	literal	radar design flaw caused computer alarms	fb9213f2e7865cc9	txid wraparound caused day and a half outage || fix: 执行 VACUUM FREEZE 并监控事务 ID 年龄	
+170	91	literal	radar design flaw caused computer alarms	63225b2d4941613b	a postgres transaction id wraparound caused a partial outage for a day and a half || fix: 执行 VACUUM FREEZE 并监控事务 ID 年龄	
+171	91	literal	radar design flaw caused computer alarms	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+172	91	literal	radar design flaw caused computer alarms	829f36cf0b459818	a design flaw in the apollo 11 rendezvous radar produced excess cpu load || fix: 利用优先级调度让关键制导任务继续执行	
+173	91	literal	radar design flaw caused computer alarms	9cf99d2f94bb8af8	radar design flaw caused computer alarms || fix: 利用优先级调度让关键制导任务继续执行	
+174	91	literal	radar design flaw caused computer alarms	d19f4a55250a2dc3	insufficient db capacity caused cascading failure || fix: 扩容数据库、限制队列并补充容量监控	
+175	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	adedd9839862e576	each checkin read the user's full history with low locality and exhausted mongodb memory || fix: 优化查询与索引、限制内存使用并补充监控	
+176	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	30446501dc07e48d	a flapping service caused a reconnection thundering herd when it recovered || fix: 限制重连速率并保护前端队列	
+177	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	03e403ddb8b696b0	checkin history query read entire user data || fix: 优化查询与索引、限制内存使用并补充监控	
+178	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	77b4fb9c3bd138ff	frontend memory exhausted by reconnect queues || fix: 限制重连速率并保护前端队列	
+179	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	92f332f1d214cf1c	the read pattern pulled unnecessary pages until mongodb failed catastrophically || fix: 优化查询与索引、限制内存使用并补充监控	
+180	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	978cf805fc8bbf83	Discord 服务抖动引发重连惊群，前端队列堆积耗尽内存 || fix: 限制重连速率并保护前端队列	
+181	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	498f77d36b185304	foursquare mongodb out of memory low locality reads || fix: 优化查询与索引、限制内存使用并补充监控	
+182	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	42250921523d4c8f	the reconnect storm exhausted frontend memory and cascaded through discord services || fix: 限制重连速率并保护前端队列	
+183	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	6498e19067c571ec	Foursquare MongoDB 查询局部性差打满内存，故障持续十七小时 || fix: 优化查询与索引、限制内存使用并补充监控	
+184	69	semantic	每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时	d8360a1f912bf7e3	discord flapping service reconnection thundering herd || fix: 限制重连速率并保护前端队列	
+185	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	0f1ad8bbcb716966	aws ireland outage degraded elastic clusters || fix: 等待区域恢复并改进跨区容灾	
+186	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	183cc9d0d2e001d9	traffic from a huge botnet overwhelmed network capacity || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+187	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	d2ad735a4bd73ca5	github ddos 1.35 tbps traffic flood || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+188	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	b8491275622d1811	GitHub 遭遇 1.35 Tbps 超大流量 DDoS，边缘网络被打满 || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+189	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	a3d4283f8084561c	Elastic Cloud 受 AWS eu-west-1 区域故障影响，集群降级约三小时 || fix: 等待区域恢复并改进跨区容灾	
+190	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	e3abd77a56afb8bd	a distributed denial of service attack reached one point three five terabits per second || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+191	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	a1ea0a21d5b6a1d6	the AWS region problem reduced access to hosted elasticsearch clusters || fix: 等待区域恢复并改进跨区容灾	
+192	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	2725f0506ba08d09	massive volumetric attack saturated github || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+193	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	88478eb8914dcae2	an AWS eu west one outage degraded elastic cloud deployments for about three hours || fix: 等待区域恢复并改进跨区容灾	
+194	49	semantic	AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用	b4e76119f5a2051c	elastic cloud aws eu west region degradation || fix: 等待区域恢复并改进跨区容灾	
+195	36	literal	frontend memory exhausted by reconnect queues	92f332f1d214cf1c	the read pattern pulled unnecessary pages until mongodb failed catastrophically || fix: 优化查询与索引、限制内存使用并补充监控	
+196	36	literal	frontend memory exhausted by reconnect queues	77b4fb9c3bd138ff	frontend memory exhausted by reconnect queues || fix: 限制重连速率并保护前端队列	
+197	36	literal	frontend memory exhausted by reconnect queues	498f77d36b185304	foursquare mongodb out of memory low locality reads || fix: 优化查询与索引、限制内存使用并补充监控	
+198	36	literal	frontend memory exhausted by reconnect queues	13a0222f4c1d995e	services waiting on cassandra kept retrying and blocked their own request queues || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+199	36	literal	frontend memory exhausted by reconnect queues	30446501dc07e48d	a flapping service caused a reconnection thundering herd when it recovered || fix: 限制重连速率并保护前端队列	
+200	36	literal	frontend memory exhausted by reconnect queues	d8360a1f912bf7e3	discord flapping service reconnection thundering herd || fix: 限制重连速率并保护前端队列	
+201	36	literal	frontend memory exhausted by reconnect queues	03e403ddb8b696b0	checkin history query read entire user data || fix: 优化查询与索引、限制内存使用并补充监控	
+202	36	literal	frontend memory exhausted by reconnect queues	42250921523d4c8f	the reconnect storm exhausted frontend memory and cascaded through discord services || fix: 限制重连速率并保护前端队列	
+203	36	literal	frontend memory exhausted by reconnect queues	adedd9839862e576	each checkin read the user's full history with low locality and exhausted mongodb memory || fix: 优化查询与索引、限制内存使用并补充监控	
+204	36	literal	frontend memory exhausted by reconnect queues	4a66809c780990cf	corrupted request and response queues in redis returned data to the wrong users || fix: 下线修复队列、清除损坏缓存并修补隔离逻辑	
+205	13	paraphrase	a prototype host missed patching and its secret keys compromised production	ec43ae825aef7f6f	the provider had never seen such a burst and its oms could not keep up || fix: 限制拆单规模并扩容 OMS 处理能力	
+206	13	paraphrase	a prototype host missed patching and its secret keys compromised production	f3e2d28767329a44	an old prototype machine still vulnerable to shellshock held secret keys || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+207	13	paraphrase	a prototype host missed patching and its secret keys compromised production	0fb8157c6b5c9562	browserstack old prototype shellshock production breach || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+208	13	paraphrase	a prototype host missed patching and its secret keys compromised production	87e485f1f6abc88f	id values exceeded the signed int range while the deploy changed production databases || fix: 回滚部署、迁移 ID 类型并隔离数据库升级流程	
+209	13	paraphrase	a prototype host missed patching and its secret keys compromised production	3525080179662493	an attacker compromised an eslint maintainer npm account and published malicious packages || fix: 撤销恶意版本、重置账号并启用双因素认证	
+210	13	paraphrase	a prototype host missed patching and its secret keys compromised production	b8e1883d6bdb545f	compromised npm account published malware || fix: 撤销恶意版本、重置账号并启用双因素认证	
+211	13	paraphrase	a prototype host missed patching and its secret keys compromised production	1a5ecaede298121a	shellshock vulnerable machine held secret keys || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+212	13	paraphrase	a prototype host missed patching and its secret keys compromised production	84a290002aa94d7a	attackers reached production through secret keys stored on an unpatched prototype || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+213	1	literal	android dependencies pulled malware from jcenter	a5e442f2d02a32de	android dependencies pulled malware from jcenter || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+214	1	literal	android dependencies pulled malware from jcenter	9e7947edb32b8a78	malicious maven packages were published to jcenter through an impersonation attack || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+215	1	literal	android dependencies pulled malware from jcenter	b45dd0323300995e	jcenter hosted the impersonated maven packages for more than a year || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+216	1	literal	android dependencies pulled malware from jcenter	337ecde86ee61f26	bintray jcenter malicious maven packages impersonation || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+217	1	literal	android dependencies pulled malware from jcenter	92f332f1d214cf1c	the read pattern pulled unnecessary pages until mongodb failed catastrophically || fix: 优化查询与索引、限制内存使用并补充监控	
+218	1	literal	android dependencies pulled malware from jcenter	b8e1883d6bdb545f	compromised npm account published malware || fix: 撤销恶意版本、重置账号并启用双因素认证	
+219	1	literal	android dependencies pulled malware from jcenter	aee647e866e9bc74	Bintray JCenter 恶意 Maven 包冒充合法依赖，Android 应用被植入木马 || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+220	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	a4569e4ba25a2a14	a repository contained credentials that could read the backup store || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+221	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	3a38b670bb9cf70c	credentials in a hosted source code repository granted access to bitly backups || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+222	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	064202bcfb968b36	trivago azure ad security group removal github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+223	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	f3e2d28767329a44	an old prototype machine still vulnerable to shellshock held secret keys || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+224	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	3b896eb6a3d2777e	a cassandra cluster crash blocked producers writing to the message bus || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+225	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	138a3cfd46e66dc5	support laptop access led to okta breach || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+226	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	cc52450aacf9f5ef	attackers gained access through a third party support engineer's laptop || fix: 撤销第三方访问、轮换凭据并加强供应商终端安全	
+227	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	7e2f2da98d962eb4	bitly source repository leaked backup credentials || fix: 轮换凭证、限制备份访问并清理仓库中的秘密	
+228	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	61e12c2718550630	a manual repetitive task removed the azure ad security group that controlled github access || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+229	8	paraphrase	the leaked repository credentials allowed access to backups containing password hashes	a1ea0a21d5b6a1d6	the AWS region problem reduced access to hosted elasticsearch clusters || fix: 等待区域恢复并改进跨区容灾	
+230	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	30446501dc07e48d	a flapping service caused a reconnection thundering herd when it recovered || fix: 限制重连速率并保护前端队列	
+231	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	2b571b4dce733a36	health check timeout killed supermarket after launch || fix: 调高健康检查超时并修正实例摘除策略	
+232	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+233	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	4f2518def70f64e2	the cluster configuration data exceeded what zookeeper could load at startup || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+234	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	caff2a6a12fdfb48	message bus producers blocked on cassandra || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+235	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	a5bbd7ef9b797e14	stackdriver cassandra crash queue blocking || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+236	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	416fe10c4316ace8	Stackdriver Cassandra 集群崩溃，消息队列阻塞扩散成全局服务故障 || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+237	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	adb791bf583fab70	database cluster and file discrepancies blocked a clean cross datacenter failover || fix: 恢复供电、核对数据并修复跨站切换流程	
+238	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	13a0222f4c1d995e	services waiting on cassandra kept retrying and blocked their own request queues || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+239	128	paraphrase	stackdriver recovered after the cassandra cluster and message pipeline were restored	3b896eb6a3d2777e	a cassandra cluster crash blocked producers writing to the message bus || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+240	135	literal	tarsnap batch log filled filesystem	053e2b0634cc1412	unbounded log growth stopped backup service || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+241	135	literal	tarsnap batch log filled filesystem	350afa7138f79e2c	Tarsnap 批处理日志无限增长写满磁盘，备份服务停止 || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+242	135	literal	tarsnap batch log filled filesystem	84ddd95da8a9b142	tarsnap batch log filled filesystem || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+243	135	literal	tarsnap batch log filled filesystem	c3665bb25b03b78e	the disk filled with retry logs and other filesystem writes failed || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+244	135	literal	tarsnap batch log filled filesystem	28176f3f0d8cccc8	a batch job log grew without bound until the filesystem filled || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+245	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	a5bbd7ef9b797e14	stackdriver cassandra crash queue blocking || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+246	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	a0826f92f1762ad8	watchdog timers rebooted the spacecraft because the critical task could not run || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+247	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	8d6a64062cfd9248	apollo 11 rendezvous radar cpu overload restarts || fix: 利用优先级调度让关键制导任务继续执行	
+248	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	274346d4a28c73a8	a priority inversion in vxworks caused repeated system resets on mars pathfinder || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+249	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	829f36cf0b459818	a design flaw in the apollo 11 rendezvous radar produced excess cpu load || fix: 利用优先级调度让关键制导任务继续执行	
+250	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	9cf99d2f94bb8af8	radar design flaw caused computer alarms || fix: 利用优先级调度让关键制导任务继续执行	
+251	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	cbb81edec0cff176	火星探路者 VxWorks 优先级反转触发看门狗重启 || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+252	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	fd124fd91e9e5898	mars pathfinder priority inversion system resets || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+253	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	c3920946bd71dd08	unneeded radar work overloaded the computer and triggered program alarms || fix: 利用优先级调度让关键制导任务继续执行	
+254	89	semantic	火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启	e909ec08902d3102	vxworks priority inversion watchdog reboot || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+255	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	0c0cf2ab8482553b	GitHub 交换机 MLAG 切换冻结网络，Pacemaker/DRBD 节点互相 STONITH || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+256	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	b0ba9f93053ea106	Chef Supermarket 健康检查超时过短，上线两小时后节点被误判并崩溃 || fix: 调高健康检查超时并修正实例摘除策略	
+257	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	6a1208c3c02e6f6c	aggressive health check timeouts removed healthy instances and the service collapsed || fix: 调高健康检查超时并修正实例摘除策略	
+258	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	c5cbfd523d83469e	chef supermarket low health check timeout crash || fix: 调高健康检查超时并修正实例摘除策略	
+259	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+260	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	113e19ffb394b6d3	both nodes in active passive pairs powered off after missing heartbeats || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+261	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	07d94240f552eb0f	pacemaker drbd nodes fenced each other || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+262	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	bcf7ce9802f3b1cd	a disruptive mlag failover during an aggregation switch upgrade froze the network for ninety seconds || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+263	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	5e120b44ee18d3ef	github aggregation switch mlag failover stonith || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+264	74	semantic	交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电	2b571b4dce733a36	health check timeout killed supermarket after launch || fix: 调高健康检查超时并修正实例摘除策略	
+265	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	92f332f1d214cf1c	the read pattern pulled unnecessary pages until mongodb failed catastrophically || fix: 优化查询与索引、限制内存使用并补充监控	
+266	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	bbf3685518ff2fcc	mars climate orbiter metric english unit mismatch || fix: 统一单位制并增加接口单位校验	
+267	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	f656d7086c8af78e	火星气候探测器公制与英制单位混用，导航点火量错误 || fix: 统一单位制并增加接口单位校验	
+268	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	6498e19067c571ec	Foursquare MongoDB 查询局部性差打满内存，故障持续十七小时 || fix: 优化查询与索引、限制内存使用并补充监控	
+269	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	adedd9839862e576	each checkin read the user's full history with low locality and exhausted mongodb memory || fix: 优化查询与索引、限制内存使用并补充监控	
+270	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	7c49962c790320f4	the navigation software used metric and english units inconsistently for thruster impulse || fix: 统一单位制并增加接口单位校验	
+271	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	7d938a19ee1c3018	navigation software used wrong thrust units || fix: 统一单位制并增加接口单位校验	
+272	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	498f77d36b185304	foursquare mongodb out of memory low locality reads || fix: 优化查询与索引、限制内存使用并补充监控	
+273	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	f33a724570ab80c0	thruster data was interpreted in the wrong unit system during trajectory correction || fix: 统一单位制并增加接口单位校验	
+274	24	semantic	地面软件按错单位算推力，火星气候探测器进入大气层烧毁	03e403ddb8b696b0	checkin history query read entire user data || fix: 优化查询与索引、限制内存使用并补充监控	
+275	115	literal	salesforce datacenter power failure database failover	3b93514b9a6fc646	Salesforce 机房断电引发数据库与文件不一致，跨机房切换失败 || fix: 恢复供电、核对数据并修复跨站切换流程	
+276	115	literal	salesforce datacenter power failure database failover	f880ce4055f6bdde	platform sh zookeeper too much data boot failure || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+277	115	literal	salesforce datacenter power failure database failover	bcf7ce9802f3b1cd	a disruptive mlag failover during an aggregation switch upgrade froze the network for ninety seconds || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+278	115	literal	salesforce datacenter power failure database failover	a175a8e4a81bc8b6	a power failure in one datacenter cascaded into database and file consistency failures || fix: 恢复供电、核对数据并修复跨站切换流程	
+279	115	literal	salesforce datacenter power failure database failover	19778742368c7305	a request queue overloaded the existing database capacity and caused a cascading failure || fix: 扩容数据库、限制队列并补充容量监控	
+280	115	literal	salesforce datacenter power failure database failover	d19f4a55250a2dc3	insufficient db capacity caused cascading failure || fix: 扩容数据库、限制队列并补充容量监控	
+281	115	literal	salesforce datacenter power failure database failover	0ff2e145486470c4	salesforce datacenter power failure database failover || fix: 恢复供电、核对数据并修复跨站切换流程	
+282	115	literal	salesforce datacenter power failure database failover	5e120b44ee18d3ef	github aggregation switch mlag failover stonith || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	
+283	115	literal	salesforce datacenter power failure database failover	24c016f1bb80acd2	power loss cascaded into cross datacenter failover || fix: 恢复供电、核对数据并修复跨站切换流程	
+284	115	literal	salesforce datacenter power failure database failover	adb791bf583fab70	database cluster and file discrepancies blocked a clean cross datacenter failover || fix: 恢复供电、核对数据并修复跨站切换流程	
+285	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	c24a57092d2202c9	high cpu from pandemic usage caused the database to stop responding for about a day || fix: 扩容容量、限流并修复数据库恢复与备份	
+286	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	13a0222f4c1d995e	services waiting on cassandra kept retrying and blocked their own request queues || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+287	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	caff2a6a12fdfb48	message bus producers blocked on cassandra || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+288	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	f69d3ef55e07d747	linux leap second printk deadlock xtime lock || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+289	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	f3e2d28767329a44	an old prototype machine still vulnerable to shellshock held secret keys || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+290	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	274346d4a28c73a8	a priority inversion in vxworks caused repeated system resets on mars pathfinder || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+291	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	1a5ecaede298121a	shellshock vulnerable machine held secret keys || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+292	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	f1f29f6a59f4d2ac	manual task deleted group controlling github org || fix: 重建安全组与成员关系，并为高风险手工操作增加保护	
+293	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	1c7373257b3a9929	a printk under xtime lock created a lock cycle during the leap second || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+294	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	5de17370169dda46	consul streaming and boltdb corruption blocked recovery of the platform || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+295	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	5cf8681b4b03b945	leap second code in the timer interrupt called printk while holding xtime lock || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+296	87	paraphrase	the low priority weather task held a lock and blocked the high priority bus task	3b896eb6a3d2777e	a cassandra cluster crash blocked producers writing to the message bus || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+297	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	b8491275622d1811	GitHub 遭遇 1.35 Tbps 超大流量 DDoS，边缘网络被打满 || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+298	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	183cc9d0d2e001d9	traffic from a huge botnet overwhelmed network capacity || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+299	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	b4e76119f5a2051c	elastic cloud aws eu west region degradation || fix: 等待区域恢复并改进跨区容灾	
+300	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	d2ad735a4bd73ca5	github ddos 1.35 tbps traffic flood || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+301	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	0f1ad8bbcb716966	aws ireland outage degraded elastic clusters || fix: 等待区域恢复并改进跨区容灾	
+302	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	88478eb8914dcae2	an AWS eu west one outage degraded elastic cloud deployments for about three hours || fix: 等待区域恢复并改进跨区容灾	
+303	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	a1ea0a21d5b6a1d6	the AWS region problem reduced access to hosted elasticsearch clusters || fix: 等待区域恢复并改进跨区容灾	
+304	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	a3d4283f8084561c	Elastic Cloud 受 AWS eu-west-1 区域故障影响，集群降级约三小时 || fix: 等待区域恢复并改进跨区容灾	
+305	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	2725f0506ba08d09	massive volumetric attack saturated github || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+306	79	semantic	GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用	e3abd77a56afb8bd	a distributed denial of service attack reached one point three five terabits per second || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+307	0	literal	bintray jcenter malicious maven packages impersonation	9e7947edb32b8a78	malicious maven packages were published to jcenter through an impersonation attack || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+308	0	literal	bintray jcenter malicious maven packages impersonation	aee647e866e9bc74	Bintray JCenter 恶意 Maven 包冒充合法依赖，Android 应用被植入木马 || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+309	0	literal	bintray jcenter malicious maven packages impersonation	3525080179662493	an attacker compromised an eslint maintainer npm account and published malicious packages || fix: 撤销恶意版本、重置账号并启用双因素认证	
+310	0	literal	bintray jcenter malicious maven packages impersonation	a5e442f2d02a32de	android dependencies pulled malware from jcenter || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+311	0	literal	bintray jcenter malicious maven packages impersonation	b45dd0323300995e	jcenter hosted the impersonated maven packages for more than a year || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+312	0	literal	bintray jcenter malicious maven packages impersonation	337ecde86ee61f26	bintray jcenter malicious maven packages impersonation || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+313	0	literal	bintray jcenter malicious maven packages impersonation	89f4b08be4ff0d53	eslint npm maintainer account malicious packages || fix: 撤销恶意版本、重置账号并启用双因素认证	
+314	0	literal	bintray jcenter malicious maven packages impersonation	8cfc0f1aea4e39f1	malicious versions appeared in the npm registry under a trusted maintainer || fix: 撤销恶意版本、重置账号并启用双因素认证	
+315	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	89f4b08be4ff0d53	eslint npm maintainer account malicious packages || fix: 撤销恶意版本、重置账号并启用双因素认证	
+316	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	b45dd0323300995e	jcenter hosted the impersonated maven packages for more than a year || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+317	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	b8e1883d6bdb545f	compromised npm account published malware || fix: 撤销恶意版本、重置账号并启用双因素认证	
+318	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	7da13d5430d6074f	ESLint 维护者 npm 账号被入侵，恶意包发布到官方仓库 || fix: 撤销恶意版本、重置账号并启用双因素认证	
+319	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	8cfc0f1aea4e39f1	malicious versions appeared in the npm registry under a trusted maintainer || fix: 撤销恶意版本、重置账号并启用双因素认证	
+320	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	a5e442f2d02a32de	android dependencies pulled malware from jcenter || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+321	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	3525080179662493	an attacker compromised an eslint maintainer npm account and published malicious packages || fix: 撤销恶意版本、重置账号并启用双因素认证	
+322	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	337ecde86ee61f26	bintray jcenter malicious maven packages impersonation || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+323	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	77b4fb9c3bd138ff	frontend memory exhausted by reconnect queues || fix: 限制重连速率并保护前端队列	
+324	53	paraphrase	developers installing eslint dependencies received packages published by the attacker	9e7947edb32b8a78	malicious maven packages were published to jcenter through an impersonation attack || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+325	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	0b6b9b957fc93dc4	zookeeper could not boot because the stored data volume was too large || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+326	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	88478eb8914dcae2	an AWS eu west one outage degraded elastic cloud deployments for about three hours || fix: 等待区域恢复并改进跨区容灾	
+327	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	f880ce4055f6bdde	platform sh zookeeper too much data boot failure || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+328	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	053e2b0634cc1412	unbounded log growth stopped backup service || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+329	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	30446501dc07e48d	a flapping service caused a reconnection thundering herd when it recovered || fix: 限制重连速率并保护前端队列	
+330	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	d8360a1f912bf7e3	discord flapping service reconnection thundering herd || fix: 限制重连速率并保护前端队列	
+331	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+332	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	4f2518def70f64e2	the cluster configuration data exceeded what zookeeper could load at startup || fix: 清理并压缩 ZooKeeper 数据，验证启动容量	
+333	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	e3abd77a56afb8bd	a distributed denial of service attack reached one point three five terabits per second || fix: 启用流量清洗与上游缓解，恢复边缘服务	
+334	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	c24a57092d2202c9	high cpu from pandemic usage caused the database to stop responding for about a day || fix: 扩容容量、限流并修复数据库恢复与备份	
+335	63	paraphrase	the service was unavailable for twenty four hours and some data was permanently lost	6a1208c3c02e6f6c	aggressive health check timeouts removed healthy instances and the service collapsed || fix: 调高健康检查超时并修正实例摘除策略	
+336	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	af13338548a4d5b1	timer interrupt deadlock during leap second || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+337	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	1c7373257b3a9929	a printk under xtime lock created a lock cycle during the leap second || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+338	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	f69d3ef55e07d747	linux leap second printk deadlock xtime lock || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+339	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	0889b89322f206a2	Roblox Consul streaming 与 BoltDB 故障导致 73 小时停机 || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+340	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	cfe0ec748606e177	Linux 闰秒处理在 xtime 锁内 printk，触发内核死锁 || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+341	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	5de17370169dda46	consul streaming and boltdb corruption blocked recovery of the platform || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+342	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	43a699de29d14332	consul and boltdb issues kept roblox down || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+343	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	71d8ddbc60704138	problems with consul streaming and boltdb caused a seventy three hour outage || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+344	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	5cf8681b4b03b945	leap second code in the timer interrupt called printk while holding xtime lock || fix: 避免在 xtime 锁内 printk 并修复闰秒处理路径	
+345	124	semantic	闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁	b3bc43fcd0d0da4e	roblox consul streaming boltdb seventy three hour outage || fix: 修复 Consul 与 BoltDB 状态并恢复集群	
+346	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	aee647e866e9bc74	Bintray JCenter 恶意 Maven 包冒充合法依赖，Android 应用被植入木马 || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+347	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	89f4b08be4ff0d53	eslint npm maintainer account malicious packages || fix: 撤销恶意版本、重置账号并启用双因素认证	
+348	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	9e7947edb32b8a78	malicious maven packages were published to jcenter through an impersonation attack || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+349	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	337ecde86ee61f26	bintray jcenter malicious maven packages impersonation || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+350	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	88478eb8914dcae2	an AWS eu west one outage degraded elastic cloud deployments for about three hours || fix: 等待区域恢复并改进跨区容灾	
+351	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	b45dd0323300995e	jcenter hosted the impersonated maven packages for more than a year || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+352	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	8cfc0f1aea4e39f1	malicious versions appeared in the npm registry under a trusted maintainer || fix: 撤销恶意版本、重置账号并启用双因素认证	
+353	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	f3e2d28767329a44	an old prototype machine still vulnerable to shellshock held secret keys || fix: 下线未修复主机、轮换密钥并隔离生产访问	
+354	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	a5e442f2d02a32de	android dependencies pulled malware from jcenter || fix: 下架恶意 Maven 包、通知受影响项目并加强发布者身份校验	
+355	2	paraphrase	an attacker impersonated a vendor and planted malicious maven artifacts in jcenter	3525080179662493	an attacker compromised an eslint maintainer npm account and published malicious packages || fix: 撤销恶意版本、重置账号并启用双因素认证	
+356	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	c3665bb25b03b78e	the disk filled with retry logs and other filesystem writes failed || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+357	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	28176f3f0d8cccc8	a batch job log grew without bound until the filesystem filled || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+358	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	fd124fd91e9e5898	mars pathfinder priority inversion system resets || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+359	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	cbb81edec0cff176	火星探路者 VxWorks 优先级反转触发看门狗重启 || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+360	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	053e2b0634cc1412	unbounded log growth stopped backup service || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+361	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	84ddd95da8a9b142	tarsnap batch log filled filesystem || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+362	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	274346d4a28c73a8	a priority inversion in vxworks caused repeated system resets on mars pathfinder || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+363	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	a0826f92f1762ad8	watchdog timers rebooted the spacecraft because the critical task could not run || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+364	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	350afa7138f79e2c	Tarsnap 批处理日志无限增长写满磁盘，备份服务停止 || fix: 删除超大日志、限制日志增长并修复重试逻辑	
+365	139	semantic	清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了	e909ec08902d3102	vxworks priority inversion watchdog reboot || fix: 远程启用优先级继承并修补 VxWorks 调度器	
+366	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	374808474a724c07	duo request queue overloaded database capacity || fix: 扩容数据库、限制队列并补充容量监控	
+367	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	13a0222f4c1d995e	services waiting on cassandra kept retrying and blocked their own request queues || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+368	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	a5bbd7ef9b797e14	stackdriver cassandra crash queue blocking || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+369	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	1a58e4a7622acae7	OpenAI ChatGPT Redis 队列错乱，部分用户看到他人的活动与账单信息 || fix: 下线修复队列、清除损坏缓存并修补隔离逻辑	
+370	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	caff2a6a12fdfb48	message bus producers blocked on cassandra || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+371	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	4f3a919ee7702d0f	openai chatgpt redis queue corruption data leak || fix: 下线修复队列、清除损坏缓存并修补隔离逻辑	
+372	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	4a66809c780990cf	corrupted request and response queues in redis returned data to the wrong users || fix: 下线修复队列、清除损坏缓存并修补隔离逻辑	
+373	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	e8fb54ea773f7879	the redis cache corrupted queue state and mixed one user's response with another || fix: 下线修复队列、清除损坏缓存并修补隔离逻辑	
+374	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	3b896eb6a3d2777e	a cassandra cluster crash blocked producers writing to the message bus || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+375	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	416fe10c4316ace8	Stackdriver Cassandra 集群崩溃，消息队列阻塞扩散成全局服务故障 || fix: 恢复 Cassandra 与消息总线，限制阻塞和重试	
+376	129	semantic	Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉	90db563d25e153df	out of order responses exposed other users data || fix: 下线修复队列、清除损坏缓存并修补隔离逻辑	
+377	16	literal	health check timeout killed supermarket after launch	c5cbfd523d83469e	chef supermarket low health check timeout crash || fix: 调高健康检查超时并修正实例摘除策略	
+378	16	literal	health check timeout killed supermarket after launch	0979030385032a92	very low health check timeouts caused supermarket to crash two hours after launch || fix: 调高健康检查超时并修正实例摘除策略	
+379	16	literal	health check timeout killed supermarket after launch	2b571b4dce733a36	health check timeout killed supermarket after launch || fix: 调高健康检查超时并修正实例摘除策略	
+380	16	literal	health check timeout killed supermarket after launch	4cc66d3c8523c986	stack exchange regex backtracking health check outage || fix: 限制正则回溯并修复健康检查超时	
+381	16	literal	health check timeout killed supermarket after launch	b0ba9f93053ea106	Chef Supermarket 健康检查超时过短，上线两小时后节点被误判并崩溃 || fix: 调高健康检查超时并修正实例摘除策略	
+382	16	literal	health check timeout killed supermarket after launch	50f0cfe7971ce964	expensive regex caused health checks to fail || fix: 限制正则回溯并修复健康检查超时	
+383	16	literal	health check timeout killed supermarket after launch	6a1208c3c02e6f6c	aggressive health check timeouts removed healthy instances and the service collapsed || fix: 调高健康检查超时并修正实例摘除策略	
+384	16	literal	health check timeout killed supermarket after launch	113e19ffb394b6d3	both nodes in active passive pairs powered off after missing heartbeats || fix: 修正 MLAG 升级流程并调整集群心跳与围栏策略	

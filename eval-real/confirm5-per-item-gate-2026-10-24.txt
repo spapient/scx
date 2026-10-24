@@ -1,0 +1,27 @@
+eval: cases=150 layers=literal,paraphrase,semantic multi-rel=39 single-rel=111 (NDCG strength)
+layer literal: n=60 A r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.969 ci95=[0.955,0.981] | B r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.966 ci95=[0.950,0.980]
+layer paraphrase: n=60 A r@5=0.633 mrr=0.258 ci95=[0.207,0.322] ndcg@10=0.852 ci95=[0.781,0.908] | B r@5=0.567 mrr=0.242 ci95=[0.189,0.308] ndcg@10=0.829 ci95=[0.758,0.884]
+layer semantic: n=30 A r@10=1.000 mrr=0.883 ci95=[0.789,0.961] ndcg@10=1.000 ci95=[0.999,1.000] | B r@10=1.000 mrr=0.674 ci95=[0.529,0.808] ndcg@10=1.000 ci95=[0.999,1.000]
+l1: hits=60 total=87 rate=0.690
+gate: mode=human
+gate: total=150 need>=30 (target 30-50) PASS
+gate: layer literal n=60 need>=10 PASS
+gate: layer paraphrase n=60 need>=10 PASS
+gate: layer semantic n=30 need>=10 PASS
+gate: judge metadata nonliteral=90 (need real by+date) PASS
+gate: human judge metadata all=150 judges=fei+hao-policy-v1 FAIL
+gate: human provenance policy-materialized labels=150 (not per-item human review) FAIL
+gate: human per-item provenance items=0/1430 cases=0/150 bad=0 method=missing/other FAIL
+gate: human controls weak=115>=10 negative=665>=10 layers=3>=2 PASS
+gate: layer literal ndcg@10 A=0.969 vs B=0.966 PASS
+gate: layer paraphrase ndcg@10 A=0.852 vs B=0.829 PASS
+gate: layer semantic ndcg@10 A=1.000 vs B=1.000 PASS
+gate: layer literal A r@5=1.000 vs B=1.000 PASS; A mrr=1.000 vs B=1.000 PASS
+gate: layer literal absolute A/B r@5=1.000/1.000>=0.20 PASS; mrr=1.000/1.000>=0.10 PASS
+gate: layer paraphrase A r@5=0.633 vs B=0.567 PASS; A mrr=0.258 vs B=0.242 PASS
+gate: layer paraphrase absolute A/B r@5=0.633/0.567>=0.20 PASS; mrr=0.258/0.242>=0.10 PASS
+gate: layer semantic A r@10=1.000 vs B=1.000 PASS; A mrr=0.883 vs B=0.674 PASS
+gate: layer semantic absolute A/B r@10=1.000/1.000>=0.20 PASS; mrr=0.883/0.674>=0.10 PASS
+gate: rel distribution 2=650 1=115 0=665
+gate: discrimination A!=B layers=2/3
+gate: FAIL

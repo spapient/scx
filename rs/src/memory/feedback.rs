@@ -3,7 +3,7 @@
 //!
 //! - case 环：quality = good/(good+bad)，状态机 open→solved→regressed，
 //!   quality 进入排序先验（recall::score_pass 乘 (1+quality*quality_prior)）。
-//! - 词环：good 词 +Δ / bad 词 −Δ（meta.toml [word_w]，上下限 ±0.5）。
+//! - 词环：good 词 +Δ / bad 词 −Δ（meta.toml [word_w]，默认上下限 ±0.5）。
 //! - L1 自适应：recall 侧把每次 top1.sim 记入 [l1] 历史（push_l1_hist），
 //!   rate 时重算 l1_base = P50(历史) 写回 [params]，CLI 过滤用动态基线 + margin。
 
@@ -14,13 +14,11 @@ use crate::memory::util::utc_now;
 
 /// 反馈后重算 L1 自适应基线并写回 meta [params]（失败静默，旁路）。
 fn adapt_l1_base(root: &str) {
-    let Ok(_g) = crate::memory::lock::acquire(root, "meta.lock") else {
-        return;
-    };
     let Ok(meta) = meta::load_meta(root) else {
         return;
     };
-    if meta.l1_hist.len() < 4 {
+    let min_history = meta.param("l1_adapt_min_history").max(1.0) as usize;
+    if meta.l1_hist.len() < min_history {
         return; // 历史太少不滑动，保持默认 0.55。
     }
     let mut sorted = meta.l1_hist.clone();
@@ -31,33 +29,8 @@ fn adapt_l1_base(root: &str) {
     } else {
         sorted[mid]
     };
-    let base = p50.clamp(0.3, 0.9);
-    // 重写 meta.toml [params] l1_base。
-    let p = std::path::Path::new(root).join("meta.toml");
-    let Ok(txt) = std::fs::read_to_string(&p) else {
-        return;
-    };
-    let mut out: Vec<String> = Vec::new();
-    let mut in_params = false;
-    let mut replaced = false;
-    for line in txt.lines() {
-        let t = line.trim();
-        if t.starts_with('[') && t.ends_with(']') {
-            in_params = t == "[params]";
-        } else if in_params && t.starts_with("l1_base") {
-            out.push(format!("l1_base = {base:.3}"));
-            replaced = true;
-            continue;
-        }
-        out.push(line.to_string());
-    }
-    if !replaced {
-        // 无 l1_base 行：追加到 [params] 后（保险）。
-        out.push(format!("l1_base = {base:.3}"));
-    }
-    let mut body = out.join("\n");
-    body.push('\n');
-    let _ = crate::memory::lock::atomic_write(&p, body.as_bytes());
+    let base = p50.clamp(meta.param("l1_adapt_min"), meta.param("l1_adapt_max"));
+    let _ = meta::set_param(root, "l1_base", base);
 }
 
 /// 反馈标注：good=true 记 good，false 记 bad。
@@ -124,21 +97,9 @@ pub(crate) fn l1_qualified(
     top1_sim >= l1_base && (top1_sim - top2_sim) >= margin && ext_hit >= 0.30
 }
 
-/// 从 meta [params] 读 l1_base / l1_margin_min（缺省 0.55 / 0.15）。
+/// 从 meta 读 l1_base / l1_margin_min；缺省值统一由 `meta::DEFAULT_PARAMS` 提供。
 pub(crate) fn l1_params(meta: &Meta) -> (f64, f64) {
-    let base = meta
-        .params
-        .iter()
-        .find(|(k, _)| k == "l1_base")
-        .map(|(_, v)| *v)
-        .unwrap_or(0.55);
-    let margin = meta
-        .params
-        .iter()
-        .find(|(k, _)| k == "l1_margin_min")
-        .map(|(_, v)| *v)
-        .unwrap_or(0.15);
-    (base, margin)
+    (meta.param("l1_base"), meta.param("l1_margin_min"))
 }
 
 #[cfg(test)]
@@ -249,6 +210,31 @@ mod tests {
             (base - 0.85).abs() < 0.01,
             "l1_base 应滑动到 P50≈0.85, got {base}"
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn l1_adapt_clamp_comes_from_config() {
+        let root = tmp_root("adaptcfg");
+        ingest(
+            &root,
+            "连接超时",
+            vec!["timeout".into()],
+            "ERROR conn timeout delta",
+            vec!["/a.log".into()],
+            &stats(),
+            vec![],
+        )
+        .unwrap();
+        meta::set_param(&root, "l1_adapt_max", 0.80).unwrap();
+        for s in [0.7, 0.8, 0.9, 1.0] {
+            meta::push_l1_hist(&root, s);
+        }
+        let id = store::list_ids(&root).unwrap()[0].clone();
+        rate(&root, &id, true).unwrap();
+        let m = store::load_meta(&root).unwrap();
+        let (base, _) = l1_params(&m);
+        assert!((base - 0.80).abs() < 1e-9, "上限应来自配置: {base}");
         let _ = fs::remove_dir_all(&root);
     }
 

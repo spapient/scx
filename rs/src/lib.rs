@@ -19,10 +19,6 @@ pub mod memory;
 pub use compress::compress;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub(crate) const DEFAULT_RATIO: f64 = 0.35;
-pub(crate) const MIN_RATIO: f64 = 0.02;
-pub(crate) const MAX_CONTEXT: i64 = 4;
-pub(crate) const MAX_WINDOW: i64 = 8;
 
 /// 引擎配置。`ratio` 为可选内容预算占输入 token 估算的比例；入口会做边界规范化。
 pub struct Config {
@@ -37,12 +33,22 @@ pub struct Config {
     pub forces: Vec<String>,
 }
 
+impl Config {
+    pub const DEFAULT_RATIO: f64 = 0.35;
+    pub const MIN_RATIO: f64 = 0.02;
+    pub const DEFAULT_CONTEXT: i64 = 1;
+    pub const MAX_CONTEXT: i64 = 4;
+    pub const DEFAULT_WINDOW: i64 = 2;
+    pub const MIN_WINDOW: i64 = 1;
+    pub const MAX_WINDOW: i64 = 8;
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
-            ratio: 0.35,
-            context: 1,
-            window: 2,
+            ratio: Self::DEFAULT_RATIO,
+            context: Self::DEFAULT_CONTEXT,
+            window: Self::DEFAULT_WINDOW,
             elide: true,
             risk_gate: true,
             lineno: false,

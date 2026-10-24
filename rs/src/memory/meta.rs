@@ -3,9 +3,6 @@
 //! 布局见 store.rs 头注释。meta 是"库元信息"（schema/引擎版本/case 数/DF 快照/参数），
 //! 与 case 资产分离：损坏时整库仍可用，rebuild 可重建。
 
-// 阶段化开发过渡：df 快照为 P2（领域 IDF）预留，非 test 构建暂放宽 dead_code。
-#![cfg_attr(not(test), allow(dead_code))]
-
 use crate::memory::lock;
 use crate::memory::model::{ENG_VER, SCHEMA};
 use crate::memory::util::utc_now;
@@ -44,6 +41,70 @@ pub(crate) struct Meta {
     /// O5 L1 自适应：最近 top1_sim 滑动历史（上限 L1_HIST_CAP，逗号分隔存 [l1] 节）。
     pub l1_hist: Vec<f64>,
 }
+
+impl Meta {
+    /// 参数读取的唯一入口：库内值优先，缺省值来自同一张默认表。
+    pub(crate) fn param(&self, key: &str) -> f64 {
+        if let Some((_, value)) = self.params.iter().find(|(k, _)| k == key) {
+            return *value;
+        }
+        debug_assert!(
+            DEFAULT_PARAMS.iter().any(|(k, _)| *k == key),
+            "unknown config key: {key}"
+        );
+        default_param(key)
+    }
+}
+
+/// 默认参数查表；未知键返回 0.0（老库兼容），开发期由 `Meta::param` 的断言兜住。
+pub(crate) fn default_param(key: &str) -> f64 {
+    DEFAULT_PARAMS
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map_or(0.0, |(_, value)| *value)
+}
+
+/// 新库参数模板，也是所有缺省读取的唯一来源。
+pub(crate) const DEFAULT_PARAMS: &[(&str, f64)] = &[
+    ("bm25_k1", 1.2),
+    ("bm25_b", 0.75),
+    ("field_weight_error_code", 3.0),
+    ("field_weight_file_loc", 2.5),
+    ("field_weight_symbol", 2.0),
+    ("field_weight_num_fp", 2.0),
+    ("decay_tau_days", 90.0),
+    ("decay_tau_solved", 180.0),
+    ("decay_tau_regressed", 30.0),
+    ("mmr_lambda", 0.5),
+    ("mmr_enable", 0.0),
+    ("bucket_enable", 1.0),
+    ("bucket_allow_other", 1.0),
+    ("bucket_bypass_sim", 0.30),
+    ("prf_enable", 1.0),
+    ("confidence_high_sim", 0.99),
+    ("index_force", 0.0),
+    ("feedback_step", 0.1),
+    ("feedback_step_bad", 0.15),
+    ("word_w_limit", 0.5),
+    ("session_cache_minutes", 30.0),
+    ("l1_base", 0.55),
+    ("l1_margin_min", 0.15),
+    ("l1_adapt_min", 0.30),
+    ("l1_adapt_max", 0.90),
+    ("l1_adapt_min_history", 4.0),
+    ("quality_prior", 0.5),
+    ("gc_ttl_regressed", 180.0),
+    ("gc_ttl_stale", 365.0),
+    ("edge_enable", 1.0),
+    ("edge_weight", 1.0),
+    ("query_field_weight", 0.80),
+    ("query_field_min_sim", 0.07),
+    ("query_field_trigger_sim", 0.30),
+    ("sibling_coherence", 1.0),
+    ("sibling_min_sim", 0.30),
+    ("synonyms_enable", 1.0),
+    ("synonym_weight", 0.5),
+];
 
 pub(crate) const L1_HIST_CAP: usize = 64;
 
@@ -200,15 +261,20 @@ pub(crate) fn push_l1_hist(root: &str, sim: f64) {
     let _ = lock::atomic_write(&p, body.as_bytes());
 }
 
-/// 词级调权：good 词 +step / bad 词 −step（上下限 ±0.5，§3.9），重写 [word_w] 节。
+/// 词级调权：good 词 +step / bad 词 −step（默认上下限 ±0.5，§3.9），重写 [word_w] 节。
 pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
     let Ok(_g) = lock::acquire(root, "meta.lock") else {
         return;
     };
-    let step = if good { 0.1 } else { -0.15 };
     let Ok(mut meta) = load_meta(root) else {
         return;
     };
+    let step = if good {
+        meta.param("feedback_step")
+    } else {
+        -meta.param("feedback_step_bad")
+    };
+    let limit = meta.param("word_w_limit").max(0.0);
     for t in terms {
         if t.len() < 2 {
             continue;
@@ -219,7 +285,7 @@ pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
             .find(|(k, _)| k == t)
             .map(|(_, v)| *v)
             .unwrap_or(0.0);
-        let next = (cur + step).clamp(-0.5, 0.5);
+        let next = (cur + step).clamp(-limit, limit);
         if let Some(e) = meta.word_w.iter_mut().find(|(k, _)| k == t) {
             e.1 = next;
         } else {
@@ -263,7 +329,7 @@ pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
 }
 
 /// 写/更新 [params] 单个参数：节内有 key 原位替换，无则节内末尾插入，无节则文件尾建节。
-/// 供测试与调参共用（P4.3 edge_enable/edge_weight 等）。
+/// 参数写入的唯一入口；建库模板、L1 自适应与测试共用。
 pub(crate) fn set_param(root: &str, key: &str, val: f64) -> std::io::Result<()> {
     let _g = lock::acquire(root, "meta.lock")?;
     let p = Path::new(root).join("meta.toml");
@@ -305,10 +371,14 @@ pub(crate) fn set_param(root: &str, key: &str, val: f64) -> std::io::Result<()> 
 }
 
 fn meta_toml(case_count: usize) -> String {
-    format!(
-        "schema = {SCHEMA}\nembed_engine = \"{ENG_VER}\"\ncreated_at = \"{}\"\ncase_count = {case_count}\ngen = 0\n\n[params]\nbm25_k1 = 1.2\nbm25_b = 0.75\nfield_weight_error_code = 3.0\nfield_weight_file_loc = 2.5\nfield_weight_symbol = 2.0\nfield_weight_num_fp = 2.0\ndecay_tau_days = 90\ndecay_tau_solved = 180\ndecay_tau_regressed = 30\nmmr_lambda = 0.5\nmmr_enable = 0\nbucket_allow_other = 1\nbucket_bypass_sim = 0.30\nfeedback_step = 0.1\ncache_sim_threshold = 0.85\nl1_base = 0.55\nl1_margin_min = 0.15\nquality_prior = 0.5\ngc_ttl_regressed = 180\ngc_ttl_stale = 365\nedge_enable = 1\nedge_weight = 1.0\nquery_field_weight = 1.0\nquery_field_trigger_sim = 0.30\nsynonyms_enable = 1\nsynonym_weight = 0.5\n",
+    let mut body = format!(
+        "schema = {SCHEMA}\nembed_engine = \"{ENG_VER}\"\ncreated_at = \"{}\"\ncase_count = {case_count}\ngen = 0\n\n[params]\n",
         utc_now()
-    )
+    );
+    for (key, value) in DEFAULT_PARAMS {
+        body.push_str(&format!("{key} = {value}\n"));
+    }
+    body
 }
 
 #[cfg(test)]
@@ -342,8 +412,14 @@ mod tests {
         assert!(
             m.params
                 .iter()
-                .any(|(k, v)| k == "query_field_weight" && (*v - 1.0).abs() < 1e-9),
-            "新库默认必须启用 query-field 重排"
+                .any(|(k, v)| k == "query_field_weight" && (*v - 0.80).abs() < 1e-9),
+            "新库默认必须启用降权 query-field 重排"
+        );
+        assert!(
+            m.params
+                .iter()
+                .any(|(k, v)| k == "sibling_min_sim" && (*v - 0.30).abs() < 1e-9),
+            "新库默认弱词面锚点不得启用同族收紧"
         );
         assert!(
             m.params

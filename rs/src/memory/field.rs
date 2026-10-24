@@ -10,9 +10,6 @@
 //! - symbol：帧行内的方法/标识符词面
 //! - num_fp：数字折叠后的行指纹（norm_into 后含 `#` 的稳定串，跨日志去噪声）
 
-// 阶段化开发过渡：P1.3 落地抽取，CLI 接线在 P1.5，非 test 构建暂放宽 dead_code。
-#![cfg_attr(not(test), allow(dead_code))]
-
 use crate::classify::{is_err, is_frame, is_lineref};
 use crate::memory::store::Fields;
 use crate::norm::{norm_into, push_analysis_lower};

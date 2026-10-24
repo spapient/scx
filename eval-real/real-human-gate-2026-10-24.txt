@@ -1,0 +1,29 @@
+# command: scx --eval eval-real/real-baseline-arb.json --gate-human --mem-dir <rebuilt real-mem>
+# mem rebuilt from eval-real/seed-real.ps1; hash suffixes matched real-cases.csv
+eval: cases=40 layers=literal,paraphrase,semantic multi-rel=34 single-rel=6 (NDCG strength)
+layer literal: n=14 A r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.958 ci95=[0.930,0.981] | B r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.920 ci95=[0.851,0.973]
+layer paraphrase: n=13 A r@5=1.000 mrr=0.744 ci95=[0.577,0.885] ndcg@10=0.940 ci95=[0.901,0.971] | B r@5=1.000 mrr=0.744 ci95=[0.577,0.885] ndcg@10=0.862 ci95=[0.802,0.913]
+layer semantic: n=13 A r@10=1.000 mrr=0.962 ci95=[0.885,1.000] ndcg@10=0.903 ci95=[0.870,0.936] | B r@10=1.000 mrr=0.962 ci95=[0.885,1.000] ndcg@10=0.885 ci95=[0.848,0.924]
+l1: hits=19 total=33 rate=0.576
+gate: mode=human
+gate: total=40 need>=30 (target 30-50) PASS
+gate: layer literal n=14 need>=10 PASS
+gate: layer paraphrase n=13 need>=10 PASS
+gate: layer semantic n=13 need>=10 PASS
+gate: judge metadata nonliteral=26 (need real by+date) PASS
+gate: human judge metadata all=40 judges=fei+hao PASS
+gate: human controls weak=151>=10 negative=46>=10 layers=3>=2 PASS
+gate: layer literal ndcg@10 A=0.958 vs B=0.920 PASS
+gate: layer paraphrase ndcg@10 A=0.940 vs B=0.862 PASS
+gate: layer semantic ndcg@10 A=0.903 vs B=0.885 PASS
+gate: layer literal A r@5=1.000 vs B=1.000 PASS; A mrr=1.000 vs B=1.000 PASS
+gate: layer literal absolute A/B r@5=1.000/1.000>=0.20 PASS; mrr=1.000/1.000>=0.10 PASS
+gate: layer paraphrase A r@5=1.000 vs B=1.000 PASS; A mrr=0.744 vs B=0.744 PASS
+gate: layer paraphrase absolute A/B r@5=1.000/1.000>=0.20 PASS; mrr=0.744/0.744>=0.10 PASS
+gate: layer semantic A r@10=1.000 vs B=1.000 PASS; A mrr=0.962 vs B=0.962 PASS
+gate: layer semantic absolute A/B r@10=1.000/1.000>=0.20 PASS; mrr=0.962/0.962>=0.10 PASS
+gate: rel distribution 2=147 1=151 0=46
+gate: discrimination A!=B layers=0/3
+gate: warning A=B on all layers (no measurable advantage)
+gate: PASS
+# exit=0

@@ -1,9 +1,9 @@
-﻿# scx 记忆知识库（RAG）实施计划
+# scx 记忆知识库（RAG）实施计划
 
 版本：v1.9（可执行计划，基于设计稿 v0.2；v1.9 增补损坏自愈、同 case 并发与索引一致性修复）
 日期：2026-10-22
 作者：scx 项目组
-状态：P1/P3 工程完成；P2 工程完成但 M2 的独立标注门未通过；P4.1/P4.2/P4.3 工具完成；P4.4 安全/一致性/损坏自愈处置完成（见 §11、§18-§22）；**M4 v1 真实语料机械门 PASS（2026-10-23，40 组/14-13-13，fei+hao，exit 0）**，三层 Recall/MRR 持平，v1 本身无优势；**v2 判别基准 150 组已完成 fei/hao 双人人工审核（312/312），最终 gate PASS，但 v2 本身 MRR 无优势**（见 `docs/m4-v2-benchmark.md`）；**confirm5 预注册独立确认成立：30 起新事故/150 查询，hard n=69，ΔMRR=+0.0669，CI [0.0238, 0.1176]，p=0.0020，gate exit 0**（见 `docs/m4-confirm5-report.md`）；P4.4 ANN 与 P4.5 embedding 可选未启动（按触发条件）
+状态：P1/P3 工程完成；P2 工程完成但 M2 的独立标注门未通过；P4.1/P4.2/P4.3 工具完成；P4.4 安全/一致性/损坏自愈处置完成（见 §11、§18-§22）；**M4 v1 真实语料机械门 PASS（2026-10-23，40 组/14-13-13，fei+hao，exit 0）**，三层 Recall/MRR 持平，v1 本身无优势；**v2 判别基准 150 组的 312 条 AI 预填建议已完成 fei/hao 人工审核并全部采纳（312/312），最终 gate PASS，但 v2 本身 MRR 无优势**（见 `docs/m4-v2-benchmark.md`）；**confirm5 预注册独立确认成立：30 起新事故/150 查询，hard n=69，ΔMRR=+0.0669，CI [0.0238, 0.1176]，p=0.0020，gate exit 0**（见 `docs/m4-confirm5-report.md`）；confirm5 policy 控制集因 provenance 规则 `--gate-human` FAIL，人工弱相关/负例闭环仍未建立；P4.4 ANN 与 P4.5 embedding 可选未启动（按触发条件）
 
 > 本文档回答"怎么做、先做什么、怎么做完算完"；设计依据见 `docs/memory-rag-design.md`（v0.2，O1-O8）。
 > 任何阶段门不过，不进下一阶段。每阶段一个 git 提交点，可独立回滚。

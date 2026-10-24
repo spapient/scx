@@ -1,4 +1,16 @@
-﻿# scx 构建说明（跨平台自举：Windows / macOS / Linux）
+# scx
+
+[![CI](https://github.com/spapient/scx/actions/workflows/ci.yml/badge.svg)](https://github.com/spapient/scx/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust 1.82+](https://img.shields.io/badge/rust-1.82%2B-orange.svg)](rs/Cargo.toml)
+
+**本地、确定性、查询感知的上下文压缩器。** 对长日志、命令输出、diff 与错误堆栈按当前问题逐行保留证据，丢弃低价值内容；证据行原文逐字保留，零依赖、离线运行。
+
+> Local, deterministic, query-aware context compression for agent logs and command output. Evidence lines stay verbatim; noise is elided. Offline, zero dependencies.
+
+[快速体验](#快速体验记忆库端到端演示) · [构建](#手动构建等价于自举用于排查) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
+
+## 构建说明（跨平台自举：Windows / macOS / Linux）
 
 ## 语义要点（v0.4.1）
 
@@ -13,7 +25,7 @@
 - 分析缓冲会剥离 ANSI 转义并把裸 `\r` 视为空白，避免彩色日志/进度条污染词面；筛选输出仍写原始行。
 - 单次输入上限 64 MiB（CLI 层，含多文件合计）；超出时明确报错，需先分段，避免一次性读入和筛选向量挤爆内存。
 - 统计行字段：`kept/total`、`chars`、`dup`、`seeds/evidence`（恒等，可断言）、`risk`、`guarded`、`regions`、`window`、`terms`、`forced`、`mode`。
-- **记忆知识库（RAG，P1–P4.3 增量 + P4.4 评审处置 + P4.4+ --fix 本地直答 / --stats 库盘点 / stored 报告与低信号守卫 / --eval-verbose 候选诊断 / 原始证据 schema / 智能标注器 / PRF 严格补漏 / 盲测模式，默认关）**：`--store 1` 沉淀证据块（≤1 MiB/case，可配 `--fix "修复结论"`；**证据行区间+原始证据自动入库**——case 四要素 query+证据区间+原始证据+修复结论；stderr 报告 `stored: case=<id> added=yes|dedup`，query 零命中时警告低信号）→ `--recall K` 旁路召回（mem: 段不进正文；case 带 fix 时**主流程即无条件输出 `fix:` 行**，`--recall-detail` 再加 `summary:` 错误摘要与 `evidence: <行号> <原文>` 原始证据回放，L1 本地直答；`--recall-only` 只读查看、不污染库状态）→ `--rate good|bad <case-id>` 反馈闭环（代际失效：改动立即影响同 query 召回排序）；`--stats` 库盘点（case 数/桶分布/状态分布/fix 覆盖率/质量均值/磁盘 KiB）；**`--annotate` 智能标注器**：从库中 case 生成三层标注（literal/paraphrase/semantic），每条经召回自检验证并带证据链，落盘 baseline-auto.json 直接喂 `--eval`——生成 M4 回归标注（不替代独立人工质量证据）；**`--annotate-raw` 盲测模式**：不过自检输出全变体集（含自检会丢弃的对照），带盲测摘要供人工盲视裁决 rel，改后 `--eval` = 独立证据；召回 = 自研统计向量（词面匹配 + 结构化字段加权 + 时间衰减 + MMR + 词级调权 + 场景桶 + 实体边一跳 + **PRF 严格补漏：首轮顺序权威、扩展尾部追加**，tf 恒 1 去重词表口径），非 embedding；`--eval <baseline.json>` 冻结标注集出 A/B 对拍表 + `l1:` 直答命中率，`--eval-verbose` 追加逐 case A/B 候选诊断（标注校准用），`--l1-hist` 出运行期命中分布；`--rebuild/--gc/--delete` 维护（id 白名单防路径穿越）；全部零依赖、离线、确定性。设计 `docs/memory-rag-design.md`，计划 `docs/rag-implementation-plan.md`（计划主体；实施记录见 `docs/rag-implementation-log.md`），标注采集 `docs/eval-baseline-template.md`。
+- **记忆知识库（RAG，P1–P4.3 增量 + P4.4 评审处置 + P4.4+ --fix 本地直答 / --stats 库盘点 / stored 报告与低信号守卫 / --eval-verbose 候选诊断 / 原始证据 schema / 智能标注器 / PRF 严格补漏 / 盲测模式 / `--gate-human` 人工控制门，默认关）**：`--store 1` 沉淀证据块（≤1 MiB/case，可配 `--fix "修复结论"`；**证据行区间+原始证据自动入库**——case 四要素 query+证据区间+原始证据+修复结论；stderr 报告 `stored: case=<id> added=yes|dedup`，query 零命中时警告低信号）→ `--recall K` 旁路召回（mem: 段不进正文；case 带 fix 时**主流程即无条件输出 `fix:` 行**，`--recall-detail` 再加 `summary:` 错误摘要与 `evidence: <行号> <原文>` 原始证据回放，L1 本地直答；`--recall-only` 只读查看、不污染库状态）→ `--rate good|bad <case-id>` 反馈闭环（代际失效：改动立即影响同 query 召回排序）；`--stats` 库盘点（case 数/桶分布/状态分布/fix 覆盖率/质量均值/磁盘 KiB）；**`--annotate` 智能标注器**：从库中 case 生成三层标注（literal/paraphrase/semantic），每条经召回自检验证并带证据链，落盘 baseline-auto.json 直接喂 `--eval`——生成 M4 回归标注（不替代独立人工质量证据）；**`--annotate-raw` 盲测模式**：不过自检输出全变体集（含自检会丢弃的对照），带盲测摘要供人工盲视裁决 rel，改后 `--eval` = 独立证据；召回 = 自研统计向量（词面匹配 + 结构化字段加权 + 时间衰减 + MMR + 词级调权 + 场景桶 + 实体边一跳 + **PRF 严格补漏：首轮顺序权威、扩展尾部追加**，tf 恒 1 去重词表口径），非 embedding；`--eval <baseline.json>` 冻结标注集出 A/B 对拍表 + `l1:` 直答命中率，`--eval-verbose` 追加逐 case A/B 候选诊断（标注校准用），`--l1-hist` 出运行期命中分布；`--rebuild/--gc/--delete` 维护（id 白名单防路径穿越）；全部零依赖、离线、确定性。设计 `docs/memory-rag-design.md`，计划 `docs/rag-implementation-plan.md`（计划主体；实施记录见 `docs/rag-implementation-log.md`），标注采集 `docs/eval-baseline-template.md`。
 
 ## 削减率的物理极限（98.99% 目标核算，2026-10-14）
 
@@ -31,7 +43,7 @@
 
 - **库 + CLI 分离**：筛选引擎是纯函数库 `src/lib.rs` 的 `scx::compress(&text, &query, &Config) -> Outcome`（零文件、环境与进程 I/O，无随机源）；`src/main.rs` 仅是外壳（参数、输入、统计与 JSON 格式化）。
 - **模块划分**：`src/terms.rs`（词面/切词/估算）、`src/classify.rs`（错误/标记/结构分类）、`src/norm.rs`（归一化/ANSI 剥离）是独立纯函数层（`pub(crate)`），可供记忆库等外部复用；`src/memory/` 为记忆知识库（store/recall/feedback/eval/edge/stats 等 20+ 文件）。历史门禁为单文件 <500 行；当前 `cli_args.rs`、`eval.rs`、`recall.rs`、`annotate.rs` 等已因后续功能增长超过，拆分列为待办（CI 未强制该门禁）。
-- **复用**：任何程序或脚本可直接 `use scx::compress`；`cargo test` 当前含 121 个库测试 + 8 个 CLI 单元测试 + 5 个 CLI 集成测试 + 1 个 golden 差分门（29 例冻结基线、87 个 expected 文件），覆盖种子不变量、空结果回退、`--force` 重复行、配置边界、CJK 词面、ANSI/CR 分析、diff 正文识别、输入上限边界、CRLF 与确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放/库盘点/并发读写/`--gate` 机械证据门与字节级回归。
+- **复用**：任何程序或脚本可直接 `use scx::compress`；`cargo test` 当前含 140 个库测试 + 9 个 CLI 单元测试 + 5 个 CLI 集成测试 + 2 个 golden 测试（1 个重冻用例 ignored；29 例冻结基线、87 个 expected 文件），覆盖种子不变量、空结果回退、`--force` 重复行、配置边界、CJK 词面、ANSI/CR 分析、diff 正文识别、输入上限边界、CRLF 与确定性、行号前缀、记忆往返/去重/衰减/桶过滤/坏段自愈/评估重放/库盘点/并发读写/`--gate` 机械资格门 + `--gate-human` 人工控制门 + 逐候选 `judge_items` 溯源、同分确定性/同族收紧/rel 键去重、UTF-8 帧扫描越界与字节级回归。
 - **golden 差分门**：`tests/golden.rs` 将 29 个代表性用例的 stdout/stderr/退出码与冻结基线（`tests/golden/expected/`）逐字节对比；有意变更语义时重冻基线：`cargo test --test golden update_baselines -- --ignored --nocapture`，并人工审查基线明细。CI 当前执行格式、clippy、单测、golden 和 release 构建。
 - **零依赖性能基准**：`examples/bench.rs`（50k 行约 2.5MB 全流程中位耗时，`std::time::Instant`，5 次采样取中位），防无声性能退化。运行：`cargo run --release --example bench --locked --target-dir "$TEMP/scx-cargo-target"`。
 
@@ -56,11 +68,17 @@ scx --stats --mem-dir D:\scx-mem
 
 ## 版本变动
 
-- **2026-10-23 confirm5 独立质量确认**：在 30 起未参与调参的公开事故、150 条查询（literal 60 / paraphrase 60 / semantic 30）上完成预注册确认。主判定层 `tier:hard` 的实际 n=69，A MRR@10 0.3425 vs B 0.2757，**Δ=+0.0669，paired bootstrap 95% CI [0.0238, 0.1176]，permutation p=0.0020**，`--gate` exit 0，literal 层 A=B=1.000；目标排序质量优势成立。按事故聚类的保守敏感性分析仍为 **CI [0.0273, 0.1138]，p=0.0038**。完整语料、哈希、复现命令与限制见 `docs/m4-confirm5-report.md`。该结论使用机械 target 标签，证明的是目标排序泛化，不外推为人工弱相关/负例已闭环，也不外推为对 embedding/任意 RAG 系统的优势。
+- **2026-10-24 人工控制门 + 逐候选溯源**：`--eval --gate-human` 把“全量 by+date、≥10 条弱相关、≥10 条负例、≥2 层含两类控制、每层 NDCG A≥B、非 policy 物化 provenance、`rel` 每个键都有 `judge_items` 真人条目且 `judge.method=per-item-*`”变成可执行门。`real-baseline-arb.json`（40 组，fei+hao）在旧门 PASS（`rel 2=147 / 1=151 / 0=46`，NDCG **0.958/0.941/0.905 vs 0.920/0.862/0.885**，Recall/MRR A=B），但新门 **FAIL（0/344）**；`v2-baseline-arb.json`（150 组，312 弱/77 负）同理 **FAIL（0/821）**——两者只有案例级签名或未入库的裁决日志。confirm5 机械 target 与 `confirm5-baseline-human.json`（115 弱/665 负，policy 物化）均 FAIL；后者可报替代指标（paraphrase r@5 0.633 vs 0.567、hard ΔMRR +0.0791，p=0.0001）。confirm5 已冻结 40/150 逐候选盲审包（384 项）。新增 `--gate-items`（允许 AI 裁决人）：codex 逐候选 384/384、rel 176/38/170、NDCG 三层 A≥B，`--gate-items` **PASS**，人工 hao 的 384/384 标签 provenance 通过，但 `--gate-human` 仍 **FAIL**：paraphrase/semantic NDCG A 0.779/0.819 vs B 0.785/0.825。
+
+- **2026-10-24 评测 B 基线热路径**：`PlainScorer` 每条 query 预计算 IDF，候选只保留 `(index, score)`、top-k 后才克隆 case id；confirm5 `--eval` 同机 10 次中位 **3.74 s**（改动前 3 次中位 3.96 s，样本少且波动大，不作强结论），150 条目标排名 `target_rank_diffs=0`，机械门 `gate: PASS`。
+
+- **2026-10-24 配置单一来源 + 同族收紧 + 确定性 + 复验**：CLI 默认值统一取 `Config`，`Meta::param` / `DEFAULT_PARAMS` 成为记忆库参数唯一来源；`--gate` 增加 A/B 绝对地板。新增 `sibling_coherence=1`（top1 同事故整篇词表 Jaccard≥0.35 收紧到其后，分数≥top1 的 40%）与 `query_field_min_sim=0.05`（低词面候选不得被 query-field 重排救活）；`order_by_score` 同分按 case id 升序，`rel_of` 精确→tail→tail8→排序键，修复跨进程 NDCG 漂移与 `expected`/`rel` 重复键。实测：confirm5 机械 paraphrase r@5 **0.567→0.633**、MRR 0.244→0.258、目标排名 **6 改善/0 退化**、hard ΔMRR **+0.0669→+0.0791**（CI 0.0366–0.1293，p=0.0001）；v2 hard ΔMRR **+0.010→+0.077**；50k 压缩中位 **17 ms**，10k 召回 p50 **273–277 µs** / p95 **354–357 µs**；同一 confirm5 输入 3 次运行 layer 行 md5 一致；`cargo test` **156/156 active**（140 库 + 9 CLI + 5 集成 + 2 golden，1 ignored）、fmt/clippy/release 全绿。
+
+- **2026-10-23 confirm5 独立目标排序确认**：在 30 起未参与调参的公开事故、150 条查询（literal 60 / paraphrase 60 / semantic 30）上完成预注册确认。主判定层 `tier:hard` 的实际 n=69，A MRR@10 0.3425 vs B 0.2757，**Δ=+0.0669，paired bootstrap 95% CI [0.0238, 0.1176]，permutation p=0.0020**，机械门 `--gate` exit 0，literal 层 A=B=1.000；目标排序质量优势成立。按事故聚类的保守敏感性分析仍为 **CI [0.0273, 0.1138]，p=0.0038**。完整语料、哈希、复现命令与限制见 `docs/m4-confirm5-report.md`。该结论使用机械 target 标签，证明的是目标排序泛化；同输入 `--gate-human` 为 FAIL（全 2、机械 judge），不外推为人工弱相关/负例闭环。同语料 policy 控制集可报替代指标，但 `judge.method=policy-materialized-v1` 同样使 `--gate-human` FAIL；不能写“人工闭环”。也不外推为对 embedding/任意 RAG 系统的优势。
 
 - **2026-10-23 召回桶/零分/同义词修复**：`bucket::lower` 现在真正做 Unicode 小写（此前 `Jdbc.java` 匹配不到 `jdbc`）；`network` 桶降到 `disk/build/runtime` 之后，`disk/storage ... timeout` 不再被通用 `timeout` 吞掉；A/B 都过滤零词面/字段/实体支持度候选，不再靠库顺序零分“碰巧命中”；A 管线增加高精度领域同义词扩展（`replication→replica`、`delay→lag`、`memory→heap` 等），B 保持纯词面。104 条截断诊断：literal 1.000/1.000，paraphrase **A 1.000 vs B 0.949**，semantic 0.933/0.933；10 条合成多相关诊断：A r@10 **0.867 vs B 0.700**。均为诊断集，不是独立人工证据；原始 40 组 gate 仍为 A=B=1.000、全 rel=2。
 
-- **2026-10-23 M4 机械门实测**：`eval-real` 40 组（literal 14 / paraphrase 13 / semantic 13），非 literal 26 条 `judge=fei`，`--eval --gate` **PASS / exit 0**；但 40/40 rel=2、三层 A=B（判别层 0/3），只能写“A 不劣于 B”，不能单独写“A 优于 B”。后续 confirm5 已补独立真实事故的目标排序确认；该 40 组本身仍不覆盖弱相关/负例。
+- **2026-10-23 M4 机械门实测**：`eval-real` 40 组（literal 14 / paraphrase 13 / semantic 13），非 literal 26 条 `judge=fei`，机械门 **PASS / exit 0**；原始 40/40 rel=2 不能证明弱相关/负例。2026-10-24 `baseline-final.json`（11 弱/64 负，逐条双人）、`real-baseline-arb.json`（151/46，弱相关为规则物化）、`v2-baseline-arb.json`（312/77，AI 预填后人工采纳）在旧门 PASS；逐候选门禁收紧后，三者因 baseline 未带 `judge_items` 均为 FAIL。`confirm5-baseline-human.json`（115/665，policy 物化）明确 FAIL，不再冒充人工闭环。
 
 - **0.4.1 + P4.4+ 优化⑭（--gate 机械证据门，2026-10-22）**：`--eval --gate` 把 M4 证据门从口头约定变成可执行门禁——总组数 ≥30、literal/paraphrase/semantic 各 ≥10、非 literal 必须有 `--judge` 写入的真实 by+date（`<你的名字>`/anonymous/TODO 占位符拒绝）、每层主指标（r@5；semantic r@10）与 MRR 均不低于 B；任一失败打印 `gate: FAIL` 并 exit 2。自动标注集（无 judge 元数据）不能过门；demo 23 组实测被拒（16/5/2）；全 2 标签与三层 A=B 输出 warning（不冒充优势证据）。门禁 111 库 + 8 CLI + 5 集成 + golden 29 例全绿，fmt/clippy 0，release ✓。
 
@@ -107,17 +125,26 @@ macOS / Linux：
 sh build.sh          # cargo build --release --locked 并安装到 bin/scx（构建缓存放库外）
 ```
 
+开发和验证同样把构建缓存放到库外：`CARGO_TARGET_DIR=$TMPDIR/scx-cargo-target cargo test --locked`。不要在技能目录内直接 `cargo build`/`cargo test` 生成 `rs/target`——技能根目录文件数超限会让 Codex 技能扫描整体跳过 scx（实测 27,976 个构建产物即触发）。
+
 ## 事实与验证记录
 
 - 二进制命名：Windows 为 `bin/scx.exe`；macOS / Linux 为 `bin/scx`（均由本机自举生成，来源同一份零依赖源码）。
 - 档位对比（2026-10-14，同语料同查询同 ratio 0.35，读数为当时快照）：默认档 94.9% / 69.7% / 89.7%，针尖档 95.9% / 82.0% / 93.9%，金标全保；同类参照同尺为 98.2% / 82.9% / 91.1%（针尖档在 readme 上反超 2.8 点，commit 差 0.9 点）。
-- 当前回归（0.4.1）：`cargo test` 33/33（含 golden 门 1 个 + 1 个 ignored 重冻）；`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 与 `cargo build --release --locked` 通过；golden 差分门对 0.4.0→0.4.1 拆分前后逐字节一致；50k 行基准中位 44 ms（0.3.8 为 61.6 ms）。CI 覆盖 Linux/macOS/Windows。
+- 当前回归（0.4.1）：`cargo test` 156/156 active 全绿（140 库 + 9 CLI 单元 + 5 集成 + 2 golden；1 个重冻用例 ignored）；`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 与 `cargo build --release --locked` 通过；golden 差分门对 0.4.0→0.4.1 拆分前后逐字节一致；50k 行基准见下方性能记录。CI 覆盖 Linux/macOS/Windows。
 - 历史差分等价（0.3.9）：40 用例对 v0.3.9 参照逐字节一致；CJK 词面变更已经逐行审查并重冻参照（v037→v039）；当时 `cargo test` 10/10。
 - 噪声转储与守卫（0.3.7）：针尖档 1,908 行→6 行（行削减 99.69%，字符 85,024→342 即 99.60%），默认档→20 行（98.9%）；4 条查询种子与“Root cause:”标记、真 ERROR 全保；Mac arm64 与 Alpine musl 实机复验通过且与基线期望逐字节一致。
 - 工程化基准（0.3.8）：50k 行（2.5MB）全流程中位 95.1 → 61.6 ms；输出与 0.3.7 逐字节一致（差分门 40/40、噪声档 A/B、三平台期望文件）；单测 9/9。
 - CJK 词面复验（0.3.9）：单测 10/10；属性门 72/72；diff 语料输出在三平台逐字节同哈希（e136263a…f2920c）；噪声档与 0.3.8 逐字节全同；差异逐行审查记录见版本史。
 - 跨平台验证（E1）：同一源码 `cargo check --release` 通过 `aarch64-apple-darwin`、`x86_64-apple-darwin`、`x86_64-unknown-linux-gnu` 三个目标；无平台分支代码。
 - 真 BPE token 计量未内置（token 估算按 1 token 约 4 字符 / 1 中文约 0.6 token，属估算口径）。
+
+## 安全与贡献
+
+- **默认离线**：筛选与记忆库在本机运行，不发送网络请求；日志与记忆库内容由使用者自行保管。
+- **漏洞报告**：请按 [SECURITY.md](SECURITY.md) 使用 GitHub 私密漏洞报告，不要先开公开 issue。
+- **代码评审**：`main` 受保护，外部贡献需通过 PR、CI 与维护者评审；具体流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- **敏感数据**：`--store` 会对已知的密码/token/Authorization 形式做尽力脱敏，但这不是通用 DLP；分享日志或记忆库前仍须人工复核。
 
 ## 许可证
 

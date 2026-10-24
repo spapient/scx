@@ -1,16 +1,23 @@
 //! CLI 参数解析：Opts 结构、USAGE、option 扫描、帮助/版本短路（帮助打印在 main）。
 //! 只做解析与校验，不含 I/O 与引擎逻辑。
 
-pub(crate) const USAGE: &str = "usage: scx --query \"...\" [--ratio 0.35] [--window 2] [--context 1] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]";
+use scx::Config;
+use std::collections::HashSet;
+
+/// 帮助文本中的默认值直接取自引擎配置，避免 CLI/文档/引擎三处漂移。
+pub(crate) fn usage() -> String {
+    format!(
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]",
+        Config::DEFAULT_RATIO,
+        Config::DEFAULT_WINDOW,
+        Config::DEFAULT_CONTEXT
+    )
+}
 
 pub(crate) struct Opts {
     pub query: String,
-    pub ratio: f64,
-    pub context: i64,
-    pub window: i64,
-    pub elide: bool,
-    pub risk_gate: bool,
-    pub lineno: bool,
+    /// 压缩引擎配置的唯一来源；CLI 默认值来自 `Config::default()`，不再重复硬编码。
+    pub config: Config,
     pub json: bool,
     pub stat: bool,
     pub no_stats: bool,
@@ -38,6 +45,10 @@ pub(crate) struct Opts {
     pub eval_verbose: bool,
     /// P4.4+ 优化⑭：--gate 机械校验 M4 证据门（须配 --eval）。
     pub eval_gate: bool,
+    /// 人工弱相关/负例闭环门：在机械门之上要求全量人工元数据、控制标签与 NDCG。
+    pub eval_gate_human: bool,
+    /// 逐候选裁决门：允许 AI/非人类裁决人，但仍要求每条候选独立记录。
+    pub eval_gate_items: bool,
     pub l1_hist: bool,
     /// P4.4+ 优化：库盘点（--stats，豁免 --query）。
     pub stats: bool,
@@ -63,7 +74,6 @@ pub(crate) struct Opts {
     /// store 前若库总量（cases+meta+index）超过 N 则拒绝写入（提示 --gc / --delete）。
     pub max_bytes: Option<u64>,
     pub mem_dir: String,
-    pub forces: Vec<String>,
     pub files: Vec<String>,
 }
 
@@ -117,41 +127,35 @@ fn parse_bool01(value: &str, name: &str) -> Result<bool, String> {
     }
 }
 
+fn once<'a>(seen: &mut HashSet<&'a str>, name: &'a str) -> Result<(), String> {
+    if seen.insert(name) {
+        Ok(())
+    } else {
+        Err(format!("{name} specified more than once"))
+    }
+}
+
 fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut query: Option<String> = None;
-    let mut query_seen = false;
-    let mut ratio = 0.35;
-    let mut ratio_seen = false;
-    let mut context = 1;
-    let mut context_seen = false;
-    let mut window = 2;
-    let mut window_seen = false;
-    let mut elide = true;
-    let mut elide_seen = false;
-    let mut risk_gate = true;
-    let mut risk_gate_seen = false;
-    let mut lineno = false;
-    let mut lineno_seen = false;
+    let mut config = Config::default();
     let mut json = false;
     let mut stat = false;
     let mut no_stats = false;
     let mut store = false;
-    let mut store_seen = false;
     let mut fix = String::new();
-    let mut fix_seen = false;
     let mut fix_file: Option<String> = None;
     let mut recall = 0usize;
-    let mut recall_seen = false;
     let mut recall_only = false;
     let mut recall_detail = false;
     let mut rate: Option<(bool, String)> = None;
-    let mut rate_seen = false;
     let mut rebuild = false;
     let mut gc = false;
     let mut delete: Option<String> = None;
     let mut eval: Option<String> = None;
     let mut eval_verbose = false;
     let mut eval_gate = false;
+    let mut eval_gate_human = false;
+    let mut eval_gate_items = false;
     let mut l1_hist = false;
     let mut stats = false;
     let mut annotate = false;
@@ -163,9 +167,8 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut judge_by: Option<String> = None;
     let mut max_bytes: Option<u64> = None;
     let mut mem_dir = default_mem_dir();
-    let mut mem_dir_seen = false;
-    let mut forces = Vec::new();
     let mut files = Vec::new();
+    let mut seen: HashSet<&str> = HashSet::new();
 
     let mut i = 0usize;
     while i < args.len() {
@@ -180,98 +183,74 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         };
         match name {
             "--query" => {
-                if query_seen {
-                    return Err("--query specified more than once".to_string());
-                }
-                query_seen = true;
+                once(&mut seen, name)?;
                 query = Some(option_value(&args, &mut i, name, inline)?);
             }
             "--ratio" => {
-                if ratio_seen {
-                    return Err("--ratio specified more than once".to_string());
-                }
-                ratio_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 let parsed = v
                     .parse::<f64>()
                     .map_err(|_| format!("--ratio expects a number, got {:?}", v))?;
-                if !parsed.is_finite() || !(0.02..=1.0).contains(&parsed) {
-                    return Err("--ratio must be a finite number in 0.02..=1.0".to_string());
+                if !parsed.is_finite() || !(Config::MIN_RATIO..=1.0).contains(&parsed) {
+                    return Err(format!(
+                        "--ratio must be a finite number in {}..=1.0",
+                        Config::MIN_RATIO
+                    ));
                 }
-                ratio = parsed;
+                config.ratio = parsed;
             }
             "--context" => {
-                if context_seen {
-                    return Err("--context specified more than once".to_string());
-                }
-                context_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 let parsed = v
                     .parse::<i64>()
                     .map_err(|_| format!("--context expects an integer, got {:?}", v))?;
-                if !(0..=4).contains(&parsed) {
-                    return Err("--context must be in 0..=4".to_string());
+                if !(0..=Config::MAX_CONTEXT).contains(&parsed) {
+                    return Err(format!("--context must be in 0..={}", Config::MAX_CONTEXT));
                 }
-                context = parsed;
+                config.context = parsed;
             }
             "--window" => {
-                if window_seen {
-                    return Err("--window specified more than once".to_string());
-                }
-                window_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 let parsed = v
                     .parse::<i64>()
                     .map_err(|_| format!("--window expects an integer, got {:?}", v))?;
-                if !(0..=8).contains(&parsed) {
-                    return Err("--window must be in 0..=8".to_string());
+                if !(0..=Config::MAX_WINDOW).contains(&parsed) {
+                    return Err(format!("--window must be in 0..={}", Config::MAX_WINDOW));
                 }
-                window = if parsed == 0 { 1 } else { parsed };
+                config.window = parsed.max(Config::MIN_WINDOW);
             }
             "--elide" => {
-                if elide_seen {
-                    return Err("--elide specified more than once".to_string());
-                }
-                elide_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
-                elide = parse_bool01(&v, "--elide")?;
+                config.elide = parse_bool01(&v, "--elide")?;
             }
             "--risk-gate" => {
-                if risk_gate_seen {
-                    return Err("--risk-gate specified more than once".to_string());
-                }
-                risk_gate_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
-                risk_gate = parse_bool01(&v, "--risk-gate")?;
+                config.risk_gate = parse_bool01(&v, "--risk-gate")?;
             }
             "--lineno" => {
-                if lineno_seen {
-                    return Err("--lineno specified more than once".to_string());
-                }
-                lineno_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
-                lineno = parse_bool01(&v, "--lineno")?;
+                config.lineno = parse_bool01(&v, "--lineno")?;
             }
             "--force" => {
                 let v = option_value(&args, &mut i, name, inline)?;
                 if v.split('|').all(|p| p.trim().is_empty()) {
                     return Err("--force requires a non-empty pattern".to_string());
                 }
-                forces.push(v);
+                config.forces.push(v);
             }
             "--store" => {
-                if store_seen {
-                    return Err("--store specified more than once".to_string());
-                }
-                store_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 store = parse_bool01(&v, "--store")?;
             }
             "--fix" => {
-                if fix_seen {
-                    return Err("--fix specified more than once".to_string());
-                }
-                fix_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 if v.is_empty() {
                     return Err("--fix requires non-empty text".to_string());
@@ -280,9 +259,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
             }
             // P4.4+ 优化⑩：--fix-file <path>——多行修复结论从文件读入。
             "--fix-file" => {
-                if fix_file.is_some() {
-                    return Err("--fix-file specified more than once".to_string());
-                }
+                once(&mut seen, name)?;
                 let p = option_value(&args, &mut i, name, inline)?;
                 if p.is_empty() {
                     return Err("--fix-file requires a path".to_string());
@@ -290,10 +267,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 fix_file = Some(p);
             }
             "--recall" => {
-                if recall_seen {
-                    return Err("--recall specified more than once".to_string());
-                }
-                recall_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 let parsed = v
                     .parse::<usize>()
@@ -316,9 +290,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 recall_detail = true;
             }
             "--eval" => {
-                if eval.is_some() {
-                    return Err("--eval specified more than once".to_string());
-                }
+                once(&mut seen, name)?;
                 let p = option_value(&args, &mut i, name, inline)?;
                 if p.is_empty() {
                     return Err("--eval requires a baseline.json path".to_string());
@@ -340,6 +312,18 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                     return Err("--gate does not take a value".to_string());
                 }
                 eval_gate = true;
+            }
+            "--gate-human" => {
+                if inline.is_some() {
+                    return Err("--gate-human does not take a value".to_string());
+                }
+                eval_gate_human = true;
+            }
+            "--gate-items" => {
+                if inline.is_some() {
+                    return Err("--gate-items does not take a value".to_string());
+                }
+                eval_gate_items = true;
             }
             "--l1-hist" => {
                 if inline.is_some() {
@@ -367,9 +351,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 annotate_raw = true;
             }
             "--annotate-out" => {
-                if annotate_out.is_some() {
-                    return Err("--annotate-out specified more than once".to_string());
-                }
+                once(&mut seen, name)?;
                 let p = option_value(&args, &mut i, name, inline)?;
                 if p.is_empty() {
                     return Err("--annotate-out requires a path".to_string());
@@ -377,12 +359,14 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 annotate_out = Some(p);
             }
             "--seed" => {
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 seed = v
                     .parse::<u64>()
                     .map_err(|_| format!("--seed expects a non-negative integer, got {:?}", v))?;
             }
             "--annotate-max" => {
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 annotate_max = v
                     .parse::<usize>()
@@ -390,9 +374,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
             }
             // P4.4+ 优化⑩：盲测裁决（--judge <baseline.json>，交互式 stdin 录入）。
             "--judge" => {
-                if judge.is_some() {
-                    return Err("--judge specified more than once".to_string());
-                }
+                once(&mut seen, name)?;
                 let p = option_value(&args, &mut i, name, inline)?;
                 if p.is_empty() {
                     return Err("--judge requires a baseline path".to_string());
@@ -400,16 +382,12 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 judge = Some(p);
             }
             "--judge-by" => {
-                if judge_by.is_some() {
-                    return Err("--judge-by specified more than once".to_string());
-                }
+                once(&mut seen, name)?;
                 judge_by = Some(option_value(&args, &mut i, name, inline)?);
             }
             // P4.4+ 优化⑫（P1-4）：--max-bytes 总容量软配额（store 前检查）。
             "--max-bytes" => {
-                if max_bytes.is_some() {
-                    return Err("--max-bytes specified more than once".to_string());
-                }
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 let parsed = v
                     .parse::<u64>()
@@ -432,9 +410,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 gc = true;
             }
             "--delete" => {
-                if delete.is_some() {
-                    return Err("--delete specified more than once".to_string());
-                }
+                once(&mut seen, name)?;
                 let id = option_value(&args, &mut i, name, inline)?;
                 if id.is_empty() {
                     return Err("--delete requires a case-id".to_string());
@@ -442,10 +418,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 delete = Some(id);
             }
             "--rate" => {
-                if rate_seen {
-                    return Err("--rate specified more than once".to_string());
-                }
-                rate_seen = true;
+                once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
                 let good = match v.as_str() {
                     "good" => true,
@@ -459,10 +432,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 rate = Some((good, id));
             }
             "--mem-dir" => {
-                if mem_dir_seen {
-                    return Err("--mem-dir specified more than once".to_string());
-                }
-                mem_dir_seen = true;
+                once(&mut seen, name)?;
                 mem_dir = option_value(&args, &mut i, name, inline)?;
             }
             "--json" => {
@@ -507,7 +477,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         && !annotate_raw
         && judge.is_none()
         && query.is_empty()
-        && forces.is_empty()
+        && config.forces.is_empty()
     {
         return Err("missing --query (or provide at least one --force pattern)".to_string());
     }
@@ -522,32 +492,34 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     if annotate && annotate_raw {
         return Err("--annotate and --annotate-raw are mutually exclusive".to_string());
     }
-    if eval_gate && eval.is_none() {
-        return Err("--gate requires --eval <baseline.json>".to_string());
+    let gate_count = [eval_gate, eval_gate_human, eval_gate_items]
+        .iter()
+        .filter(|v| **v)
+        .count();
+    if gate_count > 0 && eval.is_none() {
+        return Err("--gate/--gate-human/--gate-items requires --eval <baseline.json>".to_string());
+    }
+    if gate_count > 1 {
+        return Err("--gate, --gate-human and --gate-items are mutually exclusive".to_string());
     }
     if recall_only && query.is_empty() {
         return Err("--recall-only requires --query".to_string());
     }
-    if fix_seen && !store {
+    if seen.contains("--fix") && !store {
         return Err("--fix requires --store 1".to_string());
     }
     if fix_file.is_some() && !store {
         return Err("--fix-file requires --store 1".to_string());
     }
-    if fix_seen && fix_file.is_some() {
+    if seen.contains("--fix") && fix_file.is_some() {
         return Err("--fix and --fix-file are mutually exclusive".to_string());
     }
-    if recall_only && !recall_seen {
+    if recall_only && !seen.contains("--recall") {
         recall = 3; // recall-only 未指定 K 时默认 top-3（与主流程 --recall 语义一致）
     }
     Ok(Opts {
         query,
-        ratio,
-        context,
-        window,
-        elide,
-        risk_gate,
-        lineno,
+        config,
         json,
         stat,
         no_stats,
@@ -564,6 +536,8 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         eval,
         eval_verbose,
         eval_gate,
+        eval_gate_human,
+        eval_gate_items,
         l1_hist,
         stats,
         annotate,
@@ -575,7 +549,6 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         judge_by,
         max_bytes,
         mem_dir,
-        forces,
         files,
     })
 }
@@ -586,7 +559,7 @@ pub(crate) fn parse_args(args: &[String]) -> Opts {
         Ok(opts) => opts,
         Err(e) => {
             eprintln!("scx: {}", e);
-            eprintln!("{}", USAGE);
+            eprintln!("{}", usage());
             std::process::exit(2);
         }
     }
@@ -615,6 +588,16 @@ mod tests {
         assert!(parse_args_from(args(&["--query"])).is_err());
         assert!(parse_args_from(args(&["--force", "--json"])).is_err());
         assert!(parse_args_from(args(&["--query", "a", "--query", "b"])).is_err());
+        assert!(parse_args_from(args(&["--query", "a", "--seed", "1", "--seed", "2"])).is_err());
+        assert!(parse_args_from(args(&[
+            "--query",
+            "a",
+            "--annotate-max",
+            "1",
+            "--annotate-max",
+            "2"
+        ]))
+        .is_err());
         assert!(parse_args_from(args(&["--query", "a", "--stat", "--no-stats"])).is_err());
     }
 
@@ -629,9 +612,21 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(o.query, "alpha");
-        assert_eq!(o.ratio, 0.5);
-        assert_eq!(o.context, 0);
+        assert_eq!(o.config.ratio, 0.5);
+        assert_eq!(o.config.context, 0);
         assert_eq!(o.files, vec!["--weird-file".to_string()]);
+    }
+
+    #[test]
+    fn defaults_come_from_engine_config() {
+        let o = parse_args_from(args(&["--query", "q"])).unwrap();
+        let d = Config::default();
+        assert_eq!(o.config.ratio, d.ratio);
+        assert_eq!(o.config.context, d.context);
+        assert_eq!(o.config.window, d.window);
+        assert_eq!(o.config.elide, d.elide);
+        assert_eq!(o.config.risk_gate, d.risk_gate);
+        assert_eq!(o.config.lineno, d.lineno);
     }
 
     #[test]
@@ -641,7 +636,7 @@ mod tests {
         assert!(parse_args_from(args(&["--force", "|"])).is_err());
         let o = parse_args_from(args(&["--force", "SPECIAL"])).unwrap();
         assert_eq!(o.query, "");
-        assert_eq!(o.forces, vec!["SPECIAL".to_string()]);
+        assert_eq!(o.config.forces, vec!["SPECIAL".to_string()]);
     }
 
     #[test]
@@ -657,15 +652,15 @@ mod tests {
             "0",
         ]))
         .unwrap();
-        assert_eq!(o.window, 1);
-        assert!(!o.elide);
-        assert!(!o.risk_gate);
+        assert_eq!(o.config.window, 1);
+        assert!(!o.config.elide);
+        assert!(!o.config.risk_gate);
         let o2 = parse_args_from(args(&["--force=--json"])).unwrap();
-        assert_eq!(o2.forces, vec!["--json".to_string()]);
+        assert_eq!(o2.config.forces, vec!["--json".to_string()]);
         let o3 = parse_args_from(args(&["--query", "a", "--lineno", "1"])).unwrap();
-        assert!(o3.lineno);
+        assert!(o3.config.lineno);
         let o4 = parse_args_from(args(&["--query", "a", "--lineno=0"])).unwrap();
-        assert!(!o4.lineno);
+        assert!(!o4.config.lineno);
         assert!(parse_args_from(args(&["--query", "a", "--lineno", "2"])).is_err());
         assert!(parse_args_from(args(&["--query", "a", "--lineno"])).is_err());
     }
@@ -726,6 +721,15 @@ mod tests {
         assert!(o.eval_gate);
         assert!(parse_args_from(args(&["--gate"])).is_err());
         assert!(parse_args_from(args(&["--eval", "bl.json", "--gate=x"])).is_err());
+        let o = parse_args_from(args(&["--eval", "bl.json", "--gate-human"])).unwrap();
+        assert!(o.eval_gate_human);
+        assert!(parse_args_from(args(&["--gate-human"])).is_err());
+        assert!(parse_args_from(args(&["--eval", "bl.json", "--gate", "--gate-human"])).is_err());
+        let o = parse_args_from(args(&["--eval", "bl.json", "--gate-items"])).unwrap();
+        assert!(o.eval_gate_items);
+        assert!(
+            parse_args_from(args(&["--eval", "bl.json", "--gate-human", "--gate-items"])).is_err()
+        );
         assert!(
             parse_args_from(args(&["--eval-verbose"])).is_err(),
             "无 --eval 时 --eval-verbose 应报错"

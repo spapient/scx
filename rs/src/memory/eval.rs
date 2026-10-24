@@ -13,6 +13,7 @@
 //! `case_summary`：L1 直答要点行（error_code + file_loc + 证据块首个非空行，≤300 字符），
 //! 供 CLI `--recall-detail` 展开摘要，不把整块正文塞进直答。
 
+use crate::memory::gate::GateMode;
 use crate::memory::json::Val;
 use crate::memory::recall::{self, RecallHit};
 use crate::memory::store;
@@ -30,6 +31,19 @@ pub(crate) struct EvalCase {
     pub judged_by: Option<String>,
     /// `--judge` 写入的裁决时间（UTC）；与 judged_by 同时存在才算人工裁决。
     pub judged_date: Option<String>,
+    /// `judge.method`：区分逐条盲审与“人工规则物化”，供 gate 输出证据边界。
+    pub judged_method: Option<String>,
+    /// 逐候选裁决溯源：候选 id → 裁决人。`rel` 里每个键都必须能在此找到
+    /// 对应条目，`--gate-human` 才认可为“逐条人工”而非整包签收。
+    pub judge_items: HashMap<String, String>,
+}
+
+impl EvalCase {
+    /// expected 首个目标的相关度；literal 层 query 就是目标 case 原文，
+    /// 该值必须为 2，否则标签与行不对应（或整包机械填写）。
+    pub(crate) fn expected_rel(&self) -> Option<f64> {
+        self.expected.first().map(|e| rel_of(self, e))
+    }
 }
 
 /// 解析 baseline.json：`{"name":..,"cases":[{"query":..,"layer":..,"expected":[..],"rel":{..}}]}`
@@ -89,13 +103,19 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
                 rel.insert(rk.clone(), r);
             }
         }
+        // expected 可能是完整 id，而 rel 字典常用 hash 后缀（跨日重建后日期前缀
+        // 不同）。先按同一匹配口径找已有标签，避免为同一 case 再插入 rel=1
+        // 的重复键；否则 rel_of 会因 HashMap 遍历顺序随机取到 1 或 2。
         for e in &expected {
-            rel.entry(e.clone()).or_insert(1.0);
+            if !rel.keys().any(|k| id_matches(e, k) || id_matches(k, e)) {
+                rel.insert(e.clone(), 1.0);
+            }
         }
         // P4.4+ 优化⑭：读取 judge 元数据供 --gate 校验。自动标注集没有 judge
         // 对象（或只有 rel），因此不能冒充人工裁决证据。
         let mut judged_by = None;
         let mut judged_date = None;
+        let mut judged_method = None;
         if let Some((_, Val::Obj(jkvs))) = kvs.iter().find(|(k, _)| k == "judge") {
             let get_optional = |key: &str| -> Option<String> {
                 jkvs.iter()
@@ -107,6 +127,25 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
             };
             judged_by = get_optional("by");
             judged_date = get_optional("date");
+            judged_method = get_optional("method");
+        }
+        let mut judge_items = HashMap::new();
+        if let Some((_, Val::Obj(ikvs))) = kvs.iter().find(|(k, _)| k == "judge_items") {
+            for (ik, iv) in ikvs {
+                let by = match iv {
+                    Val::Obj(m) => m
+                        .iter()
+                        .find(|(k, _)| k == "by")
+                        .and_then(|(_, v)| match v {
+                            Val::Str(s) if !s.trim().is_empty() => Some(s.clone()),
+                            _ => None,
+                        }),
+                    _ => None,
+                };
+                if let Some(by) = by {
+                    judge_items.insert(ik.clone(), by);
+                }
+            }
         }
         out.push(EvalCase {
             query,
@@ -115,6 +154,8 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
             rel,
             judged_by,
             judged_date,
+            judged_method,
+            judge_items,
         });
     }
     Ok(out)
@@ -122,29 +163,48 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
 
 /// expected/rel 的 id 匹配：支持完整 id、hash 后缀（tail）或 hash 后缀的后 8 位
 /// （P4.4 评审处置：case id 由 32 位升级 64 位后 tail=16 hex，标注集里的旧 8 位
-/// hash 仍须匹配，golden 免日期漂移）。
-fn hit_expected(exp: &[String], id: &str) -> bool {
+/// hash 仍须匹配，golden 免日期漂移）。完整 id 的日期前缀允许不同：重建库跨日
+/// 运行时 hash 不变，冻结 baseline 不应因此整体 miss。
+fn id_matches(exp: &str, id: &str) -> bool {
     let tail = id.rsplit('_').next().unwrap_or(id);
     let tail8 = if tail.len() >= 8 {
         &tail[tail.len() - 8..]
     } else {
         tail
     };
-    exp.iter().any(|e| e == id || e == tail || e == tail8)
+    exp == id
+        || exp == tail
+        || exp == tail8
+        || exp.rsplit('_').next().is_some_and(|suffix| suffix == tail)
+}
+
+fn hit_expected(exp: &[String], id: &str) -> bool {
+    exp.iter().any(|e| id_matches(e, id))
 }
 
 fn rel_of(c: &EvalCase, id: &str) -> f64 {
+    if let Some(v) = c.rel.get(id) {
+        return *v;
+    }
     let tail = id.rsplit('_').next().unwrap_or(id);
+    if let Some(v) = c.rel.get(tail) {
+        return *v;
+    }
     let tail8 = if tail.len() >= 8 {
         &tail[tail.len() - 8..]
     } else {
         tail
     };
-    c.rel
-        .get(id)
-        .copied()
-        .or_else(|| c.rel.get(tail).copied())
-        .or_else(|| c.rel.get(tail8).copied())
+    if let Some(v) = c.rel.get(tail8) {
+        return *v;
+    }
+    // 慢路径：rel 用完整 id、命中用另一日期前缀时按后缀匹配。
+    // 先按 key 排序再取，避免 HashMap 遍历顺序影响重复/近重复键的选择。
+    let mut keys: Vec<&String> = c.rel.keys().collect();
+    keys.sort();
+    keys.into_iter()
+        .find(|k| id_matches(k, id))
+        .map(|k| c.rel[k])
         .unwrap_or(0.0)
 }
 
@@ -198,36 +258,65 @@ fn dcg(rels: &[f64]) -> f64 {
 
 /// 评估入口（默认报告）：读取 baseline.json → 逐例 A/B 召回 → 分层聚合 → 报告行（确定性）。
 pub(crate) fn run(root: &str, path: &str) -> std::io::Result<Vec<String>> {
-    run_impl(root, path, false, false).map(|(lines, _)| lines)
+    run_impl(root, path, false, None).map(|(lines, _)| lines)
 }
 
 /// 评估入口（--eval-verbose）：聚合报告 + 逐 case 的 A/B top-10 候选诊断
 /// （rank/sim/score/case 尾 8 /[hit]|[miss]）——标注者可见"召回为什么对/错"，
 /// 直接服务 M4 证据门的人工标注与校准（P4.4+ 优化④）。
 pub(crate) fn run_verbose(root: &str, path: &str) -> std::io::Result<Vec<String>> {
-    run_impl(root, path, true, false).map(|(lines, _)| lines)
+    run_impl(root, path, true, None).map(|(lines, _)| lines)
 }
 
 /// P4.4+ 优化⑭：M4 机械门（`--eval --gate`）——报告 + 是否通过。
 pub(crate) fn run_gate(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
-    run_impl(root, path, false, true)
+    run_impl(root, path, false, Some(GateMode::Mechanical))
 }
 
 /// `--eval --gate --eval-verbose`：门禁结论 + 逐 case 诊断。
 pub(crate) fn run_gate_verbose(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
-    run_impl(root, path, true, true)
+    run_impl(root, path, true, Some(GateMode::Mechanical))
+}
+
+/// `--eval --gate-human`：人工弱相关/负例闭环门（全量人工元数据 + 控制标签 + NDCG）。
+pub(crate) fn run_gate_human(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
+    run_impl(root, path, false, Some(GateMode::Human))
+}
+
+pub(crate) fn run_gate_human_verbose(
+    root: &str,
+    path: &str,
+) -> std::io::Result<(Vec<String>, bool)> {
+    run_impl(root, path, true, Some(GateMode::Human))
+}
+
+/// `--eval --gate-items`：逐候选裁决门（允许 AI 裁决人，证据等级低于 human）。
+pub(crate) fn run_gate_items(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
+    run_impl(root, path, false, Some(GateMode::Items))
+}
+
+pub(crate) fn run_gate_items_verbose(
+    root: &str,
+    path: &str,
+) -> std::io::Result<(Vec<String>, bool)> {
+    run_impl(root, path, true, Some(GateMode::Items))
 }
 
 fn run_impl(
     root: &str,
     path: &str,
     verbose: bool,
-    gate: bool,
+    gate_mode: Option<GateMode>,
 ) -> std::io::Result<(Vec<String>, bool)> {
     let txt = std::fs::read_to_string(path)?;
     let v = crate::memory::json::parse(&txt)
         .map_err(|e| std::io::Error::other(format!("eval: {e}")))?;
     let cases = parse_baseline(&v).map_err(std::io::Error::other)?;
+    let meta = store::load_meta(root)?;
+    let (l1_base, l1_margin) = crate::memory::feedback::l1_params(&meta);
+    let plain = PlainScorer::load(root, &meta)?;
+    let mut l1_hit = 0usize;
+    let mut l1_total = 0usize;
     // 分层顺序按首次出现保持（golden 稳定）。
     let mut layers: Vec<String> = Vec::new();
     // [n, A:r5,r10,mrr,ndcg, B:r5,r10,mrr,ndcg]；semantic 层报告 r@10（弱相关口径）。
@@ -238,7 +327,18 @@ fn run_impl(
     let mut diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)> = Vec::new();
     for c in &cases {
         let a = recall::recall(root, &c.query, 10)?;
-        let b = plain(root, &c.query, 10)?;
+        let b = plain.search(&c.query, 10);
+        if let Some(top) = a.first() {
+            if hit_expected(&c.expected, &top.id) {
+                l1_total += 1;
+                let margin_ok = a
+                    .get(1)
+                    .is_none_or(|second| top.score - second.score >= l1_margin);
+                if top.sim >= l1_base && margin_ok {
+                    l1_hit += 1;
+                }
+            }
+        }
         let (ar5, ar10, amrr, andcg) = metric(c, &a);
         let (br5, br10, bmrr, bndcg) = metric(c, &b);
         let e = agg.entry(c.layer.clone()).or_insert([0.0; 9]);
@@ -328,7 +428,6 @@ fn run_impl(
         }
     }
     // P2 阶段门残余：L1 直答命中率出表（[l1] 判据落地后首次可统计）。
-    let (l1_hit, l1_total) = l1_stats(root, &cases)?;
     let l1_rate = if l1_total > 0 {
         l1_hit as f64 / l1_total as f64
     } else {
@@ -339,8 +438,12 @@ fn run_impl(
     ));
     // P4.4+ 优化⑭：M4 机械门——样本量/分层/裁决元数据/主指标 A≥B。
     let mut gate_failed = false;
-    if gate {
-        let g = crate::memory::gate::check(&cases, &layers, &agg);
+    if let Some(mode) = gate_mode {
+        let g = match mode {
+            GateMode::Mechanical => crate::memory::gate::check(&cases, &layers, &agg),
+            GateMode::Human => crate::memory::gate::check_human(&cases, &layers, &agg),
+            GateMode::Items => crate::memory::gate::check_items(&cases, &layers, &agg),
+        };
         out.extend(g.lines);
         gate_failed = g.failed;
     }
@@ -421,102 +524,96 @@ fn boot_ci(vals: &[f64], seed: u64) -> (f64, f64) {
     (lo, hi)
 }
 
-/// P2 阶段门残余：L1 直答命中率——top1 命中 expected 的相关 case 中，满足 L1 置信判据
-/// （top1.sim ≥ l1_base 且 top1−top2 ≥ margin，单例视为满足）的比例。
-/// 判据参数来自 meta.toml [params]（feedback::l1_params，随库自适应）。
-fn l1_stats(root: &str, cases: &[EvalCase]) -> std::io::Result<(usize, usize)> {
-    let meta = store::load_meta(root)?;
-    let (base, margin) = crate::memory::feedback::l1_params(&meta);
-    let mut hit = 0usize;
-    let mut total = 0usize;
-    for c in cases {
-        let hits = recall::recall(root, &c.query, 2)?;
-        if hits.is_empty() || !hit_expected(&c.expected, &hits[0].id) {
-            continue; // top1 未命中相关 case：不算 L1 可直答对象
-        }
-        total += 1;
-        let top2_ok = hits.len() < 2 || (hits[0].score - hits[1].score) >= margin;
-        if hits[0].sim >= base && top2_ok {
-            hit += 1;
-        }
-    }
-    Ok((hit, total))
-}
-
 /// P4.1 评估 B 基线：朴素 BM25。全库候选（无桶过滤）、纯词面 BM25（无字段加权/
 /// 衰减/quality/词权/PRF/MMR）、sim=score/sm 归一、按 score 降序取 top-k。
-pub(crate) fn plain(root: &str, query: &str, k: usize) -> std::io::Result<Vec<RecallHit>> {
-    let meta = store::load_meta(root)?;
-    let k1 = param(&meta, "bm25_k1", 1.2);
-    let b = param(&meta, "bm25_b", 0.75);
-    let qterms = build_mem_terms(query);
-    let ids = store::list_ids(root)?;
-    let mut docs: Vec<(String, Vec<String>)> = Vec::with_capacity(ids.len());
-    let mut df: HashMap<String, usize> = HashMap::new();
-    let mut total_len = 0usize;
-    for id in &ids {
-        let c = store::read_case(root, id)?;
-        let mut terms = build_mem_terms(&c.query);
-        terms.extend(build_mem_terms(&c.text));
-        let mut seen: Vec<&str> = Vec::with_capacity(terms.len());
-        for t in &terms {
-            if !seen.contains(&t.as_str()) {
-                seen.push(t.as_str());
+/// 语料只加载一次，150 条查询复用，避免每个 case 重复读取全库 JSON。
+struct PlainScorer {
+    docs: Vec<(String, Vec<String>)>,
+    df: HashMap<String, usize>,
+    n: f64,
+    avgdl: f64,
+    k1: f64,
+    b: f64,
+}
+
+impl PlainScorer {
+    fn load(root: &str, meta: &store::Meta) -> std::io::Result<Self> {
+        let mut docs = Vec::new();
+        let mut df: HashMap<String, usize> = HashMap::new();
+        let mut total_len = 0usize;
+        for id in store::list_ids(root)? {
+            let c = store::read_case(root, &id)?;
+            let mut terms = build_mem_terms(&c.query);
+            terms.extend(build_mem_terms(&c.text));
+            terms.sort();
+            terms.dedup();
+            total_len += terms.len();
+            for t in &terms {
                 *df.entry(t.clone()).or_insert(0) += 1;
             }
+            docs.push((id, terms));
         }
-        terms.sort();
-        terms.dedup();
-        total_len += terms.len();
-        docs.push((id.clone(), terms));
+        let n = docs.len() as f64;
+        Ok(Self {
+            avgdl: if n > 0.0 { total_len as f64 / n } else { 0.0 },
+            n,
+            docs,
+            df,
+            k1: meta.param("bm25_k1"),
+            b: meta.param("bm25_b"),
+        })
     }
-    if docs.is_empty() {
-        return Ok(Vec::new());
-    }
-    let n = docs.len() as f64;
-    let avgdl = total_len as f64 / n;
-    let mut hits: Vec<RecallHit> = Vec::with_capacity(docs.len());
-    for (id, terms) in &docs {
-        let dl = terms.len() as f64;
-        let mut score = 0.0;
-        for qt in &qterms {
-            let d = *df.get(qt).unwrap_or(&0) as f64;
-            let idf = ((1.0 + (n - d + 0.5) / (d + 0.5)).ln()).max(0.0);
-            let f = terms.iter().filter(|t| *t == qt).count() as f64;
-            if f > 0.0 {
-                let denom = f + k1 * (1.0 - b + b * dl / avgdl);
-                score += idf * f * (k1 + 1.0) / denom;
+
+    fn search(&self, query: &str, k: usize) -> Vec<RecallHit> {
+        if self.docs.is_empty() {
+            return Vec::new();
+        }
+        let qterms = build_mem_terms(query);
+        // query 相关 IDF 只依赖 df，与文档无关：每条 query 预计算一次，
+        // 避免在 10k 候选 × 150 query 的热路径上重复做 df 查表与 ln。
+        let qidf: Vec<f64> = qterms
+            .iter()
+            .map(|qt| {
+                let d = *self.df.get(qt).unwrap_or(&0) as f64;
+                crate::memory::bm25::idf(self.n, d)
+            })
+            .collect();
+        let sm: f64 = qidf.iter().sum();
+        let mut scored: Vec<(usize, f64)> = Vec::with_capacity(self.docs.len());
+        for (idx, (_, terms)) in self.docs.iter().enumerate() {
+            let mut score = 0.0;
+            let denom = crate::memory::bm25::denom(self.k1, self.b, terms.len() as f64, self.avgdl);
+            for (qt, idf) in qterms.iter().zip(&qidf) {
+                if terms.binary_search(qt).is_err() {
+                    continue;
+                }
+                score += crate::memory::bm25::score(*idf, self.k1, denom);
+            }
+            // 与 A 管线的零支持度过滤同口径：没有 query 词命中的 case 不得以
+            // 0 分进入 top-k，否则 B 会靠库顺序“碰巧命中”被高估。
+            if score > 0.0 {
+                scored.push((idx, score));
             }
         }
-        // 与 A 管线的零支持度过滤同口径：没有 query 词命中的 case 不得以
-        // 0 分进入 top-k，否则 B 会靠库顺序“碰巧命中”被高估。
-        if score > 0.0 {
-            hits.push(RecallHit {
-                id: id.clone(),
+        scored.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| self.docs[a.0].0.cmp(&self.docs[b.0].0))
+        });
+        scored.truncate(k);
+        scored
+            .into_iter()
+            .map(|(idx, score)| RecallHit {
+                id: self.docs[idx].0.clone(),
                 score,
-                sim: 0.0,
-            });
-        }
+                sim: if sm > 0.0 {
+                    (score / sm).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                },
+            })
+            .collect()
     }
-    let mut sm = 0.0;
-    for qt in &qterms {
-        let d = *df.get(qt).unwrap_or(&0) as f64;
-        sm += ((1.0 + (n - d + 0.5) / (d + 0.5)).ln()).max(0.0);
-    }
-    for h in hits.iter_mut() {
-        h.sim = if sm > 0.0 {
-            (h.score / sm).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-    }
-    hits.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    hits.truncate(k);
-    Ok(hits)
 }
 
 /// P2 阶段门残余：运行期 [l1] 历史出表（--l1-hist）——top1.sim 采样分布统计。
@@ -582,14 +679,6 @@ pub(crate) fn case_summary(root: &str, id: &str) -> std::io::Result<String> {
     Ok(out)
 }
 
-fn param(m: &store::Meta, key: &str, dflt: f64) -> f64 {
-    m.params
-        .iter()
-        .find(|(k, _)| k == key)
-        .map(|(_, v)| *v)
-        .unwrap_or(dflt)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -611,6 +700,19 @@ mod tests {
     }
 
     #[test]
+    fn expected_does_not_override_tail_label_with_one() {
+        // rel 用 hash 后缀、expected 用完整 id（跨日重建后的常见形态）：
+        // 解析不得再插入一个 rel=1 的完整 id 键，否则 rel_of 随机取到 1/2。
+        let v = crate::memory::json::parse(
+            r#"{"cases":[{"query":"q","layer":"literal","expected":["2026-10-22_abcdef0123456789"],"rel":{"abcdef0123456789":2},"judge":{"by":"fei","date":"2026-10-24T00:00:00Z"}}]}"#,
+        )
+        .unwrap();
+        let cases = parse_baseline(&v).unwrap();
+        assert_eq!(cases[0].rel.len(), 1, "{:?}", cases[0].rel);
+        assert_eq!(rel_of(&cases[0], "2026-10-24_abcdef0123456789"), 2.0);
+    }
+
+    #[test]
     fn metric_recall_mrr_ndcg() {
         let mut rel = HashMap::new();
         rel.insert("c1".to_string(), 2.0);
@@ -622,6 +724,8 @@ mod tests {
             rel,
             judged_by: None,
             judged_date: None,
+            judged_method: None,
+            judge_items: HashMap::new(),
         };
         // 命中顺序 c2 在前：recall@5=1.0，recall@10=1.0，MRR=1/1（c2 首个 expected 即第一），NDCG<1（c1 排后）。
         let hits = vec![hit("c2", 0.9), hit("c1", 0.8), hit("c3", 0.1)];
@@ -634,6 +738,27 @@ mod tests {
         // 完全未命中：全 0。
         let (r5, r10, mrr, ndcg) = metric(&c, &[hit("c9", 0.5)]);
         assert_eq!((r5, r10, mrr, ndcg), (0.0, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn frozen_full_ids_match_across_date_prefix() {
+        let expected = vec!["2026-10-22_337ecde86ee61f26".to_string()];
+        let current = "2026-10-24_337ecde86ee61f26";
+        assert!(hit_expected(&expected, current));
+        let mut rel = HashMap::new();
+        rel.insert(expected[0].clone(), 2.0);
+        let c = EvalCase {
+            query: "q".to_string(),
+            layer: "literal".to_string(),
+            expected,
+            rel,
+            judged_by: None,
+            judged_date: None,
+            judged_method: None,
+            judge_items: HashMap::new(),
+        };
+        assert_eq!(rel_of(&c, current), 2.0);
+        assert!(!id_matches("2026-10-22_aaaaaaaaaaaaaaaa", current));
     }
 
     #[test]
@@ -650,6 +775,8 @@ mod tests {
             rel,
             judged_by: None,
             judged_date: None,
+            judged_method: None,
+            judge_items: HashMap::new(),
         };
         let hits = vec![hit("t", 1.0), hit("w", 0.9)];
         let (_, _, _, ndcg) = metric(&c, &hits);
@@ -676,6 +803,25 @@ mod tests {
         )
         .unwrap();
         assert!(parse_baseline(&bad).is_err());
+    }
+
+    #[test]
+    fn parse_baseline_reads_per_item_provenance() {
+        let v = crate::memory::json::parse(
+            r#"{"cases":[{"query":"q","layer":"semantic","expected":["a"],
+                "rel":{"a":2,"b":0},
+                "judge":{"by":"fei","date":"2026-10-24T00:00:00Z","method":"per-item-blind-v1"},
+                "judge_items":{"a":{"by":"fei","date":"2026-10-24T00:00:00Z"},
+                               "b":{"by":"fei","date":"2026-10-24T00:00:00Z"}}}]}"#,
+        )
+        .unwrap();
+        let cases = parse_baseline(&v).unwrap();
+        assert_eq!(cases[0].judge_items.len(), 2);
+        assert_eq!(
+            cases[0].judge_items.get("b").map(String::as_str),
+            Some("fei")
+        );
+        assert_eq!(cases[0].judged_method.as_deref(), Some("per-item-blind-v1"));
     }
 
     #[test]

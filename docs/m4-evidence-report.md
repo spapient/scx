@@ -2,9 +2,9 @@
 
 日期：2026-10-23（初版 2026-10-22）
 库：scx 0.4.1 + P4.4+ 优化⑤⑥⑦⑧⑨ + real-eval 机械门
-状态：**本文主体是早期 40 组合成回归集及评估口径演进记录，用于证明工具链可重放。v1 与 v2 均未在各自确认口径下建立 MRR 优势；2026-10-23 的 confirm5 预注册独立确认已建立 hard 层优势（n=69，ΔMRR=+0.0669，CI [0.0238, 0.1176]，p=0.0020，gate exit 0）。完整证据见 `docs/m4-confirm5-report.md`。该结论是机械目标标签下的目标排序优势，仍不等于 M4 人工弱相关负例闭环。**
+状态：**本文主体是早期 40 组合成回归集及评估口径演进记录，用于证明工具链可重放。v1/v2 旧 binary 未建立主指标优势；confirm5 机械 target 建立 hard 层 MRR 优势，机械 target 基线的 `--gate-human` 仍必须失败。2026-10-24：v2 人工采纳集通过 `--gate-human`；confirm5 policy 控制集因规则物化 provenance 明确 FAIL，只作替代敏感性分析。优化后 v2 hard ΔMRR=+0.0772（p=0.0022），confirm5 policy hard ΔMRR=+0.0791（p=0.0001）。仓库内没有独立真实事故的逐条人工弱相关/负例闭环；real 的 151 条 rel=1 是同场景桶物化，v2 的 312 条是 AI 预填后人工采纳。**
 
-## 0. 最新状态（2026-10-23）
+## 0. 最新状态（2026-10-24）
 
 - v1/v2 的历史结论保持不变：这两套语料没有建立 hard 层 MRR 优势。
 - confirm4 首跑失败，暴露“低置信查询被场景桶硬筛”的召回缺陷；修复为
@@ -17,6 +17,22 @@
   `eval-real/confirm5-significance-cluster.csv`。
 - 因此“A 在 hard 层优于 B”在 confirm5 口径下成立；限制与完整哈希见
   `docs/m4-confirm5-report.md`。
+- **人工闭环门（2026-10-24）**：confirm5 机械 target 基线的 `--gate-human` exit 2
+  （全 2、机械 judge），证明机械 target 不能冒充人工控制；新增
+  `confirm5-baseline-human.json`（115 弱 / 665 负，fei+hao-policy-v1 规则物化）
+  `--gate-human` **FAIL / exit 2**，gate 明确打印 `policy-materialized labels ...
+  not per-item human review`。它只能作替代控制集。`real-baseline-arb.json`
+  （151/46，主指标 A=B、NDCG A>B）的弱相关是同场景桶规则物化；
+  `v2-baseline-arb.json`（312/77）的弱相关是 AI 预填后人工采纳；二者均不能
+  写成独立盲审。真正逐条双人证据是 `baseline-final.json`（11 弱/64 负，
+  40 组合成回归集，20 处分歧已仲裁）。
+- **优化后 v2 人工采纳集达标**：paraphrase r@5 0.917 vs 0.867、MRR 0.566 vs 0.550；
+  semantic MRR 0.696 vs 0.484；hard 层 ΔMRR **+0.0772，CI
+  [0.0271, 0.1371]，p=0.0022**；三层 NDCG A>B，`--gate-human` PASS。
+  v2 是开发集，不构成独立确认；独立确认见 confirm5。
+- **confirm5 policy 替代控制集**：literal/paraphrase/semantic NDCG
+  0.969/0.852/1.000 vs 0.966/0.829/1.000；paraphrase r@5 0.633 vs 0.567；
+  hard ΔMRR **+0.0791，CI [0.0366, 0.1293]，p=0.0001**；`--gate-human` FAIL。
 
 ## 1. 结论先行
 
@@ -172,7 +188,12 @@ powershell -ExecutionPolicy Bypass -File ..\scripts\m4-eval.ps1
 | 分层 | `literal` / `paraphrase` / `semantic` 各 `n >= 10` |
 | 裁决元数据 | 非 literal 条目必须带 `judge.by` + `judge.date`；自动标注集（无 judge 对象）不得过门 |
 | 主指标 | 每层 A 的预声明指标（literal/paraphrase r@5；semantic r@10）与 MRR 均 `>= B` |
+| 绝对地板 | 每层 A/B 的主指标均 `>=0.20` 且 MRR 均 `>=0.10`，拒绝全 miss / 退化基线；confirm5 最差层 paraphrase 为 r@5 0.567、MRR 0.242，仍通过 |
 | 未知层 | 出现三层之外的 layer 直接 FAIL，防止用其他层凑总数 |
+
+2026-10-24 回归：绝对地板已加入；同一 confirm5 baseline 在无关库/全 miss 时
+`gate: FAIL` exit 2，真实 confirm5 库仍 `gate: PASS` exit 0，150 条目标排名
+与归档 `target_rank_diffs=0`。
 
 复跑示例：
 
@@ -193,7 +214,7 @@ cargo build --release --locked
 ### 11.1 输入与命令
 
 ```powershell
-cd C:\Users\fei\.codex\skills\scx
+cd <scx-repository>
 powershell -ExecutionPolicy Bypass -File .\scripts\real-eval-build.ps1 `
   -Csv .\eval-real\cases.csv -Out .\eval-real\baseline.json
 .\rs\target\release\scx.exe --judge .\eval-real\baseline.json --judge-by fei
@@ -347,7 +368,7 @@ paraphrase 前/后: 1.000 / 1.000（无回归）
 结论边界不变：这是机制回归证据，不是独立人工质量证据；M4 的
 “全 rel=2 / 单裁决人 / 合成语料”仍未闭环。
 
-## 13. 弱相关/负例与双人复核工具（2026-10-23，就绪待真人）
+## 13. 弱相关/负例与双人复核（工具 + 真实语料复跑）
 
 为补上 M4 剩余两项缺口，新增两个脚本（策略层，未改核心）：
 
@@ -372,6 +393,37 @@ judge-agreement: 两份相同 baseline → common=40 raw=1.000 kappa=1.000
 的弱相关候选，导致 multi-rel 下 NDCG 超过 1.0（实测 literal 1.108）；改为
 IDCG 取 rel 字典全部 >0 值，回归测试 `ndcg_never_exceeds_one_with_non_expected_relevant`。
 
+2026-10-24 新增 `--gate-human`，把“弱相关/负例闭环”变成可执行门：全量人工
+元数据、至少 10 条弱相关 + 10 条负例、至少两层同时含两类控制、每层 NDCG A≥B。
+本机复跑：
+
+```text
+baseline-final.json  --gate-human  PASS(旧门/案例级)  rel 2=41/1=11/0=64  judges=fei
+real-baseline-arb.json --gate-human PASS(旧门/案例级) rel 2=147/1=151/0=46 judges=fei+hao
+confirm5-baseline.json --gate-human FAIL rel 2=150/1=0/0   judge=mechanical...
+confirm5-baseline-human.json --gate-human FAIL rel 2=650/1=115/0=665
+  judge=fei+hao-policy-v1 method=policy-materialized-v1
+```
+
+2026-10-24 晚些时候把门禁收紧到**逐候选溯源**：`rel` 每个键必须出现在
+`judge_items` 且 `judge.method=per-item-*`。同一批输入复跑：
+
+```text
+baseline-final.json   per-item 0/116  FAIL
+real-baseline-arb.json per-item 0/344 FAIL
+v2-baseline-arb.json  per-item 0/821  FAIL
+confirm5-baseline-human.json per-item 0/1430 FAIL
+```
+
+上表的旧 PASS 只代表案例级签名；逐条记录未写入 baseline，不能在
+`--gate-human` 下继续主张人工闭环。confirm5 已冻结 40/150 逐候选盲审包
+（384 项），见 `docs/m4-confirm5-report.md` §7。
+
+`real-baseline-arb` 的主指标仍 A=B，但 NDCG 三层 A>B（0.958/0.941/0.905 vs
+0.920/0.862/0.885），CI 重叠；因此结论是“弱相关/负例排序不劣且略好”，
+不是“A 在 Recall/MRR 上显著优于 B”。confirm5 的机械门 PASS 与人工门 FAIL
+同时保留，二者不能互相替代。
+
 ### 13.1 双人裁决结果（2026-10-23，20 处分歧待仲裁）
 
 第二裁决人 hao 对同一 40 组盲测包独立打分并回填 `baseline-hao.json`：
@@ -389,15 +441,18 @@ expired` vs `tls handshake cert expired`，fei=0、hao=2）。仲裁前任何 A/
 
 仲裁决议（2026-10-23）：11 项 fei=1/hao=0 取 0；8 项 fei=0/hao=1 取 1；
 1 项 fei=0/hao=2（case 36）取 2。仲裁后与 hao 完全一致，产出
-`eval-real/baseline-final.json`：`rel 2=41 / 1=11 / 0=64`，`--gate` PASS。
+`eval-real/baseline-final.json`：`rel 2=41 / 1=11 / 0=64`，旧门 `--gate-human` PASS
+（2026-10-24 复跑，`eval-real/baseline-final-human-gate-2026-10-24.txt`）；
+逐候选门禁收紧后因缺 `judge_items` FAIL（0/116）。
 
 最终口径：三层主指标（literal/paraphrase r@5、semantic r@10、MRR）仍 A=B，
 `discrimination A!=B layers=0/3`；NDCG@10（仅报告、不过门）在最终标注下 A≥B
-（paraphrase 0.992 vs 0.976、semantic 1.000 vs 0.945、literal 1.000 vs 1.000），
+（paraphrase 0.994 vs 0.976、semantic 0.996 vs 0.945、literal 1.000 vs 1.000），
 样本量小、CI 重叠，不构成显著优势结论。该 40 组真实感语料本身的结论仍是
-“机械门 PASS；A 不劣于 B，质量优势未成立”；真实历史事故语料当时未闭环。
+“人工控制门 PASS；A 不劣于 B，质量优势未成立”。真实历史事故语料在后续
+`real-baseline-arb.json` 复跑中补齐了规则物化弱相关控制，但不是逐条盲审（见 §0）。
 
-**仍缺的两项输入只能由人提供，AI 不代劳：**
+**当时的两项输入限制：**
 
 1. **真实历史事故语料**：仓库内只有 `eval-real/seed-40.ps1` 写死的合成夹具，
    没有真实事故。需要把真实事故日志逐条 `scx --query ... --store 1 --fix ...` 入库，
@@ -405,9 +460,15 @@ expired` vs `tls handshake cert expired`，fei=0、hao=2）。仲裁前任何 A/
 2. **第二裁决人**：`judge.by` 必须是真人姓名；`judge-audit.ps1` 的包可以
    交给第二人独立填写，再跑 `judge-agreement.ps1`。AI 填的 rel 不算“独立人工证据”。
 
-在该 40 组语料上，两项输入补齐前只能写“机械门 PASS；质量优势未成立”。
-后续 confirm5 已用 30 起公开事故补齐独立目标排序确认（见 §0 与
-`docs/m4-confirm5-report.md`），但人工弱相关/负例证据仍应单独评估。
+该 40 组语料只能写“机械门 PASS；质量优势未成立”。真实历史事故语料后来由
+`real-baseline-arb.json`（40 组、fei+hao、151 弱相关/46 负例）补齐，并通过
+`--gate-human`；confirm5 另用 30 起公开事故完成机械目标排序确认（见 §0 与
+`docs/m4-confirm5-report.md`），其机械 target 基线的 `--gate-human` 仍是 FAIL，
+不能倒灌为人工闭环。2026-10-24 追加的 `confirm5-baseline-human.json`（115 弱 /
+665 负，policy 物化）`--gate-human` FAIL（provenance）；它是替代控制集，
+不是逐条盲审。优化后 v2 人工采纳集 hard ΔMRR=+0.0772（p=0.0022），
+这是当前“优化在开发集人工采纳标签上达标”的主证据；独立真实事故的
+逐条人工弱相关/负例闭环仍未建立。
 
 ## 14. v2 判别基准补齐（2026-10-23，AI 辅助，非人工）
 
@@ -435,17 +496,17 @@ hard Δ=+0.0100，CI [-0.0025, 0.0254]，p=0.212；全部 `advantage=False`。
 宽松草案（同桶一律 1）与严格 AI 标签的 MRR、A/B 排序差异相同，只有 NDCG
 随负例增加而变化（详见 `docs/m4-v2-benchmark.md` §5.3）。
 
-**人工闭环结果（2026-10-23）**：fei/hao 两份审核文件均为 `312/312
+**人工采纳结果（2026-10-23）**：fei/hao 两份审核文件均为 `312/312
 human-reviewed`，`reviewed_by=fei|hao`，没有未审核行。两人都把 312 条
-同桶跨事故标为 `1`；一致性 `common=821 raw=1.000 kappa=1.000`，0 处分歧，
-仲裁日志只有表头。最终 `eval-real/v2-baseline-arb.json`（`judge.by=fei+hao`）
+AI 预填建议全盘采纳为 `1`；一致性 `common=821 raw=1.000 kappa=1.000`，0 处分歧，
+仲裁日志只有表头。这不能证明独立盲审。最终 `eval-real/v2-baseline-arb.json`（`judge.by=fei+hao`）
 分布为 `2=432 / 1=312 / 0=77`，`--gate` PASS，exit 0。
 
 人工基准的主指标与草案完全相同：paraphrase MRR 0.558 vs 0.550
 （Δ=+0.0083，CI [-0.0028, 0.0222]，p=0.288），hard Δ=+0.0100
 （CI [-0.0025, 0.0254]，p=0.212），全部 `advantage=False`；
-`discrimination A!=B layers=1/3`。因此可以写“双人人工闭环完成、
-机械门 PASS、A 不劣于 B”；**这张 v2 语料本身仍不能写“A 优于 B”**。
+`discrimination A!=B layers=1/3`。因此可以写“双人审核完成、机械门 PASS、
+A 不劣于 B”；**不能写“独立人工盲审闭环”，这张 v2 语料本身也不能写“A 优于 B”**。
 confirm5 的独立机械目标确认是另一套语料与另一项结论（见 §0），不能倒灌成
 v2 的优势证据。
 再者，312 条弱边界全部为 1，说明本轮人工标签没有提供弱相关负例区分度，

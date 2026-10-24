@@ -134,7 +134,7 @@ FIELD_WEIGHT: error_code=3.0, file_loc=2.5, symbol=2.0, num_fp=2.0
 
 ### 3.4 会话缓存（O3，v0.2 新增）
 
-* 进程内存 LRU，键 = (会话 query 指纹, 最近 30 分钟窗口)。
+* 进程内存 LRU，键 = 会话 query 指纹；窗口默认 30 分钟（`session_cache_minutes`，0 = 关闭）。
 * 同一会话连续追问同一问题（"上次那个连接池爆掉"）直接命中，零磁盘检索。
 * 仅影响 recall 路径，不影响压缩路径；会话结束即释放。
 
@@ -236,9 +236,18 @@ field_weight_num_fp = 2.0       ✚ O1
 decay_tau_days = 90
 mmr_lambda = 0.5
 feedback_step = 0.1
-cache_sim_threshold = 0.85
-l1_margin_min = 0.15            ✚ O5 自适应置信 margin 下限
+feedback_step_bad = 0.15
+word_w_limit = 0.5
+confidence_high_sim = 0.99
+query_field_weight = 1.0        ✚ 低置信/并列时的 query 字段重排
+query_field_min_sim = 0.05      ✚ 词面过低时不启用重排
+query_field_trigger_sim = 0.30  ✚ CJK 低置信重排触发线
+sibling_coherence = 1           ✚ top1 同事故兄弟收紧（Jaccard≥0.35）
 session_cache_minutes = 30      ✚ O3
+l1_adapt_min = 0.30             ✚ O5 自适应基线下限
+l1_adapt_max = 0.90             ✚ O5 自适应基线上限
+l1_adapt_min_history = 4        ✚ O5 启动自适应所需样本数
+l1_margin_min = 0.15            ✚ O5 自适应置信 margin 下限
 ```
 
 ### 4.3 vec.bin（稀疏向量，二进制）

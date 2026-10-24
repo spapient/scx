@@ -1,0 +1,215 @@
+{
+ "name": "confirm5-blind40",
+ "seed": "confirm5-blind-v1",
+ "baseline": "eval-real/confirm5-baseline-human.json",
+ "baseline_sha256": "4c1621d881d4f6e20ec36e86892cb0ab893d7df83e6d195179d62b4814654a3f",
+ "memory_dir": "eval-real/confirm5-mem",
+ "packet": "eval-real/confirm5-blind40-packet.tsv",
+ "packet_sha256": "b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f",
+ "protocol": "2=同事故/同根因或直接修复  1=同故障族/部分有用  0=无关",
+ "cases": [
+  {
+   "case_index": 109,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 144,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 58,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 29,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 27,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 141,
+   "layer": "literal",
+   "candidates": 10
+  },
+  {
+   "case_index": 142,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 143,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 43,
+   "layer": "paraphrase",
+   "candidates": 11
+  },
+  {
+   "case_index": 64,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 140,
+   "layer": "literal",
+   "candidates": 10
+  },
+  {
+   "case_index": 46,
+   "layer": "literal",
+   "candidates": 10
+  },
+  {
+   "case_index": 101,
+   "layer": "literal",
+   "candidates": 10
+  },
+  {
+   "case_index": 26,
+   "layer": "literal",
+   "candidates": 4
+  },
+  {
+   "case_index": 3,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 6,
+   "layer": "literal",
+   "candidates": 9
+  },
+  {
+   "case_index": 31,
+   "layer": "literal",
+   "candidates": 10
+  },
+  {
+   "case_index": 91,
+   "layer": "literal",
+   "candidates": 10
+  },
+  {
+   "case_index": 69,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 49,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 36,
+   "layer": "literal",
+   "candidates": 10
+  },
+  {
+   "case_index": 13,
+   "layer": "paraphrase",
+   "candidates": 8
+  },
+  {
+   "case_index": 1,
+   "layer": "literal",
+   "candidates": 7
+  },
+  {
+   "case_index": 8,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 128,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 135,
+   "layer": "literal",
+   "candidates": 5
+  },
+  {
+   "case_index": 89,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 74,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 24,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 115,
+   "layer": "literal",
+   "candidates": 10
+  },
+  {
+   "case_index": 87,
+   "layer": "paraphrase",
+   "candidates": 12
+  },
+  {
+   "case_index": 79,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 0,
+   "layer": "literal",
+   "candidates": 8
+  },
+  {
+   "case_index": 53,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 63,
+   "layer": "paraphrase",
+   "candidates": 11
+  },
+  {
+   "case_index": 124,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 2,
+   "layer": "paraphrase",
+   "candidates": 10
+  },
+  {
+   "case_index": 139,
+   "layer": "semantic",
+   "candidates": 10
+  },
+  {
+   "case_index": 129,
+   "layer": "semantic",
+   "candidates": 11
+  },
+  {
+   "case_index": 16,
+   "layer": "literal",
+   "candidates": 8
+  }
+ ],
+ "sample_cases": 40,
+ "total_cases": 150,
+ "judgments": 384
+}

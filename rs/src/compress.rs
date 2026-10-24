@@ -4,27 +4,26 @@
 //! 从文本到压缩结果的单趟管线。独立成文件以维持 crate 根 <500 行门禁。
 
 use crate::classify::{
-    is_diffline, is_diffmeta, is_err, is_frame, is_guardable, is_heading, is_incident_marker,
-    is_lineref,
+    error_flags, is_diffline, is_diffmeta, is_frame, is_heading, is_incident_marker, is_lineref,
 };
 use crate::norm::{norm_into, push_analysis_lower};
 use crate::terms::{build_terms, token_est};
-use crate::{push_lineno, Config, Outcome, DEFAULT_RATIO, MAX_CONTEXT, MAX_WINDOW, MIN_RATIO};
+use crate::{push_lineno, Config, Outcome};
 use std::collections::HashMap;
 
 /// 对 `text` 按 `query` 做证据筛选压缩。纯函数：无文件、环境与进程 I/O。
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 库是公开接口：配置在入口统一规范化，避免 CLI 之外的调用触发溢出或超大循环。
     let ratio = if cfg.ratio.is_nan() {
-        DEFAULT_RATIO
+        Config::DEFAULT_RATIO
     } else {
-        cfg.ratio.clamp(MIN_RATIO, 1.0)
+        cfg.ratio.clamp(Config::MIN_RATIO, 1.0)
     };
-    let context = cfg.context.clamp(0, MAX_CONTEXT);
-    let window = if cfg.window <= 0 {
-        1
+    let context = cfg.context.clamp(0, Config::MAX_CONTEXT);
+    let window = if cfg.window < Config::MIN_WINDOW {
+        Config::MIN_WINDOW
     } else {
-        cfg.window.min(MAX_WINDOW)
+        cfg.window.min(Config::MAX_WINDOW)
     };
 
     // 分析使用 LF 归一化文本；passthrough/fail-open 返回输入原文，保持“原样保留”语义。
@@ -51,10 +50,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             }
         }
     }
-    let chars_a = original.chars().count();
     let total = lines.len();
-    let tok_v: Vec<f64> = lines.iter().map(|s| token_est(s)).collect();
-    let total_tok: f64 = tok_v.iter().sum();
+    // token 估算只服务小输入直通与可选预算；针尖档大盘无需整份扫描。
+    let total_tok: f64 = if context != 0 || total < 40 {
+        lines.iter().map(|s| token_est(s)).sum()
+    } else {
+        0.0
+    };
+    let chars_a = original.chars().count();
 
     let mk = |text_owned: String,
               kept: usize,
@@ -132,9 +135,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         low.clear();
         push_analysis_lower(lines[i], &mut low);
         let ll = low.as_str();
-        err_v[i] = is_err(ll);
+        (err_v[i], guard_v[i]) = error_flags(ll);
         marker_v[i] = is_incident_marker(ll);
-        guard_v[i] = is_guardable(ll);
         force_v[i] = force_subs.iter().any(|p| ll.contains(p.as_str()));
         let base = i * words;
         for (k, t) in uniq_terms.iter().enumerate() {
@@ -359,7 +361,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             if (region_gate && !in_region[i] && i >= 2) || scores[i] <= 0.0 {
                 continue;
             }
-            let t = tok_v[i];
+            let t = token_est(lines[i]);
             if used + t > budget {
                 continue;
             }

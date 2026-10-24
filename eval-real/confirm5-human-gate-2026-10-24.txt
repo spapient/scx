@@ -1,0 +1,28 @@
+# command: scx --eval eval-real/confirm5-baseline.json --gate-human --mem-dir <confirm5-mem>
+eval: cases=150 layers=literal,paraphrase,semantic multi-rel=0 single-rel=150 (NDCG strength)
+layer literal: n=60 A r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=1.000 ci95=[1.000,1.000] | B r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=1.000 ci95=[1.000,1.000]
+layer paraphrase: n=60 A r@5=0.567 mrr=0.244 ci95=[0.190,0.310] ndcg@10=0.378 ci95=[0.323,0.443] | B r@5=0.567 mrr=0.242 ci95=[0.189,0.308] ndcg@10=0.373 ci95=[0.314,0.438]
+layer semantic: n=30 A r@10=1.000 mrr=0.883 ci95=[0.789,0.961] ndcg@10=0.913 ci95=[0.843,0.971] | B r@10=1.000 mrr=0.674 ci95=[0.529,0.808] ndcg@10=0.751 ci95=[0.640,0.854]
+l1: hits=60 total=87 rate=0.690
+gate: mode=human
+gate: total=150 need>=30 (target 30-50) PASS
+gate: layer literal n=60 need>=10 PASS
+gate: layer paraphrase n=60 need>=10 PASS
+gate: layer semantic n=30 need>=10 PASS
+gate: judge metadata nonliteral=90 (need real by+date) PASS
+gate: human judge metadata all=150 judges=mechanical-target-confirm5-v1 FAIL
+gate: human controls weak=0>=10 negative=0>=10 layers=0>=2 FAIL
+gate: layer literal ndcg@10 A=1.000 vs B=1.000 PASS
+gate: layer paraphrase ndcg@10 A=0.378 vs B=0.373 PASS
+gate: layer semantic ndcg@10 A=0.913 vs B=0.751 PASS
+gate: layer literal A r@5=1.000 vs B=1.000 PASS; A mrr=1.000 vs B=1.000 PASS
+gate: layer literal absolute A/B r@5=1.000/1.000>=0.20 PASS; mrr=1.000/1.000>=0.10 PASS
+gate: layer paraphrase A r@5=0.567 vs B=0.567 PASS; A mrr=0.244 vs B=0.242 PASS
+gate: layer paraphrase absolute A/B r@5=0.567/0.567>=0.20 PASS; mrr=0.244/0.242>=0.10 PASS
+gate: layer semantic A r@10=1.000 vs B=1.000 PASS; A mrr=0.883 vs B=0.674 PASS
+gate: layer semantic absolute A/B r@10=1.000/1.000>=0.20 PASS; mrr=0.883/0.674>=0.10 PASS
+gate: rel distribution 2=150 1=0 0=0
+gate: warning all labels are 2 (no weak/negative controls)
+gate: discrimination A!=B layers=2/3
+gate: FAIL
+# exit=2
