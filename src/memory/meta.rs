@@ -123,48 +123,34 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
     let mut params = Vec::new();
     let mut word_w = Vec::new();
     let mut l1_hist = Vec::new();
-    let mut section = "";
-    for line in txt.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            section = &line[1..line.len() - 1];
-            continue;
-        }
-        let Some(eq) = line.find('=') else { continue };
-        let k = line[..eq].trim();
-        let v = line[eq + 1..].trim();
-        match section {
-            "" => {
-                if k == "created_at" {
-                    created_at = v.trim_matches('"').to_string();
-                } else if k == "case_count" {
-                    case_count = v.parse().unwrap_or(0);
-                } else if k == "gen" {
-                    gen = v.parse().unwrap_or(0);
-                }
-            }
+    // 行式解析统一由 scx::conf 提供（节感知 TOML 子集），语义与历史实现一致。
+    for e in crate::conf::parse(txt.lines()) {
+        match e.section {
+            "" => match e.key {
+                "created_at" => created_at = crate::conf::unquote(e.value).to_string(),
+                "case_count" => case_count = crate::conf::parse_usize(e.value).unwrap_or(0),
+                "gen" => gen = crate::conf::parse_u64(e.value).unwrap_or(0),
+                _ => {}
+            },
             "df" => {
-                if let Ok(n) = v.parse::<usize>() {
-                    df.push((k.to_string(), n));
+                if let Some(n) = crate::conf::parse_usize(e.value) {
+                    df.push((e.key.to_string(), n));
                 }
             }
             "params" => {
-                if let Some(f) = v.parse::<f64>().ok().filter(|f| f.is_finite()) {
-                    params.push((k.to_string(), f));
+                if let Some(f) = crate::conf::parse_f64(e.value) {
+                    params.push((e.key.to_string(), f));
                 }
             }
             "word_w" => {
-                if let Some(f) = v.parse::<f64>().ok().filter(|f| f.is_finite()) {
-                    word_w.push((k.to_string(), f));
+                if let Some(f) = crate::conf::parse_f64(e.value) {
+                    word_w.push((e.key.to_string(), f));
                 }
             }
-            "l1" if k == "hist" => {
-                let body = v.trim().trim_matches('"');
+            "l1" if e.key == "hist" => {
+                let body = crate::conf::unquote(e.value);
                 for tok in body.split(',') {
-                    if let Some(f) = tok.trim().parse::<f64>().ok().filter(|f| f.is_finite()) {
+                    if let Some(f) = crate::conf::parse_f64(tok.trim()) {
                         l1_hist.push(f);
                     }
                 }

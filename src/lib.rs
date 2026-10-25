@@ -17,6 +17,7 @@
 use std::fmt;
 mod analysis;
 mod compress;
+mod conf;
 mod policy;
 mod terms;
 
