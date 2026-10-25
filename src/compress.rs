@@ -824,7 +824,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     } else {
         expand_regions(&seeds.seed, window as usize, total, None)
     };
-    let scores = score_lines(
+    #[cfg_attr(not(feature = "semantic"), allow(unused_mut))]
+    let mut scores = score_lines(
         &lines,
         &dup,
         &seeds.hits,
@@ -833,6 +834,17 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         &masks.force_v,
         &DEFAULT_SCORES,
     );
+    // 语义增强（可选）：feature=semantic 且显式加载权重时，对非 dup 候选行
+    // 叠加 sigmoid 打分作为排序加分；不启用时与 v0.4.1 逐字节一致。
+    #[cfg(feature = "semantic")]
+    if let Some(w) = &cfg.semantic {
+        for i in 0..total {
+            if dup[i] {
+                continue;
+            }
+            scores[i] += w.score(&crate::semantic::feats(lines[i], &uniq_terms, w.dim));
+        }
+    }
     let boost = neighborhood_boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     let (mut keep, mut keep_count) = seed_floor(&seeds.seed, context, total);
 

@@ -37,6 +37,9 @@ pub mod json;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 
+#[cfg(feature = "semantic")]
+pub mod semantic;
+
 pub use compress::compress;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -62,6 +65,10 @@ pub struct Config {
     /// `REGION_DEFAULT.max_span` 裁剪为种子邻域窗口）。默认 `false` =
     /// 行为与 v0.4.1 逐字节一致。
     pub structure: bool,
+    /// 语义增强权重（`--semantic <weights.json>`，feature=semantic 下可用）；
+    /// `None` = 不启用，默认路径逐字节不变。
+    #[cfg(feature = "semantic")]
+    pub semantic: Option<crate::semantic::Weights>,
 }
 
 impl Config {
@@ -86,6 +93,8 @@ impl Default for Config {
             forces: Vec::new(),
             max_tokens: None,
             structure: false,
+            #[cfg(feature = "semantic")]
+            semantic: None,
         }
     }
 }

@@ -154,6 +154,9 @@ enum Kind {
     Force,
     /// 双值（`--rate good|bad <case-id>`）。
     RatePair,
+    /// 语义权重文件（`--semantic <path>`，feature=semantic 下可用）。
+    #[cfg(feature = "semantic")]
+    Semantic,
 }
 
 /// 单 flag 声明：解析循环的唯一样板；新增 flag 只改表，不新增分支。
@@ -243,6 +246,16 @@ static FLAGS: &[Flag] = &[
         kind: Kind::Bool01,
         what: "",
         err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    #[cfg(feature = "semantic")]
+    Flag {
+        name: "--semantic",
+        once: true,
+        kind: Kind::Semantic,
+        what: "weights.json",
+        err_empty: "requires a weights file path",
         err_zero: "",
         min: 0,
     },
@@ -696,6 +709,8 @@ fn parse_flag(
         Kind::Bool01 => parse_bool01_kind(s, f, inline, args, i),
         Kind::Force => parse_force(s, f, inline, args, i),
         Kind::RatePair => parse_rate_pair(s, f, inline, args, i),
+        #[cfg(feature = "semantic")]
+        Kind::Semantic => parse_semantic_kind(s, f, inline, args, i),
     }
 }
 
@@ -814,6 +829,22 @@ fn parse_u64_kind(
         "--max-tokens" => s.max_tokens = Some(parsed),
         _ => unreachable!("U64 flag without arm: {}", f.name),
     }
+    Ok(())
+}
+
+/// 语义权重文件：加载 + SHA256 校验，失败即报错拒绝运行。
+#[cfg(feature = "semantic")]
+fn parse_semantic_kind(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
+    let v = option_value(args, i, f.name, inline)?;
+    let w = crate::semantic::Weights::load(&v).map_err(|e| format!("{}: {e}", f.name))?;
+    s.config.semantic = Some(w);
     Ok(())
 }
 
