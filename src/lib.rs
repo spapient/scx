@@ -20,6 +20,7 @@ mod compress;
 /// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。
 pub mod conf;
 pub mod contain;
+mod fx;
 mod policy;
 mod terms;
 

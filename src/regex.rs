@@ -347,17 +347,26 @@ pub fn compile_nfa(node: &Node) -> Compiled {
 }
 
 /// 已编译正则（状态表 + 入口 + 接受态）。
+#[derive(Debug)]
 pub struct Compiled {
     states: Vec<St>,
     start: usize,
     accept: usize,
 }
 
-/// ε-closure：从一组状态出发，经 Split 全部可达的状态集。
-fn closure(states: &[St], from: Vec<usize>) -> Vec<usize> {
-    let mut seen = vec![false; states.len()];
-    let mut stack = from;
-    let mut out = Vec::new();
+/// ε-closure：从一组起始状态出发，经 Split 全部可达的状态集。
+/// `seen` / `stack` / `out` 为调用方持有的复用缓冲；返回后 `seen` 恢复全
+/// false，`out` 为闭包集合（元素顺序不影响判定正确性）。
+fn closure_into(
+    states: &[St],
+    starts: &[usize],
+    seen: &mut [bool],
+    stack: &mut Vec<usize>,
+    out: &mut Vec<usize>,
+) {
+    out.clear();
+    stack.clear();
+    stack.extend_from_slice(starts);
     while let Some(s) = stack.pop() {
         if seen[s] {
             continue;
@@ -369,37 +378,51 @@ fn closure(states: &[St], from: Vec<usize>) -> Vec<usize> {
             stack.push(states[s].b);
         }
     }
-    out
+    for &s in out.iter() {
+        seen[s] = false;
+    }
 }
 
 impl Compiled {
     /// 行内任意位置命中（非锚定搜索：每字符后并入入口 closure，
     /// 等效于从每个位置重新尝试；含空匹配，与标准搜索语义一致）。
     pub fn matches(&self, line: &str) -> bool {
-        let chars: Vec<char> = line.chars().collect();
-        let mut cur = closure(&self.states, vec![self.start]);
+        if self.states.is_empty() {
+            return false;
+        }
+        let mut seen = vec![false; self.states.len()];
+        let mut stack: Vec<usize> = Vec::new();
+        let mut closed: Vec<usize> = Vec::new();
+        let mut cur: Vec<usize> = Vec::new();
+        closure_into(
+            &self.states,
+            &[self.start],
+            &mut seen,
+            &mut stack,
+            &mut closed,
+        );
         // 起始 ε-closure 即含 accept：模式可空，空行即命中。
-        if cur.contains(&self.accept) {
+        if closed.contains(&self.accept) {
             return true;
         }
-        for &ch in &chars {
-            let mut next = Vec::new();
-            for &s in &cur {
+        for ch in line.chars() {
+            cur.clear();
+            for &s in &closed {
                 match &self.states[s].kind {
-                    Kind::Char(c) if *c == ch => next.push(self.states[s].a),
+                    Kind::Char(c) if *c == ch => cur.push(self.states[s].a),
                     Kind::Class { ranges, neg } => {
                         let hit = ranges.iter().any(|(lo, hi)| *lo <= ch && ch <= *hi);
                         if hit != *neg {
-                            next.push(self.states[s].a);
+                            cur.push(self.states[s].a);
                         }
                     }
                     _ => {}
                 }
             }
-            next.push(self.start); // 非锚定：新位置重启
-            cur = closure(&self.states, next);
+            cur.push(self.start); // 非锚定：新位置重启
+            closure_into(&self.states, &cur, &mut seen, &mut stack, &mut closed);
             // 正则搜索语义：accept 可达即存在匹配，立即命中。
-            if cur.contains(&self.accept) {
+            if closed.contains(&self.accept) {
                 return true;
             }
         }

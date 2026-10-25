@@ -14,7 +14,6 @@ use crate::analysis::{norm_into, push_analysis_lower};
 use crate::policy::{RiskTable, ScoreTable, DEFAULT_RISK, DEFAULT_SCORES};
 use crate::terms::{build_terms, token_est};
 use crate::{push_lineno, Config, Mode, Outcome, Risk};
-use std::collections::HashMap;
 
 /// 字符数用于报告与压缩比；日志常见纯 ASCII，可跳过逐字符迭代。
 fn char_count(text: &str) -> usize {
@@ -49,8 +48,8 @@ fn split_lines<'b, 'a: 'b>(text: &'a str, buf: &'b mut Option<String>) -> Vec<&'
 pub(crate) enum ForcePat {
     /// 字面子串（大小写不敏感，对小写缓冲匹配）。
     Sub(String),
-    /// 手写正则（已解析；非法模式不参与匹配，CLI 层解析时已报错）。
-    Re(crate::regex::Node),
+    /// 手写正则（已解析并预编译；非法模式不参与匹配，CLI 层解析时已报错）。
+    Re(crate::regex::Compiled),
 }
 
 /// 解析 `--force`：按 `|` 拆分，trim + 小写，跳过空项；`re:` 前缀进正则。
@@ -64,7 +63,7 @@ fn parse_forces(forces: &[String]) -> Vec<ForcePat> {
             }
             if let Some(rest) = p.strip_prefix("re:") {
                 match crate::regex::parse_regex(rest) {
-                    Ok(node) => pats.push(ForcePat::Re(node)),
+                    Ok(node) => pats.push(ForcePat::Re(crate::regex::compile_nfa(&node))),
                     Err(e) => {
                         // CLI（args::parse_force）已前置校验；库内核绕过 CLI
                         // 直接构造 Config 时，非法模式不参与匹配（debug 断言提示）。
@@ -119,7 +118,7 @@ fn scan_masks(
         marker_v[i] = is_incident_marker(ll);
         force_v[i] = forces.iter().any(|p| match p {
             ForcePat::Sub(s) => ll.contains(s.as_str()),
-            ForcePat::Re(n) => crate::regex::compile_nfa(n).matches(ll),
+            ForcePat::Re(n) => n.matches(ll),
         });
         let base = i * words;
         for (k, t) in terms.iter().enumerate() {
@@ -149,7 +148,7 @@ fn fold_dups(
 ) -> (Vec<bool>, usize) {
     let total = lines.len();
     let has_hit = |i: usize| (0..words).any(|w| mask[i * words + w] != 0);
-    let mut seen_count: HashMap<String, usize> = HashMap::new();
+    let mut seen_count: crate::fx::FxHashMap<String, usize> = crate::fx::FxHashMap::default();
     let mut dup = vec![false; total];
     let mut dup_n = 0usize;
     let mut key = String::new();
@@ -157,7 +156,12 @@ fn fold_dups(
     for i in 0..total {
         key.clear();
         norm_into(lines[i], &mut key, &mut run);
-        if key.chars().count() < 6 {
+        let key_len = if key.is_ascii() {
+            key.len()
+        } else {
+            key.chars().count()
+        };
+        if key_len < 6 {
             continue;
         }
         if let Some(n) = seen_count.get_mut(key.as_str()) {
