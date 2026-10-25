@@ -16,7 +16,7 @@ use crate::memory::json::Val;
 use crate::memory::recall::{self, RecallHit};
 use crate::memory::store;
 use crate::memory::EvalMode;
-use crate::terms::build_mem_terms;
+use crate::terms::{build_doc_terms, build_mem_terms};
 use std::collections::HashMap;
 
 /// 单条评估输入（baseline.json 的一行标注）。
@@ -513,10 +513,7 @@ impl PlainScorer {
         let mut total_len = 0usize;
         for id in store::list_ids(root)? {
             let c = store::read_case(root, &id)?;
-            let mut terms = build_mem_terms(&c.query);
-            terms.extend(build_mem_terms(&c.text));
-            terms.sort();
-            terms.dedup();
+            let (_, terms) = build_doc_terms(&c.query, &c.text);
             total_len += terms.len();
             for t in &terms {
                 *df.entry(t.clone()).or_insert(0) += 1;

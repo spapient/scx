@@ -287,9 +287,9 @@ fn main() {
 |---|---|
 | `rs/src/lib.rs` | 公共 API、`Config`、`Outcome` |
 | `rs/src/compress.rs` | 纯函数筛选与预算分配 |
-| `rs/src/terms.rs`, `classify.rs`, `normalize.rs` | 切词、结构分类、ANSI/换行归一化 |
+| `rs/src/analysis.rs`, `rs/src/terms.rs` | 归一化、结构分类、切词与 token 估算 |
 | `rs/src/memory/` | 本地 case 存储、召回、反馈、索引与评估 |
-| `rs/src/main.rs`, `args.rs`, `input.rs`, `memory_cli.rs` | CLI 编排、参数和文件 I/O |
+| `rs/src/main.rs`, `args.rs`, `input.rs` | CLI 编排、记忆输出、参数和文件 I/O |
 | `bin/run`, `bin/run.cmd` | 跨平台自举入口 |
 | `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门 |
 | `eval/` | 可重建语料、冻结标签、盲审包与统一评估工具 |
@@ -336,9 +336,9 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 
 | 工作负载 | 结果 | 条件 |
 |---|---|---|
-| 50k 行 / 2,338,389 字符压缩 | 中位 **15 ms**，样本 14–19 ms | Apple M5 Pro，5 次采样 |
-| 10k case 稀疏查询召回 | p50 **215 µs**，p95 **245 µs** | 最新一轮 21 次采样；三轮 p50 0.22–0.34 ms |
-| 10k case 全候选宽查询 | p50 **2.1 ms** | 最新一轮 7 次采样；三轮 p50 2.1–3.0 ms |
+| 50k 行 / 2,338,389 字符压缩 | 中位 **12 ms**，样本 11–17 ms | Apple M5 Pro，三轮 × 5 次采样 |
+| 10k case 稀疏查询召回 | p50 **206 µs**，p95 **240 µs** | 最新一轮 21 次采样；三轮 p50 204–207 µs |
+| 10k case 全候选宽查询 | p50 **1.9–2.1 ms** | 三轮 × 7 次采样 |
 
 复现：
 
@@ -348,6 +348,19 @@ cargo test --manifest-path rs/Cargo.toml --locked
 cargo run --release --locked --manifest-path rs/Cargo.toml --example bench
 cargo run --release --locked --manifest-path rs/Cargo.toml --example mem_bench
 ```
+
+### 同类工具与可比性
+
+不同项目解决的任务不同，不能用单一压缩比或单条延迟做跨任务排名。这里只说明定位与可借鉴之处：
+
+| 项目 | 主要任务 | 与 scx 的边界 |
+|---|---|---|
+| [ripgrep](https://github.com/BurntSushi/ripgrep) | 行式正则搜索 | 不做上下文预算与证据压缩；其清晰的 CLI/core 分层与流式扫描是架构参照 |
+| [LLMLingua](https://github.com/microsoft/LLMLingua) | 模型式提示压缩 | 依赖模型且可能改写/丢弃 token；scx 零模型、离线、只删整行，保留原文 |
+| [loglizer](https://github.com/logpai/loglizer) | 机器学习日志异常检测 | 做异常判定/分类，不按当前查询逐行筛证据；任务与输出契约不同 |
+
+scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性与延迟，不是通用摘要质量或
+跨语言模型压缩比。上述项目在各自任务上更成熟；scx 只优化“查询相关的原始行选择”。
 
 ## 边界与限制
 

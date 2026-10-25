@@ -16,7 +16,7 @@ use crate::memory::field;
 use crate::memory::index::{self, Index};
 use crate::memory::store::{self, Meta};
 use crate::memory::synonyms;
-use crate::terms::build_mem_terms;
+use crate::terms::{build_doc_terms, build_mem_terms};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -391,12 +391,8 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         let mut total_len = 0usize;
         for id in &ids {
             let c = store::read_case(root, id)?;
-            let query_terms = build_mem_terms(&c.query);
+            let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
             let buckets = crate::memory::bucket::case_buckets(&[], &query_terms, &c.text);
-            let mut terms = query_terms.clone();
-            terms.extend(build_mem_terms(&c.text));
-            terms.sort();
-            terms.dedup(); // 与索引路径 DocRec.terms 同口径（去重词表，tf 每词=1）
             total_len += terms.len();
             for (qi, qt) in qterms.iter().enumerate() {
                 if terms.binary_search(qt).is_ok() {
@@ -667,7 +663,7 @@ fn group_siblings(
     for &i in &order[1..window] {
         let sibling = terms_by_id
             .get(hits[i].id.as_str())
-            .is_some_and(|t| jaccard(top_terms, t) >= SIBLING_JACCARD)
+            .is_some_and(|t| crate::memory::ranking::jaccard(top_terms, t) >= SIBLING_JACCARD)
             && hits[i].score >= top_score * SIBLING_SCORE_RATIO;
         if sibling {
             family.push(i);
@@ -681,28 +677,6 @@ fn group_siblings(
     out.extend(rest);
     out.extend_from_slice(&order[window..]);
     out
-}
-
-/// 已排序去重词表的 Jaccard；双指针避免构造临时集合。
-fn jaccard(a: &[String], b: &[String]) -> f64 {
-    let (mut i, mut j, mut inter) = (0, 0, 0);
-    while i < a.len() && j < b.len() {
-        match a[i].cmp(&b[j]) {
-            std::cmp::Ordering::Less => i += 1,
-            std::cmp::Ordering::Greater => j += 1,
-            std::cmp::Ordering::Equal => {
-                inter += 1;
-                i += 1;
-                j += 1;
-            }
-        }
-    }
-    let union = a.len() + b.len() - inter;
-    if union == 0 {
-        0.0
-    } else {
-        inter as f64 / union as f64
-    }
 }
 
 #[cfg(test)]
@@ -785,9 +759,9 @@ mod tests {
     fn jaccard_is_symmetric_and_bounded() {
         let a = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let b = vec!["b".to_string(), "c".to_string(), "d".to_string()];
-        assert!((jaccard(&a, &b) - 0.5).abs() < 1e-9);
-        assert!((jaccard(&b, &a) - 0.5).abs() < 1e-9);
-        assert_eq!(jaccard(&[], &b), 0.0);
+        assert!((crate::memory::ranking::jaccard(&a, &b) - 0.5).abs() < 1e-9);
+        assert!((crate::memory::ranking::jaccard(&b, &a) - 0.5).abs() < 1e-9);
+        assert_eq!(crate::memory::ranking::jaccard(&[], &b), 0.0);
     }
 
     #[test]

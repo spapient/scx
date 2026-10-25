@@ -4,10 +4,17 @@
 
 /// FNV-1a 64 位哈希（确定性、无随机源）。
 pub(crate) fn fnv1a(s: &str) -> u64 {
+    fnv1a_parts(&[s.as_bytes()])
+}
+
+/// 分片 FNV-1a：避免为复合身份键拼接临时字符串。
+pub(crate) fn fnv1a_parts(parts: &[&[u8]]) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in s.as_bytes() {
-        h ^= u64::from(*b);
-        h = h.wrapping_mul(0x100_0000_01b3);
+    for part in parts {
+        for &b in *part {
+            h ^= u64::from(b);
+            h = h.wrapping_mul(0x100_0000_01b3);
+        }
     }
     h
 }
@@ -16,7 +23,7 @@ pub(crate) fn fnv1a(s: &str) -> u64 {
 /// 64 位避免持久化资产的生日碰撞（32 位在 1 万条时碰撞率 ≈1.2%）。
 pub(crate) fn case_id(now: &str, query: &str, text: &str) -> String {
     let day = &now[0..10]; // YYYY-MM-DD
-    let h = fnv1a(&format!("{query}\u{0}{text}"));
+    let h = fnv1a_parts(&[query.as_bytes(), b"\0", text.as_bytes()]);
     format!("{day}_{h:016x}")
 }
 
@@ -42,13 +49,14 @@ pub(crate) fn utc_now() -> String {
 /// 不破坏行号与结构（键名保留、仅值替换）。朴素字节扫描（零依赖）。
 pub(crate) fn sanitize(s: &str) -> String {
     // 多轮直到稳定：嵌套形式（如 `Authorization: Bearer token=..`）逐层收敛。
-    let mut out = s.to_string();
-    for _ in 0..3 {
-        let next = sanitize_once(&out);
-        if next == out {
-            break;
+    let Some(mut out) = sanitize_once(s) else {
+        return s.to_string();
+    };
+    for _ in 1..3 {
+        match sanitize_once(&out) {
+            Some(next) => out = next,
+            None => break,
         }
-        out = next;
     }
     out
 }
@@ -70,10 +78,11 @@ const SENSITIVE_KEYS: &[&str] = &[
     "auth",
 ];
 
-fn sanitize_once(s: &str) -> String {
+fn sanitize_once(s: &str) -> Option<String> {
     let b = s.as_bytes();
     let mut out = String::with_capacity(s.len());
     let mut i = 0usize;
+    let mut changed = false;
     while i < b.len() {
         if let Some((key_len, sep_len)) = match_key_value(b, i) {
             // key + 分隔符（保留键名与分隔符原样）。
@@ -91,6 +100,7 @@ fn sanitize_once(s: &str) -> String {
             }
             if v > key_end {
                 out.push_str("<redacted>");
+                changed = true;
                 i = v;
             } else {
                 i = key_end;
@@ -100,12 +110,14 @@ fn sanitize_once(s: &str) -> String {
         if let Some((pw_start, at_pos)) = match_url_userinfo(b, i) {
             out.push_str(&s[i..pw_start]);
             out.push_str("<redacted>");
+            changed = true;
             i = at_pos; // @ 由下一轮原样输出（保留结构）。
             continue;
         }
         if let Some(len) = match_bearer(b, i) {
             out.push_str(&s[i..i + len]);
             out.push_str("<redacted>");
+            changed = true;
             i += len;
             continue;
         }
@@ -113,7 +125,7 @@ fn sanitize_once(s: &str) -> String {
         out.push(ch);
         i += ch.len_utf8();
     }
-    out
+    changed.then_some(out)
 }
 
 /// 位置 i 是否以敏感键开头（大小写不敏感）且键后紧跟 `=`/`:`（可带空白）。

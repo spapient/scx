@@ -3,10 +3,10 @@
 //! 纯函数、无 I/O、无随机源；本文件不定义 Config/Outcome（在 crate 根），只实现
 //! 从文本到压缩结果的单趟管线。独立成文件以维持 crate 根 <500 行门禁。
 
-use crate::classify::{
+use crate::analysis::{
     error_flags, is_diffline, is_diffmeta, is_frame, is_heading, is_incident_marker, is_lineref,
 };
-use crate::normalize::{norm_into, push_analysis_lower};
+use crate::analysis::{norm_into, push_analysis_lower};
 use crate::terms::{build_terms, token_est};
 use crate::{push_lineno, Config, Outcome};
 use std::collections::HashMap;

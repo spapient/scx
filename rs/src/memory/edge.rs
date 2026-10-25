@@ -116,11 +116,7 @@ pub(crate) fn bridge_cases(
             continue;
         }
         let c = store::read_case(root, &id)?;
-        let query_terms = crate::terms::build_mem_terms(&c.query);
-        let mut terms = query_terms.clone();
-        terms.extend(crate::terms::build_mem_terms(&c.text));
-        terms.sort();
-        terms.dedup();
+        let (query_terms, terms) = crate::terms::build_doc_terms(&c.query, &c.text);
         let shared = ents
             .iter()
             .filter(|e| {

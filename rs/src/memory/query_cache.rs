@@ -14,7 +14,7 @@
 //! 的条目一律视为过期（新 case / 反馈 / 删除后，同 query 必须走 BM25 重算，
 //! 快照不得遮挡新状态）。
 
-use crate::memory::util::{edit_dist, fnv1a, utc_now_secs};
+use crate::memory::util::{edit_dist, fnv1a_parts, utc_now_secs};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -217,7 +217,7 @@ fn decode(buf: &[u8]) -> Decoded {
 /// 归一化 query（保留数字：qmap 是精确键，8080/9090 不能共用快照）。
 fn norm_query(query: &str) -> String {
     let mut out = String::new();
-    crate::normalize::norm_identity_into(query, &mut out);
+    crate::analysis::norm_identity_into(query, &mut out);
     out
 }
 
@@ -413,7 +413,8 @@ pub(crate) fn session_put(root: &str, query: &str, hits: Vec<(String, f64, f64)>
 
 /// 会话键必须包含库根：同进程可服务多个 `--mem-dir`，query+gen 相同也不能串库。
 fn session_key(root: &str, query: &str) -> u64 {
-    fnv1a(&format!("{root}\u{0}{}", norm_query(query)))
+    let query = norm_query(query);
+    fnv1a_parts(&[root.as_bytes(), b"\0", query.as_bytes()])
 }
 
 #[cfg(test)]

@@ -18,7 +18,6 @@ pub(crate) mod gate;
 mod index;
 mod ingest;
 mod json;
-mod judge;
 pub(crate) mod lock;
 mod maintenance;
 mod meta;
@@ -240,5 +239,5 @@ pub fn annotate_to_file(
 
 /// 交互式逐候选裁决入口（`--judge`）。
 pub fn judge_baseline(path: &str, by: &str) -> std::io::Result<Vec<String>> {
-    judge::judge(path, by)
+    annotate::judge(path, by)
 }

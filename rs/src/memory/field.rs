@@ -1,6 +1,6 @@
 //! 结构化字段抽取（O1）：从压缩证据块中抽四类判别字段。
 //!
-//! 复用 classify.rs 的行分类器（is_err / is_frame / is_lineref）与 norm.rs
+//! 复用 analysis.rs 的行分类器（is_err / is_frame / is_lineref）与分析归一化
 //! 的 norm_into，只读证据块、无任何 I/O；摄取路径（memory 侧）调用，
 //! compress 零触碰。
 //!
@@ -10,9 +10,9 @@
 //! - symbol：帧行内的方法/标识符词面
 //! - num_fp：数字折叠后的行指纹（norm_into 后含 `#` 的稳定串，跨日志去噪声）
 
-use crate::classify::{is_err, is_frame, is_lineref};
+use crate::analysis::{is_err, is_frame, is_lineref};
+use crate::analysis::{norm_into, push_analysis_lower};
 use crate::memory::store::Fields;
-use crate::normalize::{norm_into, push_analysis_lower};
 
 pub(crate) const CAP: usize = 16;
 

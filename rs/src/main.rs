@@ -1,13 +1,11 @@
-// scx CLI：参数解析在 args，输入读取在 input，记忆接线在 memory_cli；
+// scx CLI：参数解析在 args，输入读取在 input，记忆输出接线在本文件；
 // 筛选逻辑全在库 crate（scx::compress）。本文件只做命令编排与输出。
 mod args;
 mod input;
-mod memory_cli;
 
 use args::{parse_args, Opts};
 use input::{read_fix_file, read_input};
-use memory_cli::{run_recall, write_mem_lines};
-use scx::memory::{CaseStats, EvalMode, StoreInput};
+use scx::memory::{recall_cases, Case, CaseStats, EvalMode, RecallHit, StoreInput};
 use scx::{compress, Outcome};
 use std::io::{self, Write};
 use std::sync::mpsc;
@@ -28,6 +26,93 @@ impl Failure {
 type CliResult<T = ()> = Result<T, Failure>;
 type StoreResult = io::Result<(bool, String)>;
 type StoreReceiver = mpsc::Receiver<StoreResult>;
+
+/// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
+/// case 只显示指纹段（`YYYY-MM-DD_<hash16>` 的 hash16），保证输出不随日期漂移。
+fn write_mem_lines(
+    out: &mut dyn Write,
+    hits: &[RecallHit],
+    root: &str,
+    detail: bool,
+) -> io::Result<()> {
+    for h in hits {
+        let short = h.id.rsplit('_').next().unwrap_or(&h.id);
+        writeln!(
+            out,
+            "mem: sim={:.2} score={:.2} case={}",
+            h.sim, h.score, short
+        )?;
+        let c = scx::memory::read_case(root, &h.id)?;
+        if detail {
+            writeln!(out, "  summary: {}", escape(&summary(&c)))?;
+            for (i, &lno) in c.evidence_lno.iter().enumerate() {
+                writeln!(
+                    out,
+                    "  evidence: {} {}",
+                    lno,
+                    escape(c.evidence.get(i).map(String::as_str).unwrap_or(""))
+                )?;
+            }
+        }
+        if !c.fix.is_empty() {
+            writeln!(
+                out,
+                "  fix: {} (candidate, sim={:.2})",
+                escape(&c.fix),
+                h.sim
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// 召回详情摘要：字段 + 首个错误/非空行，最多 300 字符。
+fn summary(c: &Case) -> String {
+    let mut parts: Vec<&str> = c
+        .fields
+        .error_code
+        .iter()
+        .chain(&c.fields.file_loc)
+        .map(String::as_str)
+        .collect();
+    let is_err_line = |t: &str| {
+        t.contains("error")
+            || t.contains("ERROR")
+            || t.contains("错误")
+            || t.contains("ERR")
+            || t.contains("warn")
+            || t.contains("WARN")
+            || t.contains("警告")
+    };
+    let line = c
+        .text
+        .lines()
+        .map(str::trim)
+        .find(|t| !t.is_empty() && is_err_line(t))
+        .or_else(|| c.text.lines().map(str::trim).find(|t| !t.is_empty()));
+    if let Some(line) = line {
+        parts.push(line);
+    }
+    let s = parts.join(" | ");
+    let mut out: String = s.chars().take(300).collect();
+    if s.chars().count() > 300 {
+        out.push('…');
+    }
+    out
+}
+
+/// 召回回放输出转义控制字符（ANSI ESC / C0），防恶意日志注入终端。
+fn escape(s: &str) -> String {
+    scx::memory::escape_control(s)
+}
+
+/// `--recall-only` 查看模式：只读召回、零库状态写入，库缺失时不创建目录。
+fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) -> io::Result<()> {
+    let hits = recall_cases(mem_dir, query, k, true)?;
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_mem_lines(&mut out, &hits, mem_dir, detail)
+}
 
 fn stats_line(r: &Outcome) -> String {
     format!(
@@ -361,4 +446,18 @@ fn extract_evidence(input: &str, lno: &[usize]) -> Vec<String> {
                 .to_string()
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn summary_truncates_to_300_chars() {
+        let mut c = Case::new("id".into(), "q".into(), vec![], String::new());
+        c.text = format!("ERROR {}", "x".repeat(400));
+        let got = summary(&c);
+        assert_eq!(got.chars().count(), 301, "300 字符 + 省略号");
+        assert!(got.ends_with('…'));
+    }
 }

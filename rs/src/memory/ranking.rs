@@ -17,7 +17,7 @@
 
 use crate::memory::recall::RecallHit;
 use crate::memory::store::{self, Meta};
-use crate::terms::build_mem_terms;
+use crate::terms::{build_doc_terms, build_mem_terms};
 use std::collections::HashMap;
 
 /// Robertson/Sparck Jones IDF（平滑、非负）。
@@ -64,14 +64,9 @@ pub(crate) fn expand(
         let mut df: HashMap<String, usize> = HashMap::new();
         for id in &all_ids {
             let c = store::read_case(root, id)?;
-            let mut terms = build_mem_terms(&c.query);
-            terms.extend(build_mem_terms(&c.text));
-            let mut seen: Vec<&str> = Vec::with_capacity(terms.len());
+            let (_, terms) = build_doc_terms(&c.query, &c.text);
             for t in &terms {
-                if !seen.contains(&t.as_str()) {
-                    seen.push(t.as_str());
-                    *df.entry(t.clone()).or_insert(0) += 1;
-                }
+                *df.entry(t.clone()).or_insert(0) += 1;
             }
         }
         (n, df)
@@ -159,13 +154,24 @@ pub(crate) fn mmr_select(
     picked
 }
 
-/// 词袋 Jaccard：|A∩B| / |A∪B|（空∪空 = 0）。
-fn jaccard(a: &[String], b: &[String]) -> f64 {
+/// 已排序去重词表的 Jaccard：|A∩B| / |A∪B|（空∪空 = 0），双指针 O(n+m)。
+/// 召回、MMR 与同族聚类共享此实现；调用方必须传入排序后的词表。
+pub(crate) fn jaccard(a: &[String], b: &[String]) -> f64 {
     if a.is_empty() && b.is_empty() {
         return 0.0;
     }
-    let (small, big) = if a.len() <= b.len() { (a, b) } else { (b, a) };
-    let intersection = small.iter().filter(|t| big.contains(t)).count();
+    let (mut i, mut j, mut intersection) = (0usize, 0usize, 0usize);
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            std::cmp::Ordering::Less => i += 1,
+            std::cmp::Ordering::Greater => j += 1,
+            std::cmp::Ordering::Equal => {
+                intersection += 1;
+                i += 1;
+                j += 1;
+            }
+        }
+    }
     let union = a.len() + b.len() - intersection;
     if union == 0 {
         0.0
@@ -295,9 +301,9 @@ mod mmr_tests {
     #[test]
     fn mmr_removes_redundant_variant() {
         let docs = vec![
-            terms(&["db", "timeout", "conn", "errno", "alpha"]),
-            terms(&["db", "timeout", "conn", "errno", "beta"]),
-            terms(&["disk", "full", "space", "fatal"]),
+            terms(&["alpha", "conn", "db", "errno", "timeout"]),
+            terms(&["beta", "conn", "db", "errno", "timeout"]),
+            terms(&["disk", "fatal", "full", "space"]),
         ];
         let cands = vec![0usize, 1, 2];
         let scores = vec![1.0, 0.7, 0.6];

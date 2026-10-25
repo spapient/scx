@@ -27,7 +27,7 @@
 //!   同一路径内确定；P4 评估统一以索引路径为准。
 
 use crate::memory::store::{self, Meta};
-use crate::terms::build_mem_terms;
+use crate::terms::build_doc_terms;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -129,8 +129,8 @@ pub(crate) struct Index {
     pub docs: Vec<DocRec>,
     /// term → (df, doc_idx 升序列表)。
     pub dict: HashMap<String, (usize, Vec<usize>)>,
-    /// 实体键 → doc_idx 升序列表；由 doc 快照派生，避免召回时重读全库 case。
-    pub entities: HashMap<String, Vec<usize>>,
+    /// 实体键 → doc_idx 升序列表；由 doc 快照惰性派生（无实体查询时不付构建成本）。
+    entities: OnceLock<HashMap<String, Vec<usize>>>,
 }
 
 /// 从 doc 字段快照派生实体倒排（实体键去重、doc_idx 升序）。
@@ -196,11 +196,7 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
     let mut total_len = 0usize;
     for id in &ids {
         let c = store::read_case(root, id)?;
-        let query_terms = build_mem_terms(&c.query);
-        let mut terms = query_terms.clone();
-        terms.extend(build_mem_terms(&c.text));
-        terms.sort();
-        terms.dedup();
+        let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
         total_len += terms.len();
         let buckets = crate::memory::bucket::case_buckets(&[], &query_terms, &c.text);
         docs.push((
@@ -476,14 +472,13 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         }
         dict.insert(term, (df, post));
     }
-    let entities = entity_map(&docs);
     Ok(Index {
         n_docs,
         total_len,
         ids,
         docs,
         dict,
-        entities,
+        entities: OnceLock::new(),
     })
 }
 
@@ -491,19 +486,17 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
 /// 返回 doc_idx（配合 `idx.docs[di]` 零 case 文件 IO 打分）。
 pub(crate) fn candidates(idx: &Index, qterms: &[String]) -> Vec<usize> {
     let mut seen: Vec<bool> = vec![false; idx.n_docs];
-    let mut hit: Vec<usize> = Vec::new();
     for t in qterms {
         if let Some((_, post)) = idx.dict.get(t) {
             for &di in post {
-                if !seen[di] {
-                    seen[di] = true;
-                    hit.push(di);
-                }
+                seen[di] = true;
             }
         }
     }
-    hit.sort_unstable();
-    hit
+    seen.iter()
+        .enumerate()
+        .filter_map(|(di, &hit)| hit.then_some(di))
+        .collect()
 }
 
 /// term 的全库 df（未收录 = 0）。
@@ -516,17 +509,25 @@ pub(crate) fn entity_neighbors(idx: &Index, ents: &[String]) -> Vec<(usize, usiz
     let mut keys: Vec<&str> = ents.iter().map(String::as_str).collect();
     keys.sort_unstable();
     keys.dedup();
-    let mut shared: HashMap<usize, usize> = HashMap::new();
+    let mut shared = vec![0usize; idx.n_docs];
     for key in keys {
-        if let Some(docs) = idx.entities.get(key) {
+        if let Some(docs) = idx.entity_map().get(key) {
             for &di in docs {
-                *shared.entry(di).or_insert(0) += 1;
+                shared[di] += 1;
             }
         }
     }
-    let mut out: Vec<(usize, usize)> = shared.into_iter().collect();
-    out.sort_unstable_by_key(|&(di, _)| di);
-    out
+    shared
+        .into_iter()
+        .enumerate()
+        .filter_map(|(di, n)| (n > 0).then_some((di, n)))
+        .collect()
+}
+
+impl Index {
+    fn entity_map(&self) -> &HashMap<String, Vec<usize>> {
+        self.entities.get_or_init(|| entity_map(&self.docs))
+    }
 }
 
 /// 是否启用倒排路径：规模达标（meta 可覆盖）或 --rebuild 后强制（index_force=1）。

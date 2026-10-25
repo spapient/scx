@@ -13,10 +13,11 @@
 //! 输出 baseline.json 兼容 `--eval`（query/layer/expected/rel；extra 键 evidence/note
 //! 被 eval 解析器忽略）；expected 用 hash16 后缀（免日期漂移）。
 
+use crate::memory::json::{self, Val};
 use crate::memory::store::Case;
 use crate::memory::synonyms::PAIRS as SYN;
 use crate::memory::{recall, store, util::fnv1a};
-use std::io;
+use std::io::{self, BufRead, Write};
 
 /// 一条自动标注（对应 baseline.json 的一个 case 条目 + 证据链）。
 pub(crate) struct AnnotatedCase {
@@ -427,6 +428,135 @@ pub(crate) fn stats_report(report: &AnnotateReport) -> Vec<String> {
         report.paraphrase_no_synonym, report.semantic_no_root
     ));
     lines
+}
+
+/// 盲测裁决（`--judge <baseline.json>`）：逐条显示 query 与目标摘要，从 stdin
+/// 录入相关度（2=强 / 1=弱 / 0=无关 / s=跳过），原子写回 rel 与 judge 元数据。
+///
+/// 裁决视图不显示任何 A/B 分数或自动放行结果，避免“接受预填 rel”的自证偏差；
+/// 跳过条目保持 `judge:null`，`--eval` 继续拒绝，报告必须声明漏裁未纳入。
+pub(crate) fn judge(path: &str, by: &str) -> io::Result<Vec<String>> {
+    let txt = std::fs::read_to_string(path)?;
+    let mut v = json::parse(&txt).map_err(io::Error::other)?;
+    let cases = match &mut v {
+        Val::Obj(kvs) => match kvs.iter_mut().find(|(k, _)| k == "cases") {
+            Some((_, Val::Arr(items))) => items,
+            _ => return Err(io::Error::other("judge: baseline missing \"cases\" array")),
+        },
+        _ => return Err(io::Error::other("judge: baseline must be an object")),
+    };
+    if cases.is_empty() {
+        return Err(io::Error::other("judge: no cases to adjudicate"));
+    }
+    let total = cases.len();
+    let stdin = io::stdin();
+    let mut lines = stdin.lock().lines();
+    let mut judged = 0usize;
+    let mut skipped = 0usize;
+    let mut judged_rows: Vec<String> = Vec::new();
+    for (i, item) in cases.iter_mut().enumerate() {
+        let kvs = match item {
+            Val::Obj(kvs) => kvs,
+            _ => return Err(io::Error::other(format!("judge: cases[{i}] not an object"))),
+        };
+        let already = kvs.iter().any(|(k, val)| match k.as_str() {
+            "rel" => matches!(val, Val::Obj(_)),
+            "judge" => matches!(val, Val::Obj(_)),
+            _ => false,
+        });
+        if already {
+            skipped += 1;
+            continue;
+        }
+        let layer = get_str(kvs, "layer");
+        let query = get_str(kvs, "query");
+        let note = get_str(kvs, "note");
+        let target = get_first_expected(kvs).unwrap_or_default();
+        println!("[{}/{}] layer={} query=\"{}\"", i + 1, total, layer, query);
+        if !note.is_empty() {
+            println!("  hint: {note}");
+        }
+        let rel = loop {
+            print!("  rel? [2=strong 1=weak 0=unrelated s=skip] > ");
+            io::stdout().flush()?;
+            let buf =
+                match lines.next() {
+                    Some(Ok(l)) => l,
+                    Some(Err(e)) => return Err(e),
+                    None => return Err(io::Error::other(
+                        "judge: EOF - nothing written; rerun to resume (unjudged stay judge:null)",
+                    )),
+                };
+            match buf.trim() {
+                "2" => break Some(2.0),
+                "1" => break Some(1.0),
+                "0" => break Some(0.0),
+                "s" | "S" | "" => break None,
+                _ => println!("  (input: 2/1/0/s)"),
+            }
+        };
+        match rel {
+            Some(r) => {
+                upsert(kvs, "rel", Val::Obj(vec![(target, Val::Num(r))]));
+                let date = crate::memory::util::utc_now();
+                upsert(
+                    kvs,
+                    "judge",
+                    Val::Obj(vec![
+                        ("by".to_string(), Val::Str(by.to_string())),
+                        ("date".to_string(), Val::Str(date)),
+                    ]),
+                );
+                judged += 1;
+                judged_rows.push(format!(
+                    "  judged[{}] {} query=\"{}\"",
+                    fmt_rel(r),
+                    layer,
+                    query
+                ));
+            }
+            None => skipped += 1,
+        }
+    }
+    std::fs::write(path, json::write(&v))?;
+    let mut out = vec![
+        format!("judge: judged={judged} skipped={skipped} total={total}"),
+        format!("  by={by} date={}", crate::memory::util::utc_now()),
+        format!("  out: {path} (skipped keep judge:null, --eval still rejects them)"),
+    ];
+    out.extend(judged_rows);
+    Ok(out)
+}
+
+/// 原地插入或替换键（替换保位、新增追加，保持 JSON 键序稳定）。
+fn upsert(kvs: &mut Vec<(String, Val)>, key: &str, val: Val) {
+    if let Some(pos) = kvs.iter().position(|(k, _)| k == key) {
+        kvs[pos] = (key.to_string(), val);
+    } else {
+        kvs.push((key.to_string(), val));
+    }
+}
+
+fn get_str(kvs: &[(String, Val)], key: &str) -> String {
+    kvs.iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, v)| match v {
+            Val::Str(s) => s.clone(),
+            _ => String::new(),
+        })
+        .unwrap_or_default()
+}
+
+fn get_first_expected(kvs: &[(String, Val)]) -> Option<String> {
+    kvs.iter()
+        .find(|(k, _)| k == "expected")
+        .and_then(|(_, v)| match v {
+            Val::Arr(items) => items.iter().find_map(|e| match e {
+                Val::Str(s) => Some(s.clone()),
+                _ => None,
+            }),
+            _ => None,
+        })
 }
 
 #[cfg(test)]

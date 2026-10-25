@@ -16,7 +16,9 @@
 use crate::memory::json::{self, Val};
 pub(crate) use crate::memory::meta::SCHEMA;
 pub(crate) use crate::memory::meta::{ensure_root, load_meta, Meta};
-pub(crate) use crate::memory::util::{case_id, fnv1a, utc_now};
+#[cfg(test)]
+pub(crate) use crate::memory::util::fnv1a;
+pub(crate) use crate::memory::util::{case_id, fnv1a_parts, utc_now};
 use std::fs;
 use std::path::{Path, PathBuf};
 

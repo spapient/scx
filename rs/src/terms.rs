@@ -3,6 +3,8 @@
 //! 与引擎解耦：任何调用方（compress / 未来的记忆库摄取）都可直接复用 build_terms 与 token_est，
 //! 保证"同一查询词面 → 同一词表"的确定性。
 
+use std::collections::HashSet;
+
 pub(crate) const MAX_QUERY_TERMS: usize = 256;
 /// 单 token 上限（字节）。记忆索引的 doc 词表长度字段为 u8；超长 token
 /// 不能静默截断，否则索引会错位。线性与索引路径共用本切词器，在入口统一
@@ -32,6 +34,7 @@ fn build_terms_mode(query: &str, memory: bool) -> Vec<String> {
     let stop = |s: &str| STOP.contains(&s);
     let is_tok = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || "_./\\:@-".contains(c);
     let mut terms: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
     let mut cur = String::new();
     for c in query.to_lowercase().chars() {
         if is_tok(c) {
@@ -39,73 +42,82 @@ fn build_terms_mode(query: &str, memory: bool) -> Vec<String> {
             continue;
         }
         if cur.len() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
-            terms.push(cur.clone());
+            push_unique(&mut terms, &mut seen, cur.clone());
+            if terms.len() >= MAX_QUERY_TERMS {
+                return terms;
+            }
         }
         cur.clear();
     }
     if cur.len() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
-        terms.push(cur);
+        push_unique(&mut terms, &mut seen, cur);
+    }
+    if terms.len() >= MAX_QUERY_TERMS {
+        return terms;
     }
     let mut run = String::new();
-    let mut runs: Vec<String> = Vec::new();
     for c in query.chars() {
         if is_cjk(c) {
             run.push(c);
             continue;
         }
         if run.chars().count() >= 2 {
-            runs.push(run.clone());
+            push_cjk(&mut terms, &mut seen, &run, memory);
+            if terms.len() >= MAX_QUERY_TERMS {
+                return terms;
+            }
         }
         run.clear();
     }
     if run.chars().count() >= 2 {
-        runs.push(run);
+        push_cjk(&mut terms, &mut seen, &run, memory);
     }
-    for r in runs {
-        if stop(&r) {
-            continue;
-        }
-        let chars: Vec<char> = r.chars().collect();
-        if chars.len() < 2 {
-            continue;
-        }
-        // CJK 没有空格分词：≤6 字整段成词；长段按 6 字块切分，尾部单字用
-        // 最后两字补齐。记忆库在块内追加重叠 bigram/trigram 以桥接释义变体。
-        if !memory && chars.len() <= 6 {
-            terms.push(r);
-            continue;
-        }
-        let mut start = 0;
-        while start < chars.len() {
-            let end = (start + 6).min(chars.len());
-            if end - start >= 2 {
-                if memory {
-                    push_zh(&mut terms, &chars[start..end]);
-                } else {
-                    terms.push(chars[start..end].iter().collect());
-                }
-            }
-            start += 6;
-        }
-        if chars.len() % 6 == 1 {
-            let tail = &chars[chars.len() - 2..];
+    terms
+}
+
+fn push_unique(terms: &mut Vec<String>, seen: &mut HashSet<String>, term: String) {
+    if terms.len() >= MAX_QUERY_TERMS {
+        return;
+    }
+    if seen.insert(term.clone()) {
+        terms.push(term);
+    }
+}
+
+/// CJK 没有空格分词：≤6 字整段成词；长段按 6 字块切分，尾部单字用最后两字
+/// 补齐。记忆库在块内追加重叠 bigram/trigram 以桥接释义变体。
+fn push_cjk(terms: &mut Vec<String>, seen: &mut HashSet<String>, run: &str, memory: bool) {
+    if STOP.contains(&run) {
+        return;
+    }
+    let chars: Vec<char> = run.chars().collect();
+    if chars.len() < 2 {
+        return;
+    }
+    if !memory && chars.len() <= 6 {
+        push_unique(terms, seen, run.to_string());
+        return;
+    }
+    let mut start = 0;
+    while start < chars.len() {
+        let end = (start + 6).min(chars.len());
+        if end - start >= 2 {
             if memory {
-                push_zh(&mut terms, tail);
+                push_zh(terms, seen, &chars[start..end]);
             } else {
-                terms.push(tail.iter().collect());
+                push_unique(terms, seen, chars[start..end].iter().collect());
             }
         }
+        start += 6;
     }
-    let mut uniq: Vec<String> = Vec::new();
-    for t in terms {
-        if uniq.len() >= MAX_QUERY_TERMS {
-            break;
-        }
-        if !uniq.contains(&t) {
-            uniq.push(t);
+    if chars.len() % 6 == 1 {
+        let tail = &chars[chars.len() - 2..];
+        if memory {
+            push_zh(terms, seen, tail);
+        } else {
+            push_unique(terms, seen, tail.iter().collect());
         }
     }
-    uniq
 }
 
 /// 压缩引擎词表（CJK 整段/6 字块，不展开滑动 n-gram）。
@@ -127,16 +139,25 @@ pub(crate) fn build_mem_terms(query: &str) -> Vec<String> {
     build_terms_mode(query, true)
 }
 
+/// case 的 query 词表与 query∪text 去重词表（索引/线性/实体桥共用同一口径）。
+pub(crate) fn build_doc_terms(query: &str, text: &str) -> (Vec<String>, Vec<String>) {
+    let query_terms = build_mem_terms(query);
+    let mut terms = query_terms.clone();
+    terms.extend(build_mem_terms(text));
+    terms.sort_unstable();
+    terms.dedup();
+    (query_terms, terms)
+}
+
 /// 一个 ≤6 字 CJK 块：整段（精确）+ 重叠 bigram + 重叠 trigram（模糊桥接）。
-fn push_zh(terms: &mut Vec<String>, chars: &[char]) {
-    let seg: String = chars.iter().collect();
-    terms.push(seg);
+fn push_zh(terms: &mut Vec<String>, seen: &mut HashSet<String>, chars: &[char]) {
+    push_unique(terms, seen, chars.iter().collect());
     for w in chars.windows(2) {
-        terms.push(w.iter().collect());
+        push_unique(terms, seen, w.iter().collect());
     }
     if chars.len() >= 3 {
         for w in chars.windows(3) {
-            terms.push(w.iter().collect());
+            push_unique(terms, seen, w.iter().collect());
         }
     }
 }
@@ -203,5 +224,25 @@ mod tests {
         assert!(t2.iter().any(|x| x == "数据库连接池"), "{t2:?}");
         assert!(t2.iter().any(|x| x == "耗尽磁盘空间"), "{t2:?}");
         assert!(t2.iter().any(|x| x == "不足"), "{t2:?}");
+    }
+
+    #[test]
+    fn term_cap_keeps_first_occurrence_order() {
+        let q: Vec<String> = (0..300).map(|i| format!("w{i}")).collect();
+        let terms = build_terms(&q.join(" "));
+        assert_eq!(terms.len(), MAX_QUERY_TERMS);
+        assert_eq!(terms.first().map(String::as_str), Some("w0"));
+        assert_eq!(
+            terms.last().map(String::as_str),
+            Some("w255"),
+            "cap must keep the first 256 unique terms"
+        );
+    }
+
+    #[test]
+    fn doc_terms_are_sorted_unique_with_query_order_preserved() {
+        let (query_terms, terms) = build_doc_terms("Beta alpha beta", "alpha gamma alpha");
+        assert_eq!(query_terms, ["beta", "alpha"]);
+        assert_eq!(terms, ["alpha", "beta", "gamma"]);
     }
 }

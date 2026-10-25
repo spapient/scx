@@ -32,11 +32,11 @@ const FP_LOCK: &str = "index/fingerprints.lock";
 /// 这修复了旧实现“query 数字也被折叠 → 不同端口事故互相去重”的问题。
 pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut q = String::new();
-    crate::normalize::norm_identity_into(query, &mut q);
+    crate::analysis::norm_identity_into(query, &mut q);
     let mut run = String::new();
     let mut t = String::new();
-    crate::normalize::norm_into(text, &mut t, &mut run);
-    let h = store::fnv1a(&format!("{q}\u{0}{t}"));
+    crate::analysis::norm_into(text, &mut t, &mut run);
+    let h = store::fnv1a_parts(&[q.as_bytes(), b"\0", t.as_bytes()]);
     format!("{:016x}", h)
 }
 

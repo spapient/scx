@@ -37,8 +37,7 @@ rs/src/memory/
 ├── maintenance.rs  # rebuild / gc / delete / --stats 盘点
 ├── eval.rs         # 冻结 baseline 重放与指标
 ├── gate.rs         # 机械、逐项、人工证据门
-├── annotate.rs     # 回归标注与盲测材料生成
-├── judge.rs        # 逐候选交互裁决
+├── annotate.rs     # 回归标注、盲测材料生成与逐候选裁决
 ├── json.rs         # 零依赖 JSON 子集
 ├── lock.rs         # 跨进程锁与原子写
 └── util.rs         # FNV/UTC/编辑距离/脱敏/控制字符转义
@@ -131,9 +130,11 @@ Apple M5 Pro、release、零第三方依赖，2026-10-25 本机采样：
 
 | 工作负载 | 结果 |
 |---|---|
-| 50k 行 / 2.34M 字符压缩 | 中位约 15 ms |
-| 10k case，稀疏查询 | p50 约 0.22 ms（三轮 0.22–0.34 ms） |
-| 10k case，全库候选宽查询 | p50 约 2.1 ms（三轮 2.1–3.0 ms） |
+| 50k 行 / 2.34M 字符压缩 | 中位 12–13 ms（三轮 11–17 ms 样本） |
+| 10k case，稀疏查询 | p50 204–207 µs，p95 236–292 µs（三轮） |
+| 10k case，全库候选宽查询 | p50 1.9–2.1 ms（三轮） |
+| 10k case，冷启动线性首查 | p50 约 0.97 s（三轮） |
+| 10k case，全量重建索引 | 约 374–382 ms（三轮） |
 
 复现：
 
@@ -155,4 +156,6 @@ cargo run --release --locked --manifest-path rs/Cargo.toml --example mem_bench
 - 会话快照并入 `query_cache`；qmap recency 改为真实 Unix 秒，旧格式自动作废。
 - 索引打分快照改为 `Arc` 共享；query 的 df/idf/词权预计算，实体倒排由
   postings 快照派生，10k 全候选宽查询从约 15 ms 降至约 2.1 ms。
+- 文本分类与归一化合并为 `analysis`；标注与裁决、CLI 记忆输出归并到单一所有者，
+  公开模块数与重复逻辑继续收敛；词表去重改为单趟完成并复用 `build_doc_terms`。
 - 移除历史 `eval-real/` 中间产物；可重建语料与冻结标签迁入 `eval/`。
