@@ -11,13 +11,47 @@ use crate::Config;
 use std::collections::HashSet;
 
 /// 帮助文本中的默认值直接取自引擎配置，避免 CLI/文档/引擎三处漂移。
+/// 帮助未纳入 golden 基线（无 golden 例覆盖 help 输出），故可自由重构；
+/// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
-    format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]",
+    let mut s = format!(
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
-    )
+    );
+    s.push_str("\noptions:\n");
+    s.push_str("  --ratio R            optional-content budget (default ");
+    s.push_str(&Config::DEFAULT_RATIO.to_string());
+    s.push_str("); evidence lines and minimum neighborhood are exempt\n");
+    s.push_str("  --context 0|1        context 0 = needle mode: skip optional fill, keep evidence lines only\n");
+    s.push_str(
+        "  --max-tokens N       hard token ceiling; evidence floor wins, overflow is reported as\n",
+    );
+    s.push_str(
+        "                       mode=overflow:evidence/fill, never silently drops evidence\n",
+    );
+    s.push_str("  --structure 1        structural-aware neighborhood: fenced blocks, import/use/#include\n");
+    s.push_str("                       blocks, stack-trace at-chains (default off, byte-identical to v0.4.1)\n");
+    s.push_str("  --policy-file PATH   policy text override: ratio/context/window/elide/risk_gate/lineno/\n");
+    s.push_str("                       max_tokens/structure; precedence CLI > file > DEFAULT\n");
+    s.push_str("  --force P            keep lines matching substring (case-insensitive); prefix re: enters\n");
+    s.push_str("                       a finite regex subset: | alternation, [..] classes, * + ? quantifiers\n");
+    #[cfg(feature = "semantic")]
+    {
+        s.push_str("  --semantic <weights>    optional neural re-score (cargo feature=semantic); weights file\n");
+        s.push_str("                       self-describing JSON {schema,dim,weights,sha256}, SHA256 verified\n");
+    }
+    s.push_str(
+        "  --store 1 --fix S    persist evidence block + fix conclusion into local memory\n",
+    );
+    s.push_str("  --recall K           side-channel recall from memory (mem: section)\n");
+    s.push_str("  --json               structured JSON stats (outcome + dropped ledger)\n");
+    s.push_str(
+        "  --eval/--gate        replay frozen baseline / mechanical evidence gate (see eval/)\n",
+    );
+    s.push_str("  file...              input file(s); stdin when none\n");
+    s
 }
 
 pub struct Opts {
