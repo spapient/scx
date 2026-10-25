@@ -1,7 +1,5 @@
-//! MCP stdio 冒烟集成测试（`cargo test --features mcp`）。
-//! 通过 CARGO_BIN_EXE_scx-mcp 拉起真实二进制，走 stdio 往返。
-
-#![cfg(feature = "mcp")]
+//! MCP stdio 冒烟集成测试（mcp 已并入默认轨，主二进制 `scx mcp` 承担 stdio）。
+//! 通过 CARGO_BIN_EXE_scx 拉起真实二进制，走 stdio 往返。
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
@@ -11,12 +9,13 @@ fn spawn() -> (
     std::process::ChildStdin,
     BufReader<std::process::ChildStdout>,
 ) {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_scx-mcp"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scx"))
+        .arg("mcp")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("spawn scx-mcp");
+        .expect("spawn scx mcp");
     let stdin = child.stdin.take().expect("stdin");
     let stdout = BufReader::new(child.stdout.take().expect("stdout"));
     (child, stdin, stdout)
@@ -95,6 +94,6 @@ fn mcp_stdio_roundtrip() {
     assert!(ping.contains("result"), "ping: {ping}");
 
     drop(stdin);
-    let status = child.wait().expect("wait scx-mcp");
+    let status = child.wait().expect("wait scx mcp");
     assert!(status.success(), "exit status: {status:?}");
 }

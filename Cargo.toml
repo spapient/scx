@@ -14,17 +14,9 @@ categories = ["command-line-utilities", "development-tools", "text-processing"]
 
 [features]
 default = []
-# MCP stdio server（零第三方 crate；关闭时 scx-mcp 二进制不参与构建，
-# 默认路径与 v0.4.1 逐字节一致）。
-mcp = []
 # 可选语义增强打分器（手写 std 点积/sigmoid + 自描述权重文件，零第三方 crate；
 # 关闭时模块 cfg 排除，默认路径与 v0.4.1 逐字节一致）。
 semantic = []
-
-[[bin]]
-name = "scx-mcp"
-path = "src/mcp.rs"
-required-features = ["mcp"]
 
 [profile.release]
 opt-level = 3

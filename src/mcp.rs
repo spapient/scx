@@ -1,4 +1,4 @@
-//! scx-mcp：MCP stdio 服务器（零第三方 crate）。
+//! MCP stdio 服务器（零第三方 crate，无条件编译进 scx 主二进制）。
 //!
 //! - 传输：stdio（逐行 JSON-RPC 2.0，符合 MCP stdio transport）。
 //! - 工具：`compress_context` / `connect_account` / `usage_summary`。
@@ -6,14 +6,10 @@
 //!   **绝不触碰 CLI 渲染**（正文写 stdout / 统计行 / `scxjson:` 前缀），
 //!   stdio 通道不被污染。
 //!
-//! 本文件既是 MCP 服务器实现，也是 `scx-mcp` 二进制的入口（`main` 在文末）。
-//! 二进制仅在 `--features mcp` 下构建（Cargo.toml `required-features`）；
-//! 默认构建不含 MCP 代码，压缩主路径与 v0.4.1 逐字节一致。
+//! 入口：`scx mcp` 子命令（main.rs 分派）调用 `serve()`；`serverInfo.name`
+//! 为 `"scx"`。压缩主路径与 v0.4.1 逐字节一致。
 
-#![forbid(unsafe_code)]
-#![warn(clippy::cognitive_complexity)]
-
-use scx::json::{parse, Json};
+use crate::json::{parse, Json};
 
 /// 进程内用量记账（单线程 stdio 循环，无需原子）。
 #[derive(Default)]
@@ -72,7 +68,7 @@ fn dispatch(method: &str, id: Option<Json>, msg: &Json, usage: &mut Usage) -> Op
 
 fn init(key: &str) -> String {
     format!(
-            "{{\"jsonrpc\":\"2.0\",\"id\":{key},\"result\":{{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{{\"tools\":{{}}}},\"serverInfo\":{{\"name\":\"scx-mcp\",\"version\":\"{}\"}}}}}}",
+            "{{\"jsonrpc\":\"2.0\",\"id\":{key},\"result\":{{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{{\"tools\":{{}}}},\"serverInfo\":{{\"name\":\"scx\",\"version\":\"{}\"}}}}}}",
             env!("CARGO_PKG_VERSION")
         )
 }
@@ -168,25 +164,25 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
         Some(t) => t.to_string(),
         _ => return error(id, -32602, "compress_context: missing text"),
     };
-    let mut cfg = scx::Config::default();
+    let mut cfg = crate::Config::default();
     apply(&mut cfg, args);
-    let outcome = scx::compress(&text, &query, &cfg);
+    let outcome = crate::compress(&text, &query, &cfg);
     usage.compressed += 1;
     usage.input += text.len() as u64;
     usage.output += outcome.text.len() as u64;
-    result(id, &scx::ops::render(&outcome))
+    result(id, &crate::ops::render(&outcome))
 }
 
 /// 数值与开关参数落到压缩配置（缺省即保持 `Config::default()`）。
-fn apply(cfg: &mut scx::Config, args: &Json) {
+fn apply(cfg: &mut crate::Config, args: &Json) {
     if let Some(r) = number(args, "ratio") {
         cfg.ratio = r.min(1000) as f64 / 1000.0;
     }
     if let Some(c) = number(args, "context") {
-        cfg.context = c.min(scx::Config::MAX_CONTEXT as usize) as i64;
+        cfg.context = c.min(crate::Config::MAX_CONTEXT as usize) as i64;
     }
     if let Some(w) = number(args, "window") {
-        cfg.window = w.min(scx::Config::MAX_WINDOW as usize) as i64;
+        cfg.window = w.min(crate::Config::MAX_WINDOW as usize) as i64;
     }
     if let Some(m) = number(args, "max_tokens") {
         cfg.limit = Some(m);
@@ -242,8 +238,3 @@ fn send(writer: &mut impl Write, response: &str) -> bool {
 }
 
 use std::io::{self, BufRead, Write};
-
-/// 二进制入口：stdio 服务循环，退出码 0 = 正常。
-fn main() {
-    std::process::exit(serve());
-}

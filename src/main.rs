@@ -60,6 +60,14 @@ fn run(args: &[String]) -> ops::Reply {
     if short(args) {
         return Ok(());
     }
+    if let Some(sub) = args.first() {
+        if sub == "mcp" {
+            std::process::exit(scx::mcp::serve());
+        }
+        if sub == "setup" {
+            std::process::exit(scx::setup::run(&args[1..]));
+        }
+    }
     let opts = parse(args).map_err(Failure::Usage)?;
     ops::run(ops::parse(&opts))
 }

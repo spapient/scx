@@ -37,6 +37,8 @@ pub mod ops;
 pub mod memory;
 
 pub mod json;
+pub mod mcp;
+pub mod setup;
 
 #[cfg(feature = "semantic")]
 pub mod semantic;
