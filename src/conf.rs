@@ -38,6 +38,44 @@ pub fn parse<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Entry<'a>> {
     out
 }
 
+/// 带行号的解析结果（P3 `--policy-file` 报错定位用）。
+pub struct LEntry<'a> {
+    /// 与 `parse` 相同的解析结果。
+    pub entry: Entry<'a>,
+    /// 原文 1-based 行号。
+    pub line: usize,
+}
+
+/// 逐行解析并保留行号（语义与 `parse` 完全一致）。
+pub fn parse_with_lineno<'a>(lines: impl Iterator<Item = (usize, &'a str)>) -> Vec<LEntry<'a>> {
+    let mut out = Vec::new();
+    let mut section = "";
+    for (line_no, raw) in lines {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            section = &line[1..line.len() - 1];
+            continue;
+        }
+        let Some(eq) = line.find('=') else {
+            continue;
+        };
+        let key = line[..eq].trim();
+        let value = line[eq + 1..].trim();
+        out.push(LEntry {
+            entry: Entry {
+                section,
+                key,
+                value,
+            },
+            line: line_no,
+        });
+    }
+    out
+}
+
 /// f64 读取：必须可解析且有限（NaN/inf 拒绝）。
 pub fn parse_f64(v: &str) -> Option<f64> {
     v.parse::<f64>().ok().filter(|f| f.is_finite())

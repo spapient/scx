@@ -157,6 +157,8 @@ enum Kind {
     /// 语义权重文件（`--semantic <path>`，feature=semantic 下可用）。
     #[cfg(feature = "semantic")]
     Semantic,
+    /// 策略文件（`--policy-file <path>`：文本覆盖 DEFAULT，CLI 显式参数优先）。
+    PolicyFile,
 }
 
 /// 单 flag 声明：解析循环的唯一样板；新增 flag 只改表，不新增分支。
@@ -256,6 +258,15 @@ static FLAGS: &[Flag] = &[
         kind: Kind::Semantic,
         what: "weights.json",
         err_empty: "requires a weights file path",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--policy-file",
+        once: true,
+        kind: Kind::PolicyFile,
+        what: "policy.toml",
+        err_empty: "requires a policy file path",
         err_zero: "",
         min: 0,
     },
@@ -711,6 +722,7 @@ fn parse_flag(
         Kind::RatePair => parse_rate_pair(s, f, inline, args, i),
         #[cfg(feature = "semantic")]
         Kind::Semantic => parse_semantic_kind(s, f, inline, args, i),
+        Kind::PolicyFile => parse_policy_file(s, f, inline, args, i),
     }
 }
 
@@ -846,6 +858,139 @@ fn parse_semantic_kind(
     let w = crate::semantic::Weights::load(&v).map_err(|e| format!("{}: {e}", f.name))?;
     s.config.semantic = Some(w);
     Ok(())
+}
+
+/// `--policy-file`：读文本策略覆盖 `DEFAULT`。优先级：CLI 显式参数 > 文件 > DEFAULT。
+/// 文件按 TOML 子集（`conf::parse_with_lineno`）解析；未知键 / 类型错 /
+/// 范围越界均报错并带行号。CLI 已显式给出的字段（`s.seen`）不被文件覆盖。
+fn parse_policy_file(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
+    let path = option_value(args, i, f.name, inline)?;
+    let body = std::fs::read_to_string(&path)
+        .map_err(|e| format!("{}: cannot read {}: {}", f.name, path, e))?;
+    let entries = crate::conf::parse_with_lineno(body.lines().enumerate().map(|(n, l)| (n + 1, l)));
+    for le in entries {
+        if !le.entry.section.is_empty() {
+            return Err(format!(
+                "{}: {}:{}: section [{}] not supported",
+                f.name, path, le.line, le.entry.section
+            ));
+        }
+        let key = le.entry.key;
+        let v = le.entry.value;
+        let flag = match key {
+            "ratio" => Some("--ratio"),
+            "context" => Some("--context"),
+            "window" => Some("--window"),
+            "elide" => Some("--elide"),
+            "risk_gate" => Some("--risk-gate"),
+            "lineno" => Some("--lineno"),
+            "max_tokens" => Some("--max-tokens"),
+            "structure" => Some("--structure"),
+            _ => None,
+        };
+        let Some(flag) = flag else {
+            return Err(format!(
+                "{}: {}:{}: unknown policy key `{}` (allowed: ratio/context/window/elide/risk_gate/lineno/max_tokens/structure)",
+                f.name, path, le.line, key
+            ));
+        };
+        // CLI 显式参数优先：文件只填 DEFAULT 层（CLI 未指定的字段）。
+        if s.seen.contains(flag) {
+            continue;
+        }
+        apply_policy_value(s, key, v, &path, le.line)?;
+    }
+    Ok(())
+}
+
+/// 单键策略值落位：类型 + 范围校验，失败带行号报错。
+fn apply_policy_value(
+    s: &mut ParseState,
+    key: &str,
+    v: &str,
+    path: &str,
+    line: usize,
+) -> Result<(), String> {
+    let err = |msg: String| format!("--policy-file: {path}:{line}: {msg}");
+    match key {
+        "ratio" => {
+            let r: f64 = crate::conf::parse_f64(v)
+                .ok_or_else(|| err(format!("ratio must be a finite f64, got {v:?}")))?;
+            if !(crate::policy::MIN_RATIO..=1.0).contains(&r) {
+                return Err(err(format!(
+                    "ratio must be in {}..=1.0",
+                    crate::policy::MIN_RATIO
+                )));
+            }
+            s.config.ratio = r;
+        }
+        "context" => {
+            let c = parse_i64_range(v, 0, crate::policy::MAX_CONTEXT).ok_or_else(|| {
+                err(format!(
+                    "context must be 0..={}",
+                    crate::policy::MAX_CONTEXT
+                ))
+            })?;
+            s.config.context = c;
+        }
+        "window" => {
+            let w = parse_i64_range(v, crate::policy::MIN_WINDOW, crate::policy::MAX_WINDOW)
+                .ok_or_else(|| {
+                    err(format!(
+                        "window must be {}..={}",
+                        crate::policy::MIN_WINDOW,
+                        crate::policy::MAX_WINDOW
+                    ))
+                })?;
+            s.config.window = w;
+        }
+        "elide" => {
+            s.config.elide = parse_bool0_1(v).ok_or_else(|| err("elide must be 0/1".into()))?
+        }
+        "risk_gate" => {
+            s.config.risk_gate =
+                parse_bool0_1(v).ok_or_else(|| err("risk_gate must be 0/1".into()))?
+        }
+        "lineno" => {
+            s.config.lineno = parse_bool0_1(v).ok_or_else(|| err("lineno must be 0/1".into()))?
+        }
+        "structure" => {
+            s.config.structure =
+                parse_bool0_1(v).ok_or_else(|| err("structure must be 0/1".into()))?
+        }
+        "max_tokens" => {
+            let m: usize = crate::conf::parse_usize(v).ok_or_else(|| {
+                err(format!(
+                    "max_tokens must be a non-negative integer, got {v:?}"
+                ))
+            })?;
+            s.config.max_tokens = Some(m);
+        }
+        _ => unreachable!("policy key whitelist"),
+    }
+    Ok(())
+}
+
+/// `0/1` 布尔文本。
+fn parse_bool0_1(v: &str) -> Option<bool> {
+    match v {
+        "0" => Some(false),
+        "1" => Some(true),
+        _ => None,
+    }
+}
+
+/// i64 文本 + 范围校验。
+fn parse_i64_range(v: &str, lo: i64, hi: i64) -> Option<i64> {
+    let n: i64 = v.parse().ok()?;
+    (lo..=hi).contains(&n).then_some(n)
 }
 
 /// 0/1 开关。
@@ -1062,7 +1207,11 @@ fn into_opts(s: ParseState) -> Opts {
         s.recall
     };
     let mut config = s.config;
-    config.max_tokens = s.max_tokens.map(|v| v as usize);
+    // 仅 CLI 显式 `--max-tokens` 覆盖（优先级 CLI > 文件 > DEFAULT）；
+    // 未显式时保留 `--policy-file` 写入的值，避免 None 覆盖文件设置。
+    if s.seen.contains("--max-tokens") {
+        config.max_tokens = s.max_tokens.map(|v| v as usize);
+    }
     Opts {
         query: s.query.unwrap_or_default(),
         config,
