@@ -669,6 +669,8 @@ fn set_recall_switch(s: &mut ParseState, name: &str) -> Result<(), String> {
 }
 
 /// 按 `Kind` 统一分派单个 flag 的取值与写入。
+/// 参数分派：每个 Kind 的处理在独立小函数中，本函数只做 match 分发
+/// （McCabe 判定点 = kind 分支数，远低于门禁 10）。
 fn parse_flag(
     s: &mut ParseState,
     f: &Flag,
@@ -677,126 +679,192 @@ fn parse_flag(
     i: &mut usize,
 ) -> Result<(), String> {
     match f.kind {
-        Kind::NoValue => {
-            if inline.is_some() {
-                return Err(format!("{} does not take a value", f.name));
-            }
-            match f.name {
-                "--json" | "--stat" | "--no-stats" => set_output(s, f.name),
-                "--rebuild" | "--gc" => set_house(s, f.name),
-                "--annotate" | "--annotate-raw" | "--gate" | "--gate-human" | "--gate-items" => {
-                    set_eval_switch(s, f.name)
-                }
-                _ => set_recall_switch(s, f.name)?,
-            }
-            Ok(())
-        }
-        Kind::Value => {
-            if f.once {
-                once(&mut s.seen, f.name)?;
-            }
-            let v = option_value(args, i, f.name, inline)?;
-            if !f.err_empty.is_empty() && v.is_empty() {
-                return Err(format!("{} {}", f.name, f.err_empty));
-            }
-            match f.name {
-                "--query" | "--fix" | "--mem-dir" => set_free(s, f, v),
-                _ => set_path(s, f, v),
-            }
-            Ok(())
-        }
-        Kind::F64 => {
-            once(&mut s.seen, f.name)?;
-            let v = option_value(args, i, f.name, inline)?;
-            let parsed: f64 = v
-                .parse()
-                .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
-            if !parsed.is_finite() || !(Config::MIN_RATIO..=1.0).contains(&parsed) {
-                return Err(format!(
-                    "{} must be a finite number in {}..=1.0",
-                    f.name,
-                    Config::MIN_RATIO
-                ));
-            }
-            s.config.ratio = parsed;
-            Ok(())
-        }
-        Kind::I64 => {
-            once(&mut s.seen, f.name)?;
-            let v = option_value(args, i, f.name, inline)?;
-            let parsed: i64 = v
-                .parse()
-                .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
-            let max = if f.name == "--window" {
-                Config::MAX_WINDOW
-            } else {
-                Config::MAX_CONTEXT
-            };
-            if !(0..=max).contains(&parsed) {
-                return Err(format!("{} must be in 0..={}", f.name, max));
-            }
-            if f.name == "--window" {
-                s.config.window = parsed.max(Config::MIN_WINDOW);
-            } else {
-                s.config.context = parsed;
-            }
-            Ok(())
-        }
-        Kind::U64 => {
-            once(&mut s.seen, f.name)?;
-            let v = option_value(args, i, f.name, inline)?;
-            let parsed: u64 = v
-                .parse()
-                .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
-            if parsed < f.min {
-                return Err(format!("{} {}", f.name, f.err_zero));
-            }
-            match f.name {
-                "--seed" => s.seed = parsed,
-                "--annotate-max" => s.annotate_max = parsed as usize,
-                "--recall" => s.recall = parsed as usize,
-                "--max-bytes" => s.max_bytes = Some(parsed),
-                "--max-tokens" => s.max_tokens = Some(parsed),
-                _ => unreachable!("U64 flag without arm: {}", f.name),
-            }
-            Ok(())
-        }
-        Kind::Bool01 => {
-            once(&mut s.seen, f.name)?;
-            let v = option_value(args, i, f.name, inline)?;
-            let b = parse_bool01(&v, f.name)?;
-            match f.name {
-                "--elide" => s.config.elide = b,
-                "--risk-gate" => s.config.risk_gate = b,
-                "--lineno" => s.config.lineno = b,
-                _ => s.store = b,
-            }
-            Ok(())
-        }
-        Kind::Force => {
-            let v = option_value(args, i, f.name, inline)?;
-            if v.split('|').all(|p| p.trim().is_empty()) {
-                return Err(format!("{} {}", f.name, f.err_empty));
-            }
-            s.config.forces.push(v);
-            Ok(())
-        }
-        Kind::RatePair => {
-            once(&mut s.seen, f.name)?;
-            let v = option_value(args, i, f.name, inline)?;
-            let good = match v.as_str() {
-                "good" => true,
-                "bad" => false,
-                _ => return Err("--rate expects good or bad".to_string()),
-            };
-            let id = option_value(args, i, f.name, None)?;
-            if id.is_empty() {
-                return Err("--rate requires a case-id".to_string());
-            }
-            s.rate = Some((good, id));
-            Ok(())
-        }
+        Kind::NoValue => parse_no_value(s, f, inline),
+        Kind::Value => parse_value(s, f, inline, args, i),
+        Kind::F64 => parse_f64_kind(s, f, inline, args, i),
+        Kind::I64 => parse_i64_kind(s, f, inline, args, i),
+        Kind::U64 => parse_u64_kind(s, f, inline, args, i),
+        Kind::Bool01 => parse_bool01_kind(s, f, inline, args, i),
+        Kind::Force => parse_force(s, f, inline, args, i),
+        Kind::RatePair => parse_rate_pair(s, f, inline, args, i),
     }
+}
+
+/// 无值开关：按名字分组写入状态（输出形态 / 维护动作 / 评估开关 / 召回开关）。
+fn parse_no_value(s: &mut ParseState, f: &Flag, inline: Option<String>) -> Result<(), String> {
+    if inline.is_some() {
+        return Err(format!("{} does not take a value", f.name));
+    }
+    match f.name {
+        "--json" | "--stat" | "--no-stats" => set_output(s, f.name),
+        "--rebuild" | "--gc" => set_house(s, f.name),
+        "--annotate" | "--annotate-raw" | "--gate" | "--gate-human" | "--gate-items" => {
+            set_eval_switch(s, f.name)
+        }
+        _ => set_recall_switch(s, f.name)?,
+    }
+    Ok(())
+}
+
+/// 自由文本值（query/fix/mem-dir 入 state；其余按路径处理）。
+fn parse_value(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    if f.once {
+        once(&mut s.seen, f.name)?;
+    }
+    let v = option_value(args, i, f.name, inline)?;
+    if !f.err_empty.is_empty() && v.is_empty() {
+        return Err(format!("{} {}", f.name, f.err_empty));
+    }
+    match f.name {
+        "--query" | "--fix" | "--mem-dir" => set_free(s, f, v),
+        _ => set_path(s, f, v),
+    }
+    Ok(())
+}
+
+/// 比率（有限且在 MIN_RATIO..=1.0）。
+fn parse_f64_kind(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
+    let v = option_value(args, i, f.name, inline)?;
+    let parsed: f64 = v
+        .parse()
+        .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
+    if !parsed.is_finite() || !(Config::MIN_RATIO..=1.0).contains(&parsed) {
+        return Err(format!(
+            "{} must be a finite number in {}..=1.0",
+            f.name,
+            Config::MIN_RATIO
+        ));
+    }
+    s.config.ratio = parsed;
+    Ok(())
+}
+
+/// 整数档（window/context，0..=上限）。
+fn parse_i64_kind(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
+    let v = option_value(args, i, f.name, inline)?;
+    let parsed: i64 = v
+        .parse()
+        .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
+    let max = if f.name == "--window" {
+        Config::MAX_WINDOW
+    } else {
+        Config::MAX_CONTEXT
+    };
+    if !(0..=max).contains(&parsed) {
+        return Err(format!("{} must be in 0..={}", f.name, max));
+    }
+    if f.name == "--window" {
+        s.config.window = parsed.max(Config::MIN_WINDOW);
+    } else {
+        s.config.context = parsed;
+    }
+    Ok(())
+}
+
+/// 无符号整数档（下限 f.min 起）。
+fn parse_u64_kind(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
+    let v = option_value(args, i, f.name, inline)?;
+    let parsed: u64 = v
+        .parse()
+        .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
+    if parsed < f.min {
+        return Err(format!("{} {}", f.name, f.err_zero));
+    }
+    match f.name {
+        "--seed" => s.seed = parsed,
+        "--annotate-max" => s.annotate_max = parsed as usize,
+        "--recall" => s.recall = parsed as usize,
+        "--max-bytes" => s.max_bytes = Some(parsed),
+        "--max-tokens" => s.max_tokens = Some(parsed),
+        _ => unreachable!("U64 flag without arm: {}", f.name),
+    }
+    Ok(())
+}
+
+/// 0/1 开关。
+fn parse_bool01_kind(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
+    let v = option_value(args, i, f.name, inline)?;
+    let b = parse_bool01(&v, f.name)?;
+    match f.name {
+        "--elide" => s.config.elide = b,
+        "--risk-gate" => s.config.risk_gate = b,
+        "--lineno" => s.config.lineno = b,
+        _ => s.store = b,
+    }
+    Ok(())
+}
+
+/// 强制模式子串（`|` 分隔，允许重复）。
+fn parse_force(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    let v = option_value(args, i, f.name, inline)?;
+    if v.split('|').all(|p| p.trim().is_empty()) {
+        return Err(format!("{} {}", f.name, f.err_empty));
+    }
+    s.config.forces.push(v);
+    Ok(())
+}
+
+/// 反馈对（good/bad + case-id）。
+fn parse_rate_pair(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
+    let v = option_value(args, i, f.name, inline)?;
+    let good = match v.as_str() {
+        "good" => true,
+        "bad" => false,
+        _ => return Err("--rate expects good or bad".to_string()),
+    };
+    let id = option_value(args, i, f.name, None)?;
+    if id.is_empty() {
+        return Err("--rate requires a case-id".to_string());
+    }
+    s.rate = Some((good, id));
+    Ok(())
 }
 
 /// 无维护动作（rebuild/gc/delete/eval/l1-hist/stats/judge）时是否豁免 `--query`。
@@ -838,7 +906,7 @@ fn validate_judge(s: &ParseState) -> Result<(), String> {
 }
 
 fn validate_annotate(s: &ParseState) -> Result<(), String> {
-    if (s.annotate || s.annotate_raw) && (s.eval.is_some() || s.l1_hist) {
+    if annotate_conflict(s) {
         return Err(
             "--annotate/--annotate-raw cannot be combined with --eval/--l1-hist".to_string(),
         );
@@ -846,12 +914,21 @@ fn validate_annotate(s: &ParseState) -> Result<(), String> {
     if s.annotate && s.annotate_raw {
         return Err("--annotate and --annotate-raw are mutually exclusive".to_string());
     }
-    if (s.annotate_out.is_some() || s.seen.contains("--seed") || s.seen.contains("--annotate-max"))
-        && !(s.annotate || s.annotate_raw)
-    {
+    if annotate_requires_missing(s) {
         return Err("--annotate-out/--seed/--annotate-max require --annotate".to_string());
     }
     Ok(())
+}
+
+/// --annotate/--annotate-raw 与 --eval/--l1-hist 互斥。
+fn annotate_conflict(s: &ParseState) -> bool {
+    (s.annotate || s.annotate_raw) && (s.eval.is_some() || s.l1_hist)
+}
+
+/// 标注参数出现但未启用 --annotate。
+fn annotate_requires_missing(s: &ParseState) -> bool {
+    (s.annotate_out.is_some() || s.seen.contains("--seed") || s.seen.contains("--annotate-max"))
+        && !(s.annotate || s.annotate_raw)
 }
 
 fn validate_actions(s: &ParseState) -> Result<(), String> {

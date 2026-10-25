@@ -235,7 +235,7 @@ fn seed_marks(
         force_any |= fm;
         hits[i] = h;
         sumw[i] = sw;
-        seed[i] = h >= 2 || (h == 1 && lone != usize::MAX && df[lone] <= rare_thr) || fm;
+        seed[i] = is_seed_candidate(h, lone, df, rare_thr, fm);
         if h > 0 {
             hit_lines += 1;
         }
@@ -314,19 +314,34 @@ fn score_line(
     if is_diffmeta(line) {
         sc += tbl.diffmeta_bonus;
     }
-    if is_diffline(line) && hits[i] > 0 {
+    if diff_hit(line, hits[i]) {
         sc += tbl.diffline_hit_bonus;
     }
-    if is_frame(line) || is_lineref(line) {
+    if frame_hint(line) {
         sc += tbl.frame_bonus;
     }
     if force[i] {
         sc += tbl.force_bonus;
     }
-    if i < tbl.edge_head || i >= total.saturating_sub(tbl.edge_tail) {
+    if edge_line(i, total, tbl) {
         sc += tbl.edge_bonus;
     }
     sc
+}
+
+/// diff 内容行且命中（结构判定与命中判定合并为单布尔，降低 score_line 判定点）。
+fn diff_hit(line: &str, hits: usize) -> bool {
+    is_diffline(line) && hits > 0
+}
+
+/// 堆栈帧 / 行引用（score_line 的结构加分判定）。
+fn frame_hint(line: &str) -> bool {
+    is_frame(line) || is_lineref(line)
+}
+
+/// 首 `edge_head` / 尾 `edge_tail` 身份行。
+fn edge_line(i: usize, total: usize, tbl: &ScoreTable) -> bool {
+    i < tbl.edge_head || i >= total.saturating_sub(tbl.edge_tail)
 }
 
 /// 逐行打分：基础 = IDF 加权命中；结构加分只提升排序价值。
@@ -550,20 +565,10 @@ fn render(lines: &[&str], keep: &[bool], elide: bool, lineno: bool) -> (String, 
 }
 
 /// 对 `text` 按 `query` 做证据筛选压缩。纯函数：无文件、环境与进程 I/O。
+/// 编排器只做阶段调用与决策合并（McCabe 判定点 < 10）；各阶段逻辑在
+/// 独立小函数中（`norm_config` / `pass_shape_decision` / `cap_*` 等）。
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
-    // 库是公开接口：配置在入口统一规范化，避免 CLI 之外的调用触发溢出或超大循环。
-    let ratio = if cfg.ratio.is_nan() {
-        crate::policy::DEFAULT_RATIO
-    } else {
-        cfg.ratio.clamp(crate::policy::MIN_RATIO, 1.0)
-    };
-    let context = cfg.context.clamp(0, crate::policy::MAX_CONTEXT);
-    let window = if cfg.window < crate::policy::MIN_WINDOW {
-        crate::policy::MIN_WINDOW
-    } else {
-        cfg.window.min(crate::policy::MAX_WINDOW)
-    };
-
+    let (ratio, context, window) = norm_config(cfg);
     // 分析使用 LF 归一化文本；passthrough/fail-open 返回输入原文，保持“原样保留”语义。
     let original = text;
     // 零拷贝快路径：无 CR 时直接借用原文本；行以 &str 切片保存，避免整文复制与逐行分配。
@@ -575,11 +580,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // token 估算只服务小输入直通与可选预算；针尖档大盘无需整份扫描。
     // 小输入先算一次即可（随后可能直接 passthrough）；大输入把估算并入
     // 逐行分析循环，避免为同一批行再走一趟缓存。
-    let small_tok: f64 = if total < crate::policy::SMALL_LINES {
-        lines.iter().map(|s| token_est(s)).sum()
-    } else {
-        0.0
-    };
+    let small_tok = small_token_est(&lines, total);
     let chars_a = char_count(original);
 
     let mk = |text_owned: String,
@@ -619,7 +620,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         }
     };
 
-    if total < crate::policy::SMALL_LINES && small_tok < crate::policy::SMALL_TOK {
+    // 直通早退：小输入 / 超长行（无查询参与，原样返回）。
+    if let Some(mode) = pass_shape_decision(total, small_tok, any_longline(&lines)) {
         return mk(
             original.to_string(),
             total,
@@ -631,28 +633,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             0,
             0,
             Vec::new(),
-            Mode::PassSmall,
-            cfg.max_tokens,
-            0.0,
-        );
-    }
-    // 100k 字符的行必然至少 100k 字节；先做 O(1) 字节检查，只有超长行才
-    // 付 Unicode 字符计数成本（避免对每行都扫描一遍 chars）。
-    if lines.iter().any(|s| {
-        s.len() > crate::policy::LONGLINE_BYTES && s.chars().count() > crate::policy::LONGLINE_CHARS
-    }) {
-        return mk(
-            original.to_string(),
-            total,
-            chars_a,
-            0.0,
-            0,
-            0,
-            Risk::Low,
-            0,
-            0,
-            Vec::new(),
-            Mode::PassLongline,
+            mode,
             cfg.max_tokens,
             0.0,
         );
@@ -680,7 +661,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let seeds_total = (0..total).filter(|&i| seeds.seed[i]).count();
 
     // 无信号 fail-open：零命中且无 --force 命中 => 原样保留。
-    if seeds.hit_lines == 0 && !seeds.force_any {
+    if failopen_decision(seeds.hit_lines, seeds.force_any) {
         return mk(
             original.to_string(),
             total,
@@ -715,19 +696,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
     // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
     let tok_floor = kept_tokens(&lines, &keep);
-    let mut overflow: Option<Mode> = None;
-    if let Some(max) = cfg.max_tokens {
-        if tok_floor > max as f64 {
-            overflow = Some(Mode::OverflowEvidence);
-        }
-    }
+    let mut overflow = cap_floor(tok_floor, cfg.max_tokens);
 
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
     if context != 0 && overflow.is_none() {
-        let remaining = cfg
-            .max_tokens
-            .map(|m| m as f64 - tok_floor)
-            .unwrap_or(f64::INFINITY);
+        let remaining = cap_remaining(tok_floor, cfg.max_tokens);
         fill_budget(
             &Select {
                 lines: &lines,
@@ -763,11 +736,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 守卫后最终检查：填充受上限约束，但风险守卫可能追加证据性行；如实报告 OverflowFill。
     let final_tok = kept_tokens(&lines, &keep);
     if overflow.is_none() {
-        if let Some(max) = cfg.max_tokens {
-            if final_tok > max as f64 {
-                overflow = Some(Mode::OverflowFill);
-            }
-        }
+        overflow = cap_final(final_tok, cfg.max_tokens);
     }
 
     // 预算过紧或只有高频单查询命中时可能选不出任何行；此时回退原文，不返回静默空结果。
@@ -790,16 +759,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     let (out_text, kept_lno) = render(&lines, &keep, cfg.elide, cfg.lineno);
-    let chars_b = if out_text.ends_with('\n') {
-        char_count(&out_text).saturating_sub(1)
-    } else {
-        char_count(&out_text)
-    };
-    let cut_pct = if chars_a > 0 {
-        100.0 * (1.0 - chars_b as f64 / chars_a as f64)
-    } else {
-        0.0
-    };
+    let (chars_b, cut_pct) = cut_stats(&out_text, chars_a);
     mk(
         out_text,
         keep_count,
@@ -815,4 +775,95 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         cfg.max_tokens,
         final_tok,
     )
+}
+
+/// 配置规范化（库是公开接口：入口统一钳制，避免 CLI 之外的调用触发溢出或超大循环）。
+fn norm_config(cfg: &Config) -> (f64, i64, i64) {
+    let ratio = if cfg.ratio.is_nan() {
+        crate::policy::DEFAULT_RATIO
+    } else {
+        cfg.ratio.clamp(crate::policy::MIN_RATIO, 1.0)
+    };
+    let context = cfg.context.clamp(0, crate::policy::MAX_CONTEXT);
+    let window = if cfg.window < crate::policy::MIN_WINDOW {
+        crate::policy::MIN_WINDOW
+    } else {
+        cfg.window.min(crate::policy::MAX_WINDOW)
+    };
+    (ratio, context, window)
+}
+
+/// 小输入 token 估算（仅 total < SMALL_LINES 时计算，其余为 0）。
+fn small_token_est(lines: &[&str], total: usize) -> f64 {
+    if total < crate::policy::SMALL_LINES {
+        lines.iter().map(|s| token_est(s)).sum()
+    } else {
+        0.0
+    }
+}
+
+/// 超长行检测：字节与字符双口径（先 O(1) 字节检查，只有超长行才付字符计数成本）。
+fn any_longline(lines: &[&str]) -> bool {
+    lines.iter().any(|s| {
+        s.len() > crate::policy::LONGLINE_BYTES && s.chars().count() > crate::policy::LONGLINE_CHARS
+    })
+}
+
+/// 直通判定：小输入（行数与 token 估算双低）或超长行，返回对应模式；否则 None。
+fn pass_shape_decision(total: usize, small_tok: f64, has_longline: bool) -> Option<Mode> {
+    if total < crate::policy::SMALL_LINES && small_tok < crate::policy::SMALL_TOK {
+        Some(Mode::PassSmall)
+    } else if has_longline {
+        Some(Mode::PassLongline)
+    } else {
+        None
+    }
+}
+
+/// 无信号 fail-open 判定（零命中且无 --force 命中）。
+fn failopen_decision(signals: usize, force_any: bool) -> bool {
+    signals == 0 && !force_any
+}
+
+/// 证据种子判定：≥2 命中，或单稀有命中（df <= rare_thr），或 --force 命中。
+fn is_seed_candidate(h: usize, lone: usize, df: &[usize], rare_thr: usize, fm: bool) -> bool {
+    h >= 2 || (h == 1 && lone != usize::MAX && df[lone] <= rare_thr) || fm
+}
+
+/// --max-tokens：证据地板（证据 + 最小邻域）已超上限 → OverflowEvidence。
+fn cap_floor(tok_floor: f64, max_tokens: Option<usize>) -> Option<Mode> {
+    match max_tokens {
+        Some(max) if tok_floor > max as f64 => Some(Mode::OverflowEvidence),
+        _ => None,
+    }
+}
+
+/// --max-tokens：可选填充可分配余量（无上限时为 +∞）。
+fn cap_remaining(tok_floor: f64, max_tokens: Option<usize>) -> f64 {
+    max_tokens
+        .map(|m| m as f64 - tok_floor)
+        .unwrap_or(f64::INFINITY)
+}
+
+/// --max-tokens：风险守卫追加证据性行后总估算仍超 → OverflowFill。
+fn cap_final(final_tok: f64, max_tokens: Option<usize>) -> Option<Mode> {
+    match max_tokens {
+        Some(max) if final_tok > max as f64 => Some(Mode::OverflowFill),
+        _ => None,
+    }
+}
+
+/// 输出统计：字符数（去掉尾随换行）与压减率。
+fn cut_stats(out_text: &str, chars_a: usize) -> (usize, f64) {
+    let chars_b = if out_text.ends_with('\n') {
+        char_count(out_text).saturating_sub(1)
+    } else {
+        char_count(out_text)
+    };
+    let cut_pct = if chars_a > 0 {
+        100.0 * (1.0 - chars_b as f64 / chars_a as f64)
+    } else {
+        0.0
+    };
+    (chars_b, cut_pct)
 }

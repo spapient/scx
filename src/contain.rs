@@ -48,7 +48,7 @@ pub fn run(case: &Slice, cfg: &Config) -> Report {
     let mut kept = 0usize;
     let mut miss: Vec<String> = Vec::new();
     for ev in case.evidence {
-        if out_lines.iter().any(|l| *l == *ev) {
+        if out_lines.contains(ev) {
             kept += 1;
         } else {
             miss.push(ev.to_string());
@@ -150,7 +150,11 @@ mod tests {
     #[test]
     fn containment_full_on_evidence_case() {
         let r = run(&build_case(), &cfg());
-        assert_eq!(r.evidence_kept, r.evidence_total, "证据必须全保留: {:?}", r.miss);
+        assert_eq!(
+            r.evidence_kept, r.evidence_total,
+            "证据必须全保留: {:?}",
+            r.miss
+        );
         assert!(r.miss.is_empty());
         assert!(r.cut_pct > 0.0, "压缩必须产生真实压减");
         assert_eq!(r.mode, Mode::Sieve);
