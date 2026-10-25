@@ -309,6 +309,13 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   （.gitignore 草稿留本地）；`cargo publish --locked` 成功（201 文件），crates.io
   max_version=0.6.0、num_versions=3。main 已同步 origin/main=f725515。
 
+- **0.6.1 补丁（2026-10-26）**：修复 Claude Code 严格校验 `inputSchema` 导致的连接失败
+  （commit 271f4b2：TOOLS 表加 JSON Schema，compress_context 带参数 schema、无参工具 `{}`；
+  门禁双轨 228/0+239/0、golden 零漂移、本机 Claude `✔ Connected` 实测；Codex `--approve-for-me`
+  与 Claude `--allowedTools` 真实 MCP 通道调用均成功）。bump 0.6.1 + lock 同步；
+  `cargo publish --locked` 成功；crates.io max_version=0.6.1、num_versions=4；main 同步
+  origin/main=bb600ac（271f4b2 fix + bump）。
+
 ### 遗留 / 发布后检查单
 
 1. **merge / push / crates.io 发布均已执行**：main = origin/main = `1b89398`；
