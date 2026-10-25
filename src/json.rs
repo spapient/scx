@@ -2,6 +2,8 @@
 //! 值保留键序；递归下降解析，规模远小于深度限制风险。
 
 #![forbid(unsafe_code)]
+// 公共工具模块：mcp/semantic 各 feature 下消费点不同，允许部分方法在某构建未用。
+#![allow(dead_code)]
 
 pub enum Json {
     Null,

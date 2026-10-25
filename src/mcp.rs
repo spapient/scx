@@ -9,7 +9,7 @@
 //! 仅随 `--features mcp` 编译；feature 关闭时本模块与 `scx-mcp` 二进制
 //! 不参与构建，默认路径与 v0.4.1 逐字节一致。
 
-use crate::json::{Json, parse_json};
+use crate::json::{parse_json, Json};
 
 /// 进程内用量记账（单线程 stdio 循环，无需原子）。
 #[derive(Default)]
