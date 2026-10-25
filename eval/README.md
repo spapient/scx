@@ -21,14 +21,15 @@ python bin/scx-eval --help     # Windows
 | `confirm5.corpus.json` | confirm5：30 起公开事故，150 条存储 case |
 | `v2.corpus.json` | v2 开发集：30 起公开事故，150 条存储 case |
 | `real.corpus.json` | 真实事故集：11 起公开复盘，40 条 case |
-| `confirm5-policy.labels.json` | 规则物化控制集，**不是人工标签** |
-| `confirm5-ai.labels.json` | 384/384 AI 逐候选标签（`per-item-ai-v1`） |
-| `confirm5-hao.labels.json` | 384/384 人工逐候选标签（`per-item-human-v1`） |
+| `confirm5.policy.labels.json` | 规则物化控制集，**不是人工标签** |
+| `confirm5.ai.labels.json` | 384/384 AI 逐候选标签（`per-item-ai-v1`） |
+| `confirm5.human.labels.json` | 384/384 人工逐候选标签（`per-item-human-v1`） |
 | `v2.labels.json` | v2 案例级标签，AI 预填后由两位审核者采纳 |
 | `real.labels.json` | real 案例级标签（`judge.by=fei+hao`） |
-| `confirm5-40.packet.tsv` | 冻结盲审包：40 case / 384 候选 |
-| `confirm5-40-ai.tsv` | AI 输入包，保留 provenance |
-| `confirm5-40-hao.tsv` | 人工输入包，含 literal 不变量修正 |
+| `confirm5.blind40.packet.tsv` | 冻结盲审包：40 case / 384 候选 |
+
+AI/人工 reviewer 填写后的 TSV 是 `packet + labels` 的派生视图，不再单独入库；
+`blind check --packet ... --out ...` 可无损重建并校验历史 SHA256。
 
 ## 语料格式
 
@@ -102,13 +103,29 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
   --mem-dir /tmp/scx-confirm5
 ```
 
+`seed` 默认使用 4 个并发 store 进程，`--jobs` 取 `1..=32`；超过 32 只会加剧
+进程启动与跨进程锁竞争。case 文本以 UTF-8 字节经 stdin 写入，不生成逐 case
+临时文件，也不受 Windows 换行转换影响。输出 CSV 始终按语料顺序排列，case id
+的 hash 后缀与串行播种逐字节一致；CI 会在归一化日期前缀后对比
+`--jobs 4` 与 `--jobs 1` 的整个 CSV，避免跨午夜准备产生无意义差异。
+2026-10-25 Apple M5 Pro 五轮交替样本：并行中位 0.452 s（0.426–0.485），
+串行中位 0.606 s（0.593–0.610），中位加速 1.34×；绝对耗时随机器负载变化，
+不作为跨机器承诺。
+
+`seed` 在写入前验证语料：query 必须是单行、无制表符/NUL（否则
+`--eval-verbose` 无法无歧义解析），store/eval query 不得重复，事故 ID 唯一，
+来源必须是 HTTP(S) URL，层名、case 数和每个事故的 case 列表都必须完整。
+`--force` 只会清理已确认包含 `meta.toml` 与 `cases/` 的 scx 记忆库，拒绝工作区
+根、系统/用户临时目录根和任意非记忆库目录；macOS 的 `/tmp` 与
+`DARWIN_USER_TEMP_DIR` 都按标准临时根处理。
+
 人工、AI 与 policy 门禁复用同一记忆库：
 
 ```bash
-./bin/run --eval eval/confirm5-hao.labels.json --gate-human --eval-verbose \
+./bin/run --eval eval/confirm5.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-confirm5
-./bin/run --eval eval/confirm5-ai.labels.json --gate-items --mem-dir /tmp/scx-confirm5
-./bin/run --eval eval/confirm5-policy.labels.json --gate-human --mem-dir /tmp/scx-confirm5
+./bin/run --eval eval/confirm5.ai.labels.json --gate-items --mem-dir /tmp/scx-confirm5
+./bin/run --eval eval/confirm5.policy.labels.json --gate-human --mem-dir /tmp/scx-confirm5
 ```
 
 预期：human `PASS / exit 0`；AI 只通过 `--gate-items`，`--gate-human` 必须
@@ -118,13 +135,14 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 
 `stats` 读取确定性的 `--eval-verbose` 输出，计算配对 MRR/NDCG 差值、bootstrap
 置信区间和 sign-flip permutation p 值。提供 `--mem-dir` 时由 case query 计算难度层；
-也可传入 `case_index,tier` CSV。
+也可传入 `case_index,tier` CSV；该 CSV 必须覆盖全部 case，重复、越界或未知 tier
+都会被拒绝，避免静默漏算 hard 层。
 
 ```bash
-./bin/run --eval eval/confirm5-hao.labels.json --gate-human --eval-verbose \
+./bin/run --eval eval/confirm5.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-confirm5 > /tmp/scx-confirm5-hao.txt
 ./bin/scx-eval stats \
-  --baseline eval/confirm5-hao.labels.json \
+  --baseline eval/confirm5.human.labels.json \
   --verbose /tmp/scx-confirm5-hao.txt \
   --mem-dir /tmp/scx-confirm5 \
   --cluster-size 5 \
@@ -137,22 +155,31 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 
 ```bash
 ./bin/scx-eval blind make \
-  --baseline eval/confirm5-policy.labels.json --mem-dir /tmp/scx-confirm5 \
+  --baseline eval/confirm5.policy.labels.json --mem-dir /tmp/scx-confirm5 \
   --out /tmp/packet.tsv --manifest /tmp/manifest.json
 ./bin/scx-eval blind progress --packet /tmp/packet.tsv
 ./bin/scx-eval blind import \
-  --baseline eval/confirm5-policy.labels.json --packet /tmp/packet.tsv \
+  --baseline eval/confirm5.policy.labels.json --packet /tmp/packet.tsv \
   --out /tmp/human.json --judge <name> --date 2026-10-25T00:00:00Z
 ./bin/scx-eval blind check --baseline /tmp/human.json
+./bin/scx-eval blind check --baseline /tmp/human.json \
+  --packet /tmp/packet.tsv --out /tmp/human-filled.tsv
 ./bin/scx-eval blind agree \
   --a /tmp/first-reviewer.json --b /tmp/second-reviewer.json
 ```
 
-`blind make` 是确定性的。用 `confirm5-policy.labels.json` 和新播种记忆库重建
+`blind make` 是确定性的。用 `confirm5.policy.labels.json` 和新播种记忆库重建
 冻结包，应得到 SHA256
 `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f`。
 `blind agree` 报告共同裁决项、原始一致率、Cohen's kappa 与分歧列表。
 历史标签中的包路径字符串可能过时，应以 `judge.packet_sha256` 定位包。
+`blind import --allow-partial` 只允许留空的 grade；任何非空且不属于 `0/1/2`
+的值都会拒绝整次导入，且不写输出文件。`blind check --packet` 会用冻结包和
+labels 重建填写版；从 labels 读取的 `packet_sha256` 必须一致，否则失败。
+填写包以 LF 规范化后的内容计算 provenance 哈希，因此 Windows/Excel 保存的
+CRLF 文件与 LF 文件等价；`verify` 仍校验冻结文件的原始字节。
+已删除的两个派生填写版可重建为 SHA256
+`6a5319c5...ac9b18`（AI）和 `1f6cd835...240b5`（人工）。
 
 ## v2 与 real
 

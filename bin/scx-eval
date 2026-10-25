@@ -26,13 +26,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 EVAL_DIR = ROOT / "eval"
 LAYERS = ("literal", "paraphrase", "semantic")
 GRADE_HELP = "2=同事故/同根因或直接修复  1=同故障族/部分有用  0=无关"
+PACKET_HEAD = ("row", "case_index", "layer", "query", "candidate", "hint", "grade")
+# Local store writes are millisecond I/O; beyond 32 workers the cross-process
+# lock and process startup dominate, while resource spikes grow unchecked.
+MAX_JOBS = 32
 STOP = {
     "the", "a", "an", "of", "to", "and", "in", "on", "for", "with", "by",
     "from", "after", "before", "was", "were", "is", "are", "be", "that",
@@ -46,8 +50,11 @@ STOP = {
 
 
 def load_json(path):
-    with open(path, encoding="utf-8") as handle:
-        return json.load(handle, object_pairs_hook=OrderedDict)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        sys.exit(f"{path}: {error}")
 
 
 def dump_json(path, value):
@@ -68,12 +75,31 @@ def write_csv(path, fields, rows):
         for key in row:
             if key not in fields:
                 fields.append(key)
-    with open(path, "w", encoding="utf-8", newline="") as handle:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
             handle, fieldnames=fields, lineterminator="\n", restval=""
         )
         writer.writeheader()
         writer.writerows(rows)
+    os.replace(tmp, path)
+
+
+def read_csv(path):
+    try:
+        with open(path, encoding="utf-8-sig", newline="") as handle:
+            return list(csv.DictReader(handle))
+    except (OSError, UnicodeError, csv.Error) as error:
+        sys.exit(f"{path}: {error}")
+
+
+def is_line(value):
+    return not any(char in value for char in "\r\n\t\0")
+
+
+def require_line(label, value):
+    if not is_line(value):
+        sys.exit(f"{label}: must be one line without tabs or NUL")
 
 
 def sha256_file(path):
@@ -149,14 +175,37 @@ def _inside(path, parent):
         return False
 
 
+def is_memory_dir(path):
+    path = Path(path)
+    return (path / "meta.toml").is_file() and (path / "cases").is_dir()
+
+
+def cleanup_roots():
+    roots = {ROOT.resolve(), Path(tempfile.gettempdir()).resolve()}
+    # macOS resolves /tmp to /private/tmp while gettempdir() uses the user's
+    # per-process DARWIN_USER_TEMP_DIR; both are standard scratch locations.
+    if os.name != "nt":
+        roots.add(Path("/tmp").resolve())
+    return roots
+
+
 def prepare_mem_dir(mem_dir, force):
     path = Path(mem_dir).resolve()
+    if path.exists() and not path.is_dir():
+        sys.exit(f"seed: memory path is not a directory: {path}")
     if path.exists() and any(path.iterdir()):
         if not force:
             sys.exit(f"seed: memory dir is not empty: {path} (use --force)")
-        temp_root = Path(tempfile.gettempdir()).resolve()
-        if not (_inside(path, ROOT) or _inside(path, temp_root)):
-            sys.exit(f"seed: refusing to clear a non-workspace path: {path}")
+        roots = cleanup_roots()
+        if path in roots or any(_inside(root, path) for root in roots):
+            sys.exit(f"seed: refusing to clear a workspace or temp root: {path}")
+        if not is_memory_dir(path):
+            sys.exit(
+                f"seed: refusing to clear a non-memory directory: {path} "
+                "(remove it manually)"
+            )
+        if not any(_inside(path, root) for root in roots):
+            sys.exit(f"seed: refusing to clear outside workspace/temp roots: {path}")
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -169,10 +218,12 @@ def validate_corpus(corpus):
             f"corpus: incidents={len(incidents)} "
             f"expected={corpus.get('expected_incidents')}"
         )
-    seen_ids, seen_store = set(), set()
+    seen_ids, seen_store, seen_eval = set(), set(), set()
     layers = {layer: 0 for layer in LAYERS}
     total = 0
     for incident in incidents:
+        if not isinstance(incident, dict):
+            sys.exit("corpus: every incident must be an object")
         ident = str(incident.get("id") or "").strip()
         source = str(incident.get("source") or "").strip()
         root_cause = str(incident.get("root_cause") or "").strip()
@@ -183,19 +234,42 @@ def validate_corpus(corpus):
             sys.exit(f"corpus: incident {ident} has no public source URL")
         if not root_cause or not fix:
             sys.exit(f"corpus: incident {ident} has empty root_cause/fix")
+        for label, value in (
+            ("id", ident),
+            ("source", source),
+            ("root_cause", root_cause),
+            ("fix", fix),
+        ):
+            require_line(f"corpus: incident {ident} {label}", value)
         seen_ids.add(ident)
-        for case in incident.get("cases") or []:
+        cases = incident.get("cases") or []
+        if not cases:
+            sys.exit(f"corpus: incident {ident} has no cases")
+        for case in cases:
+            if not isinstance(case, dict):
+                sys.exit(f"corpus: incident {ident} case must be an object")
             layer = str(case.get("layer") or "")
             store_query = str(case.get("store_query") or "").strip()
             eval_query = str(case.get("eval_query") or "").strip()
+            text_query = str(case.get("text_query") or store_query).strip()
             if layer not in layers:
                 sys.exit(f"corpus: incident {ident} has bad layer: {layer!r}")
-            if not store_query or not eval_query:
+            if not store_query or not eval_query or not text_query:
                 sys.exit(f"corpus: incident {ident} has an empty query")
+            for label, value in (
+                ("store_query", store_query),
+                ("eval_query", eval_query),
+                ("text_query", text_query),
+            ):
+                require_line(f"corpus: incident {ident} {label}", value)
             normalized = store_query.casefold()
             if normalized in seen_store:
                 sys.exit(f"corpus: duplicate stored query: {store_query!r}")
+            normalized_eval = eval_query.casefold()
+            if normalized_eval in seen_eval:
+                sys.exit(f"corpus: duplicate eval query: {eval_query!r}")
             seen_store.add(normalized)
+            seen_eval.add(normalized_eval)
             layers[layer] += 1
             total += 1
     if total != corpus.get("expected_cases", total):
@@ -209,71 +283,85 @@ def corpus_cases(corpus):
             yield incident, case
 
 
-def seed_corpus(corpus, mem_dir, binary, force):
+def seed_case(binary, mem_dir, incident, case):
+    store_query = str(case["store_query"]).strip()
+    text_query = str(case.get("text_query") or store_query).strip()
+    source = str(incident["source"]).strip()
+    root_cause = str(incident["root_cause"]).strip()
+    text = (
+        f"{text_query}\n"
+        f"公开复盘, 来源: {source}\n"
+        f"根因: {root_cause}"
+    )
+    # Bytes on stdin avoid platform newline translation and per-case temp files.
+    # Corpus identity therefore stays byte-stable on Linux, macOS, and Windows.
+    proc = subprocess.run(
+        [
+            binary, "--query", store_query, "--store", "1",
+            "--fix", str(incident["fix"]).strip(), "--mem-dir", str(mem_dir),
+        ],
+        input=text.encode("utf-8"),
+        capture_output=True,
+    )
+    output = (proc.stdout + proc.stderr).decode("utf-8", "replace")
+    match = re.search(r"stored case=(\S+) added=yes", output)
+    if proc.returncode != 0 or not match:
+        raise RuntimeError(f"seed: store failed for {case['store_query']!r}\n{output}")
+    case_id = match.group(1)
+    return {
+        "query": case["eval_query"],
+        "layer": case["layer"],
+        "case_id": case_id,
+        "note": f"target={tail_of(case_id)} source={incident['source']}",
+    }
+
+
+def seed_corpus(corpus, mem_dir, binary, force, jobs=1):
     layers = validate_corpus(corpus)
     binary = binary or default_binary()
     if not binary or not Path(binary).is_file():
         sys.exit("seed: missing release binary; run `./bin/run --version` first")
     mem_dir = prepare_mem_dir(mem_dir, force)
-    rows = []
-    with tempfile.TemporaryDirectory(prefix="scx-eval-") as tmp:
-        for index, (incident, case) in enumerate(corpus_cases(corpus), 1):
-            text_query = case.get("text_query") or case["store_query"]
-            text = (
-                f"{text_query}\n"
-                f"公开复盘, 来源: {incident['source']}\n"
-                f"根因: {incident['root_cause']}"
-            )
-            log_path = Path(tmp) / f"{index:04d}.log"
-            log_path.write_text(text, encoding="utf-8")
-            proc = subprocess.run(
-                [
-                    binary, "--query", case["store_query"], "--store", "1",
-                    "--fix", incident["fix"], "--mem-dir", str(mem_dir),
-                    str(log_path),
-                ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            output = (proc.stdout or "") + (proc.stderr or "")
-            match = re.search(r"stored case=(\S+) added=yes", output)
-            if proc.returncode != 0 or not match:
-                sys.exit(f"seed: store failed for {case['store_query']!r}\n{output}")
-            case_id = match.group(1)
-            rows.append(
-                {
-                    "query": case["eval_query"],
-                    "layer": case["layer"],
-                    "case_id": case_id,
-                    "note": f"target={tail_of(case_id)} source={incident['source']}",
-                }
-            )
+    jobs = int(jobs)
+    items = list(corpus_cases(corpus))
+    if not items:
+        sys.exit("seed: corpus has no cases")
+
+    def run(item):
+        incident, case = item
+        return seed_case(binary, mem_dir, incident, case)
+
+    try:
+        with ThreadPoolExecutor(max_workers=min(jobs, len(items))) as pool:
+            rows = list(pool.map(run, items))
+    except (OSError, RuntimeError) as error:
+        sys.exit(str(error))
     return rows, layers
 
 
 def cmd_seed(args):
+    if not 1 <= args.jobs <= MAX_JOBS:
+        sys.exit(f"seed: --jobs must be in 1..={MAX_JOBS}")
     corpus = load_json(args.corpus)
     rows, layers = seed_corpus(
-        corpus, args.mem_dir, args.binary or default_binary(), args.force
+        corpus, args.mem_dir, args.binary or default_binary(), args.force, args.jobs
     )
     if args.csv:
         write_csv(args.csv, ("query", "layer", "case_id", "note"), rows)
     print(
         f"seed: corpus={corpus.get('name')} cases={len(rows)} "
         f"literal={layers['literal']} paraphrase={layers['paraphrase']} "
-        f"semantic={layers['semantic']} mem={args.mem_dir}"
+        f"semantic={layers['semantic']} jobs={args.jobs} mem={args.mem_dir}"
     )
     if args.csv:
         print(f"seed: wrote {args.csv}")
 
 
 def cmd_baseline(args):
-    rows = list(csv.DictReader(open(args.csv, encoding="utf-8-sig")))
+    rows = read_csv(args.csv)
     if not rows:
         sys.exit(f"baseline: no data rows: {args.csv}")
-    cases = []
+    cases, seen_ids = [], set()
     counts = {layer: 0 for layer in LAYERS}
     for number, row in enumerate(rows, 2):
         query = (row.get("query") or "").strip()
@@ -281,17 +369,21 @@ def cmd_baseline(args):
         case_id = (row.get("case_id") or "").strip()
         if not query or not case_id or layer not in counts:
             sys.exit(f"baseline: bad row {number}")
-        case = OrderedDict()
-        case["query"] = query
-        case["layer"] = layer
-        case["expected"] = [case_id]
-        case["rel"] = {case_id: 2}
-        case["judge"] = OrderedDict(
-            (("by", args.judge_by), ("date", args.judge_date))
-        )
+        require_line(f"baseline: row {number} query", query)
+        if case_id in seen_ids:
+            sys.exit(f"baseline: duplicate case_id: {case_id}")
+        seen_ids.add(case_id)
         note = (row.get("note") or "").strip()
-        case["note"] = "target-only" + (f"; {note}" if note else "")
-        cases.append(case)
+        cases.append(
+            {
+                "query": query,
+                "layer": layer,
+                "expected": [case_id],
+                "rel": {case_id: 2},
+                "judge": {"by": args.judge_by, "date": args.judge_date},
+                "note": "target-only" + (f"; {note}" if note else ""),
+            }
+        )
         counts[layer] += 1
     dump_json(args.out, {"cases": cases})
     print(
@@ -312,20 +404,34 @@ def cmd_baseline(args):
 
 
 def parse_verbose(path, expected_cases):
-    text = Path(path).read_text(encoding="utf-8").splitlines()
+    try:
+        text = Path(path).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        sys.exit(f"{path}: {error}")
     rows = []
     current = None
     for line in text:
         match = re.match(r'case (\d+)/\d+ q="(.*)"', line)
         if match:
-            current = {"A": [], "B": []}
+            current = {"A": None, "B": None}
             rows.append(current)
             continue
         match = re.match(r"  ([AB]): (.*)", line)
         if match and current is not None:
+            if current[match.group(1)] is not None:
+                sys.exit(f"stats: duplicate {match.group(1)} line in {path}")
             current[match.group(1)] = re.findall(r"\) (\S+) sim=", match.group(2))
+            continue
+        if line.startswith(("case ", "  A: ", "  B: ")):
+            sys.exit(f"stats: malformed verbose line in {path}: {line!r}")
     if len(rows) != expected_cases:
         sys.exit(f"stats: verbose cases={len(rows)} baseline cases={expected_cases}")
+    for index, row in enumerate(rows, 1):
+        for side in ("A", "B"):
+            if row[side] is None:
+                sys.exit(f"stats: case {index} missing {side} line in {path}")
+            if not row[side]:
+                row[side] = []
     return rows
 
 
@@ -386,10 +492,10 @@ def tier_of(value):
     return "hard"
 
 
-def load_case_queries(mem_dir):
+def load_memory_cases(mem_dir, command):
     root = Path(mem_dir) / "cases"
     if not root.is_dir():
-        sys.exit(f"stats: missing memory cases dir: {root}")
+        sys.exit(f"{command}: missing memory cases dir: {root}")
     by_full, by_tail = {}, {}
     for directory in sorted(root.iterdir()):
         path = directory / "case.json"
@@ -397,51 +503,59 @@ def load_case_queries(mem_dir):
             continue
         case = load_json(path)
         ident = str(case.get("id") or directory.name)
-        by_full[ident] = str(case.get("query") or "")
-        by_tail[tail_of(ident)] = str(case.get("query") or "")
+        entry = (
+            ident,
+            str(case.get("query") or ""),
+            str(case.get("fix") or ""),
+        )
+        by_full[ident] = entry
+        by_tail[tail_of(ident)] = entry
     return by_full, by_tail
 
 
 def strata_for(cases, mem_dir, strata_csv=None):
     if strata_csv:
         tiers = {}
-        for row in csv.DictReader(open(strata_csv, encoding="utf-8-sig")):
-            tiers[int(row["case_index"])] = row.get("tier", "")
+        for row in read_csv(strata_csv):
+            try:
+                index = int(row["case_index"])
+            except (KeyError, ValueError):
+                sys.exit(f"stats: bad strata case_index: {row.get('case_index')!r}")
+            tier = (row.get("tier") or "").strip()
+            if not 0 <= index < len(cases):
+                sys.exit(f"stats: strata case_index out of range: {index}")
+            if index in tiers:
+                sys.exit(f"stats: duplicate strata case_index: {index}")
+            if tier not in {"easy", "medium", "hard"}:
+                sys.exit(f"stats: bad tier for case {index}: {tier!r}")
+            tiers[index] = tier
+        missing = sorted(set(range(len(cases))) - set(tiers))
+        if missing:
+            sys.exit(f"stats: strata missing case indexes: {missing[:8]}")
         return tiers
     if not mem_dir:
         sys.exit("stats: --mem-dir or --strata is required")
-    by_full, by_tail = load_case_queries(mem_dir)
+    by_full, by_tail = load_memory_cases(mem_dir, "stats")
     tiers = {}
     for index, case in enumerate(cases):
         target = str(case["expected"][0])
-        query = by_full.get(target) or by_tail.get(tail_of(target))
-        if query is None:
+        hit = by_full.get(target) or by_tail.get(tail_of(target))
+        if hit is None:
             sys.exit(f"stats: target {target} not found in memory dir {mem_dir}")
+        query = hit[1]
         tiers[index] = tier_of(jaccard(str(case["query"]), query))
     return tiers
 
 
-def analyze(name, rows, boot, perm, seed, mde, metric):
-    if not rows:
-        return None
-    deltas = [row["a"] - row["b"] for row in rows]
-    n = len(deltas)
-    observed = sum(deltas) / n
-    rng = random.Random(seed)
-    means = sorted(
-        sum(deltas[rng.randrange(n)] for _ in range(n)) / n
-        for _ in range(boot)
-    )
-    lo = means[int(0.025 * (boot - 1))]
-    hi = means[int(0.975 * (boot - 1))]
-    hits = sum(
-        1
-        for _ in range(perm)
-        if abs(sum(x if rng.random() >= 0.5 else -x for x in deltas) / n)
-        >= abs(observed)
-    )
-    p_value = (hits + 1.0) / (perm + 1.0)
-    return {
+def ci_bounds(samples, boot):
+    samples.sort()
+    return samples[int(0.025 * (boot - 1))], samples[int(0.975 * (boot - 1))]
+
+
+def result_row(name, rows, lo, hi, p_value, metric, mde, n_clusters=None):
+    n = len(rows)
+    observed = sum(row["a"] - row["b"] for row in rows) / n
+    row = {
         "group": name,
         "n": n,
         f"A_{metric}": round(sum(row["a"] for row in rows) / n, 4),
@@ -453,6 +567,31 @@ def analyze(name, rows, boot, perm, seed, mde, metric):
         "mde": mde,
         "advantage": int(lo > 0 and observed >= mde and p_value < 0.05),
     }
+    if n_clusters is not None:
+        row["n_clusters"] = n_clusters
+    return row
+
+
+def analyze(name, rows, boot, perm, seed, mde, metric):
+    if not rows:
+        return None
+    deltas = [row["a"] - row["b"] for row in rows]
+    n = len(deltas)
+    observed = sum(deltas) / n
+    rng = random.Random(seed)
+    means = [
+        sum(deltas[rng.randrange(n)] for _ in range(n)) / n
+        for _ in range(boot)
+    ]
+    lo, hi = ci_bounds(means, boot)
+    hits = sum(
+        1
+        for _ in range(perm)
+        if abs(sum(x if rng.random() >= 0.5 else -x for x in deltas) / n)
+        >= abs(observed)
+    )
+    p_value = (hits + 1.0) / (perm + 1.0)
+    return result_row(name, rows, lo, hi, p_value, metric, mde)
 
 
 def analyze_cluster(rows, cluster_size, boot, perm, seed, mde, metric):
@@ -470,9 +609,7 @@ def analyze_cluster(rows, cluster_size, boot, perm, seed, mde, metric):
         sample = [clusters[rng.randrange(len(clusters))] for _ in clusters]
         values = [row["a"] - row["b"] for cluster in sample for row in cluster]
         means.append(sum(values) / len(values))
-    means.sort()
-    lo = means[int(0.025 * (boot - 1))]
-    hi = means[int(0.975 * (boot - 1))]
+    lo, hi = ci_bounds(means, boot)
     hits = 0
     for _ in range(perm):
         total = count = 0
@@ -484,26 +621,25 @@ def analyze_cluster(rows, cluster_size, boot, perm, seed, mde, metric):
         if abs(total / count) >= abs(observed):
             hits += 1
     p_value = (hits + 1.0) / (perm + 1.0)
-    return {
-        "group": "tier:hard:cluster",
-        "n": len(rows),
-        "n_clusters": len(clusters),
-        f"A_{metric}": round(sum(row["a"] for row in rows) / len(rows), 4),
-        f"B_{metric}": round(sum(row["b"] for row in rows) / len(rows), 4),
-        "delta": round(observed, 4),
-        "ci_lo": round(lo, 4),
-        "ci_hi": round(hi, 4),
-        "perm_p": round(p_value, 4),
-        "mde": mde,
-        "advantage": int(lo > 0 and observed >= mde and p_value < 0.05),
-    }
+    return result_row(
+        "tier:hard:cluster", rows, lo, hi, p_value, metric, mde, len(clusters)
+    )
 
 
 def cmd_stats(args):
     if args.boot < 1 or args.perm < 1:
         sys.exit("stats: --boot and --perm must be positive")
+    if not math.isfinite(args.mde) or not 0.0 <= args.mde <= 1.0:
+        sys.exit("stats: --mde must be a finite value in [0, 1]")
+    if args.cluster_size < 0:
+        sys.exit("stats: --cluster-size must be non-negative")
     baseline = load_json(args.baseline)
     cases = baseline.get("cases") or []
+    if not cases:
+        sys.exit("stats: baseline has no cases")
+    for index, case in enumerate(cases):
+        if not case.get("expected"):
+            sys.exit(f"stats: case {index} has no expected target")
     verbose = parse_verbose(args.verbose, len(cases))
     tiers = strata_for(cases, args.mem_dir, args.strata)
     rows = []
@@ -523,24 +659,20 @@ def cmd_stats(args):
                 "b": right,
             }
         )
+    def measure(name, group):
+        return analyze(
+            name, group, args.boot, args.perm, args.seed, args.mde, args.metric
+        )
+
     results = []
     for layer in LAYERS:
         group = [row for row in rows if row["layer"] == layer]
         if group:
-            results.append(
-                analyze(layer, group, args.boot, args.perm, args.seed, args.mde, args.metric)
-            )
+            results.append(measure(layer, group))
     for tier in sorted({row["tier"] for row in rows if row["tier"]}):
         group = [row for row in rows if row["tier"] == tier]
-        results.append(
-            analyze(
-                f"tier:{tier}", group, args.boot, args.perm, args.seed,
-                args.mde, args.metric,
-            )
-        )
-    results.append(
-        analyze("all", rows, args.boot, args.perm, args.seed, args.mde, args.metric)
-    )
+        results.append(measure(f"tier:{tier}", group))
+    results.append(measure("all", rows))
     if args.cluster_size:
         hard = [row for row in rows if row["tier"] == "hard"]
         cluster = analyze_cluster(
@@ -579,39 +711,66 @@ def cmd_stats(args):
 # ---------------------------------------------------------------------------
 
 
-def case_index(mem_dir):
-    root = Path(mem_dir) / "cases"
-    if not root.is_dir():
-        sys.exit(f"blind: missing memory cases dir: {root}")
-    out = {}
-    for directory in sorted(root.iterdir()):
-        path = directory / "case.json"
-        if not path.is_file():
-            continue
-        case = load_json(path)
-        full = str(case.get("id") or directory.name)
-        out[tail_of(full)] = (
-            full,
-            str(case.get("query") or ""),
-            str(case.get("fix") or ""),
-        )
-    return out
+def read_tsv(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            head = handle.readline().rstrip("\r\n").split("\t")
+            if tuple(head) != PACKET_HEAD:
+                sys.exit(f"blind: bad header: {head}")
+            rows = [line.rstrip("\r\n").split("\t") for line in handle if line.strip()]
+    except OSError as error:
+        sys.exit(f"{path}: {error}")
+    for number, row in enumerate(rows, 2):
+        if len(row) != len(head):
+            sys.exit(f"blind: row {number} has {len(row)} columns, expected {len(head)}")
+    return head, rows
+
+
+def tsv_text(head, rows):
+    lines = ["\t".join(head)]
+    lines.extend("\t".join(str(value) for value in row) for row in rows)
+    return "\n".join(lines) + "\n"
+
+
+def write_text(path, text):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="") as handle:
+        handle.write(text)
+    os.replace(tmp, path)
 
 
 def read_packet(path):
-    with open(path, encoding="utf-8") as handle:
-        head = handle.readline().rstrip("\n").split("\t")
-        need = ["row", "case_index", "layer", "query", "candidate", "hint", "grade"]
-        if head[: len(need)] != need:
-            sys.exit(f"blind: bad header: {head}")
-        rows = [line.rstrip("\n").split("\t") for line in handle if line.strip()]
+    head, rows = read_tsv(path)
     return [dict(zip(head, row)) for row in rows]
+
+
+def filled_packet(head, rows, cases):
+    rel_by_case = {}
+    for index, case in enumerate(cases):
+        case_index = int(case.get("case_index", index))
+        if case_index in rel_by_case:
+            sys.exit(f"blind: duplicate label case_index: {case_index}")
+        rel_by_case[case_index] = case.get("rel") or {}
+    filled = []
+    for number, row in enumerate(rows, 2):
+        fields = dict(zip(head, row))
+        try:
+            grade = float(rel_by_case[int(fields["case_index"])][fields["candidate"]])
+        except (KeyError, TypeError, ValueError):
+            sys.exit(f"blind: packet row {number} cannot be materialized from labels")
+        if grade not in (0.0, 1.0, 2.0):
+            sys.exit(f"blind: packet row {number} grade {grade} outside 0..2")
+        fields["grade"] = str(int(grade))
+        filled.append([fields.get(key, "") for key in head])
+    return tsv_text(head, filled)
 
 
 def cmd_blind_make(args):
     baseline = load_json(args.baseline)
     cases = baseline["cases"]
-    by_layer = OrderedDict()
+    by_layer = {}
     for index, case in enumerate(cases):
         by_layer.setdefault(case["layer"], []).append(index)
     picks = []
@@ -622,7 +781,7 @@ def cmd_blind_make(args):
         ranked = sorted(indexes, key=lambda i: sha256_text(f"{args.seed}:{layer}:{i}"))
         picks.extend(ranked[:want])
     picks.sort(key=lambda i: sha256_text(f"{args.seed}:case:{i}"))
-    memory = case_index(args.mem_dir)
+    _, memory = load_memory_cases(args.mem_dir, "blind")
     rows, manifest_cases = [], []
     for case_index_value in picks:
         case = cases[case_index_value]
@@ -653,11 +812,16 @@ def cmd_blind_make(args):
             rows.append(
                 (case_index_value, case["layer"], clean(case["query"]), key, hint)
             )
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    with open(args.out, "w", encoding="utf-8", newline="") as handle:
-        handle.write("row\tcase_index\tlayer\tquery\tcandidate\thint\tgrade\n")
-        for number, (ci, layer, query, key, hint) in enumerate(rows, 1):
-            handle.write(f"{number}\t{ci}\t{layer}\t{query}\t{key}\t{hint}\t\n")
+    write_text(
+        args.out,
+        tsv_text(
+            PACKET_HEAD,
+            [
+                (number, ci, layer, query, key, hint, "")
+                for number, (ci, layer, query, key, hint) in enumerate(rows, 1)
+            ],
+        ),
+    )
     manifest = {
         "name": args.name,
         "seed": args.seed,
@@ -687,11 +851,13 @@ def parse_grades(rows, allow_partial):
     grades = {}
     for row in rows:
         grade = (row.get("grade") or "").strip()
+        if not grade and allow_partial:
+            continue
         if grade not in {"0", "1", "2"}:
-            if allow_partial:
-                continue
+            if grade:
+                sys.exit(f"blind: row {row['row']} grade={grade!r} must be 0, 1, or 2")
             sys.exit(
-                f"blind: row {row['row']} grade={grade!r} "
+                f"blind: row {row['row']} has an empty grade "
                 "(fill every row or pass --allow-partial)"
             )
         key = (int(row["case_index"]), row["candidate"])
@@ -704,10 +870,14 @@ def parse_grades(rows, allow_partial):
 
 
 def cmd_blind_import(args):
-    rows = read_packet(args.packet)
+    head, table = read_tsv(args.packet)
+    rows = [dict(zip(head, row)) for row in table]
     grades = parse_grades(rows, args.allow_partial)
     baseline = load_json(args.baseline)
     cases = baseline["cases"]
+    # Canonicalize line endings so a Windows/Excel CRLF copy and the tracked
+    # LF packet share one provenance hash, while verify still checks raw bytes.
+    packet_sha = sha256_text(tsv_text(head, table))
     by_case = {}
     for (case_index_value, candidate), grade in grades.items():
         if not 0 <= case_index_value < len(cases):
@@ -716,6 +886,8 @@ def cmd_blind_import(args):
     output, violations = [], []
     for case_index_value in sorted(by_case):
         case = cases[case_index_value]
+        if not case.get("expected"):
+            sys.exit(f"blind: case {case_index_value} has no expected target")
         pool = set((case.get("rel") or {}).keys())
         got = set(by_case[case_index_value])
         if got != pool:
@@ -723,31 +895,29 @@ def cmd_blind_import(args):
                 f"blind: case {case_index_value} coverage mismatch "
                 f"missing={sorted(pool - got)[:3]} extra={sorted(got - pool)[:3]}"
             )
-        rel = OrderedDict(
-            (key, by_case[case_index_value][key]) for key in case["rel"].keys()
-        )
+        rel = {key: by_case[case_index_value][key] for key in case["rel"]}
         target = tail_of(case["expected"][0])
         target_grade = next(
             (value for key, value in rel.items() if tail_of(key) == target), None
         )
         if case["layer"] == "literal" and target_grade != 2.0:
             violations.append((case_index_value + 1, target[:8], target_grade))
-        items = OrderedDict((key, {"by": args.judge, "date": args.date}) for key in rel)
-        new_case = OrderedDict()
-        new_case["query"] = case["query"]
-        new_case["layer"] = case["layer"]
-        new_case["expected"] = case["expected"]
-        new_case["case_index"] = case_index_value
-        new_case["rel"] = rel
-        new_case["judge"] = {
-            "by": args.judge,
-            "date": args.date,
-            "method": args.method,
-            "packet_sha256": sha256_file(args.packet),
-            "packet": str(Path(args.packet).resolve()),
+        new_case = {
+            "query": case["query"],
+            "layer": case["layer"],
+            "expected": case["expected"],
+            "case_index": case_index_value,
+            "rel": rel,
+            "judge": {
+                "by": args.judge,
+                "date": args.date,
+                "method": args.method,
+                "packet_sha256": packet_sha,
+                "packet": str(Path(args.packet).resolve()),
+            },
+            "judge_items": {key: {"by": args.judge, "date": args.date} for key in rel},
+            "note": f"per-item blind review; packet={Path(args.packet).name}",
         }
-        new_case["judge_items"] = items
-        new_case["note"] = f"per-item blind review; packet={Path(args.packet).name}"
         if args.note:
             new_case["note"] += f"; {args.note}"
         output.append(new_case)
@@ -786,7 +956,31 @@ def cmd_blind_check(args):
                 f"extra={len(got - pool)}"
             )
     print(f"blind: cases={len(baseline['cases'])} items={items} incomplete={bad}")
-    return 1 if bad else 0
+    failed = bad > 0
+    if args.out and not args.packet:
+        sys.exit("blind: --out requires --packet")
+    if args.packet:
+        head, rows = read_tsv(args.packet)
+        body = filled_packet(head, rows, baseline["cases"])
+        actual = sha256_text(body)
+        recorded = set()
+        for case in baseline["cases"]:
+            judge = case.get("judge") or {}
+            if judge.get("packet_sha256"):
+                recorded.add(str(judge["packet_sha256"]))
+        if len(recorded) > 1:
+            sys.exit("blind: labels disagree on packet_sha256")
+        expected = next(iter(recorded), "")
+        if expected and actual.lower() != expected.lower():
+            print(
+                f"blind: materialized packet drifted: {actual} != {expected}",
+                file=sys.stderr,
+            )
+            failed = True
+        if args.out:
+            write_text(args.out, body)
+        print(f"blind: materialized rows={len(rows)} sha256={actual}")
+    return 1 if failed else 0
 
 
 def cmd_blind_progress(args):
@@ -851,9 +1045,7 @@ def cmd_blind_agree(args):
 
 
 def cmd_blind_review(args):
-    with open(args.packet, encoding="utf-8") as handle:
-        head = handle.readline().rstrip("\n").split("\t")
-        rows = [line.rstrip("\n").split("\t") for line in handle if line.strip()]
+    head, rows = read_tsv(args.packet)
     columns = {key: index for index, key in enumerate(head)}
     grade_index = columns["grade"]
     todo = [row for row in rows if not row[grade_index].strip()]
@@ -878,11 +1070,7 @@ def cmd_blind_review(args):
                 if answer == "s":
                     break
             if dirty:
-                tmp = args.packet + ".tmp"
-                with open(tmp, "w", encoding="utf-8", newline="") as handle:
-                    handle.write("\t".join(head) + "\n")
-                    handle.write("".join("\t".join(row) + "\n" for row in rows))
-                os.replace(tmp, args.packet)
+                write_text(args.packet, tsv_text(head, rows))
                 dirty = False
     except (KeyboardInterrupt, EOFError):
         pass
@@ -917,6 +1105,40 @@ def cmd_verify(args):
 
 
 def selftest():
+    assert not is_memory_dir(ROOT)
+    with tempfile.TemporaryDirectory(prefix="scx-selftest-") as tmp:
+        path = Path(tmp)
+        assert not is_memory_dir(path)
+        (path / "cases").mkdir()
+        assert not is_memory_dir(path)
+        (path / "meta.toml").write_text("schema = 2\n", encoding="utf-8")
+        assert is_memory_dir(path)
+        memory = path / "memory"
+        (memory / "cases").mkdir(parents=True)
+        (memory / "meta.toml").write_text("schema = 2\n", encoding="utf-8")
+        (memory / "stale").write_text("remove\n", encoding="utf-8")
+        assert prepare_mem_dir(memory, True) == memory.resolve()
+        assert memory.is_dir() and not any(memory.iterdir())
+        foreign = path / "foreign"
+        foreign.mkdir()
+        (foreign / "keep").write_text("keep\n", encoding="utf-8")
+        try:
+            prepare_mem_dir(foreign, True)
+        except SystemExit as error:
+            assert "non-memory" in str(error)
+        else:
+            raise AssertionError("--force must reject a non-memory directory")
+        assert (foreign / "keep").read_text(encoding="utf-8") == "keep\n"
+        verbose = path / "verbose.txt"
+        verbose.write_text(
+            'case 1/1 q="database timeout"\n'
+            "  A: 1) abcdef12 sim=0.90 score=9.00 [hit]\n"
+            "  B: (no hits)\n",
+            encoding="utf-8",
+        )
+        assert parse_verbose(verbose, 1) == [{"A": ["abcdef12"], "B": []}]
+        assert is_line("one query line")
+        assert not is_line("two\nlines") and not is_line("tab\there")
     assert id_matches("2026-10-22_abcdef12", "abcdef12")
     assert id_matches("2026-10-22_abcdef12", "2026-10-25_abcdef12")
     assert not id_matches("2026-10-22_abcdef12", "deadbeef")
@@ -963,6 +1185,13 @@ def selftest():
         corpus = load_json(EVAL_DIR / f"{name}.corpus.json")
         layers = validate_corpus(corpus)
         assert sum(layers.values()) == cases
+    for judge, expected in (
+        ("ai", "6a5319c546fe68c20f3d4d7ffd38437b3736ea301e1319afb3c374eca9ac9b18"),
+        ("human", "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5"),
+    ):
+        head, rows = read_tsv(EVAL_DIR / "confirm5.blind40.packet.tsv")
+        labels = load_json(EVAL_DIR / f"confirm5.{judge}.labels.json")
+        assert sha256_text(filled_packet(head, rows, labels["cases"])) == expected
     print("selftest: PASS")
 
 
@@ -975,6 +1204,10 @@ def build_parser():
     seed.add_argument("--mem-dir", required=True)
     seed.add_argument("--csv")
     seed.add_argument("--binary", default="")
+    seed.add_argument(
+        "--jobs", type=int, default=4,
+        help="parallel store processes (default: 4)",
+    )
     seed.add_argument("--force", action="store_true")
     seed.set_defaults(func=cmd_seed)
 
@@ -1026,6 +1259,8 @@ def build_parser():
 
     check = blind_sub.add_parser("check")
     check.add_argument("--baseline", required=True)
+    check.add_argument("--packet", help="reconstruct the filled packet")
+    check.add_argument("--out", help="write the reconstructed filled packet")
 
     progress = blind_sub.add_parser("progress")
     progress.add_argument("--packet", required=True)

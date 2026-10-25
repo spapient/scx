@@ -165,3 +165,5 @@ cargo run --release --locked --example bench -- memory
 - 文本分类与归一化合并为 `analysis`；标注与裁决、CLI 记忆输出归并到单一所有者，
   公开模块数与重复逻辑继续收敛；词表去重改为单趟完成并复用 `build_doc_terms`。
 - 移除历史 `eval-real/` 中间产物；可重建语料与冻结标签迁入 `eval/`。
+- `scx-eval seed` 改为 stdin 字节输入 + 可配置并行 store，消除逐 case 临时文件；
+  CI 对比串行/并行 CSV，语料与 `--eval-verbose` 解析增加单行、重复与覆盖校验。

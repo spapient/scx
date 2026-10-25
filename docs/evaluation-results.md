@@ -43,7 +43,7 @@ provenance 缺失而失败。仓库内仍没有“独立 holdout + 双人逐条�
 
 ### 2.1 policy 控制集
 
-`eval/confirm5-policy.labels.json` 在同一 150 条查询上物化规则：同事故 `rel=2`，
+`eval/confirm5.policy.labels.json` 在同一 150 条查询上物化规则：同事故 `rel=2`，
 同场景桶 `rel=1`，其余 `rel=0`；分布 `2=650 / 1=115 / 0=665`，
 `judge.method=policy-materialized-v1`。
 
@@ -57,9 +57,9 @@ gate: FAIL
 
 ### 2.2 逐候选人工验收（hao，40/150）
 
-- 盲审包：`eval/confirm5-40.packet.tsv`，40 例 / 384 候选，SHA256
+- 盲审包：`eval/confirm5.blind40.packet.tsv`，40 例 / 384 候选，SHA256
   `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f`。
-- 人工标签：`eval/confirm5-hao.labels.json`，`judge.by=hao`，
+- 人工标签：`eval/confirm5.human.labels.json`，`judge.by=hao`，
   `method=per-item-human-v1`；rel 分布 `2=142 / 1=130 / 0=112`。
 - `--gate-human`：**PASS / exit 0**；literal 自匹配 0/14 违规；
   provenance 384/384、cases 40/40。
@@ -69,7 +69,7 @@ gate: FAIL
 - NDCG 差值的 semantic bootstrap：+0.0023，CI [-0.0131, 0.0161]；因此不能
   写“NDCG 显著优于 B”。
 
-AI 标签 `eval/confirm5-ai.labels.json`（`per-item-ai-v1`，384/384）只通过
+AI 标签 `eval/confirm5.ai.labels.json`（`per-item-ai-v1`，384/384）只通过
 `--gate-items`，`--gate-human` 必须失败。配置是在 hao 标签上校准的，不能把
 40/150 的结果外推成全量或独立 holdout。
 
@@ -78,21 +78,27 @@ AI 标签 `eval/confirm5-ai.labels.json`（`per-item-ai-v1`，384/384）只通�
 | 对象 | SHA256 |
 |---|---|
 | `eval/confirm5.corpus.json` | `B83A3A8C834A6494BDA76777BFD7500488CEDFE097C81D2AFA5E03049E543335` |
-| `eval/confirm5-policy.labels.json` | `EDF6C2083D77F7A39A2DB1DCC8C13614AD55E5D78A832BBC6F93B449E1BD6F33` |
-| `eval/confirm5-ai.labels.json` | `3114B9152835D604BD06F1B1D4E54A327B8857E9650E08111B04F452D965508A` |
-| `eval/confirm5-hao.labels.json` | `C68573E0640EADD29C843F399C986ADB69194285A49AB1A5201D9D408A83498C` |
-| `eval/confirm5-40.packet.tsv` | `B8EEBF2FCB78D0FB745C9760B55DD34D832A9BB976B377F3DFB8C7CEA264093F` |
-| `eval/confirm5-40-ai.tsv` | `6A5319C546FE68C20F3D4D7FFD38437B3736EA301E1319AFB3C374ECA9AC9B18` |
-| `eval/confirm5-40-hao.tsv` | `1F6CD83576DD3872635C2317131F8CE7858301E7AFE88D490B8CE46E1B9240B5` |
+| `eval/confirm5.policy.labels.json` | `EDF6C2083D77F7A39A2DB1DCC8C13614AD55E5D78A832BBC6F93B449E1BD6F33` |
+| `eval/confirm5.ai.labels.json` | `3114B9152835D604BD06F1B1D4E54A327B8857E9650E08111B04F452D965508A` |
+| `eval/confirm5.human.labels.json` | `C68573E0640EADD29C843F399C986ADB69194285A49AB1A5201D9D408A83498C` |
+| `eval/confirm5.blind40.packet.tsv` | `B8EEBF2FCB78D0FB745C9760B55DD34D832A9BB976B377F3DFB8C7CEA264093F` |
+| 派生 AI 填写版（packet + ai labels） | `6A5319C546FE68C20F3D4D7FFD38437B3736EA301E1319AFB3C374ECA9AC9B18` |
+| 派生人工填写版（packet + hao labels） | `1F6CD83576DD3872635C2317131F8CE7858301E7AFE88D490B8CE46E1B9240B5` |
+
+两个填写版是派生视图，不再入库；`blind check --packet ... --out ...` 可逐字节
+重建并由 labels 中的 `packet_sha256` 自动校验。
 
 复现入口：
 
 ```bash
 ./bin/scx-eval seed eval/confirm5.corpus.json \
   --mem-dir /tmp/scx-confirm5 --csv /tmp/scx-confirm5.csv --force
-./bin/run --eval eval/confirm5-hao.labels.json --gate-human --eval-verbose \
+./bin/run --eval eval/confirm5.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-confirm5
 ```
+
+`seed` 默认 4 个并发 store 进程；CI 同时串行重建，归一化日期前缀后对比整个
+CSV，确保并行只缩短准备时间，不改变 case 身份或输出顺序。
 
 ## 3. v2：开发集
 

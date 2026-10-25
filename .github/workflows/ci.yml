@@ -82,6 +82,19 @@ jobs:
           python bin/scx-eval seed eval/confirm5.corpus.json
           --mem-dir eval/ci-mem --csv eval/ci-cases.csv
           --binary target/release/scx.exe --force
+      - name: Rebuild confirm5 corpus serially
+        run: >-
+          python bin/scx-eval seed eval/confirm5.corpus.json
+          --mem-dir eval/ci-mem-serial --csv eval/ci-cases-serial.csv
+          --binary target/release/scx.exe --force --jobs 1
+      - name: Compare parallel and serial seed output
+        shell: pwsh
+        run: |
+          $parallel = (Get-Content .\eval\ci-cases.csv -Raw) -replace '\d{4}-\d{2}-\d{2}_', '<date>_'
+          $serial = (Get-Content .\eval\ci-cases-serial.csv -Raw) -replace '\d{4}-\d{2}-\d{2}_', '<date>_'
+          if ($parallel -ne $serial) {
+            throw "parallel seed output differs from serial seed output"
+          }
       - name: Build mechanical baseline
         run: >-
           python bin/scx-eval baseline
@@ -100,7 +113,7 @@ jobs:
       - name: Reject policy labels as human closure
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\confirm5-policy.labels.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-policy-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\confirm5.policy.labels.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-policy-gate.txt 2> $null
           if ($LASTEXITCODE -ne 2) {
             Get-Content .\eval\ci-policy-gate.txt -Tail 40
             throw "policy labels must not pass --gate-human (exit $LASTEXITCODE)"
@@ -109,12 +122,12 @@ jobs:
       - name: Frozen blind packet
         run: >-
           python bin/scx-eval verify
-          --packet eval/confirm5-40.packet.tsv
+          --packet eval/confirm5.blind40.packet.tsv
           --sha256 b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f
       - name: AI labels pass items gate, fail human gate
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\confirm5-ai.labels.json --gate-items --mem-dir .\eval\ci-mem 1> .\eval\ci-ai-items.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\confirm5.ai.labels.json --gate-items --mem-dir .\eval\ci-mem 1> .\eval\ci-ai-items.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\eval\ci-ai-items.txt -Tail 30
             throw "AI per-item gate failed with exit $LASTEXITCODE"
@@ -122,13 +135,13 @@ jobs:
           if ((Get-Content .\eval\ci-ai-items.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
             throw "AI gate must declare non-human adjudication"
           }
-          .\target\release\scx.exe --eval .\eval\confirm5-ai.labels.json --gate-human --mem-dir .\eval\ci-mem 1> $null 2> $null
+          .\target\release\scx.exe --eval .\eval\confirm5.ai.labels.json --gate-human --mem-dir .\eval\ci-mem 1> $null 2> $null
           if ($LASTEXITCODE -ne 2) { throw "AI labels must not pass --gate-human (exit $LASTEXITCODE)" }
           $global:LASTEXITCODE = 0
       - name: Human per-item gate
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\confirm5-hao.labels.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-hao-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\confirm5.human.labels.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-hao-gate.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\eval\ci-hao-gate.txt -Tail 40
             throw "human per-item gate failed with exit $LASTEXITCODE"

@@ -351,51 +351,7 @@ fn run_impl(
     ));
     for l in &layers {
         let e = agg.get(l).unwrap_or(&[0.0; 9]);
-        let n = e[0];
-        let p = per.get(l).unwrap();
-        // 主指标（预声明）：r@5/r@10 点值 + MRR/NDCG bootstrap 95% CI（固定 seed 确定性）。
-        let am_ci = boot_ci(&p[0], CI_SEED);
-        let an_ci = boot_ci(&p[1], CI_SEED);
-        let bm_ci = boot_ci(&p[2], CI_SEED);
-        let bn_ci = boot_ci(&p[3], CI_SEED);
-        // 弱相关层（semantic）用 r@10 口径；强相关层（literal/paraphrase）用 r@5。
-        if l == "semantic" {
-            out.push(format!(
-                "layer {l}: n={n:.0} A r@10={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}] | B r@10={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}]",
-                e[2] / n.max(1.0),
-                e[3] / n.max(1.0),
-                am_ci.0,
-                am_ci.1,
-                e[4] / n.max(1.0),
-                an_ci.0,
-                an_ci.1,
-                e[6] / n.max(1.0),
-                e[7] / n.max(1.0),
-                bm_ci.0,
-                bm_ci.1,
-                e[8] / n.max(1.0),
-                bn_ci.0,
-                bn_ci.1,
-            ));
-        } else {
-            out.push(format!(
-                "layer {l}: n={n:.0} A r@5={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}] | B r@5={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}]",
-                e[1] / n.max(1.0),
-                e[3] / n.max(1.0),
-                am_ci.0,
-                am_ci.1,
-                e[4] / n.max(1.0),
-                an_ci.0,
-                an_ci.1,
-                e[5] / n.max(1.0),
-                e[7] / n.max(1.0),
-                bm_ci.0,
-                bm_ci.1,
-                e[8] / n.max(1.0),
-                bn_ci.0,
-                bn_ci.1,
-            ));
-        }
+        out.push(layer_line(l, e, per.get(l).unwrap()));
     }
     // L1 直答命中率出表。
     let l1_rate = if l1_total > 0 {
@@ -426,6 +382,38 @@ fn run_impl(
         }
     }
     Ok((out, gate_failed))
+}
+
+/// 分层报告行：强相关层用 r@5，semantic 弱相关层用 r@10；CI 固定 seed。
+fn layer_line(name: &str, e: &[f64; 9], p: &[Vec<f64>; 4]) -> String {
+    let n = e[0].max(1.0);
+    let (k, a_r, b_r) = if name == "semantic" {
+        (10, e[2], e[6])
+    } else {
+        (5, e[1], e[5])
+    };
+    let am = boot_ci(&p[0], CI_SEED);
+    let an = boot_ci(&p[1], CI_SEED);
+    let bm = boot_ci(&p[2], CI_SEED);
+    let bn = boot_ci(&p[3], CI_SEED);
+    format!(
+        "layer {name}: n={:.0} A r@{k}={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}] | B r@{k}={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}]",
+        e[0],
+        a_r / n,
+        e[3] / n,
+        am.0,
+        am.1,
+        e[4] / n,
+        an.0,
+        an.1,
+        b_r / n,
+        e[7] / n,
+        bm.0,
+        bm.1,
+        e[8] / n,
+        bn.0,
+        bn.1,
+    )
 }
 
 /// 单行候选诊断：`1) <tail8> sim=0.86 score=0.55 [hit] | 2) ... [miss]`。

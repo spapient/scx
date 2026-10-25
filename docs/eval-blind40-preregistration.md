@@ -6,9 +6,9 @@
 
 > 重构说明（2026-10-25）：本文是冻结的预注册记录，裁决口径与验收条件未改；
 > 仅把命令中的旧路径/工具名替换为当前等价物。`eval-real/` 原始文件可从
-> git commit `5ada90d` 恢复。源基线为 `eval/confirm5-policy.labels.json`，盲审包为
-> `eval/confirm5-40.packet.tsv`，人工/AI 标签为
-> `eval/confirm5-hao.labels.json` / `eval/confirm5-ai.labels.json`；工具为
+> git commit `5ada90d` 恢复。源基线为 `eval/confirm5.policy.labels.json`，盲审包为
+> `eval/confirm5.blind40.packet.tsv`，人工/AI 标签为
+> `eval/confirm5.human.labels.json` / `eval/confirm5.ai.labels.json`；工具为
 > `./bin/scx-eval blind`。包哈希 `b8eebf2f...` 可由 `blind make`
 > 从当前语料确定性重建。
 
@@ -27,12 +27,12 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 | 项 | 值 |
 |---|---|
-| 源基线 | `eval/confirm5-policy.labels.json` |
+| 源基线 | `eval/confirm5.policy.labels.json` |
 | 源基线 SHA256 | 见 manifest `baseline_sha256` |
 | 抽样 | 种子 `confirm5-blind-v1` 的 SHA-256 排序，按层抽 14 literal / 13 paraphrase / 13 semantic |
 | 样本量 | 40 / 150（26.7%） |
 | 裁决项 | 样本内每个 case 的全部候选（384 项） |
-| 盲审包 | `eval/confirm5-40.packet.tsv` |
+| 盲审包 | `eval/confirm5.blind40.packet.tsv` |
 | 包 SHA256 | `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f` |
 | 清单 | 由 `blind make --manifest` 生成（不入库） |
 
@@ -70,15 +70,15 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 ```bash
 # 1a) 逐行提示（推荐：按回车逐条，避免表格批量粘贴错位）
-./bin/scx-eval blind review --packet eval/confirm5-40.packet.tsv
+./bin/scx-eval blind review --packet eval/confirm5.blind40.packet.tsv
 
 # 1b) 或直接在表格里填 grade 列（0/1/2），随时看进度
-./bin/scx-eval blind progress --packet eval/confirm5-40.packet.tsv
+./bin/scx-eval blind progress --packet eval/confirm5.blind40.packet.tsv
 
 # 2) 导入（date 用真实 UTC 时间）
 ./bin/scx-eval blind import \
-  --baseline eval/confirm5-policy.labels.json \
-  --packet eval/confirm5-40.packet.tsv \
+  --baseline eval/confirm5.policy.labels.json \
+  --packet eval/confirm5.blind40.packet.tsv \
   --out /tmp/confirm5-blind40-human.json \
   --judge <你的名字> --date 2026-10-24T12:00:00Z
 
@@ -102,7 +102,7 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 - 裁决人：`codex`，方法 `per-item-ai-v1`，384/384 项；
 - 分级：rel2=176 / rel1=38 / rel0=170；literal 自匹配 0/14 违规；
 - `--gate-items` PASS / exit 0；`--gate-human` FAIL / exit 2；
-- 产物：`eval/confirm5-ai.labels.json`、`eval/confirm5-40-ai.tsv`；
+- 产物：`eval/confirm5.ai.labels.json`；填写版 TSV 是派生视图，不单独入库，
   gate 输出与统计 CSV 可由 `--gate-items` 与 `bin/scx-eval stats` 重建。
 
 边界：同一模型自评、非独立、非人工，证据等级 E3。AI 结果不能单独满足第 4 节
@@ -112,8 +112,9 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 用户确认 384 个分数由本人（hao）逐条给出，仅由工具执行导入。原始提交中
 8 条 literal 自匹配被判 0/1，与预注册的“literal 目标必须为 2”不变量冲突；
-导入器拒绝后，仅对这 8 条按不变量归一化为 2。原始提交未入库，修正版为
-`eval/confirm5-40-hao.tsv`；这是机械不变量修正，不是额外人工判分。
+导入器拒绝后，仅对这 8 条按不变量归一化为 2。原始提交未入库；修正结果在
+`eval/confirm5.human.labels.json`，填写视图可由 packet + labels 重建。这是机械
+不变量修正，不是额外人工判分。
 
 - provenance：384/384，`judge.by=hao`，`per-item-human-v1`；
 - literal 自匹配：0/14；控制：rel1=130 / rel0=112；
@@ -121,6 +122,14 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
   0.906/0.785/0.828 vs 0.898/0.785/0.825；
 - semantic MRR 0.872 vs 0.715（Δ+0.1564，CI [0.0205, 0.3282]，p=0.1261）；
 - 同一输入连续 3 次运行逐层输出一致。
+
+重建填写视图并校验历史哈希：
+
+```bash
+./bin/scx-eval blind check \
+  --baseline eval/confirm5.human.labels.json \
+  --packet eval/confirm5.blind40.packet.tsv --out /tmp/confirm5-hao.tsv
+```
 
 结论：第 4 节的质量验收已通过；但配置是在同一批标签上校准的，NDCG 差值
 置信区间仍跨 0，因此不能写成“显著优于 B”或“独立样本外确认”。
