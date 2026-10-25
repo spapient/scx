@@ -279,10 +279,27 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 - contain token 压减保持「确定性正则估算」（ASCII 词 + CJK 字），与字符口径
   差约 2 个百分点；真实 tokenizer 需引入第三方 crate，违反零依赖红线。
 
-### 遗留 / 发布前检查单（不阻塞 0.5.0 本地使用）
+### 发布记录（2026-10-26，crates.io）
 
-1. **未执行 cargo publish / git push / merge main**（需用户明确指示）：crates.io
-   发布前复查项见 `docs/release-checklist.md`（crate 名可用性、CI、tag、授权）。
+- **crates.io 发布完成**：`scx 0.5.0` 已正式发布（`cargo publish --locked` 成功，
+  Published scx v0.5.0 at registry crates-io）。crate 名 `scx` 发布前经 API 确认未占用
+  （404），名称合法；发布后 `cargo search scx` 可见、API 元数据/关键词/分类完整。
+- **发布前处置**：工作区出现的未提交优化（`src/fx.rs` 零依赖 FxHash、
+  `regex.rs` 预编译 Compiled、`compress.rs` FxHashMap + ASCII key_len 快速路径）经用户
+  确认纳入发布；提交 `1b89398`（perf(determinism): FxHash maps, precompiled NFA, ascii
+  key_len — output unchanged），fmt/clippy/全量测试全绿（含 golden 37 例零漂移），
+  与 main 一并 push。
+- **发布凭据与账户**：用户 `cargo login` 配置 API token；crates.io 要求已验证邮箱，
+  自动浏览器登录按钮 CSRF 初始化故障（环境级，多轮诊断），最终由用户换用已验证邮箱
+  `haofei.ni@outlook.com`（Verified）完成发布前置。发布经 API 验证：max_version 0.5.0、
+  downloads 初始 0、yanked false。
+
+### 遗留 / 发布后检查单
+
+1. **merge / push / crates.io 发布均已执行**：main = origin/main = `1b89398`；
+   crates.io `scx` 0.5.0 已发布（见上）。剩余可选事项：GitHub release/tag（未打 tag，
+   `v0.5.0` tag 需用户指示）；远程 main 分支保护为 PR-only（本次直接 push 为管理员
+   绕过路径，后续可改走 PR+CI）。
 2. SuperCompress 同场独立对照未做：需**真实事故语料 + 第三方盲审**，本轮不虚构数据。
 3. contain token 估算为自测口径（非真实 tokenizer），文档已显著标注。
 4. `docs/benchmarks.md` 默认路径本轮单轮采样负载偏高（14,757µs），历史快照
