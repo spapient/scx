@@ -131,10 +131,9 @@ def clean(text, limit=220):
 
 def default_binary():
     names = ("scx.exe", "scx")
-    # The bootstrap install is the user-facing binary; the Cargo output is the
-    # fallback for a build-only checkout. Prefer one source to avoid replaying
-    # evidence with a stale duplicate.
-    for base in (ROOT / "bin", ROOT / "target" / "release"):
+    # Cargo's release output is the canonical artifact for this checkout. The
+    # bootstrap copy under bin/ is a fallback for binary-only installs.
+    for base in (ROOT / "target" / "release", ROOT / "bin"):
         for name in names:
             path = base / name
             if path.is_file():
