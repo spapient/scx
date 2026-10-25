@@ -311,3 +311,47 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 4. `docs/benchmarks.md` 默认路径本轮单轮采样负载偏高（14,757µs），历史快照
    （11.7–12.0ms）为基准值；新路径（structure/max-tokens/policy）为本轮首测，
    跨机复现见 benchmarks.md。
+
+---
+
+## v0.6.0 完成记录（2026-10-26，三项优化）
+
+### 范围与门禁证据（双轨：默认 + semantic；mcp 已并入默认轨）
+
+- `cargo fmt --check` = 0；`cargo clippy --all-targets --locked -- -D warnings` 默认 /
+  semantic 双轨 = 0；`cargo test --locked` = **228 通过 / 0 失败**（基线 227 +
+  mcp_smoke 并入默认轨；golden 37 例零漂移，`golden_gate` ok）；`--features semantic`
+  轨 = **239 / 0**（+3 词干化单测）；`cargo build --release --locked` = 0。
+- 版本 `0.5.1 → 0.6.0`（minor，按 pre-1.0 惯例）；VERSION 唯一来源 `CARGO_PKG_VERSION`。
+
+### 子项状态
+
+| 子项 | 状态 | 证据 |
+|---|---|---|
+| 事项 1：MCP 并入默认轨 + `scx setup` 一键注册 | ✅ | `scx mcp` 手动握手返回 tools/list（serverInfo.name=scx）；`scx setup` 在隔离 HOME 下三配置文件实测：写入正确、二次运行内容逐字节不变（幂等）、`.scx.bak` 备份存在、每 agent 写后 tools/list 握手 PASS；tools/scx setup/doctor 对齐实测通过 |
+| 事项 2：contain 同场对照（scx vs 头截断 vs 随机抽样） | ✅ | `docs/containcmp.md`：scx 70/70=100.00% / 82.01% / 4.19ms；头截断 0/70；随机抽样 8/70=11.43%（种子 `contain-rand-v1`，逐字节可复现）；逐片明细 `docs/contain5-compare.json`；自测非第三方标注；SuperCompress 待第三方盲审（node 存在但 compiler 未 vendor，不虚构数字） |
+| 事项 3：feature-gate 语义增强（英文屈折词干化） | ✅ | 默认轨 228/0 逐位不变（golden 37 零漂移）；semantic 轨 239/0；confirm5 三层 MRR 逐位一致（1.000/0.247/0.836，tier:hard Δ+0.0608 CI [+0.0200,+0.1069]）；新探针语料 `config/stem.corpus.json`：zero-signal 4/5→0/5、paraphrase MRR 0.200→0.600、literal 无退化 |
+
+### commit 链（v0.6.0，接 58ca051 之后）
+
+| commit | 说明 |
+|---|---|
+| `634fcc7` | feat(mcp): mcp 并入主二进制（Cargo.toml 删 feature/bin、main.rs 子命令 mcp/setup、mcp.rs name=scx、src/setup.rs 新、tests/mcp_smoke 默认轨、tools/scx 对齐） |
+| `547081a` | docs(readme/skill): 一键接入章节 + v0.6.0 措辞 |
+| `9490340` | feat(eval): contain 同场对照（随机抽样基线 + 三指标 + containcmp.md + 明细 JSON） |
+| `3d8c326` | feat(semantic): 词干化（stem_expand 双 gate、stem_enable 默认关、stem.corpus.json、+3 测试） |
+| （版本 commit） | chore(version): 0.5.1 → 0.6.0（Cargo.toml/lock + README/memory.md 版本引用） |
+
+### 关键语义与偏差（以代码为准）
+
+- 事项 1 偏差：无。CLI 向后兼容——`mcp`/`setup` 作为 args[0] 子命令在现有 parse 前拦截，未提供时原路径逐字节不变；`scx-mcp` 二进制删除，`CARGO_BIN_EXE_scx-mcp` 测试改为 `CARGO_BIN_EXE_scx` + `mcp` 参数。
+- 事项 2 偏差：仓库实际布局为 `tools/scx.py` + `config/`（外部会话重组），对照资产落在 `docs/containcmp.md` + `docs/contain5-compare.json`；延迟口径不对称已显著标注（scx=子进程端到端、基线=进程内 Python）。
+- 事项 3 偏差：选择方向 1（词干化）+ 加性扩展挂载点（复用 P3 synonym_weight 半权机制），未动 RECALL_PAIRS 既有全表（勘察确认 confirm5 miss 多为真转述，词干化收益在屈折变体）；`stem_enable` 登记入 `DEFAULT_PARAMS`（param() debug_assert 要求）；词干代码位于 `src/semantic.rs`（feature 编译期排除）+ 运行期开关。
+- 曾出现一次 semantic 轨锁测试 flake（`locks_fixed_order_and_failure_releases`），重跑全绿；根因与 P4 golden 假红同类（并行测试 /tmp 残留干扰），已清理，非代码回归。
+
+### 遗留 / 待后续（不阻塞 0.6.0 本地使用）
+
+1. **cargo publish 0.6.0 未执行**（需用户明确授权）：发布前复查见 `docs/release-checklist.md`；本轮只做本地构建与三事项行为验证。
+2. SuperCompress 同场对照仍待第三方盲审（需真实事故语料 + 独立复现；本机未 vendor 其 compiler）。
+3. contain token 压减为确定性正则估算（非真实 tokenizer），文档已标注。
+4. 词干化词表为英文屈折最小集（ies/咝音 es/尾 s）；扩展方向（同义词/更多词形）留待后续语料验证后保守增量。
