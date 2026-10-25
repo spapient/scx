@@ -2,9 +2,9 @@
 //!
 //! `--gate` 只校验机械资格（样本量/分层/裁决元数据/A 不劣于 B）；
 //! `--gate-human` 额外要求全量人工裁决、弱相关与负例控制，并校验 NDCG。
-//! 后者才是“人工弱相关/负例闭环”的证据门，机械 target 标签不能替代它。
+//! 后者才是"人工弱相关/负例闭环"的证据门，机械 target 标签不能替代它。
 //!
-//! 目标：把“30–50 组、每层 ≥10、非 literal 必须人工裁决、A 不劣于 B”
+//! 目标：把"30–50 组、每层 ≥10、非 literal 必须人工裁决、A 不劣于 B"
 //! 从口头约定变成可执行门禁，防止用 5 条 demo 或自动标注集冒充人工证据。
 //!
 //! 纯函数：只读解析后的 EvalCase 与已聚合指标，不触碰库、不写文件。
@@ -18,7 +18,7 @@ pub(crate) const MIN_TOTAL: usize = 30;
 pub(crate) const MIN_LAYER: usize = 10;
 /// 浮点比较容差：指标是整数计数除以 n，1e-9 足以吸收除法误差。
 const EPS: f64 = 1e-9;
-/// 绝对地板：拒绝“全部 miss / 基线退化”仍因相对非劣而 PASS。
+/// 绝对地板：拒绝"全部 miss / 基线退化"仍因相对非劣而 PASS。
 /// 取值低于 confirm5 各层实测最差值（paraphrase r@5 0.567、MRR 0.242），
 /// 只拦截退化到不可用区间的结果，不替代相对非劣判定。
 pub(crate) const MIN_RECALL: f64 = 0.20;
@@ -71,7 +71,7 @@ pub(crate) fn check_human(
 }
 
 /// 逐候选裁决门（允许非人类裁决人）：证据等级低于 `--gate-human`，
-/// 只证明“每一条候选都有独立裁决记录”，不证明人工闭环。
+/// 只证明"每一条候选都有独立裁决记录"，不证明人工闭环。
 pub(crate) fn check_items(
     cases: &[EvalCase],
     layers: &[String],
@@ -97,50 +97,10 @@ fn check_mode(
     ));
     failed |= cases.len() < MIN_TOTAL;
 
-    for layer in ["literal", "paraphrase", "semantic"] {
-        let n = cases.iter().filter(|c| c.layer == layer).count();
-        let ok = n >= MIN_LAYER;
-        lines.push(format!(
-            "gate: layer {layer} n={n} need>={MIN_LAYER} {}",
-            verdict(ok)
-        ));
-        failed |= !ok;
-    }
+    layer_counts(cases, &mut lines, &mut failed);
+    unknown_layers(layers, &mut lines, &mut failed);
+    nonliteral_meta(cases, &mut lines, &mut failed);
 
-    // 未知层不允许用来凑总数：证据门只认三层。
-    for layer in layers {
-        if !matches!(layer.as_str(), "literal" | "paraphrase" | "semantic") {
-            lines.push(format!("gate: unknown layer {layer} FAIL"));
-            failed = true;
-        }
-    }
-
-    // literal 是 query 原样/指纹机械判定，不要求 judge 元数据；
-    // paraphrase/semantic 必须由 --judge 写入 by+date，自动标注集不得过门。
-    let non_literal = cases.iter().filter(|c| c.layer != "literal").count();
-    let meta_ok = cases
-        .iter()
-        .filter(|c| c.layer != "literal")
-        .all(|c| valid_judge(c.judged_by.as_deref()) && non_empty(c.judged_date.as_deref()));
-    lines.push(format!(
-        "gate: judge metadata nonliteral={non_literal} (need real by+date) {}",
-        verdict(meta_ok)
-    ));
-    failed |= !meta_ok;
-    let mut placeholders: Vec<String> = cases
-        .iter()
-        .filter(|c| c.layer != "literal" && !valid_judge(c.judged_by.as_deref()))
-        .filter_map(|c| c.judged_by.clone())
-        .filter(|s| !s.trim().is_empty())
-        .collect();
-    placeholders.sort();
-    placeholders.dedup();
-    if !placeholders.is_empty() {
-        lines.push(format!(
-            "gate: placeholder judge rejected: {}",
-            placeholders.join(", ")
-        ));
-    }
     if mode != GateMode::Mechanical {
         adjudication_checks(
             cases,
@@ -154,64 +114,12 @@ fn check_mode(
 
     // 主指标预声明：literal/paraphrase 用 r@5，semantic 用 r@10；另加 MRR。
     // NDCG 只报告不过门（单相关时接近二值，判别力弱）。
-    // 同时校验 A/B 的绝对地板：B 全 miss 时 A 的“相对优势”不是有效证据。
-    let mut diff_layers = 0usize;
-    for layer in layers {
-        let Some(e) = agg.get(layer) else {
-            continue;
-        };
-        let n = e[0];
-        if n <= 0.0 {
-            continue;
-        }
-        let (a_r, b_r, metric) = if layer == "semantic" {
-            (e[2] / n, e[6] / n, "r@10")
-        } else {
-            (e[1] / n, e[5] / n, "r@5")
-        };
-        let a_mrr = e[3] / n;
-        let b_mrr = e[7] / n;
-        let r_ok = a_r + EPS >= b_r;
-        let m_ok = a_mrr + EPS >= b_mrr;
-        let r_floor_ok = a_r >= MIN_RECALL && b_r >= MIN_RECALL;
-        let m_floor_ok = a_mrr >= MIN_MRR && b_mrr >= MIN_MRR;
-        lines.push(format!(
-            "gate: layer {layer} A {metric}={a_r:.3} vs B={b_r:.3} {}; A mrr={a_mrr:.3} vs B={b_mrr:.3} {}",
-            verdict(r_ok),
-            verdict(m_ok)
-        ));
-        failed |= !r_ok || !m_ok;
-        lines.push(format!(
-            "gate: layer {layer} absolute A/B {metric}={a_r:.3}/{b_r:.3}>={MIN_RECALL:.2} {}; mrr={a_mrr:.3}/{b_mrr:.3}>={MIN_MRR:.2} {}",
-            verdict(r_floor_ok),
-            verdict(m_floor_ok)
-        ));
-        failed |= !r_floor_ok || !m_floor_ok;
-        if (a_r - b_r).abs() > EPS || (a_mrr - b_mrr).abs() > EPS {
-            diff_layers += 1;
-        }
-    }
+    // 同时校验 A/B 的绝对地板：B 全 miss 时 A 的"相对优势"不是有效证据。
+    let diff_layers = metric_lines(layers, agg, &mut lines, &mut failed);
 
-    // 标签分布与判别力只告警、不单独判失败：全 2 的语料可以证明“能召回”，
+    // 标签分布与判别力只告警、不单独判失败：全 2 的语料可以证明"能召回"，
     // 但证明不了 A 相对 B 的优势；报告必须带着这两行引用。
-    let mut rel2 = 0usize;
-    let mut rel1 = 0usize;
-    let mut rel0 = 0usize;
-    for c in cases {
-        for v in c.rel.values() {
-            if *v >= 2.0 {
-                rel2 += 1;
-            } else if *v >= 1.0 {
-                rel1 += 1;
-            } else {
-                rel0 += 1;
-            }
-        }
-    }
-    lines.push(format!("gate: rel distribution 2={rel2} 1={rel1} 0={rel0}"));
-    if rel2 > 0 && rel1 == 0 && rel0 == 0 {
-        lines.push("gate: warning all labels are 2 (no weak/negative controls)".to_string());
-    }
+    rel_dist(cases, &mut lines);
 
     lines.push(format!(
         "gate: discrimination A!=B layers={diff_layers}/{}",
@@ -231,6 +139,138 @@ fn check_mode(
     GateResult { lines, failed }
 }
 
+/// 固定三层（literal/paraphrase/semantic）的样本量门槛。
+fn layer_counts(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut bool) {
+    for layer in ["literal", "paraphrase", "semantic"] {
+        let n = cases.iter().filter(|c| c.layer == layer).count();
+        let ok = n >= MIN_LAYER;
+        lines.push(format!(
+            "gate: layer {layer} n={n} need>={MIN_LAYER} {}",
+            verdict(ok)
+        ));
+        *failed |= !ok;
+    }
+}
+
+/// 未知层不允许用来凑总数：证据门只认三层。
+fn unknown_layers(layers: &[String], lines: &mut Vec<String>, failed: &mut bool) {
+    for layer in layers {
+        if !matches!(layer.as_str(), "literal" | "paraphrase" | "semantic") {
+            lines.push(format!("gate: unknown layer {layer} FAIL"));
+            *failed = true;
+        }
+    }
+}
+
+/// non-literal 层的 judge 元数据（by+date）与占位裁决人拒绝。
+/// literal 是 query 原样/指纹机械判定，不要求 judge 元数据；
+/// paraphrase/semantic 必须由 --judge 写入 by+date，自动标注集不得过门。
+fn nonliteral_meta(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut bool) {
+    let non_literal = cases.iter().filter(|c| c.layer != "literal").count();
+    let meta_ok = cases
+        .iter()
+        .filter(|c| c.layer != "literal")
+        .all(|c| valid_judge(c.judged_by.as_deref()) && non_empty(c.judged_date.as_deref()));
+    lines.push(format!(
+        "gate: judge metadata nonliteral={non_literal} (need real by+date) {}",
+        verdict(meta_ok)
+    ));
+    *failed |= !meta_ok;
+    let mut placeholders: Vec<String> = cases
+        .iter()
+        .filter(|c| c.layer != "literal" && !valid_judge(c.judged_by.as_deref()))
+        .filter_map(|c| c.judged_by.clone())
+        .filter(|s| !s.trim().is_empty())
+        .collect();
+    placeholders.sort();
+    placeholders.dedup();
+    if !placeholders.is_empty() {
+        lines.push(format!(
+            "gate: placeholder judge rejected: {}",
+            placeholders.join(", ")
+        ));
+    }
+}
+
+/// 逐层主指标（r@5/r@10 + MRR）相对非劣与绝对地板；返回 A≠B 的层数。
+fn metric_lines(
+    layers: &[String],
+    agg: &HashMap<String, [f64; 9]>,
+    lines: &mut Vec<String>,
+    failed: &mut bool,
+) -> usize {
+    let mut diff_layers = 0usize;
+    for layer in layers {
+        let Some(e) = agg.get(layer) else {
+            continue;
+        };
+        let n = e[0];
+        if n <= 0.0 {
+            continue;
+        }
+        if metric_line(layer, n, e, lines, failed) {
+            diff_layers += 1;
+        }
+    }
+    diff_layers
+}
+
+/// 单层主指标判定；返回 A 与 B 是否有可测差异。
+fn metric_line(
+    layer: &str,
+    n: f64,
+    e: &[f64; 9],
+    lines: &mut Vec<String>,
+    failed: &mut bool,
+) -> bool {
+    let (a_r, b_r, metric) = if layer == "semantic" {
+        (e[2] / n, e[6] / n, "r@10")
+    } else {
+        (e[1] / n, e[5] / n, "r@5")
+    };
+    let a_mrr = e[3] / n;
+    let b_mrr = e[7] / n;
+    let r_ok = a_r + EPS >= b_r;
+    let m_ok = a_mrr + EPS >= b_mrr;
+    let r_floor_ok = a_r >= MIN_RECALL && b_r >= MIN_RECALL;
+    let m_floor_ok = a_mrr >= MIN_MRR && b_mrr >= MIN_MRR;
+    lines.push(format!(
+        "gate: layer {layer} A {metric}={a_r:.3} vs B={b_r:.3} {}; A mrr={a_mrr:.3} vs B={b_mrr:.3} {}",
+        verdict(r_ok),
+        verdict(m_ok)
+    ));
+    *failed |= !r_ok || !m_ok;
+    lines.push(format!(
+        "gate: layer {layer} absolute A/B {metric}={a_r:.3}/{b_r:.3}>={MIN_RECALL:.2} {}; mrr={a_mrr:.3}/{b_mrr:.3}>={MIN_MRR:.2} {}",
+        verdict(r_floor_ok),
+        verdict(m_floor_ok)
+    ));
+    *failed |= !r_floor_ok || !m_floor_ok;
+    (a_r - b_r).abs() > EPS || (a_mrr - b_mrr).abs() > EPS
+}
+
+/// rel 标签分布统计与"全 2"告警。
+fn rel_dist(cases: &[EvalCase], lines: &mut Vec<String>) {
+    let mut rel2 = 0usize;
+    let mut rel1 = 0usize;
+    let mut rel0 = 0usize;
+    for c in cases {
+        for v in c.rel.values() {
+            if *v >= 2.0 {
+                rel2 += 1;
+            } else if *v >= 1.0 {
+                rel1 += 1;
+            } else {
+                rel0 += 1;
+            }
+        }
+    }
+    lines.push(format!("gate: rel distribution 2={rel2} 1={rel1} 0={rel0}"));
+    if rel2 > 0 && rel1 == 0 && rel0 == 0 {
+        lines.push("gate: warning all labels are 2 (no weak/negative controls)".to_string());
+    }
+}
+
 fn adjudication_checks(
     cases: &[EvalCase],
     layers: &[String],
@@ -239,6 +279,32 @@ fn adjudication_checks(
     failed: &mut bool,
     human: bool,
 ) {
+    judge_meta_line(cases, human, lines, failed);
+    policy_line(cases, lines, failed);
+    item_line(cases, human, lines, failed);
+    if !human {
+        let mut names: Vec<String> = cases.iter().filter_map(|c| c.judged_by.clone()).collect();
+        names.sort();
+        names.dedup();
+        lines.push(format!(
+            "gate: adjudicator={} non-human (evidence: per-item AI, not human closure)",
+            names.join(",")
+        ));
+    }
+    literal_match_line(cases, human, lines, failed);
+    let (rel1, rel0, control_layers) = control_counts(cases, layers);
+    let control_ok =
+        rel1 >= MIN_WEAK && rel0 >= MIN_NEGATIVE && control_layers >= MIN_CONTROL_LAYERS;
+    lines.push(format!(
+        "gate: human controls weak={rel1}>={MIN_WEAK} negative={rel0}>={MIN_NEGATIVE} layers={control_layers}>={MIN_CONTROL_LAYERS} {}",
+        verdict(control_ok)
+    ));
+    *failed |= !control_ok;
+    ndcg_lines(layers, agg, lines, failed);
+}
+
+/// 全量 judge 元数据（by+date）与裁决人去重清单。
+fn judge_meta_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
     let judge_ok = cases.iter().all(|c| {
         let by_ok = if human {
             human_judge(c)
@@ -262,8 +328,10 @@ fn adjudication_checks(
         verdict(judge_ok)
     ));
     *failed |= !judge_ok;
-    // 规则物化标签可以证明“按人工规则排序”，但不是逐条人工裁决。human
-    // 门必须失败：只告警会让“policy control set PASS”被误读成人工闭环。
+}
+
+/// 规则物化标签即使真人签署也不是逐条裁决；human 门必须失败。
+fn policy_line(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut bool) {
     let policy = cases.iter().filter(|c| policy_materialized(c)).count();
     if policy > 0 {
         lines.push(format!(
@@ -271,9 +339,10 @@ fn adjudication_checks(
         ));
         *failed = true;
     }
-    // 逐候选溯源：整包签收（judge.by 写真人）不算逐条裁决。`rel` 的每个键
-    // 都必须有 judge_items 条目，且条目裁决人是真人；方法必须是 per-item-*。
-    // 这条让“规则生成 rel + 真人署名”无法再冒充人工弱相关/负例闭环。
+}
+
+/// 逐候选溯源计数：required/covered/bad_by/complete_cases。
+fn item_counts(cases: &[EvalCase], human: bool) -> (usize, usize, usize, usize) {
     let mut required = 0usize;
     let mut covered = 0usize;
     let mut bad_by = 0usize;
@@ -303,6 +372,12 @@ fn adjudication_checks(
             complete_cases += 1;
         }
     }
+    (required, covered, bad_by, complete_cases)
+}
+
+/// 逐候选溯源行：每个 rel 键都有真人 per-item 条目。
+fn item_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
+    let (required, covered, bad_by, complete_cases) = item_counts(cases, human);
     let method_ok = cases.iter().all(|c| {
         c.judged_method
             .as_deref()
@@ -317,17 +392,10 @@ fn adjudication_checks(
         verdict(items_ok)
     ));
     *failed |= !items_ok;
-    if !human {
-        let mut names: Vec<String> = cases.iter().filter_map(|c| c.judged_by.clone()).collect();
-        names.sort();
-        names.dedup();
-        lines.push(format!(
-            "gate: adjudicator={} non-human (evidence: per-item AI, not human closure)",
-            names.join(",")
-        ));
-    }
-    // literal 层 query 与目标 case 原文逐字相同：目标必须是 2。出现 0/1
-    // 说明分数与行错位（或整包机械填写），此时任何 NDCG/弱相关统计都无效。
+}
+
+/// literal 层 self-match：query 即目标原文，expected_rel 必须为 2。
+fn literal_match_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
     let literal: Vec<&EvalCase> = cases
         .iter()
         .filter(|c| c.layer == "literal" && !c.rel.is_empty())
@@ -344,7 +412,10 @@ fn adjudication_checks(
         verdict(literal_ok)
     ));
     *failed |= !literal_ok;
+}
 
+/// 逐层统计弱相关(rel=1)/负例(rel=0)总数与同时含两者的层数。
+fn control_counts(cases: &[EvalCase], layers: &[String]) -> (usize, usize, usize) {
     let mut rel1 = 0usize;
     let mut rel0 = 0usize;
     let mut control_layers = 0usize;
@@ -369,16 +440,16 @@ fn adjudication_checks(
             control_layers += 1;
         }
     }
-    let control_ok =
-        rel1 >= MIN_WEAK && rel0 >= MIN_NEGATIVE && control_layers >= MIN_CONTROL_LAYERS;
-    lines.push(format!(
-        "gate: human controls weak={rel1}>={MIN_WEAK} negative={rel0}>={MIN_NEGATIVE} layers={control_layers}>={MIN_CONTROL_LAYERS} {}",
-        verdict(control_ok)
-    ));
-    *failed |= !control_ok;
+    (rel1, rel0, control_layers)
+}
 
-    // NDCG 使用 rel 分级；人工控制集必须证明弱相关排序不劣于 B。
-    // 主指标 A=B 时 NDCG 仍可区分“召回目标”与“把弱相关/负例排对”。
+/// 逐层 NDCG@10 相对非劣（人工闭环证据）。
+fn ndcg_lines(
+    layers: &[String],
+    agg: &HashMap<String, [f64; 9]>,
+    lines: &mut Vec<String>,
+    failed: &mut bool,
+) {
     for layer in layers {
         let Some(e) = agg.get(layer) else {
             continue;

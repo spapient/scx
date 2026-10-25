@@ -30,10 +30,10 @@ pub(crate) struct EvalCase {
     pub judged_by: Option<String>,
     /// `--judge` 写入的裁决时间（UTC）；与 judged_by 同时存在才算人工裁决。
     pub judged_date: Option<String>,
-    /// `judge.method`：区分逐条盲审与“人工规则物化”，供 gate 输出证据边界。
+    /// `judge.method`：区分逐条盲审与"人工规则物化"，供 gate 输出证据边界。
     pub judged_method: Option<String>,
     /// 逐候选裁决溯源：候选 id → 裁决人。`rel` 里每个键都必须能在此找到
-    /// 对应条目，`--gate-human` 才认可为“逐条人工”而非整包签收。
+    /// 对应条目，`--gate-human` 才认可为"逐条人工"而非整包签收。
     pub judge_items: HashMap<String, String>,
 }
 
@@ -61,103 +61,135 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
             Val::Obj(kvs) => kvs,
             _ => return Err(format!("baseline: cases[{i}] not an object")),
         };
-        let get_str = |key: &str| -> Result<String, String> {
-            match kvs.iter().find(|(k, _)| k == key) {
-                Some((_, Val::Str(s))) => Ok(s.clone()),
-                _ => Err(format!("baseline: cases[{i}] missing string \"{key}\"")),
-            }
-        };
-        let query = get_str("query")?;
-        let layer = get_str("layer")?;
-        // 盲测裁决门——judge:null（未裁决）一律拒绝，防止
-        // "人工直接接受预填 rel = 自动标注自证"。先跑 --judge 再评估。
-        if kvs
-            .iter()
-            .any(|(k, v)| k == "judge" && matches!(v, Val::Null))
-        {
-            return Err(format!(
-                "baseline: cases[{i}] unjudged (judge:null) - run --judge first"
-            ));
+        out.push(parse_case(kvs, i)?);
+    }
+    Ok(out)
+}
+
+/// 解析单条 case：query/layer/expected/rel/judge 元数据/judge_items。
+/// 与原内联逻辑逐字段一一对应，仅拆分以降低圈复杂度。
+fn parse_case(kvs: &[(String, Val)], i: usize) -> Result<EvalCase, String> {
+    let get_str = |key: &str| -> Result<String, String> {
+        match kvs.iter().find(|(k, _)| k == key) {
+            Some((_, Val::Str(s))) => Ok(s.clone()),
+            _ => Err(format!("baseline: cases[{i}] missing string \"{key}\"")),
         }
-        let expected = match kvs.iter().find(|(k, _)| k == "expected") {
-            Some((_, Val::Arr(items))) => {
-                let mut v = Vec::with_capacity(items.len());
-                for e in items {
-                    match e {
-                        Val::Str(s) => v.push(s.clone()),
-                        _ => return Err(format!("baseline: cases[{i}].expected not strings")),
-                    }
+    };
+    let query = get_str("query")?;
+    let layer = get_str("layer")?;
+    // 盲测裁决门——judge:null（未裁决）一律拒绝，防止
+    // "人工直接接受预填 rel = 自动标注自证"。先跑 --judge 再评估。
+    if kvs
+        .iter()
+        .any(|(k, v)| k == "judge" && matches!(v, Val::Null))
+    {
+        return Err(format!(
+            "baseline: cases[{i}] unjudged (judge:null) - run --judge first"
+        ));
+    }
+    let expected = parse_expected(kvs, i)?;
+    let rel = parse_rel(kvs, &expected, i)?;
+    let (judged_by, judged_date, judged_method) = parse_judge(kvs);
+    let judge_items = parse_items(kvs);
+    Ok(EvalCase {
+        query,
+        layer,
+        expected,
+        rel,
+        judged_by,
+        judged_date,
+        judged_method,
+        judge_items,
+    })
+}
+
+/// 解析 expected 字符串数组。
+fn parse_expected(kvs: &[(String, Val)], i: usize) -> Result<Vec<String>, String> {
+    match kvs.iter().find(|(k, _)| k == "expected") {
+        Some((_, Val::Arr(items))) => {
+            let mut v = Vec::with_capacity(items.len());
+            for e in items {
+                match e {
+                    Val::Str(s) => v.push(s.clone()),
+                    _ => return Err(format!("baseline: cases[{i}].expected not strings")),
                 }
-                v
             }
-            _ => return Err(format!("baseline: cases[{i}] missing array \"expected\"")),
+            Ok(v)
+        }
+        _ => Err(format!("baseline: cases[{i}] missing array \"expected\"")),
+    }
+}
+
+/// 解析 rel 字典并为未标注的 expected 补 rel=1。
+fn parse_rel(
+    kvs: &[(String, Val)],
+    expected: &[String],
+    i: usize,
+) -> Result<HashMap<String, f64>, String> {
+    let mut rel = HashMap::new();
+    if let Some((_, Val::Obj(rel_kvs))) = kvs.iter().find(|(k, _)| k == "rel") {
+        for (rk, rv) in rel_kvs {
+            let r = match rv {
+                Val::Num(n) if n.is_finite() && (0.0..=2.0).contains(n) => *n,
+                _ => return Err(format!("baseline: cases[{i}].rel.{rk} not 0..=2 number")),
+            };
+            rel.insert(rk.clone(), r);
+        }
+    }
+    // expected 可能是完整 id，而 rel 字典常用 hash 后缀（跨日重建后日期前缀
+    // 不同）。先按同一匹配口径找已有标签，避免为同一 case 再插入 rel=1
+    // 的重复键；否则 rel_of 会因 HashMap 遍历顺序随机取到 1 或 2。
+    for e in expected {
+        if !rel.keys().any(|k| id_matches(e, k) || id_matches(k, e)) {
+            rel.insert(e.clone(), 1.0);
+        }
+    }
+    Ok(rel)
+}
+
+/// 读取 judge 元数据供 --gate 校验。自动标注集没有 judge
+/// 对象（或只有 rel），因此不能冒充人工裁决证据。
+fn parse_judge(kvs: &[(String, Val)]) -> (Option<String>, Option<String>, Option<String>) {
+    let mut judged_by = None;
+    let mut judged_date = None;
+    let mut judged_method = None;
+    if let Some((_, Val::Obj(jkvs))) = kvs.iter().find(|(k, _)| k == "judge") {
+        let get_optional = |key: &str| -> Option<String> {
+            jkvs.iter()
+                .find(|(k, _)| k == key)
+                .and_then(|(_, v)| match v {
+                    Val::Str(s) if !s.trim().is_empty() => Some(s.clone()),
+                    _ => None,
+                })
         };
-        let mut rel = HashMap::new();
-        if let Some((_, Val::Obj(rel_kvs))) = kvs.iter().find(|(k, _)| k == "rel") {
-            for (rk, rv) in rel_kvs {
-                let r = match rv {
-                    Val::Num(n) if n.is_finite() && (0.0..=2.0).contains(n) => *n,
-                    _ => return Err(format!("baseline: cases[{i}].rel.{rk} not 0..=2 number")),
-                };
-                rel.insert(rk.clone(), r);
-            }
-        }
-        // expected 可能是完整 id，而 rel 字典常用 hash 后缀（跨日重建后日期前缀
-        // 不同）。先按同一匹配口径找已有标签，避免为同一 case 再插入 rel=1
-        // 的重复键；否则 rel_of 会因 HashMap 遍历顺序随机取到 1 或 2。
-        for e in &expected {
-            if !rel.keys().any(|k| id_matches(e, k) || id_matches(k, e)) {
-                rel.insert(e.clone(), 1.0);
-            }
-        }
-        // 读取 judge 元数据供 --gate 校验。自动标注集没有 judge
-        // 对象（或只有 rel），因此不能冒充人工裁决证据。
-        let mut judged_by = None;
-        let mut judged_date = None;
-        let mut judged_method = None;
-        if let Some((_, Val::Obj(jkvs))) = kvs.iter().find(|(k, _)| k == "judge") {
-            let get_optional = |key: &str| -> Option<String> {
-                jkvs.iter()
-                    .find(|(k, _)| k == key)
+        judged_by = get_optional("by");
+        judged_date = get_optional("date");
+        judged_method = get_optional("method");
+    }
+    (judged_by, judged_date, judged_method)
+}
+
+/// 读取 judge_items：候选 id → 裁决人。
+fn parse_items(kvs: &[(String, Val)]) -> HashMap<String, String> {
+    let mut judge_items = HashMap::new();
+    if let Some((_, Val::Obj(ikvs))) = kvs.iter().find(|(k, _)| k == "judge_items") {
+        for (ik, iv) in ikvs {
+            let by = match iv {
+                Val::Obj(m) => m
+                    .iter()
+                    .find(|(k, _)| k == "by")
                     .and_then(|(_, v)| match v {
                         Val::Str(s) if !s.trim().is_empty() => Some(s.clone()),
                         _ => None,
-                    })
+                    }),
+                _ => None,
             };
-            judged_by = get_optional("by");
-            judged_date = get_optional("date");
-            judged_method = get_optional("method");
-        }
-        let mut judge_items = HashMap::new();
-        if let Some((_, Val::Obj(ikvs))) = kvs.iter().find(|(k, _)| k == "judge_items") {
-            for (ik, iv) in ikvs {
-                let by = match iv {
-                    Val::Obj(m) => m
-                        .iter()
-                        .find(|(k, _)| k == "by")
-                        .and_then(|(_, v)| match v {
-                            Val::Str(s) if !s.trim().is_empty() => Some(s.clone()),
-                            _ => None,
-                        }),
-                    _ => None,
-                };
-                if let Some(by) = by {
-                    judge_items.insert(ik.clone(), by);
-                }
+            if let Some(by) = by {
+                judge_items.insert(ik.clone(), by);
             }
         }
-        out.push(EvalCase {
-            query,
-            layer,
-            expected,
-            rel,
-            judged_by,
-            judged_date,
-            judged_method,
-            judge_items,
-        });
     }
-    Ok(out)
+    judge_items
 }
 
 /// expected/rel 的 id 匹配：支持完整 id、hash 后缀（tail）或 hash 后缀的后 8 位
@@ -546,7 +578,7 @@ impl PlainScorer {
                 score += crate::memory::ranking::score(*idf, self.k1, denom);
             }
             // 与 A 管线的零支持度过滤同口径：没有 query 词命中的 case 不得以
-            // 0 分进入 top-k，否则 B 会靠库顺序“碰巧命中”被高估。
+            // 0 分进入 top-k，否则 B 会靠库顺序"碰巧命中"被高估。
             if score > 0.0 {
                 scored.push((idx, score));
             }
