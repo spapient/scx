@@ -207,3 +207,46 @@ cargo run --release --locked --example bench -- memory
 - 移除历史 `eval-real/` 中间产物；可重建语料与冻结标签迁入 `eval/`。
 - `scx-eval seed` 改为 stdin 字节输入 + 可配置并行 store，消除逐 case 临时文件；
   CI 对比串行/并行 CSV，语料与 `--eval-verbose` 解析增加单行、重复与覆盖校验。
+
+## L1 直答评测协议（fix 覆盖率 / 命中率口径）
+
+L1 直答是召回后的确定性筛选层：`memory::l1_hits` 在 `recall_cases` 命中后，
+仅当 top1 满足 `feedback::l1_qualified(top1_sim, top2_sim, l1_base,
+l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_sim)
+≥ margin && ext_hit ≥ 0.30` —— 才保留命中（直答），否则清空候选退回普通
+候选列表展示（不直答）。`l1_base` / `l1_margin_min` 由 meta.toml 提供，
+缺省 `(0.55, 0.15)`，可随反馈自适应（见 feedback.rs 的 L1 历史学习）。
+
+### 指标口径（全部可机械计算）
+
+- **fix 覆盖率**：库内已 store 的 case 中，`fix` 非空的比例。L1 直答输出
+  依赖 fix 覆盖——无 fix 的 case 只能作为候选展示，不能作为答案直答。
+  口径：`fix 非空 case 数 / 全部 case 数`，case 以目录 id 为唯一资产身份。
+- **直答触发率**：评测查询集中，`recall top1` 满足 `l1_qualified` 的查询
+  比例（分母为全部评测查询，含无命中查询）。
+- **直答命中率**：触发直答的查询中，top1 的 case id 与冻结标签的
+  expected tail16 匹配（指纹匹配）或人工 rel=2 判中的比例。**分子/分母
+  均只统计触发直答的查询**；未触发直答的查询不计入（避免稀释口径）。
+- **MRR 回归下界**：confirm5 机械 hard 层 ΔMRR ≥ 0（相对基线不为负），
+  CI 下界不为负——L1 直答不得让词面召回退化（直答只删弱候选，不改排序）。
+
+### 复现（命令与 eval/README.md 同构）
+
+```bash
+# 1) 建库并灌入 confirm5 语料（fix 标签在 corpus 内，随 case 入库）
+./bin/scx-eval seed eval/confirm5.corpus.json --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
+# 2) 机械 hard 层目标基线（judge-by 由确认轮次决定，照抄 eval/README.md 写法）
+./bin/scx-eval baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-confirm5-v1
+# 3) 显著性统计（mrr 为主指标；--mem-dir 用于分层）
+./bin/scx-eval stats --baseline /tmp/l1-mechanical.json   --verbose /tmp/l1-verbose.csv --out /tmp/l1-stats.csv
+# 4) fix 覆盖率：库内 fix 非空 case 占比（scx --stats 或直接统计 mem-dir）
+# 5) 直答触发/命中：对 confirm5 查询逐条跑 --recall 并核对 top1 tail16
+```
+
+> 直答触发率 / 命中率没有独立 CLI 汇总入口，用 `scx --recall 5 --recall-detail`
+> 逐查询输出 `candidate, sim=..` 行 + 冻结标签对拍即可机械核算（每查询
+> top1.sim 与 `--eval-verbose` 同口径）。
+
+> 口径声明：本协议为**作者侧自测**（语料为合成/半合成事故集，标签为作者
+> 冻结），非第三方独立评测；不用于对外发布级对比。ext_hit 在 CLI 门面恒为
+> 1.0（`l1_hits` 调用处固定），评测不模拟外部扩展命中。
