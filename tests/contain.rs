@@ -62,7 +62,8 @@ fn red_guard_evidence_never_lost_under_hard_cap() {
         assert!(
             matches!(r.mode, Mode::OverflowEvidence | Mode::OverflowFill),
             "{} 极紧上限应如实报告 overflow，got {:?}",
-            c.id, r.mode
+            c.id,
+            r.mode
         );
     }
 }
@@ -86,10 +87,7 @@ fn amber_failopen_keeps_all_evidence() {
 #[test]
 fn amber_summarize_matches_per_slice() {
     // 黄：汇总计数必须与逐切片判定一致（协议自洽）。
-    let reports: Vec<Report> = [BUILD_01, TEST_01]
-        .iter()
-        .map(|c| run(c, &cfg()))
-        .collect();
+    let reports: Vec<Report> = [BUILD_01, TEST_01].iter().map(|c| run(c, &cfg())).collect();
     let s: Summary = summarize(&reports);
     assert_eq!(s.slices, 2);
     assert_eq!(s.evidence_kept, s.evidence_total);
