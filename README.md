@@ -78,6 +78,31 @@ git clone https://github.com/spapient/scx.git \
   "${CODEX_HOME:-$HOME/.codex}/skills/scx"
 ```
 
+### 一键安装
+
+`bin/install` 构建 release 二进制并软链到 `~/.local/bin/scx`（零第三方 crate，
+`--locked` 离线可构建；目标目录可用 `SCX_BIN_DIR` 覆盖）：
+
+```bash
+# macOS / Linux / WSL
+sh bin/install                 # 构建 + 安装到 ~/.local/bin/scx
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+```powershell
+# Windows PowerShell：复制 release 二进制到用户工具目录
+New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
+Copy-Item target\release\scx.exe "$HOME\bin\scx.exe"
+$env:Path = "$HOME\bin;" + $env:Path
+```
+
+或直接使用自举入口（无需安装，按需自动构建）：
+
+```bash
+./bin/run --version            # macOS / Linux / WSL
+.inun.cmd --version        # Windows
+```
+
 ### 安装自检
 
 Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技能存在但实际不可用”的常见原因：
