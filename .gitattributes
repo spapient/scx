@@ -7,4 +7,4 @@ bin/run text eol=lf
 *.toml text eol=lf
 Cargo.lock text eol=lf
 *.tsv text eol=lf whitespace=-blank-at-eol
-rs/tests/golden/** text eol=lf
+tests/golden/** text eol=lf
