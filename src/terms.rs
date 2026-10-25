@@ -247,6 +247,10 @@ const RECALL_PAIRS: &[(&str, &str)] = &[
     ("authentication", "auth"),
     ("conn", "connection"),
     ("connection", "conn"),
+    ("fmt", "format"),
+    ("format", "fmt"),
+    ("msg", "message"),
+    ("message", "msg"),
     ("内存", "memory"),
     ("memory", "内存"),
     ("memory", "gc"),
@@ -392,6 +396,23 @@ mod tests {
     #[test]
     fn does_not_expand_broad_db_alias_in_recall() {
         assert_eq!(expand_recall_terms(&["db".into()]), vec!["db".to_string()]);
+    }
+
+    #[test]
+    fn expands_high_precision_abbrev_pairs() {
+        // P3.2 保守补充：标准技术缩写 ↔ 全称（双向、去重）。
+        let got = expand_recall_terms(&["fmt".into()]);
+        assert!(got.contains(&"format".to_string()));
+        let got2 = expand_recall_terms(&["message".into()]);
+        assert!(got2.contains(&"msg".to_string()));
+        let got3 = expand_recall_terms(&["format".into(), "fmt".into()]);
+        assert_eq!(
+            got3.iter().filter(|t| *t == "fmt").count(),
+            1,
+            "双向扩展必须去重"
+        );
+        // 字面前缀交集对（param/parameter）不加入词表。
+        assert_eq!(expand_recall_terms(&["param".into()]), vec!["param".to_string()]);
     }
 
     #[test]
