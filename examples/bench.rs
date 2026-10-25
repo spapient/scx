@@ -1,12 +1,15 @@
 //! 零依赖性能基准入口。
 //!
 //! ```text
-//! cargo run --release --locked --example bench            # 50k 行压缩
+//! cargo run --release --locked --example bench            # 压缩全路径（default/structure/max-tokens/policy）
 //! cargo run --release --locked --example bench -- memory  # 10k case 记忆库
 //! ```
 //!
-//! 压缩基准报告 9 次采样的中位耗时（微秒）。记忆库基准构造短日志与长堆栈混合的
-//! 1 万条 case，分别报告线性冷启动、索引首次加载、稳态倒排召回与全候选宽查询。
+//! 压缩基准报告 9 次采样的中位耗时（微秒），含四条路径：默认配置、--structure 1
+//! 结构感知邻域、--max-tokens 硬上限、--policy-file 字段覆盖（conf 解析为一次性
+//! 开销，稳态压缩延迟与字段覆盖等价——完整 CLI 映射在 args，此处为字段级近似）。
+//! 记忆库基准构造短日志与长堆栈混合的 1 万条 case，分别报告线性冷启动、索引
+//! 首次加载、稳态倒排召回与全候选宽查询。
 
 use scx::memory::CaseStats;
 use scx::memory::{rebuild, recall_cases, store_case, StoreInput};
@@ -37,27 +40,137 @@ fn compress_bench() {
         .collect();
     let text = lines.join("\n");
     let cfg = Config::default();
+    let query = "timeout conn_id pool";
+    let repeats = bench_repeats();
 
-    let _ = compress(&text, "timeout conn_id pool", &cfg);
-    let mut samples: Vec<u128> = Vec::new();
-    let repeats = std::env::var("SCX_BENCH_REPEAT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(9);
+    bench_median(&text, query, &cfg, "compress", repeats);
+    structure_bench(repeats);
+    max_tokens_bench(&text, query, repeats);
+    policy_bench(&text, query, repeats);
+}
+
+/// 单路径中位耗时：预热一次后采样，报告 p50 与全样本。
+fn bench_median(text: &str, query: &str, cfg: &Config, label: &str, repeats: usize) {
+    let _ = compress(text, query, cfg);
+    let mut samples: Vec<u128> = Vec::with_capacity(repeats);
     for _ in 0..repeats {
         let t = Instant::now();
-        let outcome = compress(&text, "timeout conn_id pool", &cfg);
+        let outcome = compress(text, query, cfg);
         samples.push(t.elapsed().as_micros());
         assert!(outcome.seeds > 0, "benchmark corpus must hit a seed");
     }
     samples.sort_unstable();
     println!(
-        "compress: 50k lines ({} chars) median {} us | samples {:?} us | kept={}",
+        "{label}: 50k lines ({} chars) median {} us | samples {:?} us | kept={}",
         text.chars().count(),
         samples[samples.len() / 2],
         samples,
-        compress(&text, "timeout conn_id pool", &cfg).kept,
+        compress(text, query, cfg).kept,
     );
+}
+
+/// 结构感知路径：结构富语料（import 块 / stack at 链 / fence 块 + 噪声）在
+/// `structure=false` 与 `true` 下分别计时，报告开启的增量开销。
+fn structure_bench(repeats: usize) {
+    let text = structure_text();
+    let query = "compute module";
+    let mut off = Config::default();
+    off.structure = false;
+    let mut on = Config::default();
+    on.structure = true;
+    bench_median(&text, query, &off, "structure:off", repeats);
+    bench_median(&text, query, &on, "structure:on", repeats);
+}
+
+/// --max-tokens 硬上限路径：默认语料 + `max_tokens=2000`，报告模式（应为
+/// overflow 或 sieve，取决于证据地板与预算交互）。
+fn max_tokens_bench(text: &str, query: &str, repeats: usize) {
+    let mut cfg = Config::default();
+    cfg.max_tokens = Some(2000);
+    let _ = compress(text, query, &cfg);
+    let mut samples: Vec<u128> = Vec::with_capacity(repeats);
+    for _ in 0..repeats {
+        let t = Instant::now();
+        let outcome = compress(text, query, &cfg);
+        samples.push(t.elapsed().as_micros());
+        assert!(outcome.seeds > 0);
+    }
+    samples.sort_unstable();
+    let out = compress(text, query, &cfg);
+    println!(
+        "max-tokens: 50k lines median {} us | samples {:?} us | kept={} mode={}",
+        samples[samples.len() / 2],
+        samples,
+        out.kept,
+        out.mode,
+    );
+}
+
+/// --policy-file 路径：conf::parse 为一次性开销（与 CLI 层等价），单独计时；
+/// 字段覆盖后的稳态压缩延迟单独报告。完整 CLI 映射在 args::parse_policy_file，
+/// 此处为字段级近似（ratio/context/max_tokens/structure 代表字段）。
+fn policy_bench(text: &str, query: &str, repeats: usize) {
+    let body = "ratio = 0.5\ncontext = 1\nmax_tokens = 4000\nstructure = 1\n";
+    let entries = scx::conf::parse(body.lines());
+    let mut cfg = Config::default();
+    for e in &entries {
+        match e.key {
+            "ratio" => cfg.ratio = scx::conf::parse_f64(&e.value).unwrap(),
+            "context" => cfg.context = scx::conf::parse_usize(&e.value).unwrap() as i64,
+            "max_tokens" => cfg.max_tokens = scx::conf::parse_usize(&e.value),
+            "structure" => cfg.structure = scx::conf::parse_usize(&e.value).unwrap() > 0,
+            _ => {}
+        }
+    }
+    let t = Instant::now();
+    let _ = compress(text, query, &cfg);
+    let parse_us = t.elapsed().as_micros();
+    let mut samples: Vec<u128> = Vec::with_capacity(repeats);
+    for _ in 0..repeats {
+        let t = Instant::now();
+        let outcome = compress(text, query, &cfg);
+        samples.push(t.elapsed().as_micros());
+        assert!(outcome.seeds > 0);
+    }
+    samples.sort_unstable();
+    let out = compress(text, query, &cfg);
+    println!(
+        "policy: conf parse {} us (one-shot, per-invocation) | compress median {} us | samples {:?} us | kept={} mode={}",
+        parse_us,
+        samples[samples.len() / 2],
+        samples,
+        out.kept,
+        out.mode,
+    );
+}
+
+/// 结构富语料：每 50 行一个 import 块（10 行）、stack at 链（10 行）、fence
+/// 块（3 行）与噪声行交替；保证 structure 路径有可识别的结构区间。
+fn structure_text() -> String {
+    let mut v: Vec<String> = Vec::with_capacity(50_000);
+    for i in 0..50_000 {
+        match i % 50 {
+            0..=9 => v.push(format!("import com.svc.module{};", i % 10)),
+            10..=19 => v.push(format!(
+                "  at com.svc.Class{}.method{}() line {}",
+                i % 10,
+                i % 20,
+                100 + i
+            )),
+            20 => v.push("```rust".to_string()),
+            21 => v.push(format!("let x = compute({});", i)),
+            22 => v.push("```".to_string()),
+            _ => v.push(format!("INFO heartbeat seq={} ok", i)),
+        }
+    }
+    v.join("\n")
+}
+
+fn bench_repeats() -> usize {
+    std::env::var("SCX_BENCH_REPEAT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9)
 }
 
 fn memory_bench() {

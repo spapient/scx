@@ -17,7 +17,8 @@
 use std::fmt;
 mod analysis;
 mod compress;
-mod conf;
+/// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。
+pub mod conf;
 pub mod contain;
 mod policy;
 mod terms;
