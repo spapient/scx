@@ -5,8 +5,8 @@
 //! cargo run --release --locked --example bench -- memory  # 10k case 记忆库
 //! ```
 //!
-//! 压缩基准报告 5 次采样的中位耗时。记忆库基准构造短日志与长堆栈混合的 1 万条
-//! case，报告线性冷启动、倒排召回与全候选宽查询的 p50/p95/p99。
+//! 压缩基准报告 9 次采样的中位耗时（微秒）。记忆库基准构造短日志与长堆栈混合的
+//! 1 万条 case，分别报告线性冷启动、索引首次加载、稳态倒排召回与全候选宽查询。
 
 use scx::memory::CaseStats;
 use scx::memory::{rebuild, recall_cases, store_case, StoreInput};
@@ -40,15 +40,15 @@ fn compress_bench() {
 
     let _ = compress(&text, "timeout conn_id pool", &cfg);
     let mut samples: Vec<u128> = Vec::new();
-    for _ in 0..5 {
+    for _ in 0..9 {
         let t = Instant::now();
         let outcome = compress(&text, "timeout conn_id pool", &cfg);
-        samples.push(t.elapsed().as_millis());
+        samples.push(t.elapsed().as_micros());
         assert!(outcome.seeds > 0, "benchmark corpus must hit a seed");
     }
     samples.sort_unstable();
     println!(
-        "compress: 50k lines ({} chars) median {} ms | samples {:?} ms | kept={}",
+        "compress: 50k lines ({} chars) median {} us | samples {:?} us | kept={}",
         text.chars().count(),
         samples[samples.len() / 2],
         samples,
@@ -120,6 +120,13 @@ fn memory_bench() {
         "rebuild: docs={n_docs} terms={n_terms} in {} ms",
         t.elapsed().as_millis()
     );
+
+    // 单独报告索引首次加载，后续样本只衡量稳态召回；否则一个 10ms 冷加载样本
+    // 会长期占据 p99，把查询分布与索引 I/O 混在一起。
+    let t = Instant::now();
+    let warm = recall_cases(&root, &bench_query(99), 5, true).expect("index warm failed");
+    assert!(!warm.is_empty(), "index warm query must recall");
+    println!("index warm: {} us", t.elapsed().as_micros());
 
     let mut recall = Vec::new();
     for i in 0..21 {

@@ -118,13 +118,15 @@ pub(crate) struct DocRec {
     pub status: Arc<str>,
     pub quality: f64,
     pub updated_at: Arc<str>,
+    /// `updated_at` 的 Unix 秒快照；召回热循环不再逐候选解析日期。
+    pub updated_s: u64,
 }
 
 pub(crate) struct Index {
     pub n_docs: usize,
     pub total_len: usize,
-    /// doc_idx → case id（字典序）。
-    pub ids: Vec<String>,
+    /// doc_idx → case id（字典序）；候选只克隆 `Arc`，不复制字符串。
+    pub ids: Vec<Arc<str>>,
     /// doc_idx → 打分快照（与 ids 对齐）。
     pub docs: Vec<DocRec>,
     /// term → (df, doc_idx 升序列表)。
@@ -197,6 +199,7 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
     for id in &ids {
         let c = store::read_case(root, id)?;
         let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
+        let updated_s = crate::memory::util::parse_utc_secs(&c.updated_at);
         total_len += terms.len();
         let buckets = crate::memory::bucket::case_buckets(&[], &query_terms, &c.text);
         docs.push((
@@ -210,6 +213,7 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
                 status: c.status.into(),
                 quality: c.quality,
                 updated_at: c.updated_at.into(),
+                updated_s,
             },
         ));
     }
@@ -363,7 +367,7 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
     if n_terms > body.len() {
         return Err(corrupt("n_terms exceeds body"));
     }
-    let mut ids: Vec<String> = Vec::with_capacity(n_docs);
+    let mut ids: Vec<Arc<str>> = Vec::with_capacity(n_docs);
     let mut docs: Vec<DocRec> = Vec::with_capacity(n_docs);
     let take_str = |i: &mut usize, body: &[u8]| -> std::io::Result<String> {
         if *i >= body.len() {
@@ -429,7 +433,8 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         let quality = f32::from_le_bytes(body[i..i + 4].try_into().unwrap()) as f64;
         i += 4;
         let updated_at = take_str(&mut i, body)?;
-        ids.push(id);
+        let updated_s = crate::memory::util::parse_utc_secs(&updated_at);
+        ids.push(id.into());
         docs.push(DocRec {
             terms: terms.into(),
             query_terms: query_terms.into(),
@@ -439,6 +444,7 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
             status: status.into(),
             quality,
             updated_at: updated_at.into(),
+            updated_s,
         });
     }
     let mut dict: HashMap<String, (usize, Vec<usize>)> = HashMap::with_capacity(n_terms);
@@ -630,6 +636,10 @@ mod tests {
         assert!(
             idx.docs.iter().all(|d| !d.buckets.is_empty()),
             "索引必须携带多标签桶"
+        );
+        assert!(
+            idx.docs.iter().all(|d| d.updated_s > 0),
+            "索引加载时必须一次解析 updated_at，热循环不再逐候选解析日期"
         );
         // df 语义：df=posting 长度，且 posting 严格递增（确定性）。
         for (df, post) in idx.dict.values() {

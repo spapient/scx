@@ -32,13 +32,20 @@ struct DocCtx {
     fields: Arc<super::store::Fields>,
     status: Arc<str>,
     quality: f64,
-    updated_at: Arc<str>,
+    updated_s: u64,
     /// 实体边：与 query 共享的实体键数（0 = 词面候选，>0 = 桥入兄弟 case）。
     edge_shared: usize,
 }
 
 /// 打分中间结构：候选 (id, 上下文) 列表 + query 词 df 表。
-type Docs = Vec<(String, DocCtx)>;
+type Docs = Vec<(Arc<str>, DocCtx)>;
+
+/// 候选打分结果。只保存文档下标，排序完成后再物化前 k 个公开 id。
+struct Ranked {
+    doc: usize,
+    score: f64,
+    sim: f64,
+}
 
 /// 单轮打分的 query 词快照：每个词只算一次 df/idf/权重。
 struct QueryTerm<'a> {
@@ -60,6 +67,48 @@ struct PassCtx<'a> {
     use_buckets: bool,
     qf_weight: f64,
     qf_exact_only: bool,
+}
+
+/// query 的只读派生数据：一次分析，首轮/桶回退/字段重排/PRF 共用。
+///
+/// 分散在每轮打分里重复切词、抽字段会让低置信多轮路径付 2–4 倍分析成本；
+/// 同时集中词表口径，避免扩展开关在不同轮次出现分歧。
+struct QueryPlan {
+    terms: Vec<String>,
+    original_len: usize,
+    fields: super::store::Fields,
+    entities: Vec<String>,
+}
+
+impl QueryPlan {
+    fn new(query: &str, meta: &Meta) -> Self {
+        let mut terms = build_mem_terms(query);
+        let original_len = terms.len();
+        if meta.param("synonyms_enable") > 0.0 {
+            terms = crate::terms::expand_recall_terms(&terms);
+        }
+        let fields = field::extract(query);
+        let entities = [
+            &fields.error_code,
+            &fields.file_loc,
+            &fields.symbol,
+            &fields.num_fp,
+        ]
+        .into_iter()
+        .flat_map(|values| values.iter().cloned())
+        .collect();
+        Self {
+            terms,
+            original_len,
+            fields,
+            entities,
+        }
+    }
+
+    /// 同义扩展只追加、不重排，因此原词是计划词表的前缀，无需再复制一份。
+    fn original(&self) -> &[String] {
+        &self.terms[..self.original_len]
+    }
 }
 
 /// 归一化得分 → 排序；sim 独立供 L1 置信判定。
@@ -139,9 +188,10 @@ fn recall_inner(
     let qf_weight = meta.param("query_field_weight");
     let qf_trigger = meta.param("query_field_trigger_sim");
     let high_sim = meta.param("confidence_high_sim");
+    let plan = QueryPlan::new(query, meta);
     let mut hits = score_pass(
         root,
-        query,
+        &plan,
         &PassCtx {
             k,
             meta,
@@ -162,7 +212,7 @@ fn recall_inner(
     if use_buckets && first_sim < bucket_bypass_sim {
         if let Ok(full_hits) = score_pass(
             root,
-            query,
+            &plan,
             &PassCtx {
                 k,
                 meta,
@@ -210,7 +260,7 @@ fn recall_inner(
     if use_qf {
         if let Ok(qf_hits) = score_pass(
             root,
-            query,
+            &plan,
             &PassCtx {
                 k,
                 meta,
@@ -234,11 +284,12 @@ fn recall_inner(
         if let Ok(ext) = crate::memory::ranking::expand(root, &hits, query, meta) {
             if !ext.is_empty() {
                 let q2 = format!("{query} {}", ext.join(" "));
+                let q2_plan = QueryPlan::new(&q2, meta);
                 // 第二轮继承首轮候选桶（桶由原始 query 判定），
                 // 扩展词不得改变过滤语义——否则跨语言变体/无关词会把真目标桶误滤（A/B 不可比）。
                 if let Ok(hits2) = score_pass(
                     root,
-                    &q2,
+                    &q2_plan,
                     &PassCtx {
                         k,
                         meta,
@@ -307,7 +358,7 @@ fn bucket_allowed(buckets: &[String], cand: &[String], allow_other: bool) -> boo
 /// 单轮打分：BM25 + 字段加权 + 时间衰减 + 桶过滤。
 /// `idx` 为 Some 时候选集来自倒排（全库 df/avgdl），None 时线性扫描现算。
 /// `cand`/`use_buckets` 由调用方统一判定（首轮=原始 query 桶；PRF 第二轮继承同一桶）。
-fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec<RecallHit>> {
+fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Result<Vec<RecallHit>> {
     let k = ctx.k;
     let meta = ctx.meta;
     let idx = ctx.idx;
@@ -328,12 +379,8 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     ];
     // 实体边：共享实体加权（0 则关闭，兼容老 meta 缺省开 1.0）。
     let edge_w = meta.param("edge_weight");
-    let orig_qterms = build_mem_terms(query);
-    let qterms = if meta.param("synonyms_enable") > 0.0 {
-        crate::terms::expand_recall_terms(&orig_qterms)
-    } else {
-        orig_qterms.clone()
-    };
+    let orig_qterms = plan.original();
+    let qterms = plan.terms.as_slice();
     // 同义扩展是补召回机制，不应与用户原词等权：等权时一个宽泛的扩展词
     // 可以把同域兄弟 case 抬到精确目标之前（confirm3 paraphrase 回归）。
     // 半权是“保留补召回、限制误抬升”的默认折中；置 1 可恢复旧行为。
@@ -341,22 +388,20 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     // `other` = 分类器没有强家族证据；默认放行（宁多勿漏）。
     // 置 0 可恢复旧的硬筛行为（仅用于对拍）。
     let allow_other = meta.param("bucket_allow_other") > 0.0;
-    let qfields = field::extract(query);
     let qf = [
-        &qfields.error_code,
-        &qfields.file_loc,
-        &qfields.symbol,
-        &qfields.num_fp,
+        &plan.fields.error_code,
+        &plan.fields.file_loc,
+        &plan.fields.symbol,
+        &plan.fields.num_fp,
     ];
-    // 实体边一跳：query 实体键集合（去重在 edge 侧）。
-    let q_ent_list: Vec<String> = qf.iter().flat_map(|f| f.iter().cloned()).collect();
+    let q_ent_list = &plan.entities;
 
     // 场景桶：query 判候选桶，case 主桶不在候选桶集内则跳过。
 
     // 候选 docs + df + 统计量：倒排路径（全库口径）或线性路径（候选集口径）。
     let (docs, df, n, avgdl): (Docs, Vec<usize>, f64, f64) = if let Some(idx) = idx {
         // 索引路径：doc 打分快照自包含在 postings 内，候选打分零 case.json IO。
-        let cand_di = index::candidates(idx, &qterms);
+        let cand_di = index::candidates(idx, qterms);
         let mut chosen: Vec<(usize, usize)> = Vec::with_capacity(cand_di.len());
         for di in cand_di {
             let rec = &idx.docs[di];
@@ -374,14 +419,14 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
             for &(di, _) in &chosen {
                 seen[di] = true;
             }
-            for (di, shared) in index::entity_neighbors(idx, &q_ent_list) {
+            for (di, shared) in index::entity_neighbors(idx, q_ent_list) {
                 if !seen[di] {
                     seen[di] = true;
                     chosen.push((di, shared));
                 }
             }
         }
-        let docs: Vec<(String, DocCtx)> = chosen
+        let docs: Docs = chosen
             .into_iter()
             .map(|(di, edge_shared)| {
                 let rec = &idx.docs[di];
@@ -393,7 +438,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
                         fields: rec.fields.clone(),
                         status: rec.status.clone(),
                         quality: rec.quality,
-                        updated_at: rec.updated_at.clone(),
+                        updated_s: rec.updated_s,
                         edge_shared,
                     },
                 )
@@ -411,7 +456,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let mut docs: Vec<(String, DocCtx)> = Vec::with_capacity(ids.len());
+        let mut docs: Docs = Vec::with_capacity(ids.len());
         let mut df = vec![0usize; qterms.len()];
         let mut total_len = 0usize;
         for id in &ids {
@@ -431,31 +476,31 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
                 continue;
             }
             docs.push((
-                id.clone(),
+                Arc::from(id.as_str()),
                 DocCtx {
                     terms: terms.into(),
                     query_terms: query_terms.into(),
                     fields: Arc::new(c.fields),
                     status: c.status.into(),
                     quality: c.quality,
-                    updated_at: c.updated_at.into(),
+                    updated_s: crate::memory::util::parse_utc_secs(&c.updated_at),
                     edge_shared: 0,
                 },
             ));
         }
         // 实体边一跳：桥 case 并入后 avgdl 重算（df 保持词面候选口径）。
-        let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.clone()).collect();
-        let (bridges, _) = crate::memory::edge::bridge_cases(root, meta, &q_ent_list, &exist_ids)?;
+        let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.to_string()).collect();
+        let (bridges, _) = crate::memory::edge::bridge_cases(root, meta, q_ent_list, &exist_ids)?;
         for b in bridges {
             docs.push((
-                b.id,
+                b.id.into(),
                 DocCtx {
                     terms: b.terms,
                     query_terms: b.query_terms,
                     fields: b.fields,
                     status: b.status,
                     quality: b.quality,
-                    updated_at: b.updated_at,
+                    updated_s: crate::memory::util::parse_utc_secs(&b.updated_at),
                     edge_shared: b.edge_shared,
                 },
             ));
@@ -488,6 +533,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         .collect();
     // quality 排序先验：solved 且质量高的 case 提分。
     let q_prior = meta.param("quality_prior");
+    let qf_min_sim = meta.param("query_field_min_sim");
     // score_max：原始 query 词 idf 加字段全命中，作 sim 归一化分母。
     // 同义扩展只增加命中机会，不得抬高分母把原始 query 的 sim 稀释。
     // 直觉：query 每个词在 case 中都命中一次 ≈ sim=1（tf>1 或字段命中可再溢出）。
@@ -496,8 +542,8 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         sm += f_list.len() as f64 * w;
     }
 
-    let mut hits: Vec<RecallHit> = Vec::with_capacity(docs.len());
-    for (id, dctx) in &docs {
+    let mut hits: Vec<Ranked> = Vec::with_capacity(docs.len());
+    for (doc, (_id, dctx)) in docs.iter().enumerate() {
         let dl = dctx.terms.len() as f64;
         // terms 在建库/桥接/线性路径均已 sort+dedup，tf 恒为 1；直接二分查存在性，
         // 避免每个候选文档分配一张 tf HashMap。
@@ -540,7 +586,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
                 .filter(|t| dctx.query_terms.iter().any(|x| x == *t))
                 .count();
             if support >= need {
-                let qf_terms = if qf_exact_only { &orig_qterms } else { &qterms };
+                let qf_terms = if qf_exact_only { orig_qterms } else { qterms };
                 for qt in qf_terms {
                     if dctx.query_terms.iter().any(|t| t == qt) {
                         if let Some(q) = qinfo.iter().find(|q| q.text == qt) {
@@ -560,14 +606,13 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         // 不能让零匹配 case 仅凭质量先验进入 top-k（否则任意候选会以 0 分返回，
         // 评估会把“按库顺序碰巧命中”误算成召回）。
         let support = score + fb;
-        // 时间衰减：age 用 updated_at（去重/反馈会刷新），τ 随状态动态。
+        // 时间衰减：age 用 updated_at 的预解析快照，τ 随状态动态。
         let tau_eff = match &*dctx.status {
             "solved" => tau_solved,
             "regressed" => tau_regressed,
             _ => tau,
         };
-        let upd_s = crate::memory::util::parse_utc_secs(&dctx.updated_at);
-        let age_days = (now_s.saturating_sub(upd_s)) as f64 / 86_400.0;
+        let age_days = (now_s.saturating_sub(dctx.updated_s)) as f64 / 86_400.0;
         let decay = 1.0 / (1.0 + age_days / tau_eff);
         // quality 排序先验：solved/质量高的 case 提分，regressed 压分。
         let qsign = if &*dctx.status == "regressed" {
@@ -587,14 +632,13 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         // bigram 命中就能把跨事故 case 抬进 top-10（Flowdock 语义查询实测
         // sim=0.04 的 Tarsnap case 被抬到第 7）。阈值只作用于重排项，
         // 不影响纯词面/字段分，也不改变目标 case 的召回资格。
-        let qf_min_sim = meta.param("query_field_min_sim");
         if qf_add > 0.0 && sm > 0.0 && lexical / sm < qf_min_sim {
             score -= qf_add;
             lexical = (score + fb) * decay;
             ranked = (score + fb) * decay;
         }
-        hits.push(RecallHit {
-            id: id.clone(),
+        hits.push(Ranked {
+            doc,
             score: ranked,
             sim: if sm > 0.0 {
                 (lexical / sm).clamp(0.0, 1.0)
@@ -605,7 +649,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     }
 
     // MMR：得分排序后按多样性去冗余（λ 从 meta 读）。
-    let mut order = order_by_score(&hits);
+    let mut order = order_by_score(&hits, &docs);
     // 同事故兄弟 case 往往共享完整根因段，词面高度重合。首轮用整篇词表做
     // Jaccard 聚类，把 top1 的同族 case 收紧到 top1 之后：同一事故的兄弟
     // 在人工口径里通常同为 rel=2，散落在弱相关候选之后会拉低 NDCG。
@@ -615,11 +659,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     // 候选只是共享少量泛化词；此时把整族候选前移会压过更强的跨族结果。
     let sibling_anchor_ok = sibling_anchor_ok(&hits, &order, meta.param("sibling_min_sim"));
     if meta.param("sibling_coherence") > 0.0 && sibling_anchor_ok && hits.len() > 1 {
-        let terms_by_id: HashMap<&str, &[String]> = docs
-            .iter()
-            .map(|(id, d)| (id.as_str(), d.terms.as_ref()))
-            .collect();
-        order = group_siblings(order, &hits, &terms_by_id, k);
+        order = group_siblings(order, &hits, &docs, k);
     }
     let lambda = meta.param("mmr_lambda");
     // MMR 默认关闭：v2 对拍显示 λ=0.5 会把同事故的精确目标挤出 top-5
@@ -633,7 +673,12 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     };
     let mut out: Vec<RecallHit> = Vec::with_capacity(picked.len());
     for &i in &picked {
-        out.push(hits[i].clone());
+        let hit = &hits[i];
+        out.push(RecallHit {
+            id: docs[hit.doc].0.to_string(),
+            score: hit.score,
+            sim: hit.sim,
+        });
     }
     Ok(out)
 }
@@ -642,19 +687,19 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
 ///
 /// `sort_by` 稳定，但输入 `docs` 的顺序来自倒排/哈希遍历，跨进程不保证；
 /// 不设次级键会让同分兄弟 case 的 NDCG 每次运行不同（MRR 因目标不并列而看似稳定）。
-fn order_by_score(hits: &[RecallHit]) -> Vec<usize> {
+fn order_by_score(hits: &[Ranked], docs: &Docs) -> Vec<usize> {
     let mut order: Vec<usize> = (0..hits.len()).collect();
     order.sort_by(|&a, &b| {
         hits[b]
             .score
             .partial_cmp(&hits[a].score)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| hits[a].id.cmp(&hits[b].id))
+            .then_with(|| docs[hits[a].doc].0.cmp(&docs[hits[b].doc].0))
     });
     order
 }
 
-fn sibling_anchor_ok(hits: &[RecallHit], order: &[usize], min_sim: f64) -> bool {
+fn sibling_anchor_ok(hits: &[Ranked], order: &[usize], min_sim: f64) -> bool {
     order.first().is_some_and(|&i| hits[i].sim >= min_sim)
 }
 
@@ -666,19 +711,12 @@ const SIBLING_SCORE_RATIO: f64 = 0.40;
 
 /// 把 top1 的同族候选稳定地移到 top1 之后（保持各自原有先后），其余顺序不变。
 /// 只看前 `3*k` 个候选：同事故兄弟在 confirm5 均落在 top-10 内，避免全库两两比较。
-fn group_siblings(
-    order: Vec<usize>,
-    hits: &[RecallHit],
-    terms_by_id: &HashMap<&str, &[String]>,
-    k: usize,
-) -> Vec<usize> {
+fn group_siblings(order: Vec<usize>, hits: &[Ranked], docs: &Docs, k: usize) -> Vec<usize> {
     if order.len() < 2 {
         return order;
     }
     let top = order[0];
-    let Some(top_terms) = terms_by_id.get(hits[top].id.as_str()) else {
-        return order;
-    };
+    let top_terms = &docs[hits[top].doc].1.terms;
     if top_terms.is_empty() {
         return order;
     }
@@ -686,9 +724,8 @@ fn group_siblings(
     let top_score = hits[top].score.max(1e-9);
     let (mut family, mut rest) = (Vec::new(), Vec::new());
     for &i in &order[1..window] {
-        let sibling = terms_by_id
-            .get(hits[i].id.as_str())
-            .is_some_and(|t| crate::memory::ranking::jaccard(top_terms, t) >= SIBLING_JACCARD)
+        let sibling = crate::memory::ranking::jaccard(top_terms, &docs[hits[i].doc].1.terms)
+            >= SIBLING_JACCARD
             && hits[i].score >= top_score * SIBLING_SCORE_RATIO;
         if sibling {
             family.push(i);
@@ -733,6 +770,29 @@ mod tests {
         recall(root, query, k, &store::load_meta(root)?)
     }
 
+    fn doc(id: &str, terms: &[&str]) -> (Arc<str>, DocCtx) {
+        (
+            Arc::from(id),
+            DocCtx {
+                terms: terms
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+                    .into(),
+                query_terms: Arc::from(Vec::new()),
+                fields: Arc::new(Default::default()),
+                status: "open".into(),
+                quality: 0.0,
+                updated_s: 0,
+                edge_shared: 0,
+            },
+        )
+    }
+
+    fn ranked(doc: usize, score: f64, sim: f64) -> Ranked {
+        Ranked { doc, score, sim }
+    }
+
     #[test]
     fn query_field_strength_gates_low_confidence_by_script() {
         // 英文低置信 literal 不触发 title 重排（confirm2 case 136 回归）。
@@ -756,29 +816,59 @@ mod tests {
     }
 
     #[test]
-    fn equal_scores_order_by_case_id() {
-        let hit = |id: &str, score: f64| RecallHit {
-            id: id.to_string(),
-            score,
-            sim: 1.0,
+    fn query_plan_reuses_one_term_and_field_snapshot() {
+        let meta = |synonyms| Meta {
+            created_at: String::new(),
+            case_count: 1,
+            gen: 1,
+            df: Vec::new(),
+            params: vec![("synonyms_enable".to_string(), synonyms)],
+            word_w: Vec::new(),
+            l1_hist: Vec::new(),
         };
-        let hits = vec![hit("d", 2.0), hit("b", 2.0), hit("c", 2.0), hit("a", 1.0)];
-        let ids: Vec<&str> = order_by_score(&hits)
+        let on = QueryPlan::new("ERROR conn_id=9f2a memory", &meta(1.0));
+        assert!(on.original().iter().any(|t| t == "memory"));
+        assert!(
+            on.terms.iter().any(|t| t == "heap") || on.terms.iter().any(|t| t == "oom"),
+            "启用同义词时扩展词必须进入同一份计划"
+        );
+        assert!(
+            on.fields.error_code.iter().any(|v| v == "conn_id=9f2a"),
+            "结构化字段必须只抽取一次并供所有打分轮共用"
+        );
+        assert!(
+            on.entities.iter().any(|v| v == "conn_id=9f2a"),
+            "实体边候选必须复用同一字段快照"
+        );
+        let off = QueryPlan::new("ERROR conn_id=9f2a memory", &meta(0.0));
+        assert_eq!(
+            off.terms.as_slice(),
+            off.original(),
+            "关闭同义词时不得扩展词表"
+        );
+    }
+
+    #[test]
+    fn equal_scores_order_by_case_id() {
+        let docs = vec![doc("d", &[]), doc("b", &[]), doc("c", &[]), doc("a", &[])];
+        let hits = vec![
+            ranked(0, 2.0, 1.0),
+            ranked(1, 2.0, 1.0),
+            ranked(2, 2.0, 1.0),
+            ranked(3, 1.0, 1.0),
+        ];
+        let ids: Vec<&str> = order_by_score(&hits, &docs)
             .into_iter()
-            .map(|i| hits[i].id.as_str())
+            .map(|i| &*docs[hits[i].doc].0)
             .collect();
         assert_eq!(ids, vec!["b", "c", "d", "a"]);
     }
 
     #[test]
     fn sibling_gate_requires_confident_anchor() {
-        let hit = |id: &str, sim: f64| RecallHit {
-            id: id.into(),
-            score: 1.0,
-            sim,
-        };
-        let hits = vec![hit("low", 0.29), hit("high", 0.30)];
-        let order = order_by_score(&hits);
+        let docs = vec![doc("low", &[]), doc("high", &[])];
+        let hits = vec![ranked(0, 1.0, 0.29), ranked(1, 1.0, 0.30)];
+        let order = order_by_score(&hits, &docs);
         assert!(sibling_anchor_ok(&hits, &order, 0.30));
         assert!(!sibling_anchor_ok(&hits, &order, 0.31));
         assert!(!sibling_anchor_ok(&[], &[], 0.30));
@@ -795,31 +885,21 @@ mod tests {
 
     #[test]
     fn siblings_group_after_top1_and_weak_stays_below() {
-        let hit = |id: &str, score: f64| RecallHit {
-            id: id.to_string(),
-            score,
-            sim: score / 10.0,
-        };
-        let hits = vec![
-            hit("top", 10.0),
-            hit("sib1", 8.0),
-            hit("weak", 9.0),
-            hit("sib2", 7.0),
-            hit("other", 6.0),
+        let docs = vec![
+            doc("top", &["a", "b", "c", "d"]),
+            doc("sib1", &["a", "b", "c", "d"]),
+            doc("weak", &["a", "e"]),
+            doc("sib2", &["a", "b", "c", "d"]),
+            doc("other", &["z"]),
         ];
-        let terms = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        let top = terms(&["a", "b", "c", "d"]);
-        let sib = terms(&["a", "b", "c", "d"]);
-        let weak = terms(&["a", "e"]);
-        let other = terms(&["z"]);
-        let map: HashMap<&str, &[String]> = HashMap::from([
-            ("top", top.as_slice()),
-            ("sib1", sib.as_slice()),
-            ("weak", weak.as_slice()),
-            ("sib2", sib.as_slice()),
-            ("other", other.as_slice()),
-        ]);
-        let out = group_siblings(vec![0, 2, 1, 3, 4], &hits, &map, 5);
+        let hits = vec![
+            ranked(0, 10.0, 1.0),
+            ranked(1, 8.0, 0.8),
+            ranked(2, 9.0, 0.9),
+            ranked(3, 7.0, 0.7),
+            ranked(4, 6.0, 0.6),
+        ];
+        let out = group_siblings(vec![0, 2, 1, 3, 4], &hits, &docs, 5);
         assert_eq!(out, vec![0, 1, 3, 2, 4]);
     }
 
