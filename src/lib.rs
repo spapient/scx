@@ -32,6 +32,9 @@ pub mod ops;
 /// 记忆知识库（旁路，默认不启用）：I/O 侧模块，与纯函数 `compress` 完全隔离。
 pub mod memory;
 
+#[cfg(feature = "mcp")]
+pub mod mcp;
+
 pub use compress::compress;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

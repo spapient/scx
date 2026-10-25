@@ -12,6 +12,17 @@ categories = ["command-line-utilities", "development-tools", "text-processing"]
 
 [dependencies]
 
+[features]
+default = []
+# MCP stdio server（零第三方 crate；关闭时 scx-mcp 二进制不参与构建，
+# 默认路径与 v0.4.1 逐字节一致）。
+mcp = []
+
+[[bin]]
+name = "scx-mcp"
+path = "src/bin/scx-mcp.rs"
+required-features = ["mcp"]
+
 [profile.release]
 opt-level = 3
 lto = true

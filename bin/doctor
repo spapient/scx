@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# scx-mcp doctor：检查二进制存在 + initialize/tools/list 握手。
+set -euo pipefail
+cd "$(dirname "$0")/.."
+BIN=target/release/scx-mcp
+
+if [ ! -x "$BIN" ]; then
+  echo "fail: $BIN 不存在（先运行 bin/setup）" >&2
+  exit 1
+fi
+
+if printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+  | "$BIN" | grep -q '"serverInfo"'; then
+  echo "ok: initialize handshake"
+else
+  echo "fail: initialize 握手失败" >&2
+  exit 1
+fi
+
+if printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+  | "$BIN" | grep -q 'compress_context'; then
+  echo "ok: tools/list 包含 compress_context"
+else
+  echo "fail: tools/list 异常" >&2
+  exit 1
+fi
+
+echo "ok: scx-mcp ready (stdio)"
