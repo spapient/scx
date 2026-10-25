@@ -743,6 +743,27 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         mt1.join(&lf),
     ));
 
+    // 36) --json：删除区间逐段记账（dropped 字段，1-based 闭区间 + reason；
+    //     旧字段顺序不变，向后兼容）。
+    v.push((
+        "json_dropped".into(),
+        vec!["--query", "alpha conn broken", "--json"],
+        mt1.join(&lf),
+    ));
+
+    // 37) --json + --max-tokens：容量超限删除记 reason=max-tokens。
+    v.push((
+        "json_dropped_overflow".into(),
+        vec![
+            "--query",
+            "alpha conn broken",
+            "--json",
+            "--max-tokens",
+            "5",
+        ],
+        mt1.join(&lf),
+    ));
+
     // 33) --structure 1：markdown fence 配对块整段并入种子区域（块内上下文随预算填充）。
     let mut sf: Vec<String> = vec!["```".to_string()];
     sf.push("def run():".to_string());

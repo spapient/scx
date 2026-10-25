@@ -179,6 +179,37 @@ pub struct Outcome {
     pub max_tokens: Option<usize>,
     /// 输出文本的 token 估算（`terms::token_est` 口径）；passthrough/fail-open 不保证。
     pub tok_est: f64,
+    /// 被删除的连续区间（1-based 原始行号闭区间）与原因；仅在筛选模式下有值，
+    /// passthrough/fail-open/no-kept 为空。`--json` 或新渲染模式消费；默认
+    /// stdout 统计行不输出（与 v0.4.1 逐字节一致）。
+    pub dropped: Vec<Dropped>,
+}
+
+/// 删除原因（`dropped` 每区间一条）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropReason {
+    /// 可选内容预算不足（含 `--structure 1` 超长结构区域裁剪）。
+    Budget,
+    /// `--max-tokens` 硬上限导致可选内容容量不足。
+    MaxTokens,
+}
+
+impl DropReason {
+    /// JSON 字段值（小写 kebab）。
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            DropReason::Budget => "budget",
+            DropReason::MaxTokens => "max-tokens",
+        }
+    }
+}
+
+/// 单个删除区间：原始行号闭区间 `[start, end]`（1-based）与删除原因。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Dropped {
+    pub start: usize,
+    pub end: usize,
+    pub reason: DropReason,
 }
 
 // 零分配 u64→十进制行号写入（`N: ` 前缀，grep -n 风格；供 --lineno 使用）。

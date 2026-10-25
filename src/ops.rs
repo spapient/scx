@@ -362,6 +362,20 @@ pub fn render_json(r: &Outcome) -> String {
             m, r.tok_est
         ));
     }
+    // 删除区间（每段一条，1-based 闭区间 + 原因）；默认 stdout 统计行不输出。
+    out.push_str(&format!(
+        ",\"dropped\":[{}]",
+        r.dropped
+            .iter()
+            .map(|d| format!(
+                "{{\"start\":{},\"end\":{},\"reason\":\"{}\"}}",
+                d.start,
+                d.end,
+                d.reason.as_str()
+            ))
+            .collect::<Vec<_>>()
+            .join(",")
+    ));
     out.push('}');
     out
 }

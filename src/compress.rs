@@ -729,7 +729,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
               kept_lno: Vec<usize>,
               mode: Mode,
               max_tokens: Option<usize>,
-              tok_est: f64|
+              tok_est: f64,
+              dropped: Vec<crate::Dropped>|
      -> Outcome {
         Outcome {
             text: text_owned,
@@ -751,6 +752,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             mode,
             max_tokens,
             tok_est,
+            dropped,
         }
     };
 
@@ -770,6 +772,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             mode,
             cfg.max_tokens,
             0.0,
+            Vec::new(),
         );
     }
 
@@ -810,6 +813,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             Mode::FailOpenZeroSignal,
             cfg.max_tokens,
             0.0,
+            Vec::new(),
         );
     }
 
@@ -895,6 +899,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             Mode::PassNoKept,
             cfg.max_tokens,
             0.0,
+            Vec::new(),
         );
     }
 
@@ -914,6 +919,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         overflow.unwrap_or(Mode::Sieve),
         cfg.max_tokens,
         final_tok,
+        drop_runs(&keep, overflow.is_some()),
     )
 }
 
@@ -993,6 +999,44 @@ fn cap_final(final_tok: f64, max_tokens: Option<usize>) -> Option<Mode> {
     }
 }
 
+/// 删除区间：`keep` 中连续未保留段（1-based 闭区间）与原因。
+/// `overflow` 为真（--max-tokens 生效且超限）时记 `MaxTokens`，否则记 `Budget`
+/// （含 `--structure 1` 超长结构区域裁剪——裁剪行为在 merge_structural 完成，
+/// 此处统一按未保留段记录）。
+fn drop_runs(keep: &[bool], overflow: bool) -> Vec<crate::Dropped> {
+    let mut out: Vec<crate::Dropped> = Vec::new();
+    let mut start: Option<usize> = None;
+    for (i, &k) in keep.iter().enumerate() {
+        if !k {
+            if start.is_none() {
+                start = Some(i);
+            }
+        } else if let Some(s) = start.take() {
+            out.push(crate::Dropped {
+                start: s + 1,
+                end: i,
+                reason: if overflow {
+                    crate::DropReason::MaxTokens
+                } else {
+                    crate::DropReason::Budget
+                },
+            });
+        }
+    }
+    if let Some(s) = start {
+        out.push(crate::Dropped {
+            start: s + 1,
+            end: keep.len(),
+            reason: if overflow {
+                crate::DropReason::MaxTokens
+            } else {
+                crate::DropReason::Budget
+            },
+        });
+    }
+    out
+}
+
 /// 输出统计：字符数（去掉尾随换行）与压减率。
 fn cut_stats(out_text: &str, chars_a: usize) -> (usize, f64) {
     let chars_b = if out_text.ends_with('\n') {
@@ -1014,6 +1058,41 @@ mod tests {
 
     fn sample_lines<'a>(v: &[&'a str]) -> Vec<&'a str> {
         v.to_vec()
+    }
+
+    #[test]
+    fn drop_runs_empty_keep() {
+        assert!(drop_runs(&[], false).is_empty());
+        assert!(drop_runs(&[true, true, true], false).is_empty());
+    }
+
+    #[test]
+    fn drop_runs_budget_runs() {
+        let keep = vec![true, false, false, true, false, true];
+        let dr = drop_runs(&keep, false);
+        assert_eq!(dr.len(), 2);
+        assert_eq!((dr[0].start, dr[0].end), (2, 3));
+        assert_eq!(dr[0].reason, crate::DropReason::Budget);
+        assert_eq!((dr[1].start, dr[1].end), (5, 5));
+        assert_eq!(dr[1].reason, crate::DropReason::Budget);
+    }
+
+    #[test]
+    fn drop_runs_trailing_tail() {
+        let keep = vec![true, false, false];
+        let dr = drop_runs(&keep, false);
+        assert_eq!(dr.len(), 1);
+        assert_eq!((dr[0].start, dr[0].end), (2, 3));
+    }
+
+    #[test]
+    fn drop_runs_overflow_reason() {
+        let keep = vec![false, false, true];
+        let dr = drop_runs(&keep, true);
+        assert_eq!(dr.len(), 1);
+        assert_eq!(dr[0].reason, crate::DropReason::MaxTokens);
+        assert_eq!(dr[0].reason.as_str(), "max-tokens");
+        assert_eq!(crate::DropReason::Budget.as_str(), "budget");
     }
 
     #[test]

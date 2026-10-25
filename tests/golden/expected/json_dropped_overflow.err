@@ -1,0 +1,1 @@
+scxjson: {"kept":3,"total":200,"chars_in":8870,"chars_out":122,"cut_pct":98.6,"dup":197,"seeds":1,"evidence":1,"risk":"LOW","guarded":0,"regions":1,"window":2,"terms":3,"forced":0,"mode":"overflow:evidence","max_tokens":5,"tok_est":31,"dropped":[{"start":1,"end":99,"reason":"max-tokens"},{"start":103,"end":200,"reason":"max-tokens"}]}

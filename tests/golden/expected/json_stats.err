@@ -1,1 +1,1 @@
-scxjson: {"kept":5,"total":200,"chars_in":8909,"chars_out":236,"cut_pct":97.4,"dup":195,"seeds":1,"evidence":1,"risk":"LOW","guarded":0,"regions":1,"window":2,"terms":2,"forced":0,"mode":"sieve"}
+scxjson: {"kept":5,"total":200,"chars_in":8909,"chars_out":236,"cut_pct":97.4,"dup":195,"seeds":1,"evidence":1,"risk":"LOW","guarded":0,"regions":1,"window":2,"terms":2,"forced":0,"mode":"sieve","dropped":[{"start":3,"end":149,"reason":"budget"},{"start":153,"end":200,"reason":"budget"}]}
