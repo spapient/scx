@@ -227,3 +227,64 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 2. `bin/scx-eval contain` 的 token 压减为确定性正则估算，非真实 LLM tokenizer。
 3. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审）。
 4. 既有 `memory/*` 函数圈复杂度 > 10 未拆（用户既有代码，P4 统一处理）。
+
+---
+
+## P4 完成记录（2026-10-25，版本 0.5.0 保持）
+
+### 范围与门禁证据（三轨全绿，golden 37 例零漂移）
+
+- `cargo fmt --check` = 0；`cargo clippy --all-targets --locked -- -D warnings`
+  默认 / semantic / mcp 三轨 = 0；`cargo test --locked` = 227 通过 / 0 失败
+  （lib 200 + cli 11 + contain 4 + force_regex 4 + golden 2[1 ignored] +
+  concurrency 1 + policy_file 5）；`RUSTDOCFLAGS="-D warnings" cargo doc` = 0；
+  `cargo build --release --locked` = 0。
+- 复杂度清理按 **lizard 初筛 + 人工 McCabe 核算**（lizard 对 Rust CCN 高估
+  ≈2×，不入基线）；拆分全部为纯提取，浮点加法顺序 / 循环 / 排序平局 /
+  I/O 序列不变，golden 逐字节零漂移。曾出现一次 golden 假红，根因
+  `/tmp/scx-golden-mem-store` 残留目录（测试 `remove_dir_all` 与中断残留
+  相碰），非代码回归，已清理并复核。
+
+### 子项状态
+
+| 子项 | 状态 | 证据 |
+|---|---|---|
+| 4.1 发布基建 | 完成 | `cargo package --locked` dry-run 196 文件 1.9MiB（压缩 350.5KiB）verify 通过；`bin/install` 实测 RC=0；`docs/release-checklist.md` |
+| 4.2 性能矩阵 | 完成 | `examples/bench.rs` 四路径（默认 / structure off+on / max-tokens / policy）+ `docs/benchmarks.md` 跨机基准表；structure 开 +12~13%、max-tokens 12029–12449µs overflow:evidence、policy parse 13.3–13.5ms 一次性 |
+| 4.3 RFC 多租户 | 完成 | `docs/rfc-multi-tenant.md`（设计 only，未实现；禁 publish/push/merge 纪律内） |
+| 4.4 存量复杂度清理 | 完成 | `memory/*` 18 个 lizard 候选全部人工核算；**recall_inner 19→8、score_pass 42→9**、index build 12→1 / parse 23→4、ranking expand 21→6、query_cache append 13→3 / merge 11→4、gate check_mode 23→4 / adjudication_checks 26→4、eval parse_baseline 35→8、annotate judge 25→8 / annotate_report 13→4、meta load_meta 18→9 / bump_word_w 18→5、feedback rate 13→4、json write_into 15→8、util parse_utc_secs 20→7、ingest persist 11→2；辅助函数全部 <10 |
+| 记忆库协议演进 | 完成 | L1 直答评测协议（fix 覆盖率 / 直答触发率 / 直答命中率 / MRR 下界）入 `docs/memory.md`；多进程写实测沿用 P2 `memory_concurrency` 压测 + `docs/locking.md`；内核/记忆库解耦复核：无跨模块引用（仅 ops 编排层调 memory） |
+| 待办收尾 | 完成 | contain token 口径维持「确定性正则估算」（真实 tokenizer 需第三方 crate，违反零依赖红线）并已在 CONTAINMENT.md / benchmarks 标注；SuperCompress 同场对照不虚构——需真实事故语料 + 第三方盲审，见遗留 |
+
+### commit 链（P4，接收尾链之后）
+
+| commit | 说明 |
+|---|---|
+| `ae86cbd` | feat(install): one-shot installer + release dry-run evidence + docs/release-checklist（4.1） |
+| `4d266be` | docs(rfc): multi-tenant / memory sandbox / MCP auth design only（4.3） |
+| `4e04062` → `660e528` → `b1b91f3` | feat(bench): four-path matrix + cross-machine table + clippy 三连修复（4.2；教训：**不得带红 clippy 提交**） |
+| `66cb5d0` | refactor(memory): recall_inner / score_pass 拆分（4.4 自担部分） |
+| `98fe595` / `bf41ef9` / `f276389` | refactor(memory): gate/eval、index/ranking/query_cache、annotate/meta/feedback/json/util/ingest 拆分（4.4 并行子代理，统一提交） |
+| `ce545d0` | refactor(memory): recall.rs PassCtx 收敛（too_many_arguments 归零） |
+| `c4f00a0` | docs(memory): L1 直答评测协议（4.5） |
+
+### 关键语义与偏差声明（以代码为准）
+
+- 4.2 policy 基准为**字段级近似**（ratio/context/max_tokens/structure 代表字段），
+  完整 CLI 映射在 `args::parse_policy_file`；`src/lib.rs` 的 `conf` 由
+  `mod` 改为 `pub mod`（公共 TOML 子集解析器，零依赖）。
+- 复杂度清理期间修复子代理引入的编译/门禁问题：弯引号落在 Rust 字符串字面量
+  （语法错误）、`String::as_str`（MSRV 1.82 下 unstable，改 `k[..].cmp(t)`）、
+  `too_many_arguments`（PassCtx / AnnotateCtx 收敛）。均为纯修复，不改行为。
+- contain token 压减保持「确定性正则估算」（ASCII 词 + CJK 字），与字符口径
+  差约 2 个百分点；真实 tokenizer 需引入第三方 crate，违反零依赖红线。
+
+### 遗留 / 发布前检查单（不阻塞 0.5.0 本地使用）
+
+1. **未执行 cargo publish / git push / merge main**（需用户明确指示）：crates.io
+   发布前复查项见 `docs/release-checklist.md`（crate 名可用性、CI、tag、授权）。
+2. SuperCompress 同场独立对照未做：需**真实事故语料 + 第三方盲审**，本轮不虚构数据。
+3. contain token 估算为自测口径（非真实 tokenizer），文档已显著标注。
+4. `docs/benchmarks.md` 默认路径本轮单轮采样负载偏高（14,757µs），历史快照
+   （11.7–12.0ms）为基准值；新路径（structure/max-tokens/policy）为本轮首测，
+   跨机复现见 benchmarks.md。
