@@ -187,8 +187,6 @@ fn recall_inner(
     // 消融开关（默认全开）：bucket_enable/prf_enable 只服务可复现的 A−组件对拍，
     // 不改变默认检索行为。
     let mut use_buckets = !cand.is_empty() && meta.param("bucket_enable") > 0.0;
-    let qf_weight = meta.param("query_field_weight");
-    let qf_trigger = meta.param("query_field_trigger_sim");
     let high_sim = meta.param("confidence_high_sim");
     let plan = QueryPlan::new(query, meta);
     let mut hits = score_pass(
@@ -209,31 +207,112 @@ fn recall_inner(
     // 一个通用词（例如 thread→runtime），而目标 case 的主桶是 db。硬筛会
     // 在排序前直接删掉目标，任何字段重排都救不回来。此时退回无桶候选，
     // 保留 BM25 全量排序；高置信查询仍走桶过滤以控制扫描范围。
+    let (hits, use_buckets) = recall_bucket_bypass(
+        root,
+        &plan,
+        k,
+        now_s,
+        meta,
+        idx.as_deref(),
+        &cand,
+        use_buckets,
+        hits,
+    );
+    // case-query 字段加权只在两种情况下启用：①低/中置信释义查询
+    // （top1.sim<query_field_trigger_sim，默认 0.30）；
+    // ②top1/top2 都是满分、但排序按正文长度/字段打破时（同事故兄弟 case 竞争）。
+    // 高置信且无并列的 query 不改排序，避免把同域候选抬上来。
+    let (hits, qf_strength, qf_exact_only, use_qf) = recall_qf_rerank(
+        root,
+        &plan,
+        k,
+        now_s,
+        meta,
+        idx.as_deref(),
+        &cand,
+        use_buckets,
+        hits,
+    );
+    // PRF：低置信（top1.sim < confidence_high_sim）时粗召回 top-K 扩展查询再召一轮。
+    // 扩展轮严格补漏，不覆盖首轮顺序（见下方合并逻辑）。
+    let low_conf = meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
+    if low_conf {
+        if let Some(merged) = recall_prf_extend(
+            root,
+            query,
+            &plan,
+            k,
+            now_s,
+            meta,
+            idx.as_deref(),
+            &cand,
+            use_buckets,
+            qf_strength,
+            qf_exact_only,
+            &hits,
+        ) {
+            return Ok(merged);
+        }
+    }
+    Ok(hits)
+}
+
+/// 低置信退桶：首轮 top1 sim 低于 `bucket_bypass_sim` 时，词面证据不足，
+/// 继续用场景桶硬筛会误删目标 case——退回全量 BM25 候选（不改变全库统计口径）。
+/// 返回（命中，是否仍在桶过滤）；score_pass 失败时保持原值（原语义）。
+/// （recall_inner 提取段，行为不变）
+fn recall_bucket_bypass(
+    root: &str,
+    plan: &QueryPlan,
+    k: usize,
+    now_s: u64,
+    meta: &Meta,
+    idx: Option<&Index>,
+    cand: &[String],
+    use_buckets: bool,
+    mut hits: Vec<RecallHit>,
+) -> (Vec<RecallHit>, bool) {
     let first_sim = hits.first().map(|h| h.sim).unwrap_or(0.0);
     let bucket_bypass_sim = meta.param("bucket_bypass_sim");
     if use_buckets && first_sim < bucket_bypass_sim {
         if let Ok(full_hits) = score_pass(
             root,
-            &plan,
+            plan,
             &PassCtx {
                 k,
                 meta,
                 now_s,
-                idx: idx.as_deref(),
-                cand: &cand,
+                idx,
+                cand,
                 use_buckets: false,
                 qf_weight: 0.0,
                 qf_exact_only: false,
             },
         ) {
             hits = full_hits;
-            use_buckets = false;
+            return (hits, false);
         }
     }
-    // case-query 字段加权只在两种情况下启用：①低/中置信释义查询
-    // （top1.sim<query_field_trigger_sim，默认 0.30）；
-    // ②top1/top2 都是满分、但排序按正文长度/字段打破时（同事故兄弟 case 竞争）。
-    // 高置信且无并列的 query 不改排序，避免把同域候选抬上来。
+    (hits, use_buckets)
+}
+
+/// case-query 字段重排：exact tie / 低置信 CJK 触发时按 `query_field_strength`
+/// 强度重跑一轮 score_pass；未触发或重跑失败时保持原命中（原语义：失败静默）。
+/// 返回（命中，qf 强度，qf 仅原始词，是否启用 qf）。（recall_inner 提取段）
+fn recall_qf_rerank(
+    root: &str,
+    plan: &QueryPlan,
+    k: usize,
+    now_s: u64,
+    meta: &Meta,
+    idx: Option<&Index>,
+    cand: &[String],
+    use_buckets: bool,
+    hits: Vec<RecallHit>,
+) -> (Vec<RecallHit>, f64, bool, bool) {
+    let qf_weight = meta.param("query_field_weight");
+    let qf_trigger = meta.param("query_field_trigger_sim");
+    let high_sim = meta.param("confidence_high_sim");
     let exact_tie = hits.len() >= 2 && hits[0].sim >= high_sim && hits[1].sim >= high_sim;
     let low_semantic = hits.first().is_some_and(|h| h.sim < qf_trigger);
     // qf 强度随词面置信度下降而平滑增大：just-below-trigger 的查询只得到
@@ -245,7 +324,7 @@ fn recall_inner(
     // literal 也可能低于阈值（例如 confirm2 case 136），此时 title 中的
     // 2 个常见词（retry/storm）会把错误兄弟 case 抬到目标之前。英文的
     // title 重排只保留在 exact-tie 分支（top1/top2 同为满分的兄弟 case）。
-    let query_has_cjk = query.chars().any(crate::terms::is_cjk);
+    let query_has_cjk = query_terms_has_cjk(plan);
     let top_sim = hits.first().map(|h| h.sim).unwrap_or(0.0);
     let qf_strength = query_field_strength(
         qf_weight,
@@ -259,70 +338,89 @@ fn recall_inner(
     // 并列满分时只奖原始 query 词，不奖同义词扩展：否则 `config` 与
     // `configuration` 会同时得分，兄弟 case 仍无法区分。
     let qf_exact_only = exact_tie && !low_semantic;
+    let mut out = hits;
     if use_qf {
         if let Ok(qf_hits) = score_pass(
             root,
-            &plan,
+            plan,
             &PassCtx {
                 k,
                 meta,
                 now_s,
-                idx: idx.as_deref(),
-                cand: &cand,
+                idx,
+                cand,
                 use_buckets,
                 qf_weight: qf_strength,
                 qf_exact_only,
             },
         ) {
             if !qf_hits.is_empty() {
-                hits = qf_hits;
+                out = qf_hits;
             }
         }
     }
-    // PRF：低置信（top1.sim < confidence_high_sim）时粗召回 top-K 扩展查询再召一轮。
-    // 扩展轮严格补漏，不覆盖首轮顺序（见下方合并逻辑）。
-    let low_conf = meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
-    if low_conf {
-        if let Ok(ext) = crate::memory::ranking::expand(root, &hits, query, meta, idx.as_deref()) {
-            if !ext.is_empty() {
-                let q2 = format!("{query} {}", ext.join(" "));
-                let q2_plan = QueryPlan::new(&q2, meta);
-                // 第二轮继承首轮候选桶（桶由原始 query 判定），
-                // 扩展词不得改变过滤语义——否则跨语言变体/无关词会把真目标桶误滤（A/B 不可比）。
-                if let Ok(hits2) = score_pass(
-                    root,
-                    &q2_plan,
-                    &PassCtx {
-                        k,
-                        meta,
-                        now_s,
-                        idx: idx.as_deref(),
-                        cand: &cand,
-                        use_buckets,
-                        qf_weight: if use_qf { qf_strength } else { 0.0 },
-                        qf_exact_only,
-                    },
-                ) {
-                    if !hits2.is_empty() {
-                        // PRF 严格补漏：首轮顺序权威——首轮命中
-                        // （含实体边桥入、字段加权、桶内候选）位置不变；扩展轮只把
-                        // 新命中的 case 按 q2 排序追加在尾部。绝不与首轮 score 混排
-                        // （q2 口径 score 会被扩展词放大，混排会把真目标挤出——literal
-                        // 层 mrr 退化实证：case 'disk io read timeout' A rank3 vs B rank1）。
-                        let mut merged: Vec<RecallHit> = hits.clone();
-                        for h in hits2 {
-                            if !merged.iter().any(|m| m.id == h.id) {
-                                merged.push(h);
-                            }
+    (out, qf_strength, qf_exact_only, use_qf)
+}
+
+/// query 原始词是否含 CJK（qf 低置信分支仅对中文 query 生效）。
+fn query_terms_has_cjk(plan: &QueryPlan) -> bool {
+    plan.original()
+        .iter()
+        .any(|t| t.chars().any(crate::terms::is_cjk))
+}
+
+/// PRF 扩展补漏：低置信时粗召回 top-K 扩展查询再召一轮；扩展轮严格补漏，
+/// 首轮顺序权威——新命中按 q2 排序追加在尾部，绝不与首轮 score 混排
+/// （q2 口径 score 会被扩展词放大，混排会把真目标挤出——literal 层 mrr
+/// 退化实证：case 'disk io read timeout' A rank3 vs B rank1）。
+/// 第二轮继承首轮候选桶（桶由原始 query 判定），扩展词不得改变过滤语义。
+/// 返回 None = 未触发或扩展轮无新命中（原语义：静默保持首轮）。（recall_inner 提取段）
+fn recall_prf_extend(
+    root: &str,
+    query: &str,
+    plan: &QueryPlan,
+    k: usize,
+    now_s: u64,
+    meta: &Meta,
+    idx: Option<&Index>,
+    cand: &[String],
+    use_buckets: bool,
+    qf_strength: f64,
+    qf_exact_only: bool,
+    hits: &[RecallHit],
+) -> Option<Vec<RecallHit>> {
+    if let Ok(ext) = crate::memory::ranking::expand(root, hits, query, meta, idx) {
+        if !ext.is_empty() {
+            let q2 = format!("{query} {}", ext.join(" "));
+            let q2_plan = QueryPlan::new(&q2, meta);
+            if let Ok(hits2) = score_pass(
+                root,
+                &q2_plan,
+                &PassCtx {
+                    k,
+                    meta,
+                    now_s,
+                    idx,
+                    cand,
+                    use_buckets,
+                    qf_weight: if qf_strength > 1e-9 { qf_strength } else { 0.0 },
+                    qf_exact_only,
+                },
+            ) {
+                if !hits2.is_empty() {
+                    let mut merged: Vec<RecallHit> = hits.to_vec();
+                    for h in hits2 {
+                        if !merged.iter().any(|m| m.id == h.id) {
+                            merged.push(h);
                         }
-                        merged.truncate(k);
-                        return Ok(merged);
                     }
+                    merged.truncate(k);
+                    return Some(merged);
                 }
             }
         }
     }
-    Ok(hits)
+    None
 }
 
 /// case-query 字段重排强度：exact tie 全量；CJK 低置信按 sim 线性衰减；
@@ -401,119 +499,18 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
     // 场景桶：query 判候选桶，case 主桶不在候选桶集内则跳过。
 
     // 候选 docs + df + 统计量：倒排/线性两条路径都用全库口径；桶过滤只裁候选。
-    let (docs, df, n, avgdl): (Docs, Vec<usize>, f64, f64) = if let Some(idx) = idx {
-        // 索引路径：doc 打分快照自包含在 postings 内，候选打分零 case.json IO。
-        let cand_di = index::candidates(idx, qterms);
-        let mut chosen: Vec<(usize, usize)> = Vec::with_capacity(cand_di.len());
-        for di in cand_di {
-            let rec = &idx.docs[di];
-            // `other` = 分类器没有强家族证据；硬筛会把它误当成“跨域噪声”。
-            // 默认允许 other 通过（宁多勿漏），可用 bucket_allow_other=0 关闭。
-            if use_buckets && !bucket_allowed(&rec.buckets, cand, allow_other) {
-                continue;
-            }
-            chosen.push((di, 0));
-        }
-        // 实体边一跳：实体倒排由 postings 的 doc 快照派生，桥入无需重读
-        // 全库 case.json（旧实现每次冷启动重扫 1 万条，单次约 0.2s）。
-        if meta.param("edge_enable") > 0.0 && !q_ent_list.is_empty() {
-            let mut seen = vec![false; idx.n_docs];
-            for &(di, _) in &chosen {
-                seen[di] = true;
-            }
-            for (di, shared) in index::entity_neighbors(idx, q_ent_list) {
-                if !seen[di] {
-                    seen[di] = true;
-                    chosen.push((di, shared));
-                }
-            }
-        }
-        let docs: Docs = chosen
-            .into_iter()
-            .map(|(di, edge_shared)| {
-                let rec = &idx.docs[di];
-                (
-                    idx.ids[di].clone(),
-                    DocCtx {
-                        terms: rec.terms.clone(),
-                        query_terms: rec.query_terms.clone(),
-                        fields: rec.fields.clone(),
-                        status: rec.status.clone(),
-                        quality: rec.quality,
-                        updated_s: rec.updated_s,
-                        edge_shared,
-                    },
-                )
-            })
-            .collect();
-        if docs.is_empty() {
-            return Ok(Vec::new());
-        }
-        let n = idx.n_docs as f64;
-        let avgdl = idx.total_len as f64 / n;
-        let df: Vec<usize> = qterms.iter().map(|t| index::term_df(idx, t)).collect();
-        (docs, df, n, avgdl)
-    } else {
-        let ids = store::list_ids(root)?;
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut docs: Docs = Vec::with_capacity(ids.len());
-        let mut df = vec![0usize; qterms.len()];
-        let mut total_len = 0usize;
-        for id in &ids {
-            let c = store::read_case(root, id)?;
-            let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
-            let buckets = classify::case_buckets(&[], &query_terms, &c.text);
-            total_len += terms.len();
-            for (qi, qt) in qterms.iter().enumerate() {
-                if terms.binary_search(qt).is_ok() {
-                    df[qi] += 1;
-                }
-            }
-            // BM25 的 df/avgdl 必须保持全库口径；桶过滤只裁候选，不能改统计量。
-            // 否则同一查询在“线性+桶”与“索引+桶”下会得到不同的长度归一化，
-            // 也会让 A/B 在候选子集上比较不同的 BM25（confirm3 paraphrase 回归）。
-            if use_buckets && !bucket_allowed(&buckets, cand, allow_other) {
-                continue;
-            }
-            docs.push((
-                Arc::from(id.as_str()),
-                DocCtx {
-                    terms: terms.into(),
-                    query_terms: query_terms.into(),
-                    fields: Arc::new(c.fields),
-                    status: c.status.into(),
-                    quality: c.quality,
-                    updated_s: crate::memory::util::parse_utc_secs(&c.updated_at),
-                    edge_shared: 0,
-                },
-            ));
-        }
-        // 实体边一跳：桥 case 只并入候选；df/n/avgdl 仍取全库词面口径。
-        let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.to_string()).collect();
-        let bridges = crate::memory::edge::bridge_cases(root, meta, q_ent_list, &exist_ids)?;
-        for b in bridges {
-            docs.push((
-                b.id.into(),
-                DocCtx {
-                    terms: b.terms,
-                    query_terms: b.query_terms,
-                    fields: b.fields,
-                    status: b.status,
-                    quality: b.quality,
-                    updated_s: crate::memory::util::parse_utc_secs(&b.updated_at),
-                    edge_shared: b.edge_shared,
-                },
-            ));
-        }
-        if docs.is_empty() {
-            return Ok(Vec::new());
-        }
-        // 与索引路径一致：n/avgdl 取全库口径，桥入 case 不改变平均文档长度。
-        let n = ids.len() as f64;
-        let avgdl = total_len as f64 / n;
-        (docs, df, n, avgdl)
+    let (docs, df, n, avgdl): (Docs, Vec<usize>, f64, f64) = match idx {
+        Some(i) => collect_docs_idx(i, qterms, use_buckets, cand, allow_other, q_ent_list)?,
+        None => collect_docs_scan(
+            root,
+            plan,
+            qterms,
+            use_buckets,
+            cand,
+            allow_other,
+            q_ent_list,
+            meta,
+        )?,
     };
 
     let now_s = ctx.now_s;
@@ -546,82 +543,29 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
 
     let mut hits: Vec<Ranked> = Vec::with_capacity(docs.len());
     for (doc, (_id, dctx)) in docs.iter().enumerate() {
-        let dl = dctx.terms.len() as f64;
         // terms 在建库/桥接/线性路径均已 sort+dedup，tf 恒为 1；直接二分查存在性，
         // 避免每个候选文档分配一张 tf HashMap。
+        let dl = dctx.terms.len() as f64;
         let denom = crate::memory::ranking::denom(k1, b, dl, avgdl);
-        let mut score = 0.0;
-        for q in &qinfo {
-            if dctx.terms.binary_search(q.text).is_ok() {
-                score += q.weight * crate::memory::ranking::score(q.idf, k1, denom);
-                // 词级调权：命中词权重叠加（可正可负）。
-                score += q.weight * q.idf * q.word_w;
-            }
-        }
-        let mut fb = 0.0;
-        let cfields = [
-            &dctx.fields.error_code,
-            &dctx.fields.file_loc,
-            &dctx.fields.symbol,
-            &dctx.fields.num_fp,
-        ];
-        for ((qf, cf), w) in qf.iter().zip(cfields.iter()).zip(fw.iter()) {
-            for v in qf.iter() {
-                if cf.iter().any(|c| c == v) {
-                    fb += w;
-                }
-            }
-        }
-        // 可选 BM25F 风格的 case-query 字段加权：目标 case 的 query 字段通常
-        // 比正文更短、更接近用户的问题描述。默认关闭（0），只用显式参数开启，
-        // 避免在未完成 held-out 验证前改变默认检索语义。线性与索引快照都携带
-        // query_terms，因此该特征在两条路径使用同一口径。
-        let qf_w = qf_weight;
-        let mut qf_add = 0.0;
-        if qf_w > 0.0 {
-            // 至少 2 个原始 query 词落在 case query 字段才加权：单个常见词
-            //（failed/source 等）不足以证明“问的是这条 case”，否则会把
-            // 同域但不同事故的 case 抬上来。
-            let need = orig_qterms.len().min(2);
-            let support = orig_qterms
-                .iter()
-                .filter(|t| dctx.query_terms.iter().any(|x| x == *t))
-                .count();
-            if support >= need {
-                let qf_terms = if qf_exact_only { orig_qterms } else { qterms };
-                for qt in qf_terms {
-                    if dctx.query_terms.iter().any(|t| t == qt) {
-                        if let Some(q) = qinfo.iter().find(|q| q.text == qt) {
-                            let add = q.weight * q.idf * qf_w;
-                            score += add;
-                            qf_add += add;
-                        }
-                    }
-                }
-            }
-        }
-        // 实体边加权：共享实体数 × edge_weight（词面弱但实体强相关的兄弟 case 越线）。
-        if dctx.edge_shared > 0 {
-            fb += dctx.edge_shared as f64 * edge_w;
-        }
+        let mut score = doc_lexical(dctx, &qinfo, k1, denom);
+        let mut fb = doc_field_bonus(dctx, &qf, &fw, edge_w);
+        let (score_qf, qf_add) = doc_qf_bonus(
+            dctx,
+            &qinfo,
+            orig_qterms,
+            qterms,
+            qf_exact_only,
+            qf_weight,
+            score,
+        );
+        score = score_qf;
         // 纯词面/字段/实体支持度：quality/decay 只能给已有证据的 case 加权，
         // 不能让零匹配 case 仅凭质量先验进入 top-k（否则任意候选会以 0 分返回，
         // 评估会把“按库顺序碰巧命中”误算成召回）。
         let support = score + fb;
         // 时间衰减：age 用 updated_at 的预解析快照，τ 随状态动态。
-        let tau_eff = match &*dctx.status {
-            "solved" => tau_solved,
-            "regressed" => tau_regressed,
-            _ => tau,
-        };
-        let age_days = (now_s.saturating_sub(dctx.updated_s)) as f64 / 86_400.0;
-        let decay = 1.0 / (1.0 + age_days / tau_eff);
+        let (decay, qsign) = doc_decay(dctx, now_s, tau_solved, tau_regressed, tau);
         // quality 排序先验：solved/质量高的 case 提分，regressed 压分。
-        let qsign = if &*dctx.status == "regressed" {
-            -1.0
-        } else {
-            1.0
-        };
         fb += dctx.quality * q_prior * qsign;
         if support <= 0.0 {
             continue;
@@ -649,18 +593,258 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
             },
         });
     }
+    Ok(select_hits(&hits, &docs, k, meta))
+}
 
-    // MMR：得分排序后按多样性去冗余（λ 从 meta 读）。
-    // 关闭 MMR（默认）时最终只需要 top-k；同族收紧最多查看前 3k 个候选，
-    // 因此先做 O(n) 的部分选择再排序 3k，避免为 5 条结果排序整个 10k 候选集。
-    // 打开 MMR 时仍保留完整顺序，多样性选择可能越过 3k 窗口。
+/// 索引路径候选：倒排候选 + 桶过滤 + 实体边一跳（桥入无需重读全库 case.json，
+/// 旧实现每次冷启动重扫 1 万条，单次约 0.2s）。返回候选 docs + 全库 df/n/avgdl。
+/// （score_pass 提取段，行为不变）
+fn collect_docs_idx(
+    idx: &Index,
+    qterms: &[String],
+    use_buckets: bool,
+    cand: &[String],
+    allow_other: bool,
+    q_ent_list: &[String],
+) -> std::io::Result<(Docs, Vec<usize>, f64, f64)> {
+    let cand_di = index::candidates(idx, qterms);
+    let mut chosen: Vec<(usize, usize)> = Vec::with_capacity(cand_di.len());
+    for di in cand_di {
+        let rec = &idx.docs[di];
+        // `other` = 分类器没有强家族证据；硬筛会把它误当成“跨域噪声”。
+        // 默认允许 other 通过（宁多勿漏），可用 bucket_allow_other=0 关闭。
+        if use_buckets && !bucket_allowed(&rec.buckets, cand, allow_other) {
+            continue;
+        }
+        chosen.push((di, 0));
+    }
+    // 实体边一跳：实体倒排由 postings 的 doc 快照派生，桥入无需重读全库 case.json。
+    if !q_ent_list.is_empty() {
+        extend_entity_edges(idx, q_ent_list, &mut chosen);
+    }
+    let docs: Docs = chosen
+        .into_iter()
+        .map(|(di, edge_shared)| {
+            let rec = &idx.docs[di];
+            (
+                idx.ids[di].clone(),
+                DocCtx {
+                    terms: rec.terms.clone(),
+                    query_terms: rec.query_terms.clone(),
+                    fields: rec.fields.clone(),
+                    status: rec.status.clone(),
+                    quality: rec.quality,
+                    updated_s: rec.updated_s,
+                    edge_shared,
+                },
+            )
+        })
+        .collect();
+    if docs.is_empty() {
+        return Ok((Vec::new(), Vec::new(), 0.0, 0.0));
+    }
+    let n = idx.n_docs as f64;
+    let avgdl = idx.total_len as f64 / n;
+    let df: Vec<usize> = qterms.iter().map(|t| index::term_df(idx, t)).collect();
+    Ok((docs, df, n, avgdl))
+}
+
+/// 实体边一跳并入候选：跳过已在 chosen 中的 doc；共享实体数记录为 edge_shared。
+fn extend_entity_edges(idx: &Index, q_ent_list: &[String], chosen: &mut Vec<(usize, usize)>) {
+    let mut seen = vec![false; idx.n_docs];
+    for &(di, _) in chosen.iter() {
+        seen[di] = true;
+    }
+    for (di, shared) in index::entity_neighbors(idx, q_ent_list) {
+        if !seen[di] {
+            seen[di] = true;
+            chosen.push((di, shared));
+        }
+    }
+}
+
+/// 线性路径候选：全库顺序扫描 + 桶过滤 + 实体边桥入。df/n/avgdl 取全库词面口径，
+/// 桶过滤只裁候选不改统计量（否则“线性+桶”与“索引+桶”会得到不同的长度归一化，
+/// 也会让 A/B 在候选子集上比较不同的 BM25——confirm3 paraphrase 回归）。
+/// （score_pass 提取段，行为不变）
+fn collect_docs_scan(
+    root: &str,
+    plan: &QueryPlan,
+    qterms: &[String],
+    use_buckets: bool,
+    cand: &[String],
+    allow_other: bool,
+    q_ent_list: &[String],
+    meta: &Meta,
+) -> std::io::Result<(Docs, Vec<usize>, f64, f64)> {
+    let ids = store::list_ids(root)?;
+    if ids.is_empty() {
+        return Ok((Vec::new(), Vec::new(), 0.0, 0.0));
+    }
+    let mut docs: Docs = Vec::with_capacity(ids.len());
+    let mut df = vec![0usize; qterms.len()];
+    let mut total_len = 0usize;
+    for id in &ids {
+        let c = store::read_case(root, id)?;
+        let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
+        let buckets = classify::case_buckets(&[], &query_terms, &c.text);
+        total_len += terms.len();
+        for (qi, qt) in qterms.iter().enumerate() {
+            if terms.binary_search(qt).is_ok() {
+                df[qi] += 1;
+            }
+        }
+        // BM25 的 df/avgdl 必须保持全库口径；桶过滤只裁候选，不能改统计量。
+        if use_buckets && !bucket_allowed(&buckets, cand, allow_other) {
+            continue;
+        }
+        docs.push((
+            Arc::from(id.as_str()),
+            DocCtx {
+                terms: terms.into(),
+                query_terms: query_terms.into(),
+                fields: Arc::new(c.fields),
+                status: c.status.into(),
+                quality: c.quality,
+                updated_s: crate::memory::util::parse_utc_secs(&c.updated_at),
+                edge_shared: 0,
+            },
+        ));
+    }
+    // 实体边一跳：桥 case 只并入候选；df/n/avgdl 仍取全库词面口径。
+    let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.to_string()).collect();
+    let bridges = crate::memory::edge::bridge_cases(root, meta, q_ent_list, &exist_ids)?;
+    for b in bridges {
+        docs.push((
+            b.id.into(),
+            DocCtx {
+                terms: b.terms,
+                query_terms: b.query_terms,
+                fields: b.fields,
+                status: b.status,
+                quality: b.quality,
+                updated_s: crate::memory::util::parse_utc_secs(&b.updated_at),
+                edge_shared: b.edge_shared,
+            },
+        ));
+    }
+    if docs.is_empty() {
+        return Ok((Vec::new(), Vec::new(), 0.0, 0.0));
+    }
+    // 与索引路径一致：n/avgdl 取全库口径，桥入 case 不改变平均文档长度。
+    let n = ids.len() as f64;
+    let avgdl = total_len as f64 / n;
+    Ok((docs, df, n, avgdl))
+}
+
+/// 词面分：query 词命中（tf 恒 1，二分查存在性）+ 词级调权（可正可负）。
+/// 浮点累加顺序与原实现一致，拆分不改任何字节。
+fn doc_lexical(dctx: &DocCtx, qinfo: &[QueryTerm<'_>], k1: f64, denom: f64) -> f64 {
+    let mut score = 0.0;
+    for q in qinfo {
+        if dctx.terms.binary_search(q.text).is_ok() {
+            score += q.weight * crate::memory::ranking::score(q.idf, k1, denom);
+            score += q.weight * q.idf * q.word_w;
+        }
+    }
+    score
+}
+
+/// 字段命中分 + 实体边加权（共享实体数 × edge_weight）。
+fn doc_field_bonus(dctx: &DocCtx, qf: &[&Vec<String>], fw: &[f64; 4], edge_w: f64) -> f64 {
+    let mut fb = 0.0;
+    let cfields = [
+        &dctx.fields.error_code,
+        &dctx.fields.file_loc,
+        &dctx.fields.symbol,
+        &dctx.fields.num_fp,
+    ];
+    for ((qf, cf), w) in qf.iter().zip(cfields.iter()).zip(fw.iter()) {
+        for v in qf.iter() {
+            if cf.iter().any(|c| c == v) {
+                fb += w;
+            }
+        }
+    }
+    if dctx.edge_shared > 0 {
+        fb += dctx.edge_shared as f64 * edge_w;
+    }
+    fb
+}
+
+/// 可选 BM25F 风格的 case-query 字段加权：至少 2 个原始 query 词落在 case
+/// query 字段才加权（单个常见词不足以证明“问的是这条 case”）；默认关闭（0），
+/// 只用显式参数开启。返回（含 qf 的词面分，qf 加分）。
+fn doc_qf_bonus(
+    dctx: &DocCtx,
+    qinfo: &[QueryTerm<'_>],
+    orig_qterms: &[String],
+    qterms: &[String],
+    qf_exact_only: bool,
+    qf_w: f64,
+    mut score: f64,
+) -> (f64, f64) {
+    let mut qf_add = 0.0;
+    if qf_w > 0.0 {
+        let need = orig_qterms.len().min(2);
+        let support = orig_qterms
+            .iter()
+            .filter(|t| dctx.query_terms.iter().any(|x| x == *t))
+            .count();
+        if support >= need {
+            let qf_terms = if qf_exact_only { orig_qterms } else { qterms };
+            for qt in qf_terms {
+                if dctx.query_terms.iter().any(|t| t == qt) {
+                    if let Some(q) = qinfo.iter().find(|q| q.text == qt) {
+                        let add = q.weight * q.idf * qf_w;
+                        score += add;
+                        qf_add += add;
+                    }
+                }
+            }
+        }
+    }
+    (score, qf_add)
+}
+
+/// 时间衰减：age 用 updated_at 的预解析快照，τ 随状态动态；
+/// quality 符号 solved/默认 +1，regressed -1。
+fn doc_decay(
+    dctx: &DocCtx,
+    now_s: u64,
+    tau_solved: f64,
+    tau_regressed: f64,
+    tau: f64,
+) -> (f64, f64) {
+    let tau_eff = match &*dctx.status {
+        "solved" => tau_solved,
+        "regressed" => tau_regressed,
+        _ => tau,
+    };
+    let age_days = (now_s.saturating_sub(dctx.updated_s)) as f64 / 86_400.0;
+    let decay = 1.0 / (1.0 + age_days / tau_eff);
+    let qsign = if &*dctx.status == "regressed" {
+        -1.0
+    } else {
+        1.0
+    };
+    (decay, qsign)
+}
+
+/// MMR/同族收紧/截断 + RecallHit 组装（score_pass 提取段）。
+/// MMR 默认关闭：v2 对拍显示 λ=0.5 会把同事故的精确目标挤出 top-5
+/// （paraphrase r@5 0.783→0.867 当关闭）。需要多样性时置 mmr_enable=1。
+fn select_hits(hits: &[Ranked], docs: &Docs, k: usize, meta: &Meta) -> Vec<RecallHit> {
+    // 得分排序后按多样性去冗余（λ 从 meta 读）。关闭 MMR（默认）时最终只需
+    // 要 top-k；同族收紧最多查看前 3k 个候选，因此先做 O(n) 的部分选择再排序
+    // 3k，避免为 5 条结果排序整个 10k 候选集。打开 MMR 时仍保留完整顺序。
     let mmr_enabled = meta.param("mmr_enable") > 0.0;
     let window = if mmr_enabled {
         hits.len()
     } else {
         k.saturating_mul(3).max(k).min(hits.len())
     };
-    let mut order = order_top(&hits, &docs, window);
+    let mut order = order_top(hits, docs, window);
     // 同事故兄弟 case 往往共享完整根因段，词面高度重合。首轮用整篇词表做
     // Jaccard 聚类，把 top1 的同族 case 收紧到 top1 之后：同一事故的兄弟
     // 在人工口径里通常同为 rel=2，散落在弱相关候选之后会拉低 NDCG。
@@ -668,13 +852,11 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
     // 更弱”的候选抬上来；不改变 top1 自身位置。
     // 同族收紧只在 top1 有足够词面证据时启用。弱词面锚点通常意味着查询与
     // 候选只是共享少量泛化词；此时把整族候选前移会压过更强的跨族结果。
-    let sibling_anchor_ok = sibling_anchor_ok(&hits, &order, meta.param("sibling_min_sim"));
+    let sibling_anchor_ok = sibling_anchor_ok(hits, &order, meta.param("sibling_min_sim"));
     if meta.param("sibling_coherence") > 0.0 && sibling_anchor_ok && hits.len() > 1 {
-        order = group_siblings(order, &hits, &docs, k);
+        order = group_siblings(order, hits, docs, k);
     }
     let lambda = meta.param("mmr_lambda");
-    // MMR 默认关闭：v2 对拍显示 λ=0.5 会把同事故的精确目标挤出 top-5
-    // （paraphrase r@5 0.783→0.867 当关闭）。需要多样性时置 mmr_enable=1。
     let picked = if mmr_enabled {
         let scores_norm: Vec<f64> = hits.iter().map(|h| h.sim).collect();
         let doc_terms: Vec<Vec<String>> = docs.iter().map(|(_, d)| d.terms.to_vec()).collect();
@@ -692,7 +874,7 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
             sim: hit.sim,
         });
     }
-    Ok(out)
+    out
 }
 
 /// 确定性排序：分数降序，同分按 case id 升序；只保留前 `limit` 个。
