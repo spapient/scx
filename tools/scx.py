@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -1141,17 +1142,18 @@ def validate_contain_corpus(corpus):
     return slices, kind_counts
 
 
-def run_contain_slice(binary, slc, ratio, context, work):
+def invoke_scx_once(binary, slc, ratio, context, work):
+    """Run the release binary once; return (stats, body_text, wall_seconds)."""
     ident = slc["id"]
-    query = slc["query"]
-    text = slc["full_text"]
     path = work / f"{ident}.txt"
-    write_text(path, text)
+    write_text(path, slc["full_text"])
+    start = time.perf_counter()
     proc = subprocess.run(
-        [binary, "--query", query, "--ratio", str(ratio),
+        [binary, "--query", slc["query"], "--ratio", str(ratio),
          "--context", str(context), "--json", str(path)],
         capture_output=True,
     )
+    wall = time.perf_counter() - start
     out = proc.stdout.decode("utf-8", "replace")
     err = proc.stderr.decode("utf-8", "replace")
     if proc.returncode != 0:
@@ -1167,13 +1169,77 @@ def run_contain_slice(binary, slc, ratio, context, work):
     body_text = "\n".join(body_lines)
     if body_text:
         body_text += "\n"
+    return stats, body_text, wall
+
+
+def trunc_kept_text(text, budget):
+    """Head-truncation baseline: first `budget` raw bytes, byte-exact."""
+    return text.encode("utf-8")[:budget].decode("utf-8", "replace")
+
+
+def random_sample_kept_text(text, budget, seed, ident):
+    """Random-line-sampling baseline at the SAME byte budget scx spent.
+
+    Lines are shuffled with a per-slice deterministic RNG seeded from
+    `seed:ident`, then whole lines are greedily kept in shuffle order until the
+    budget is exhausted; the remaining slack is filled with a byte prefix of
+    the next line. Selected lines are emitted in ORIGINAL order so evidence
+    substring checks stay line-faithful. Same corpus + same seed => same bytes.
+    """
+    # keepends preserves each line's own terminator; no phantom trailing block.
+    chunks = [line.encode("utf-8") for line in text.splitlines(keepends=True)]
+    order = list(range(len(chunks)))
+    random.Random(f"{seed}:{ident}").shuffle(order)
+    kept = set()
+    partial = {}
+    used = 0
+    for idx in order:
+        size = len(chunks[idx])
+        if used + size <= budget:
+            kept.add(idx)
+            used += size
+        else:
+            slack = budget - used
+            if slack > 0:
+                partial[idx] = chunks[idx][:slack]
+            break
+    parts = []
+    for idx, chunk in enumerate(chunks):
+        if idx in kept:
+            parts.append(chunk)
+        elif idx in partial:
+            parts.append(partial[idx])
+    return b"".join(parts).decode("utf-8", "replace")
+
+
+def run_contain_slice(binary, slc, ratio, context, work, seed, rounds):
+    ident = slc["id"]
+    text = slc["full_text"]
+    # scx output is deterministic; repeat only to get a stable wall-clock sample.
+    walls_scx = []
+    stats = body_text = None
+    for _ in range(max(1, rounds)):
+        stats, body_text, wall = invoke_scx_once(
+            binary, slc, ratio, context, work
+        )
+        walls_scx.append(wall)
+    # Both baselines spend the exact same byte budget scx spent.
+    budget = len(body_text.encode("utf-8"))
+    walls_trunc, trunc_text = [], ""
+    for _ in range(max(1, rounds)):
+        t0 = time.perf_counter()
+        trunc_text = trunc_kept_text(text, budget)
+        walls_trunc.append(time.perf_counter() - t0)
+    walls_rand, rand_text = [], ""
+    for _ in range(max(1, rounds)):
+        t0 = time.perf_counter()
+        rand_text = random_sample_kept_text(text, budget, seed, ident)
+        walls_rand.append(time.perf_counter() - t0)
     ev_total = len(slc["evidence"])
     kept_ev = [ev for ev in slc["evidence"] if ev in body_text]
     missed = [ev for ev in slc["evidence"] if ev not in body_text]
-    # Head-truncation baseline: spend the exact same byte budget scx spent.
-    budget = len(body_text.encode("utf-8"))
-    prefix = text.encode("utf-8")[:budget].decode("utf-8", "replace")
-    trunc_kept = sum(1 for ev in slc["evidence"] if ev in prefix)
+    trunc_kept = sum(1 for ev in slc["evidence"] if ev in trunc_text)
+    rand_kept = sum(1 for ev in slc["evidence"] if ev in rand_text)
     in_chars = len(text)
     out_chars = len(body_text)
     in_tokens = contain_token_count(text)
@@ -1181,7 +1247,7 @@ def run_contain_slice(binary, slc, ratio, context, work):
     return {
         "id": ident,
         "kind": slc["kind"],
-        "query": query,
+        "query": slc["query"],
         "mode": stats.get("mode", ""),
         "risk": stats.get("risk", ""),
         "kept": stats.get("kept"),
@@ -1190,15 +1256,21 @@ def run_contain_slice(binary, slc, ratio, context, work):
         "evidence_seeds": stats.get("evidence"),
         "chars_in": in_chars,
         "chars_out": out_chars,
+        "chars_out_rand": len(rand_text),
         "token_in": in_tokens,
         "token_out": out_tokens,
         "char_cut": 1.0 - out_chars / in_chars if in_chars else 0.0,
+        "char_cut_rand": 1.0 - len(rand_text) / in_chars if in_chars else 0.0,
         "token_cut": 1.0 - out_tokens / in_tokens if in_tokens else 0.0,
         "ev_total": ev_total,
         "ev_kept": len(kept_ev),
         "ev_missed": missed,
         "trunc_ev_kept": trunc_kept,
+        "rand_ev_kept": rand_kept,
         "trunc_budget_chars": budget,
+        "wall_scx_ms": [w * 1000.0 for w in walls_scx],
+        "wall_trunc_ms": [w * 1000.0 for w in walls_trunc],
+        "wall_rand_ms": [w * 1000.0 for w in walls_rand],
     }
 
 
@@ -1212,35 +1284,56 @@ def cmd_contain(args):
     with tempfile.TemporaryDirectory(prefix="scx-contain-") as tmp:
         work = Path(tmp)
         for slc in slices:
-            rows.append(run_contain_slice(binary, slc, args.ratio, args.context, work))
+            rows.append(run_contain_slice(
+                binary, slc, args.ratio, args.context, work,
+                args.seed, args.timing_rounds,
+            ))
     # aggregate
     n = len(rows)
     ev_sum = sum(r["ev_total"] for r in rows)
     ev_kept = sum(r["ev_kept"] for r in rows)
     trunc_kept = sum(r["trunc_ev_kept"] for r in rows)
+    rand_kept = sum(r["rand_ev_kept"] for r in rows)
     char_cut = sum(r["char_cut"] for r in rows) / n
+    char_cut_rand = sum(r["char_cut_rand"] for r in rows) / n
     token_cut = sum(r["token_cut"] for r in rows) / n
     modes = {}
     for r in rows:
         modes[r["mode"]] = modes.get(r["mode"], 0) + 1
+    # per-slice median wall, then mean across slices (ms).
+    def med(values):
+        values = sorted(values)
+        mid = len(values) // 2
+        return values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+    lat_scx = sum(med(r["wall_scx_ms"]) for r in rows) / n
+    lat_trunc = sum(med(r["wall_trunc_ms"]) for r in rows) / n
+    lat_rand = sum(med(r["wall_rand_ms"]) for r in rows) / n
     print(f"contain: slices={n} kinds={kind_counts} binary={binary}")
     print(f"contain: ratio={args.ratio} context={args.context} modes={modes}")
+    print(f"contain: rand-seed={args.seed} timing-rounds={args.timing_rounds}")
     print()
     hdr = (f"{'id':10s} {'kind':6s} {'mode':18s} {'kept':>7s} "
-           f"{'char_cut':>9s} {'tok_cut':>8s} {'scx_ev':>7s} {'trunc_ev':>9s}")
+           f"{'char_cut':>9s} {'tok_cut':>8s} {'scx_ev':>7s} "
+           f"{'trunc_ev':>9s} {'rand_ev':>8s}")
     print(hdr)
     for r in rows:
         print(f"{r['id']:10s} {r['kind']:6s} {r['mode']:18s} "
               f"{str(r['kept'])+'/'+str(r['total']):>7s} "
               f"{r['char_cut']*100:8.1f}% {r['token_cut']*100:7.1f}% "
-              f"{r['ev_kept']}/{r['ev_total']:>3d} {r['trunc_ev_kept']:>4d}/{r['ev_total']}")
+              f"{r['ev_kept']}/{r['ev_total']:>3d} {r['trunc_ev_kept']:>4d}/{r['ev_total']} "
+              f"{r['rand_ev_kept']:>4d}/{r['ev_total']}")
     print()
     print(f"contain: scx   evidence retention = {ev_kept}/{ev_sum} = "
           f"{ev_kept/ev_sum*100:.2f}%")
     print(f"contain: trunc evidence retention = {trunc_kept}/{ev_sum} = "
           f"{trunc_kept/ev_sum*100:.2f}%")
-    print(f"contain: mean char cut   = {char_cut*100:.2f}%")
-    print(f"contain: mean token cut  = {token_cut*100:.2f}%")
+    print(f"contain: rand  evidence retention = {rand_kept}/{ev_sum} = "
+          f"{rand_kept/ev_sum*100:.2f}%")
+    print(f"contain: mean char cut   = {char_cut*100:.2f}% (scx) / "
+          f"{char_cut_rand*100:.2f}% (rand, same byte budget)")
+    print(f"contain: mean token cut  = {token_cut*100:.2f}% (scx)")
+    print(f"contain: mean per-slice wall = scx {lat_scx:.3f} ms / "
+          f"trunc {lat_trunc*1000:.1f} us / rand {lat_rand*1000:.1f} us")
     misses = [(r["id"], m) for r in rows for m in r["ev_missed"]]
     if misses:
         print("contain: MISSED evidence lines:")
@@ -1248,22 +1341,31 @@ def cmd_contain(args):
             print(f"  {ident}: {line}")
     by_kind = {}
     for r in rows:
-        k = by_kind.setdefault(r["kind"], [0, 0, 0.0, 0.0])
+        k = by_kind.setdefault(r["kind"], [0, 0, 0.0, 0.0, 0])
         k[0] += r["ev_kept"]; k[1] += r["ev_total"]
         k[2] += r["char_cut"]; k[3] += r["token_cut"]
-    print("contain: per-kind (scx_ev / char_cut / token_cut):")
+        k[4] += r["rand_ev_kept"]
+    print("contain: per-kind (scx_ev / rand_ev / char_cut / token_cut):")
     for kind in sorted(by_kind):
-        ke, tot, cc, tc = by_kind[kind]
+        ke, tot, cc, tc, re = by_kind[kind]
         cnt = sum(1 for r in rows if r["kind"] == kind)
-        print(f"  {kind:6s} ev={ke}/{tot} char={cc/cnt*100:5.1f}% tok={tc/cnt*100:5.1f}%")
+        print(f"  {kind:6s} ev={ke}/{tot} rand_ev={re}/{tot} "
+              f"char={cc/cnt*100:5.1f}% tok={tc/cnt*100:5.1f}%")
     if args.out:
         dump_json(args.out, {
             "binary": binary, "ratio": args.ratio, "context": args.context,
+            "rand_seed": args.seed, "timing_rounds": args.timing_rounds,
             "aggregate": {
                 "slices": n, "kinds": kind_counts, "modes": modes,
                 "scx_evidence_retention": ev_kept / ev_sum,
                 "trunc_evidence_retention": trunc_kept / ev_sum,
-                "mean_char_cut": char_cut, "mean_token_cut": token_cut,
+                "rand_evidence_retention": rand_kept / ev_sum,
+                "mean_char_cut": char_cut,
+                "mean_char_cut_rand": char_cut_rand,
+                "mean_token_cut": token_cut,
+                "mean_wall_scx_ms": lat_scx,
+                "mean_wall_trunc_ms": lat_trunc,
+                "mean_wall_rand_ms": lat_rand,
             },
             "rows": rows,
         })
@@ -1365,6 +1467,14 @@ def selftest():
         corpus = load_json(CONFIG_DIR / f"{name}.corpus.json")
         layers = validate_corpus(corpus)
         assert sum(layers.values()) == cases
+    sample = "alpha line\nbeta line\nseed line evidence\ngamma noise\n"
+    big = random_sample_kept_text(sample, len(sample.encode()), "z", "s1")
+    assert big == sample  # budget covers everything -> verbatim input
+    small = random_sample_kept_text(sample, 10, "z", "s1")
+    assert len(small.encode("utf-8")) == 10  # byte-exact fill of the budget
+    assert small == random_sample_kept_text(sample, 10, "z", "s1")  # deterministic
+    assert small != random_sample_kept_text(sample, 10, "z2", "s1")  # seed matters
+    assert trunc_kept_text(sample, 10) == sample.encode("utf-8")[:10].decode("utf-8")
     for judge, expected in (
         ("ai", "6a5319c546fe68c20f3d4d7ffd38437b3736ea301e1319afb3c374eca9ac9b18"),
         ("human", "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5"),
@@ -1466,6 +1576,14 @@ def build_parser():
     contain.add_argument("--ratio", type=float, default=0.35)
     contain.add_argument("--context", type=int, default=1)
     contain.add_argument("--out", help="write per-slice detail JSON")
+    contain.add_argument(
+        "--seed", default="contain-rand-v1",
+        help="deterministic seed for the random-sampling baseline",
+    )
+    contain.add_argument(
+        "--timing-rounds", type=int, default=5,
+        help="repeat each method per slice, take median wall time",
+    )
     contain.set_defaults(func=cmd_contain)
 
     test = sub.add_parser("selftest")

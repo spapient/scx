@@ -59,3 +59,17 @@ cargo run --release --locked --example bench            # 压缩四路径
 cargo run --release --locked --example bench -- memory  # 记忆库（含性能门）
 export SCX_BENCH_REPEAT=21                              # 自定义采样数
 ```
+
+## 证据保留同场对照（contain5，2026-10-26）
+
+> 作者侧自测，非第三方独立评测；合成语料。与 SuperCompress 的真实对比
+> 待第三方盲审。详见 [containcmp.md](containcmp.md)。
+
+| 方法 | 证据存活率 | 字符压减率 | 单切片 wall-clock |
+|---|---:|---:|---:|
+| scx（release 二进制，M5 Pro） | 70/70 = 100.00% | 82.01% | 4.19 ms |
+| 头截断基线（同字节预算） | 0/70 = 0.00% | ≈82.01% | ≈0.3 µs |
+| 随机抽样基线（同字节预算，seed=contain-rand-v1） | 8/70 = 11.43% | ≈82.01% | ≈34 µs |
+
+口径注意：三行压减率被"同 kept 字节预算"构造为近似相等，对照差异在证据存活率；
+scx 列为子进程端到端 wall-clock（含进程启动），两基线为进程内纯 Python 计算。
