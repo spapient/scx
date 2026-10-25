@@ -1,8 +1,8 @@
 # scx 发布检查单（crates.io 发布前）
 
-> 状态：**未发布**。`cargo publish` 是外部动作，需用户明确授权后由用户在
-> 本仓库执行；本文件记录 dry-run 验证证据与发布前必须复查的条目。
-> 检查日期：2026-10-25，包版本 `0.5.0`。
+> 状态：**已发布**（0.5.0 → 0.5.1 → 0.6.0 → 0.6.1，crates.io max_version=0.6.1、num_versions=4）。
+> 下节为历次发布前 dry-run 验证证据模板；本节头部已更新为当前状态。
+> 检查日期：2026-10-25 初版；2026-10-26 随 0.6.x 系列更新。
 
 ## 已验证（本轮 dry-run 证据）
 
@@ -39,7 +39,11 @@
 - Windows PowerShell：复制 `target\release\scx.exe` 到 `$HOME\bin`（README「一键安装」）
 - 任何平台：`tools/scx`（Unix）/ `tools/scx.cmd`（Windows）自举入口，按需自动构建
 
-## 发布后事项（不在本轮范围）
+## 发布后事项（已执行，2026-10-26）
 
-- 若发布成功：README 增加 `cargo install scx` 安装路径并重新验证；确认 tag 与
-  版本号；观察 crates.io 元数据页（description/keywords/categories 渲染）。
+- crates.io `cargo install scx` 路径可用；README 安装章节已更新（含 Homebrew/npm/winget/Scoop）。
+- GitHub Release v0.6.1 + 三平台资产（darwin-arm64 / linux-x86_64 musl / windows-x86_64）。
+- Homebrew tap `spapient/homebrew-scx`（0.6.1）发布并实测。
+- npm `@spapient/scx`（0.6.2，内置 0.6.1 三平台二进制）发布并实测；`scx` 纯名回收申请中。
+- winget PR #461786、Scoop PR #8766 提交，待官方审核。
+- 完整矩阵与接入状态见 `docs/install-plan.md`（v3）。

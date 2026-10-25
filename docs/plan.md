@@ -316,6 +316,42 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   `cargo publish --locked` 成功；crates.io max_version=0.6.1、num_versions=4；main 同步
   origin/main=bb600ac（271f4b2 fix + bump）。
 
+## 分发渠道与平台接入记录（2026-10-26，0.6.1 之后）
+
+> 完整矩阵见 `docs/install-plan.md`（v3 全渠道总览）。本段为 plan 侧状态记录。
+
+### 分发渠道占名 / 发布
+
+| 渠道 | 命名 | 版本 | 状态 | 证据 |
+|---|---|---|---|---|
+| crates.io | `scx`（账户 apex） | 0.6.1 | ✅ 已发布 | max_version=0.6.1、num_versions=4、未 yanked |
+| GitHub Release | spapient/scx | v0.6.1 | ✅ 已发布 | 三平台资产（darwin-arm64 / linux-x86_64 musl / windows-x86_64） |
+| Homebrew tap | `spapient/homebrew-scx` | 0.6.1 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → /opt/homebrew/bin/scx 0.6.1 |
+| npm | `@spapient/scx`（scoped） | 0.6.2 | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过；含三平台二进制 |
+| npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 空壳包（tu123dou）占用；已发 npm 官方（落款 spapient） |
+| winget | `Spapient.Scx` | 0.6.1 | ⏳ PR #461786 审核中 | microsoft/winget-pkgs portable 三 yaml |
+| Scoop | `scx` | 0.6.1 | ⏳ PR #8766 审核中 | ScoopInstaller/Main bucket/scx.json |
+| PyPI | `scx` | — | ✗ 被占 | 现存无关包；未注册 |
+| AUR | `scx` | — | ✗ 放弃 | 官网反爬；按用户指示放弃 |
+
+### 平台接入状态（实测）
+
+- **豆包（Doubao.app）✅ 已注册成功**：GUI 连接器表单 STDIO，服务器名 `scx`、命令 `npx`、
+  参数 `-y @spapient/scx mcp`（三行）；管理页「连接器」显示 scx 且开关开启。
+  豆包支持任意可执行命令（无千问那种 npx-only 限制）。**待办**：豆包内实际调用
+  compress_context 的端到端验证（GUI 自动点击曾被 computer-use 服务故障中断）。
+- **千问办公（QwenWorkCN）✗ 放弃**：个人免费版账号添加自定义 MCP 连接器被 toast
+  `LOCAL_IDENTITY_PHASE_RESTRICTED` 拒绝——平台按账号阶段禁止本地 STDIO 连接器，
+  与配置无关；此前加密存储（IdentityConnectorConfigStore）+ runtime 双认证的逆向
+  结论一并留档。用户已明确"千问暂时不搞了"。
+- **Codex / Claude Code / Cursor / Qwen Code**：`scx setup` 全自动注册 + 握手自检，
+  三端实测通过（含 MCP 端到端调用）。
+
+### 门禁基线（本轮无代码改动，文档更新不触门禁）
+
+- 纯文档提交（install-plan.md v3 重写 + plan.md 记录段）；无 Rust 改动，
+  门禁基线维持 0.6.1 状态（双轨 228/0+239/0、golden 37 零漂移）。
+
 ### 遗留 / 发布后检查单
 
 1. **merge / push / crates.io 发布均已执行**：main = origin/main = `1b89398`；

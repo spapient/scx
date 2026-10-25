@@ -69,6 +69,25 @@ cargo build --release --locked
 .\target\release\scx.exe --version
 ```
 
+### 安装（发布渠道）
+
+```bash
+# crates.io（推荐，通用）
+cargo install scx
+
+# macOS Homebrew（tap 实测通过）
+brew tap spapient/scx && brew install scx
+
+# Node ≥18 环境（含 MCP 入口，包内置三平台二进制）
+npx -y @spapient/scx
+
+# Windows（winget / Scoop，PR 合并后可用）
+winget install Spapient.Scx
+scoop install scx
+```
+
+完整发布渠道矩阵与各平台接入状态（豆包/千问办公等）见 [docs/install-plan.md](docs/install-plan.md)。
+
 ### 一键接入 Codex / Cursor / Claude（MCP）
 
 `scx` 内置 MCP stdio server（零第三方 crate、无条件编译进主二进制）。三条命令完成注册：
