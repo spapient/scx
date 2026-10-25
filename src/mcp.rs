@@ -19,19 +19,24 @@ struct Usage {
     output: u64,
 }
 
-/// 工具定义（tools/list 静态表）。
-const TOOLS: &[(&str, &str)] = &[
+/// 工具定义（tools/list 静态表）：名称、描述、JSON Schema。
+/// `inputSchema` 为 MCP 客户端（尤其 Claude Code）严格校验的必填对象，
+/// 缺失会被判定为 invalid result；无参工具使用空 schema `{}`。
+const TOOLS: &[(&str, &str, &str)] = &[
     (
         "compress_context",
         "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio/context/window/max_tokens (num), structure (bool or 0/1)",
+        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"}},\"required\":[\"query\",\"text\"]}",
     ),
     (
         "connect_account",
         "no-op for the local build: returns the local provider identity (stdio transport, no cloud account)",
+        "{\"type\":\"object\",\"properties\":{}}",
     ),
     (
         "usage_summary",
         "process-lifetime counts: compressed calls, chars in/out",
+        "{\"type\":\"object\",\"properties\":{}}",
     ),
 ];
 
@@ -79,18 +84,18 @@ fn ping(key: &str) -> String {
 
 fn tools(key: &str) -> String {
     let mut items = String::new();
-    for (name, desc) in TOOLS {
+    for (name, desc, schema) in TOOLS {
         if !items.is_empty() {
             items.push(',');
         }
-        items.push_str(&item(name, desc));
+        items.push_str(&item(name, desc, schema));
     }
     format!("{{\"jsonrpc\":\"2.0\",\"id\":{key},\"result\":{{\"tools\":[{items}]}}}}")
 }
 
-fn item(name: &str, desc: &str) -> String {
+fn item(name: &str, desc: &str, schema: &str) -> String {
     format!(
-        "{{\"name\":\"{name}\",\"description\":\"{}\"}}",
+        "{{\"name\":\"{name}\",\"description\":\"{}\",\"inputSchema\":{schema}}}",
         desc.replace('"', "\\\"")
     )
 }
