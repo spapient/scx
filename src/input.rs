@@ -62,7 +62,7 @@ pub(crate) fn read_stdin(limit: u64) -> Result<String, String> {
     Ok(decode_bytes(buf))
 }
 
-pub(crate) fn read_input(files: &[String]) -> Result<String, String> {
+pub fn read_input(files: &[String]) -> Result<String, String> {
     if files.is_empty() {
         read_stdin(MAX_INPUT_BYTES)
     } else {
@@ -71,7 +71,7 @@ pub(crate) fn read_input(files: &[String]) -> Result<String, String> {
 }
 
 /// 读取 `--fix-file` 文本，并在分配前限制到与记忆库相同的上限。
-pub(crate) fn read_fix_file(path: &str, limit: u64) -> Result<String, String> {
+pub fn read_fix_file(path: &str, limit: u64) -> Result<String, String> {
     let file =
         std::fs::File::open(path).map_err(|e| format!("cannot read --fix-file {path}: {e}"))?;
     let buf =

@@ -7,11 +7,11 @@
 //! `usage()` 保持显式 format：其文本含 Config 默认值插值与合并项
 //! （`[--gate|--gate-human|--gate-items]`），为保证逐字节一致不改为表生成。
 
-use scx::Config;
+use crate::Config;
 use std::collections::HashSet;
 
 /// 帮助文本中的默认值直接取自引擎配置，避免 CLI/文档/引擎三处漂移。
-pub(crate) fn usage() -> String {
+pub fn usage() -> String {
     format!(
         "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
@@ -20,7 +20,7 @@ pub(crate) fn usage() -> String {
     )
 }
 
-pub(crate) struct Opts {
+pub struct Opts {
     pub query: String,
     /// 压缩引擎配置的唯一来源；CLI 默认值来自 `Config::default()`，不再重复硬编码。
     pub config: Config,
@@ -1076,7 +1076,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     Ok(into_opts(s))
 }
 
-pub(crate) fn parse_args(args: &[String]) -> Result<Opts, String> {
+pub fn parse_args(args: &[String]) -> Result<Opts, String> {
     // help/version 短路由由 main 在调用前处理；此处只解析与校验。
     parse_args_from(args.to_vec())
 }

@@ -22,6 +22,13 @@ pub mod contain;
 mod policy;
 mod terms;
 
+/// CLI 与集成层模块（库内可用）：`args` 声明式参数解析、`input` 输入读取、
+/// `ops` 操作编排（Op 枚举 + run + 纯渲染）。`ops::render_json` 供 MCP 等
+/// 集成层复用，不依赖 CLI 渲染。
+pub mod args;
+pub mod input;
+pub mod ops;
+
 /// 记忆知识库（旁路，默认不启用）：I/O 侧模块，与纯函数 `compress` 完全隔离。
 pub mod memory;
 
@@ -30,6 +37,7 @@ pub use compress::compress;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 引擎配置。`ratio` 为可选内容预算占输入 token 估算的比例；入口会做边界规范化。
+#[derive(Clone)]
 pub struct Config {
     pub ratio: f64,
     pub context: i64,
