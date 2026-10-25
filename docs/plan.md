@@ -340,16 +340,19 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   参数 `-y @spapient/scx mcp`（三行）；管理页「连接器」显示 scx 且开关开启。
   豆包支持任意可执行命令（无千问那种 npx-only 限制）。**待办**：豆包内实际调用
   compress_context 的端到端验证（GUI 自动点击曾被 computer-use 服务故障中断）。
-- **千问办公（QwenWorkCN）✗ 放弃**：个人免费版账号添加自定义 MCP 连接器被 toast
-  `LOCAL_IDENTITY_PHASE_RESTRICTED` 拒绝——平台按账号阶段禁止本地 STDIO 连接器，
-  与配置无关；此前加密存储（IdentityConnectorConfigStore）+ runtime 双认证的逆向
-  结论一并留档。用户已明确"千问暂时不搞了"。
+- **千问办公（QwenWorkCN）✅ 已注册成功（2026-10-26 手动配置）**：`LOCAL_IDENTITY_PHASE_RESTRICTED`
+  仅拦截 **JSON 导入**，**手动填写表单可用**（用户主张正确）。两个关键坑：① 千问命令字段保存时
+  只保留第一个 token（`npx -y @spapient/scx mcp` 会存成 `command:"npx"`）→ 命令必须是单 token；
+  ② 本机无系统级 node/npx，千问 App PATH 找不到 npx → `process_not_found`。解法：本机已有
+  `/opt/homebrew/bin/scx`（brew 0.6.1），创建单 token 包装脚本 `/opt/homebrew/bin/scx-mcp`
+  （`exec /opt/homebrew/bin/scx mcp "$@"`），命令填该路径。保存后开关置 1、
+  `IDENTITY_CONNECTOR_CONNECTION_FAILED` 消失。**待办**：千问对话中端到端调用 compress_context。
 - **Codex / Claude Code / Cursor / Qwen Code**：`scx setup` 全自动注册 + 握手自检，
   三端实测通过（含 MCP 端到端调用）。
 
 ### 门禁基线（本轮无代码改动，文档更新不触门禁）
 
-- 纯文档提交（install-plan.md v3 重写 + plan.md 记录段）；无 Rust 改动，
+- 纯文档提交（install-plan.md v4 千问办公改判已注册 + plan.md 记录段）；无 Rust 改动，
   门禁基线维持 0.6.1 状态（双轨 228/0+239/0、golden 37 零漂移）。
 
 ### 遗留 / 发布后检查单
