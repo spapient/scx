@@ -1,6 +1,6 @@
 //! 词面层：停用词表、CJK 判定、查询切词与 token 估算（纯函数、零分配复用缓冲）。
 //!
-//! 与引擎解耦：任何调用方（compress / 未来的记忆库摄取）都可直接复用 build_terms 与 token_est，
+//! 与引擎解耦：压缩与记忆库都直接复用 `build_terms`、`build_mem_terms` 与 `token_est`，
 //! 保证"同一查询词面 → 同一词表"的确定性。
 
 use std::collections::HashSet;
@@ -125,7 +125,7 @@ pub(crate) fn build_terms(query: &str) -> Vec<String> {
     build_terms_mode(query, false)
 }
 
-/// P4.4+ 优化⑪（P1-3）：记忆库召回用词表——在 build_terms 基础上对 **CJK 段/块
+/// 记忆库召回用词表——在 build_terms 基础上对 **CJK 段/块
 /// （≤6 字）** 追加重叠 bigram/trigram（相邻 2/3 字），保留整段用于精确匹配。
 ///
 /// 动机：整段/6 字块对中文释义层几乎不重叠（"数据库连接池耗尽" vs "连接池满了"
@@ -316,7 +316,7 @@ pub(crate) fn token_est(s: &str) -> f64 {
 mod tests {
     use super::*;
 
-    /// P4.4+ 优化⑪（P1-3）：中文释义层桥接——query 与 doc 的 CJK 段即使整段不重叠，
+    /// 中文释义层桥接——query 与 doc 的 CJK 段即使整段不重叠，
     /// 重叠 trigram/bigram 也必须提供公共词（共享根因桥）。10 组真实感中/中英混排
     /// 变体：每组 (query, doc) 词表交集必须非空；其中至少 4 对存在 ≥3 字强桥
     /// （trigram 级词面锚，如"连接池""检测到"）。

@@ -7,18 +7,16 @@
 //! 红线：本模块是 I/O 侧（memory），compress 零改动；摄取结果不影响压缩输出，
 //! 只沉淀旁路资产。
 //!
-//! 阶段化开发过渡：P1.2 落地摄取，CLI 接线在 P1.5，非 test 构建暂放宽 dead_code。
-
 use crate::memory::store::{self, Case, CaseStats};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-/// 单 case 文本上限（P4.4 评审处置）：64 MiB 输入不得直接变 64 MiB case；
+/// 单 case 文本上限：64 MiB 输入不得直接变 64 MiB case；
 /// 超过上限拒绝摄取并明确报错（旁路，不影响压缩主流程）。
 pub(crate) const MAX_CASE_TEXT: usize = 1024 * 1024; // 1 MiB
 
-/// 修复结论上限（P4.4+ 优化：--fix 随 --store 写入，属用户摘要文本）。
+/// 修复结论上限；`--fix` 只保存用户摘要文本。
 pub(crate) const MAX_FIX_LEN: usize = 4096; // 4 KiB
 
 const FP_INDEX: &str = "index/fingerprints.tsv";
@@ -223,9 +221,9 @@ pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)>
     c.source = source.to_vec();
     c.stats = stats.clone();
     c.forces = forces.to_vec();
-    // O1：摄取即抽取，判别字段写入 case（召回时字段加权直接用，无需重扫）。
+    // 摄取即抽取：判别字段随 case 写入，召回时无需重扫正文。
     c.fields = crate::memory::field::extract(text);
-    // O6：摄取即分桶；先用 case query 判家族，query 无证据再回退正文，
+    // 摄取即分桶：先用 case query 判家族，query 无证据再回退正文，
     // 避免根因里的宽域词把 query 已明确的场景带偏。
     let fvec = c.fields.error_code.clone();
     let qterms = crate::terms::build_mem_terms(&c.query);
@@ -307,7 +305,7 @@ pub(crate) fn ingest_with_evidence(
     })
 }
 
-/// 按 id 删除一个 case（tombstone 化前的简单物理删除，P3 换惰性标记）。
+/// 按 id 删除一个 case，并让派生索引按库代际自动失效。
 #[cfg(test)]
 pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
     crate::memory::maintenance::delete_case(root, id)
@@ -392,7 +390,7 @@ mod tests {
 
     #[test]
     fn ingest_with_fix_persists_and_rejects_oversize() {
-        // P4.4+ 优化：--store 配 --fix 时修复结论随 case 入库（L1 本地直答）。
+        // --store 配 --fix 时修复结论随 case 入库（L1 本地直答）。
         let root = tmp_root("fix");
         let s1 = CaseStats {
             kept: 3,
@@ -477,7 +475,7 @@ mod tests {
 
     #[test]
     fn ingest_with_evidence_roundtrip_and_legacy_compat() {
-        // P4.4+ 优化⑤：证据行区间 + 原始证据落盘；旧 case（无键）读为空，不 panic。
+        // 证据行区间与原始证据落盘；旧 case 缺键时读为空，不 panic。
         let root = tmp_root("ev");
         let s1 = CaseStats {
             kept: 3,

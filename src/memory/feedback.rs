@@ -1,4 +1,4 @@
-//! 反馈双环（O4/O5）：`--rate good|bad <case-id>` 落地 case 状态机、质量分、
+//! 反馈双环：`--rate good|bad <case-id>` 落地 case 状态机、质量分、
 //! 词级调权与 L1 自适应置信基线。
 //!
 //! - case 环：quality = good/(good+bad)，状态机 open→solved→regressed，
@@ -82,7 +82,7 @@ pub(crate) fn rate(root: &str, id: &str, good: bool) -> std::io::Result<Case> {
 
 /// L1 自适应置信判据（§5.1）：sim_top1 ≥ l1_base 且 (top1−top2) ≥ margin。
 /// `ext_hit`：PRF 扩展词命中率，设计预留；当前 recall 未返回扩展词统计，
-/// 传 1.0 视为满足（扩展命中率统计接线留待 P3 评估阶段）。
+/// 传 1.0 视为满足。
 pub(crate) fn l1_qualified(
     top1_sim: f64,
     top2_sim: f64,

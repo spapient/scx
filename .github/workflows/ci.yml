@@ -37,8 +37,17 @@ jobs:
         run: cargo test --locked
       - name: Release build
         run: cargo build --release --locked
+      - name: Evaluator selftest (Unix)
+        if: runner.os != 'Windows'
+        run: ./bin/scx-eval selftest
+      - name: Evaluator selftest (Windows)
+        if: runner.os == 'Windows'
+        run: python bin/scx-eval selftest
       - name: Bench (compress 50k lines)
         run: cargo run --release --locked --example bench
+      - name: Bench gate (10k memory recall)
+        if: runner.os == 'Linux'
+        run: cargo run --release --locked --example bench -- memory
       - name: CLI smoke (Unix)
         if: runner.os != 'Windows'
         run: sh bin/run --version
@@ -91,7 +100,7 @@ jobs:
       - name: Reject policy labels as human closure
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\labels\confirm5-policy.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-policy-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\confirm5-policy.labels.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-policy-gate.txt 2> $null
           if ($LASTEXITCODE -ne 2) {
             Get-Content .\eval\ci-policy-gate.txt -Tail 40
             throw "policy labels must not pass --gate-human (exit $LASTEXITCODE)"
@@ -105,7 +114,7 @@ jobs:
       - name: AI labels pass items gate, fail human gate
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\labels\confirm5-ai.json --gate-items --mem-dir .\eval\ci-mem 1> .\eval\ci-ai-items.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\confirm5-ai.labels.json --gate-items --mem-dir .\eval\ci-mem 1> .\eval\ci-ai-items.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\eval\ci-ai-items.txt -Tail 30
             throw "AI per-item gate failed with exit $LASTEXITCODE"
@@ -113,13 +122,13 @@ jobs:
           if ((Get-Content .\eval\ci-ai-items.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
             throw "AI gate must declare non-human adjudication"
           }
-          .\target\release\scx.exe --eval .\eval\labels\confirm5-ai.json --gate-human --mem-dir .\eval\ci-mem 1> $null 2> $null
+          .\target\release\scx.exe --eval .\eval\confirm5-ai.labels.json --gate-human --mem-dir .\eval\ci-mem 1> $null 2> $null
           if ($LASTEXITCODE -ne 2) { throw "AI labels must not pass --gate-human (exit $LASTEXITCODE)" }
           $global:LASTEXITCODE = 0
       - name: Human per-item gate
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\labels\confirm5-hao.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-hao-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\confirm5-hao.labels.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-hao-gate.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\eval\ci-hao-gate.txt -Tail 40
             throw "human per-item gate failed with exit $LASTEXITCODE"

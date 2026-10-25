@@ -1,12 +1,12 @@
 //! 存储层：case.json 的读写与目录布局。
 //!
-//! 布局（与设计 v0.2 一致；P4.4 评审处置移除 vec.bin——无效产物不再落盘）：
+//! 布局：
 //! ```text
 //! <root>/
 //! ├── meta.toml              # meta.rs：schema 版本、引擎版本、case 数、代际、参数
 //! ├── cases/<id>/
 //! │   └── case.json          # 文档 + 元数据（序列化在本文件）
-//! └── index/                 # 索引缓存（P3 起）
+//! └── index/                 # 可丢弃的索引缓存
 //! ```
 //!
 //! 原则：cases/ 是资产（可迁移），index/ 是可丢弃缓存（rebuild 重建）。
@@ -243,8 +243,8 @@ pub(crate) fn val_to_case(v: &Val) -> Case {
     c.created_at = get(&obj, "created_at").map(as_str).unwrap_or_default();
     c.updated_at = get(&obj, "updated_at").map(as_str).unwrap_or_default();
     c.fp = get(&obj, "fp").map(as_str).unwrap_or_default();
-    c.fix = get(&obj, "fix").map(as_str).unwrap_or_default(); // 缺键兼容旧 case
-                                                              // P4.4+ 优化⑤：原始证据（缺键兼容旧 case——仅压缩结果快照，语义见 §11 评审④）。
+    // fix 与原始证据字段缺键时兼容旧 case。
+    c.fix = get(&obj, "fix").map(as_str).unwrap_or_default();
     c.evidence_lno = get(&obj, "evidence_lno")
         .map(|v| match v {
             Val::Arr(items) => items.iter().map(|it| as_num(it) as usize).collect(),
@@ -296,9 +296,7 @@ pub(crate) fn lock_case(root: &str, id: &str) -> std::io::Result<crate::memory::
 }
 
 /// 写一个 case 到库（原子写 case.json）。
-/// P4.4 评审处置：不再生成 vec.bin（实际始终以空稀疏写入、召回从未使用，
-/// 属无效产物，徒增 I/O 与 schema 维护成本）；每次写 case 视为库状态变化，
-/// 自动 bump 库代际（qmap/会话缓存据此失效，保证新 case/反馈对同 query 召回可见）。
+/// 每次写入推进库代际，使 qmap 与会话缓存失效，保证新 case/反馈对同 query 可见。
 pub(crate) fn write_case(root: &str, c: &Case) -> std::io::Result<()> {
     // 索引锁覆盖“写 case → 删旧索引 → bump gen”整个窗口：索引构建要么看到
     // 写前状态并随后被失效，要么看到写后状态；不能在新 gen 下写回旧索引。
@@ -317,7 +315,7 @@ pub(crate) fn write_case(root: &str, c: &Case) -> std::io::Result<()> {
     crate::memory::meta::bump_gen(root)
 }
 
-/// case id 合法性（P4.4 评审处置）：白名单字符集，禁路径分隔符与 `..` 逃逸。
+/// case id 合法性：白名单字符集，禁路径分隔符与 `..` 逃逸。
 /// 任何以 id 拼接路径的入口（--delete/--rate/gc）必须先过此校验。
 pub(crate) fn valid_id(id: &str) -> bool {
     !id.is_empty()
@@ -413,10 +411,6 @@ pub(crate) fn bump_case_count(root: &str) -> std::io::Result<()> {
     atomic_write(&p, body.as_bytes())?;
     Ok(())
 }
-
-// ---- vec.bin（稀疏向量二进制）----
-// P4.4 评审处置：vec.bin 始终以空稀疏写入、召回从未使用，属无效产物；
-// 读写函数与 VEC_MAGIC 已整体移除，schema 2 兼容读（老库遗留文件被忽略）。
 
 #[cfg(test)]
 mod tests {

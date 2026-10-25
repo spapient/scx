@@ -1,4 +1,4 @@
-//! 场景桶（O6）：case 自动归类到场景桶，检索先判候选桶再扫。
+//! 场景桶：case 自动归类到场景桶，检索先判候选桶再扫。
 //!
 //! 桶家族：db / network / disk / build / runtime / other。判定用规范化小写
 //! 子串匹配（与 norm 后词表同口径），宁多勿漏：query 侧返回候选桶集合，
@@ -350,7 +350,7 @@ mod tests {
             bucket_of(&[], &["disk".into(), "read".into(), "timeout".into()], ""),
             "disk"
         );
-        // P4.4+ 优化：裸 "db" 词级精确匹配——terms 含独立 "db" 归 db 桶；
+        // 裸 "db" 走词级精确匹配：独立 token "db" 归 db 桶；
         // "db.java:4" 是单一 token，不得误归 db 场景桶（编译失败场景归 build）。
         assert_eq!(bucket_of(&[], &["db".into()], ""), "db");
         let got = bucket_of(&[], &["db.java:4".into()], "compile fail");
@@ -407,14 +407,14 @@ mod tests {
         assert!(c2.contains(&"build".to_string()) && c2.contains(&"disk".to_string()));
         let c3 = candidate_buckets("普通问题");
         assert!(c3.is_empty(), "无家族命中时空候选桶 = 全量扫（防漏召）");
-        // P4.4 评审处置：裸 "db" 词必须命中 db 家族（桶判定对称，防漏召）。
+        // 裸 "db" 必须命中 db 家族，保持桶判定对称并防漏召。
         let c4 = candidate_buckets("db timeout");
         assert!(
             c4.contains(&"db".to_string()),
             "裸 db 应命中 db 桶: {:?}",
             c4
         );
-        // P4.4+ 优化：子串不误判（"kubectl" 含 "db" 子串但不含独立 "db" 词）。
+        // 子串不得误判："kubectl" 含 "db" 子串，但不含独立 token "db"。
         let c5 = candidate_buckets("kubectl get pods");
         assert!(
             !c5.contains(&"db".to_string()),

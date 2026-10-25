@@ -1,4 +1,4 @@
-//! P4.3 实体边一跳扩展：case↔实体倒排（error_code/file_loc/symbol/num_fp 四类字段值
+//! 实体边一跳扩展：case↔实体倒排（error_code/file_loc/symbol/num_fp 四类字段值
 //! 各为一条实体键），召回沿边扩一跳取兄弟 case。
 //!
 //! 机制与边界（诚实口径）：实体键是 case 词面的子集（token 层无法"零词面共享"），
@@ -12,9 +12,8 @@
 //! 倒排路径直接使用 `index::entity_neighbors`（postings 自带字段快照），本模块
 //! 只服务 <10k 的线性召回路径。
 //!
-//! P4.4+ 优化⑬（P1-5）：`build` 原本每次召回重建全库实体表（1 万条库 read_case×N
-//! ≈ 0.85s/次，P3 性能回归）。改为进程内缓存（root+meta.toml mtime 键，与 index
-//! 同模式）：store/rate/gc/rebuild 都 bump gen → meta.toml 变化 → 自动 miss 重建。
+//! 实体表使用进程内缓存（root + meta.toml mtime 键，与索引同模式）；
+//! store/rate/gc/rebuild 推进库代际后会触发自动 miss 与重建。
 //! 库外进程无缓存，多进程共享 `--mem-dir` 仍是受支持场景（每次冷构建 ≤1 次）。
 
 use crate::memory::store;
@@ -89,7 +88,7 @@ pub(crate) struct BridgeCase {
     pub edge_shared: usize,
 }
 
-/// P4.3 桥并入：query 实体 → 兄弟 case（未在 `exist` 中）读出完整上下文 + 共享实体计数。
+/// 桥并入：query 实体 → 兄弟 case（未在 `exist` 中）读出完整上下文与共享实体计数。
 /// 返回 (桥 case 列表, 桥词长合计，供调用方 avgdl 重算)；df 口径由调用方保持。
 /// 仅当 edge_enable>0 且 query 确有实体时触发。
 pub(crate) fn bridge_cases(
@@ -164,7 +163,7 @@ mod tests {
         }
     }
 
-    /// P4.3 实体边一跳（召回集成）：共享 file_loc 实体但主桶不同（build）的兄弟 case，
+    /// 实体边一跳（召回集成）：共享 file_loc 实体但主桶不同（build）的兄弟 case，
     /// 被 db/network 候选桶过滤掉后，由实体边兜底并入候选并加权召回；关桥则被滤。
     #[test]
     fn edge_bridge_recovers_cross_bucket_sibling() {
@@ -205,7 +204,7 @@ mod tests {
         .unwrap();
         // 桥开（默认 edge_enable=1）：q 实体 pool.java:214 → B 兜底召回。
         let q_open = "数据库连接池 timeout at Pool.java:214";
-        let hits = recall(&root, q_open, 3).unwrap();
+        let hits = recall(&root, q_open, 3, &store::load_meta(&root).unwrap()).unwrap();
         let b_id = {
             let ids = store::list_ids(&root).unwrap();
             ids.iter()
@@ -226,7 +225,7 @@ mod tests {
         // 隔离本测试：关闭低置信桶回退，确保 B 只能被实体边召回。
         crate::memory::meta::set_param(&root, "bucket_bypass_sim", 0.0).unwrap();
         let q_off = "数据库连接池 timeout at Pool.java:214 pool";
-        let hits2 = recall(&root, q_off, 3).unwrap();
+        let hits2 = recall(&root, q_off, 3, &store::load_meta(&root).unwrap()).unwrap();
         assert!(
             !hits2.iter().any(|h| h.id == b_id),
             "关桥后 B 应被桶过滤排除：{:?}",

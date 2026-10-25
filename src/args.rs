@@ -22,41 +22,37 @@ pub(crate) struct Opts {
     pub stat: bool,
     pub no_stats: bool,
     pub store: bool,
-    /// P4.4+ 优化：修复结论（--store 配 --fix 写入 case.fix，L1 本地直答）。
-    /// 仅在 --store 1 时生效；无 --store 时解析但被忽略。
-    /// P4.4+ 优化⑩：--store 不带 --fix 时 stderr warning（L1 无法直答"怎么解决的"）。
+    /// 已验证的修复结论，仅在 `--store 1` 时写入 `case.fix`；缺失时输出警告。
     pub fix: String,
-    /// P4.4+ 优化⑩：--fix-file <path>——多行修复结论从文件读入（等价 --fix 内容，
-    /// 换行保留；适合多行处置步骤）。与 --fix 同时给时报错。
+    /// 从文件读取多行修复结论，保留换行；与 `--fix` 互斥。
     pub fix_file: Option<String>,
     pub recall: usize,
     pub recall_only: bool,
-    /// P4.2 L1 要点摘要：--recall-detail 时 mem 段追加 summary 行。
+    /// `--recall-detail` 时在召回段追加摘要与证据行。
     pub recall_detail: bool,
-    /// 反馈标注：Some((good, case_id))，仅 O4 双环路径使用。
+    /// 反馈标注：`Some((good, case_id))`。
     pub rate: Option<(bool, String)>,
-    /// P3.3 库维护：重建索引 / 过期清理 / 删除 case（惰性作废索引）。
+    /// 库维护：重建索引、过期清理或删除 case。
     pub rebuild: bool,
     pub gc: bool,
     pub delete: Option<String>,
-    /// P4.1 评估系统：冻结 baseline.json 重放（豁免 --query）。
+    /// 重放冻结的 baseline.json（豁免 `--query`）。
     pub eval: Option<String>,
-    /// P4.4+ 优化④：--eval-verbose 逐 case 诊断（A/B top-10 候选 + [hit]/[miss]）。
+    /// `--eval-verbose` 输出逐 case 的 A/B top-10 诊断。
     pub eval_verbose: bool,
-    /// P4.4+ 优化⑭：--gate 机械校验 M4 证据门（须配 --eval）。
+    /// `--gate` 启用机械证据门，必须与 `--eval` 同用。
     pub eval_gate: bool,
     /// 人工弱相关/负例闭环门：在机械门之上要求全量人工元数据、控制标签与 NDCG。
     pub eval_gate_human: bool,
     /// 逐候选裁决门：允许 AI/非人类裁决人，但仍要求每条候选独立记录。
     pub eval_gate_items: bool,
     pub l1_hist: bool,
-    /// P4.4+ 优化：库盘点（--stats，豁免 --query）。
+    /// 库盘点 `--stats`，豁免 `--query`。
     pub stats: bool,
-    /// P4.4+ 优化⑥：智能标注器（--annotate，豁免 --query）——生成 M4 证据门标注集。
+    /// 智能标注器 `--annotate`，生成证据门标注集。
     pub annotate: bool,
-    /// P4.4+ 优化⑧：盲测模式（--annotate-raw）——不过自检的全变体集（含自检会丢弃的
-    /// 变体），每条附目标 case 摘要（note: target/hint/fix），供人工盲测裁决 rel；
-    /// 消除"自检用 A 管线验证 = 用 A 自证"的选择偏差。与 --annotate 互斥。
+    /// `--annotate-raw` 输出未经自检筛选的全变体集，附目标摘要供人工盲判；
+    /// 与 `--annotate` 互斥。
     pub annotate_raw: bool,
     /// --annotate-out <path>：标注集输出路径（缺省 `<mem-dir>/baseline-auto.json`）。
     pub annotate_out: Option<String>,
@@ -65,13 +61,11 @@ pub(crate) struct Opts {
     /// --annotate-max N：标注覆盖的最大 case 数（缺省 16；0 = 全库）。
     /// 证据门 30–50 组：case 数 × 三层产率约 1.7，24+ case 库可直接落窗。
     pub annotate_max: usize,
-    /// P4.4+ 优化⑩：盲测裁决（--judge <baseline.json>）——逐条 stdin 录入 2/1/0/s，
-    /// 把 judge:null 替换为 rel+judge 元数据（by/date）；未裁决条目 --eval 拒绝。
+    /// `--judge` 逐条读取 2/1/0/s，把 `judge:null` 替换为完整裁决元数据。
     pub judge: Option<String>,
     /// --judge-by <name>：裁决人标识（缺省取 USERNAME）。
     pub judge_by: Option<String>,
-    /// P4.4+ 优化⑫（P1-4）：--max-bytes N：记忆库总容量软配额（字节）。
-    /// store 前若库总量（cases+meta+index）超过 N 则拒绝写入（提示 --gc / --delete）。
+    /// 记忆库总容量软配额（字节）；写入前超限则拒绝。
     pub max_bytes: Option<u64>,
     pub mem_dir: String,
     pub files: Vec<String>,
@@ -257,7 +251,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 fix = v;
             }
-            // P4.4+ 优化⑩：--fix-file <path>——多行修复结论从文件读入。
+            // --fix-file：多行修复结论从文件读入。
             "--fix-file" => {
                 once(&mut seen, name)?;
                 let p = option_value(&args, &mut i, name, inline)?;
@@ -306,7 +300,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 eval_verbose = true;
             }
-            // P4.4+ 优化⑭：M4 机械门（样本量/分层/裁决元数据/A≥B）。
+            // 机械门：样本量、分层、裁决元数据与 A≥B。
             "--gate" => {
                 if inline.is_some() {
                     return Err("--gate does not take a value".to_string());
@@ -343,7 +337,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 }
                 annotate = true;
             }
-            // P4.4+ 优化⑧：盲测模式——不过自检的全变体集（人工裁决用，消除选择偏差）。
+            // 盲测模式：输出未经自检的全变体集。
             "--annotate-raw" => {
                 if inline.is_some() {
                     return Err("--annotate-raw does not take a value".to_string());
@@ -372,7 +366,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                     .parse::<usize>()
                     .map_err(|_| format!("--annotate-max expects an integer, got {:?}", v))?;
             }
-            // P4.4+ 优化⑩：盲测裁决（--judge <baseline.json>，交互式 stdin 录入）。
+            // 交互式逐候选裁决。
             "--judge" => {
                 once(&mut seen, name)?;
                 let p = option_value(&args, &mut i, name, inline)?;
@@ -385,7 +379,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
                 once(&mut seen, name)?;
                 judge_by = Some(option_value(&args, &mut i, name, inline)?);
             }
-            // P4.4+ 优化⑫（P1-4）：--max-bytes 总容量软配额（store 前检查）。
+            // --max-bytes：写入前的总容量软配额。
             "--max-bytes" => {
                 once(&mut seen, name)?;
                 let v = option_value(&args, &mut i, name, inline)?;
@@ -465,7 +459,7 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
         return Err("--stat and --no-stats cannot be used together".to_string());
     }
     let query = query.unwrap_or_default();
-    // O4 反馈标注 / P3.3 库维护 / P4.1 评估 / P2 残余 l1-hist / 库盘点 / 智能标注不要求 --query。
+    // 反馈、维护、评估、统计与标注动作不要求 --query。
     if rate.is_none()
         && !rebuild
         && !gc
@@ -706,7 +700,7 @@ mod tests {
         assert!(o.store);
         assert_eq!(o.recall, 3);
         assert_eq!(o.mem_dir, "/tmp/m");
-        // P4.4+ 优化：--fix 与 --store 绑定。
+        // --fix 与 --store 绑定。
         let o = parse_args_from(args(&[
             "--query",
             "q",
@@ -724,7 +718,7 @@ mod tests {
         assert!(parse_args_from(args(&["--recall-only"])).is_err());
         let o = parse_args_from(args(&["--query", "q", "--recall-only"])).unwrap();
         assert_eq!(o.recall, 3, "recall-only 未指定 K 时应默认 top-3");
-        // P3.3 库维护参数：不要求 --query。
+        // 库维护参数不要求 --query。
         let o = parse_args_from(args(&["--rebuild", "--mem-dir", "/tmp/m"])).unwrap();
         assert!(o.rebuild);
         let o = parse_args_from(args(&["--gc", "--mem-dir", "/tmp/m"])).unwrap();
@@ -733,13 +727,13 @@ mod tests {
         assert_eq!(o.delete.as_deref(), Some("2026-10-22_ab12cd34"));
         assert!(parse_args_from(args(&["--delete"])).is_err());
         assert!(parse_args_from(args(&["--rebuild=x"])).is_err());
-        // P4.1/P4.2：--eval 豁免 --query；--recall-detail 开关。
+        // --eval 豁免 --query；--recall-detail 是独立开关。
         let o = parse_args_from(args(&["--eval", "bl.json", "--mem-dir", "/tmp/m"])).unwrap();
         assert_eq!(o.eval.as_deref(), Some("bl.json"));
-        // P4.4+ 优化④：--eval-verbose 需配合 --eval。
+        // --eval-verbose 需配合 --eval。
         let o = parse_args_from(args(&["--eval", "bl.json", "--eval-verbose"])).unwrap();
         assert!(o.eval_verbose);
-        // P4.4+ 优化⑭：--gate 必须配 --eval；不允许带值。
+        // --gate 必须配 --eval，且不允许带值。
         let o = parse_args_from(args(&["--eval", "bl.json", "--gate"])).unwrap();
         assert!(o.eval_gate);
         assert!(parse_args_from(args(&["--gate"])).is_err());
@@ -762,7 +756,7 @@ mod tests {
         assert!(o.recall_detail);
         assert!(parse_args_from(args(&["--recall-detail=x"])).is_err());
         assert!(parse_args_from(args(&["--eval"])).is_err());
-        // P4.4+ 优化：--stats 豁免 --query。
+        // --stats 豁免 --query。
         let o = parse_args_from(args(&["--stats", "--mem-dir", "/tmp/m"])).unwrap();
         assert!(o.stats);
         assert!(parse_args_from(args(&["--stats=x"])).is_err());

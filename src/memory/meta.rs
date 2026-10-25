@@ -35,15 +35,15 @@ pub(crate) struct Meta {
     /// 线上召回仍使用当前时间。
     pub created_at: String,
     pub case_count: usize,
-    /// 库代际（P4.4 评审处置）：任何 case 写入 / 删除都 +1；
+    /// 库代际：任何 case 写入 / 删除都 +1；
     /// qmap 快照与会话缓存条目记录写入时的 gen，`gen < 当前` 视为过期
     /// （新 case / 反馈 / 删除必须对同 query 召回可见）。
     pub gen: u64,
     pub df: Vec<(String, usize)>,
     pub params: Vec<(String, f64)>,
-    /// O5 词级调权表：词 → 增量权重（Rocchio 简化版，§3.9），无词条=0。
+    /// 词级调权表：词 → 增量权重（Rocchio 简化版），无词条=0。
     pub word_w: Vec<(String, f64)>,
-    /// O5 L1 自适应：最近 top1_sim 滑动历史（上限 L1_HIST_CAP，逗号分隔存 [l1] 节）。
+    /// L1 自适应：最近 top1_sim 滑动历史（上限 L1_HIST_CAP，存于 [l1] 节）。
     pub l1_hist: Vec<f64>,
 }
 
@@ -221,7 +221,7 @@ pub(crate) fn bump_gen(root: &str) -> std::io::Result<()> {
     lock::atomic_write(&p, body.as_bytes())
 }
 
-/// 追加一条 top1_sim 到 L1 历史并重写 meta.toml（O5 自适应基线数据源）。
+/// 追加一条 top1_sim 到 L1 历史并重写 meta.toml。
 /// 失败静默（旁路：历史只是置信校准的输入，不影响召回正确性）。
 pub(crate) fn push_l1_hist(root: &str, sim: f64) {
     let Ok(_g) = lock::acquire(root, "meta.lock") else {

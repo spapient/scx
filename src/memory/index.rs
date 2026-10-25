@@ -1,4 +1,4 @@
-//! 倒排索引（P3.1）：postings.bin 全量构建 / 加载校验（P3.2）/ 候选提取。
+//! 倒排索引：postings.bin 全量构建、加载校验与候选提取。
 //!
 //! 布局（自产自销，零依赖，v2 起 doc 表自包含打分快照）：
 //! ```text
@@ -20,11 +20,11 @@
 //!   term 字典序 → 同库同字节。新增/删除 case 使索引过期 → 调用方惰性作废（删文件，
 //!   回退线性扫描）；`--rebuild`/首次自动构建恢复。
 //! - v2 起 doc 表自包含打分快照（词表/字段/状态/质量/时间），候选打分零 case.json
-//!   读取（P3 性能门：1 万条库召回 <5ms）；df 快照随 build 返回，供 meta [df] 落盘。
-//! - P3.2 崩溃一致性：body_len 边界校验 + CRC-32（IEEE 查表）段尾校验；坏段 →
+//!   读取（1 万条库召回 p50 < 5 ms）；df 快照随 build 返回，供 meta [df] 落盘。
+//! - 崩溃一致性：body_len 边界校验 + CRC-32（IEEE 查表）段尾校验；坏段 →
 //!   `load` 返回 Err（corrupt），调用方自动重建或回退线性扫描，不崩溃。
 //! - 口径说明：索引路径 df/avgdl 为全库口径（区别于线性路径的候选桶内口径），
-//!   同一路径内确定；P4 评估统一以索引路径为准。
+//!   同一路径内确定；评估统一以索引路径为准。
 
 use crate::memory::store::{self, Meta};
 use crate::terms::build_doc_terms;
@@ -44,7 +44,7 @@ pub(crate) fn postings_path(root: &str) -> PathBuf {
     Path::new(root).join("index").join("postings.bin")
 }
 
-/// 写 postings.bin：header + body + crc32（段尾校验，P3.2）。
+/// 写 postings.bin：header + body + crc32 段尾校验。
 fn write_postings(root: &str, body: &[u8]) -> std::io::Result<()> {
     let p = postings_path(root);
     if let Some(d) = p.parent() {
@@ -285,9 +285,8 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
 
 /// 加载索引。不存在 → Ok(None)；校验失败 → Err(corrupt)（调用方重建或回退线性）。
 /// 命中进程内缓存（root+mtime 键）直接复用 Arc，零重复 parse；否则整文件 fs::read
-/// 一次读入解析（P4.4 评审处置：移除手写 unsafe mmap FFI——无文件锁前提下
-/// 另一进程 rebuild/truncate 会使映射失效；1 万条库 postings 仅数 MB，fs::read
-/// 在页缓存下开销可忽略，契约零 unsafe）。
+/// 一次读入解析。不使用 mmap：无文件锁时，另一进程 rebuild/truncate 会使映射失效；
+/// 1 万条库的 postings 仅数 MB，`fs::read` 在页缓存下开销可忽略，且保持零 unsafe。
 pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
     let p = postings_path(root);
     if !p.exists() {

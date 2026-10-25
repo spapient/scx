@@ -90,6 +90,8 @@ scx --version                                  # 已将入口加入 PATH 时
 
 三条命令都应输出版本号（当前为 `scx 0.4.1`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
 
+只对实际安装过的入口执行上述检查；未安装的路径报“不存在”不代表工具本身异常。
+
 ### 第一次压缩
 
 ```bash
@@ -199,7 +201,7 @@ scx --query "..." [OPTIONS] [file...]
 | `--max-bytes <N>` | 记忆库总容量软配额；超限时拒绝写入 |
 | `--recall <K>` | 在正文旁路召回最多 K 条相关 case |
 | `--recall-detail` | 召回时附带摘要、原始证据行和修复结论 |
-| `--recall-only` | 只读召回，不更新 query 图、缓存或 L1 历史 |
+| `--recall-only` | 只读召回，不写 query 图、会话缓存、索引或 L1 历史 |
 | `--rate good\|bad <CASE_ID>` | 对一次召回结果给出反馈 |
 | `--stats` | 显示 case 数、状态、fix 覆盖率、质量均值和磁盘占用 |
 | `--rebuild`, `--gc`, `--delete <CASE_ID>` | 重建索引、清理过期条目、删除指定 case |
@@ -254,7 +256,7 @@ scx --query "..." [OPTIONS] [file...]
 
 ```toml
 [dependencies]
-scx = { path = "../scx/rs" }
+scx = { path = "../scx" }
 ```
 
 ```rust
@@ -290,7 +292,9 @@ fn main() {
 | `src/analysis.rs`, `src/terms.rs` | 归一化、结构分类、切词与 token 估算 |
 | `src/memory/` | 本地 case 存储、召回、反馈、索引与评估 |
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 编排、记忆输出、参数和文件 I/O |
-| `bin/run`, `bin/run.cmd` | 跨平台自举入口 |
+| `bin/run`, `bin/run.cmd` | Unix / Windows 自举构建入口 |
+| `bin/scx-eval` | 评测语料回放、盲审与配对统计（仅标准库） |
+| `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
 | `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门 |
 | `eval/` | 可重建语料、冻结标签、盲审包与统一评估工具 |
 | `docs/` | 设计、评测协议与证据报告 |
@@ -306,13 +310,14 @@ cargo test \
 
 每次变更通过以下门禁：
 
-- `cargo fmt --check`
+- `cargo fmt -- --check`
 - `cargo clippy --locked --all-targets -- -D warnings`
-- `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps`
+- `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps`
 - 单元、CLI 集成、并发和金标测试
 - `cargo build --release --locked`
 - Rust 1.82 声明 MSRV 实编译
 - 50k 行压缩基准
+- 10k case 倒排召回 p50 < 5 ms 性能门
 - Ubuntu、macOS、Windows 三平台 CI
 - confirm5 冻结语料上的质量回归门，以及“policy/AI 标签不得冒充人工闭环”的负向测试
 
@@ -336,9 +341,13 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 
 | 工作负载 | 结果 | 条件 |
 |---|---|---|
-| 50k 行 / 2,338,389 字符压缩 | 中位 **12 ms**，样本 11–17 ms | Apple M5 Pro，三轮 × 5 次采样 |
-| 10k case 稀疏查询召回 | p50 **206 µs**，p95 **240 µs** | 最新一轮 21 次采样；三轮 p50 204–207 µs |
-| 10k case 全候选宽查询 | p50 **1.9–2.1 ms** | 三轮 × 7 次采样 |
+| 50k 行 / 2,338,389 字符压缩 | 中位 **12–14 ms**，样本 12–17 ms | Apple M5 Pro，三轮 × 5 次采样 |
+| 10k case 稀疏查询召回 | p50 **170–195 µs** | 六轮 × 21 次采样；单轮异常 279 µs |
+| 10k case 全候选宽查询 | p50 **1.98–2.36 ms** | 六轮 × 7 次采样 |
+| 10k case 冷启动线性首查 | p50 **0.98–1.09 s** | 六轮线性扫描 |
+
+基准使用合成负载：压缩输入为 50k 行混合日志，记忆库为 1 万条短日志/长堆栈
+混合 case。它衡量实现开销与回归，不代表真实事故分布或跨机器性能。
 
 复现：
 
@@ -346,7 +355,7 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
 cargo test --locked
 cargo run --release --locked --example bench
-cargo run --release --locked --example mem_bench
+cargo run --release --locked --example bench -- memory
 ```
 
 ### 同类工具与可比性

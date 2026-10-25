@@ -1,7 +1,7 @@
 //! 库维护：索引重建、过期清理、case 删除与 `--stats` 盘点。
 //!
 //! - rebuild：全量重建 postings.bin（index::build）+ qmap 合并（同指纹取 recency
-//!   最新）+ df 快照写回 meta.toml [df]（领域 IDF 数据源，P4 评估用）+ 写
+//!   最新）+ df 快照写回 meta.toml [df]（评估与召回共用的 IDF 数据源）+ 写
 //!   不改变索引启用策略（索引只是可丢弃缓存）。
 //! - gc：expire 双条件（meta [params] gc_ttl_regressed=180 / gc_ttl_stale=365）：
 //!   regressed 且超期，或从未反馈（quality=0）且陈旧 → 物理删除 + 索引作废。
@@ -46,7 +46,7 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
         };
         let upd_s = parse_utc_secs(&c.updated_at);
         let age_days = now_s.saturating_sub(upd_s) as f64 / 86_400.0;
-        // P4.4+ 优化⑫（P1-4）：带 fix 的 case（已沉淀"怎么解决"）不因 stale 过期——
+        // 带 fix 的 case（已沉淀"怎么解决"）不因 stale 过期——
         // 经验价值最高，默认永不因"未反馈"被清；regressed 仍按短 TTL 清理。
         let expired = (c.status == "regressed" && age_days > ttl_regressed)
             || (c.quality == 0.0 && c.fix.is_empty() && age_days > ttl_stale);
@@ -58,7 +58,7 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
 }
 
 /// 删除一个 case（物理删除 + 惰性作废索引 + 库代际前进）。
-/// id 先过白名单校验（P4.4 评审处置：禁 `..`/路径分隔符逃逸）。
+/// id 先过白名单校验，禁止 `..` 与路径分隔符逃逸。
 /// 返回是否存在。
 pub(crate) fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
     // case 锁串行化 rate/去重更新；index 锁覆盖“删资产 → 作废索引 → bump gen”，
@@ -85,7 +85,7 @@ fn qmap_path(root: &str) -> PathBuf {
 }
 
 /// 写 meta.toml [df] 快照（来自 index::build）。
-/// P4.4 评审处置：**不再写 index_force** —— 索引只是缓存，重建不得改变召回语义
+/// 不写 `index_force`：索引只是缓存，重建不得改变召回语义
 /// （线性路径 df/avgdl 为候选桶口径，索引路径为全库口径，强制切换会让排序跳变、
 /// A/B 评估不可比）。索引启用只由规模阈值决定；强制索引走独立测试参数（预留）。
 /// 失败静默旁路。
@@ -284,7 +284,7 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
-    /// P4.4+ 优化⑫（P1-4）：带 fix 的 case 不因 stale 过期（经验价值最高）。
+    /// 带 fix 的 case 不因 stale 过期（经验价值最高）。
     #[test]
     fn gc_keeps_stale_case_with_fix() {
         let root = tmp_root("gc-fix");

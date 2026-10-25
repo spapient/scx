@@ -6,10 +6,11 @@
 
 <!-- 粘贴实际执行的命令和结果；未执行的检查请明确写“未执行”。 -->
 
-- [ ] `cargo fmt --check`
+- [ ] `cargo fmt -- --check`
 - [ ] `cargo clippy --locked --all-targets -- -D warnings`
 - [ ] `cargo test --locked`
 - [ ] `cargo build --release --locked`
+- [ ] `./bin/scx-eval selftest`（涉及评测工具或语料时）
 - [ ] 新增/修改行为有对应测试
 
 ## 风险与回滚

@@ -1,12 +1,11 @@
 //! memory 模块门面：记忆知识库的公开接口与顶层封装。
 //!
 //! 与 `compress` 完全隔离：compress 是纯函数（零 I/O），memory 是 I/O 侧模块，
-//! 只做"旁路召回 / 评分先验"，绝不注入压缩正文（红线 N1/N2/N3）。
+//! 只做旁路召回与评分先验，绝不注入压缩正文。
 //!
-//! 子模块：`json`（零依赖 JSON 子集）、`store`（case 模型与读写）、`meta`（meta.toml
-//! 与库根）、`util`（FNV/UTC/编辑距离）、`bucket`（场景桶）、
-//! `query_cache`（会话快照 + query 记忆图）、`ingest`（压缩产物 → case，指纹去重）、`field`（结构化字段
-//! 抽取）、`recall`（BM25+字段加权+衰减+桶过滤召回）。
+//! 子模块按职责分为存储（`store`/`meta`/`index`/`lock`）、摄取与反馈、
+//! 召回排序（`recall`/`ranking`/`bucket`/`edge`/`query_cache`）以及评估
+//! （`eval`/`gate`/`annotate`）；具体文件职责见 `docs/memory.md`。
 
 mod annotate;
 mod bucket;
@@ -96,7 +95,7 @@ pub fn store_case(input: StoreInput<'_>) -> std::io::Result<(bool, String)> {
     })
 }
 
-/// 门面：读取完整 case（P4.4+ 优化⑤：原始证据回放——evidence_lno/evidence 字段）。
+/// 门面：读取完整 case，包括可回放的原始证据行。
 pub fn read_case(root: &str, id: &str) -> std::io::Result<store::Case> {
     store::read_case(root, id)
 }
@@ -108,14 +107,14 @@ pub fn escape_control(s: &str) -> String {
 
 /// 门面：按 query 召回 top-k case（会话缓存 → qmap 直达 → BM25+字段加权+衰减+桶过滤）。
 ///
-/// O3 会话缓存：进程内存可配置窗口（默认 30 分钟），窗口内同 query 直接返回快照（零磁盘），
-/// 快照记录写入时的库代际，store/rate/delete 后自动失效（P4.4 评审处置）；
-/// O2 记忆图：recall 成功后把 (query → top-k id/score/sim) 回流写入 qmap.bin
+/// 会话缓存：进程内存可配置窗口（默认 30 分钟），窗口内同 query 直接返回快照；
+/// 快照记录写入时的库代际，store/rate/delete 后自动失效。
+/// query 记忆图：recall 成功后把 (query → top-k id/score/sim) 回流写入 qmap.bin
 /// （append-only，带代际），二次同指纹 query 直接命中（跳过 BM25），编辑距离 ≤2
 /// 变体走轻量重排。回流失败静默（旁路原则：记忆图只是加速，不影响召回正确性）。
 ///
-/// `read_only`：查看模式（--recall-only / 评估）不写任何库状态
-/// （qmap / 会话缓存 / L1 历史），保证查看、标注、演示零副作用。
+/// `read_only`：`--recall-only` 不写 qmap、会话缓存、L1 历史或索引缓存；
+/// 索引缺失/损坏时直接回退线性扫描，保证只读查看零磁盘副作用。
 pub fn recall_cases(
     root: &str,
     query: &str,
@@ -123,7 +122,7 @@ pub fn recall_cases(
     read_only: bool,
 ) -> std::io::Result<Vec<RecallHit>> {
     let meta = store::load_meta(root)?;
-    // O3：会话缓存命中直接返回快照（含 score/sim，L1 过滤可复用）。
+    // 会话缓存命中直接返回快照（含 score/sim，L1 过滤可复用）。
     let cache_window = (meta.param("session_cache_minutes").max(0.0) * 60.0) as u64;
     if let Some(hits) = query_cache::session_get(root, query, meta.gen, cache_window) {
         let mut out: Vec<RecallHit> = hits
@@ -133,15 +132,19 @@ pub fn recall_cases(
         out.truncate(k);
         return Ok(out);
     }
-    let hits = recall::recall(root, query, k)?;
+    let hits = if read_only {
+        recall::recall_read_only(root, query, k, &meta)?
+    } else {
+        recall::recall(root, query, k, &meta)?
+    };
     if !hits.is_empty() && !read_only {
         let snap: Vec<(String, f64, f64)> = hits
             .iter()
             .map(|h| (h.id.clone(), h.score, h.sim))
             .collect();
-        query_cache::session_put(root, query, snap.clone(), meta.gen);
         let _ = query_cache::append(root, query, &snap, meta.gen); // 回流失败忽略
-                                                                   // O5 L1 自适应：记录 top1.sim 到滑动历史（旁路，失败静默）。
+        query_cache::session_put(root, query, snap, meta.gen);
+        // 记录 top1.sim 到 L1 滑动历史（旁路，失败静默）。
         meta::push_l1_hist(root, hits[0].sim);
     }
     Ok(hits)
@@ -211,12 +214,12 @@ pub fn eval_cases(
     eval::run(root, path, mode, verbose)
 }
 
-/// 门面：运行期 `[l1]` 直答命中分布出表（P2 阶段门残余，--l1-hist）。
+/// 门面：输出运行期 `[l1]` 直答命中分布（`--l1-hist`）。
 pub fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
     eval::l1_hist_table(root)
 }
 
-/// 门面：库盘点（P4.4+ 优化，--stats）：case/桶/状态/fix 覆盖率/质量/磁盘。
+/// 门面：库盘点（`--stats`）：case、桶、状态、fix 覆盖率、质量与磁盘。
 pub fn stats_table(root: &str) -> std::io::Result<Vec<String>> {
     maintenance::stats(root)
 }

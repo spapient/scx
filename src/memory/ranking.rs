@@ -9,7 +9,7 @@
 //! 排除已含在 query 词表中的词。
 //! 只在召回低置信（top1.sim < 0.99）时触发：同 query 高置信已直接命中，无需扩展。
 //!
-//! P4.4+ 优化⑦：按 sim>0 过滤粗召回 case——无关 case（词面零重叠）的私有词
+//! 按 sim>0 过滤粗召回 case——无关 case（词面零重叠）的私有词
 //! 不得进入扩展词表（否则扩展会把不相干桶/词拉进 query，重排噪声压过真目标）。
 //!
 //! MMR：贪心选择 `argmax(score_norm − λ · max(sim(c, selected)))`，以词袋
@@ -75,7 +75,7 @@ pub(crate) fn expand(
         return Ok(Vec::new());
     }
     // 批内 tf：只统计与 query 词面相关（sim>0）的 case——无关 case 的私有词
-    // 是噪声源（会把桶判定/重排带偏），P4.4+ 优化⑦ 明确排除。
+    // 是噪声源，会把桶判定与重排带偏，因此明确排除。
     let mut batch: HashMap<String, usize> = HashMap::new();
     for h in hits {
         if h.sim <= 0.0 {

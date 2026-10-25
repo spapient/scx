@@ -1,4 +1,4 @@
-//! 智能标注器（P4.4+ 优化⑥，`--annotate`）：为 M4 证据门自动生成 30–50 组分层标注，
+//! 智能标注器（`--annotate`）：为证据门自动生成 30–50 组分层标注，
 //! 替代人工采集。标注不凭空造——每条 query 变体先用召回管线自检（目标 case 必须进
 //! top-k），证据链（指纹 / 同义词改写 / 结构化字段 / 自检 sim-score-rank）随标注落盘，
 //! 自检失败的变体显式丢弃并计入报告。零依赖、确定性（`--seed` 固定可重放）。
@@ -25,7 +25,7 @@ pub(crate) struct AnnotatedCase {
     pub layer: String,
     pub expected: Vec<String>,
     /// 预填相关度建议（自动口径）；`judged=false`（raw 盲测模式）时序列化为
-    /// `"judge": null`，rel 不写——人工未裁决，--eval 必须拒绝（P4.4+ 优化⑩）。
+    /// `"judge": null`，rel 不写——人工未裁决，--eval 必须拒绝。
     pub rel: f64,
     pub judged: bool,
     pub evidence: Vec<String>,
@@ -76,8 +76,9 @@ pub(crate) fn annotate_report(
         ));
     }
     // 自检与评估使用同一冻结时钟：标注结果不得因运行时刻改变近邻排序。
-    let ann_now_s = crate::memory::util::parse_utc_secs(&store::load_meta(root)?.created_at);
-    // P4.4+ 优化⑦：max_cases=0 表示全库（证据门规模可调），否则取 min 且至少 1。
+    let meta = store::load_meta(root)?;
+    let ann_now_s = crate::memory::util::parse_utc_secs(&meta.created_at);
+    // max_cases=0 表示全库，否则取 min 且至少 1。
     let cap = if max_cases == 0 {
         ids.len()
     } else {
@@ -104,7 +105,7 @@ pub(crate) fn annotate_report(
         // 注意：本分支不得 continue 跳过 semantic 生成（golden 回归实证）。
         if let Some(q) = rewrite(&c, seed) {
             if !raw {
-                match self_check(root, &q, &c, 5, ann_now_s) {
+                match self_check(root, &q, &c, 5, ann_now_s, &meta) {
                     Some(s) => out.push(AnnotatedCase {
                         query: q,
                         layer: "paraphrase".to_string(),
@@ -140,7 +141,7 @@ pub(crate) fn annotate_report(
         let sq = semantic_query(&c);
         if !sq.is_empty() {
             if !raw {
-                match self_check(root, &sq, &c, 10, ann_now_s) {
+                match self_check(root, &sq, &c, 10, ann_now_s, &meta) {
                     Some(s) => out.push(AnnotatedCase {
                         query: sq,
                         layer: "semantic".to_string(),
@@ -231,7 +232,7 @@ fn rewrite(c: &Case, seed: u64) -> Option<String> {
 
 /// 大小写不敏感字面替换（首次命中即替换，避免同词多轮扰动）。
 /// 边界检查必须走 char 边界安全切片：pos 由 lower（与 s 字节对齐）求得，
-/// 前后各取一个完整 char 判断——中文 query 场景下字节切片会 panic（P4.4+ 优化⑦）。
+/// 前后各取一个完整 char 判断——中文 query 场景下字节切片会 panic。
 fn replace_ci(s: &mut String, from: &str, to: &str) -> bool {
     if from.is_empty() || to.is_empty() {
         return false;
@@ -298,11 +299,18 @@ fn semantic_query(c: &Case) -> String {
 }
 
 /// 自检：该 query 召回 top-k 是否含目标 case（tail16 匹配）。零写入（纯检索）。
-/// 门槛按相关度分层（P4.4+ 优化⑦）：literal/paraphrase（强相关）top-5；
+/// 门槛按相关度分层：literal/paraphrase（强相关）top-5；
 /// semantic（弱相关，rel=1）放宽 top-10——语义变体词面重叠天然低，top-5 会系统性误杀。
-fn self_check(root: &str, query: &str, target: &Case, k: usize, now_s: u64) -> Option<SelfCheck> {
+fn self_check(
+    root: &str,
+    query: &str,
+    target: &Case,
+    k: usize,
+    now_s: u64,
+    meta: &crate::memory::store::Meta,
+) -> Option<SelfCheck> {
     let target_tail = hash16_of(target);
-    let hits = recall::recall_at(root, query, k, now_s).ok()?;
+    let hits = recall::recall_at(root, query, k, now_s, meta).ok()?;
     for (rank, h) in hits.iter().enumerate() {
         let tail = h.id.rsplit('_').next().unwrap_or(&h.id);
         if tail == target_tail {
@@ -377,7 +385,7 @@ fn fmt_rel(r: f64) -> String {
 }
 
 /// 标注统计（stdout 报告用）：层分布 / rel 分布 / 组数。
-/// judged=false（raw 盲测集）的条目不计入 rel2/rel1，单独报 `unjudged`（P4.4+ 优化⑩）。
+/// judged=false（raw 盲测集）的条目不计入 rel2/rel1，单独报 `unjudged`。
 pub(crate) fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
     let mut by_layer: std::collections::BTreeMap<String, usize> = Default::default();
     let mut rel2 = 0usize;
@@ -694,7 +702,7 @@ mod tests {
         );
     }
 
-    /// P4.4+ 优化⑦ 回归：中文 query 里替换中文同义词不得 char 边界 panic。
+    /// 回归：中文 query 里替换中文同义词不得引发 char 边界 panic。
     #[test]
     fn replace_ci_safe_on_cjk_boundary() {
         let mut s = "数据库连接池耗尽 pool".to_string();
@@ -707,7 +715,7 @@ mod tests {
         assert_eq!(t, "磁盘空间不足");
     }
 
-    /// P4.4+ 优化⑧：raw 模式不过自检——输出必须 ⊇ 自检模式（含自检丢弃的变体），
+    /// raw 模式不过自检——输出必须 ⊇ 自检模式（含自检丢弃的变体），
     /// 且每条 raw 变体带盲测摘要（note 含 target=hint=fix=），供人工裁决（选择偏差消除）。
     #[test]
     fn annotate_raw_is_superset_with_blind_hint() {

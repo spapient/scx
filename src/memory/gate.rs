@@ -1,18 +1,18 @@
-//! P4.4+ 优化⑭：M4 证据门的机械校验（`--eval --gate`）。
+//! 证据门：机械、逐项与人工三种强度的可执行校验。
 //!
 //! `--gate` 只校验机械资格（样本量/分层/裁决元数据/A 不劣于 B）；
 //! `--gate-human` 额外要求全量人工裁决、弱相关与负例控制，并校验 NDCG。
 //! 后者才是“人工弱相关/负例闭环”的证据门，机械 target 标签不能替代它。
 //!
 //! 目标：把“30–50 组、每层 ≥10、非 literal 必须人工裁决、A 不劣于 B”
-//! 从口头约定变成可执行门禁，防止用 5 条 demo 或自动标注集冒充 M4 证据。
+//! 从口头约定变成可执行门禁，防止用 5 条 demo 或自动标注集冒充人工证据。
 //!
 //! 纯函数：只读解析后的 EvalCase 与已聚合指标，不触碰库、不写文件。
 
 use crate::memory::eval::EvalCase;
 use std::collections::HashMap;
 
-/// M4 证据门最少总组数（计划 §7：30–50 组；超过 50 组不惩罚）。
+/// 证据门最少总组数（30–50 组；超过 50 组不惩罚）。
 pub(crate) const MIN_TOTAL: usize = 30;
 /// 每层最少组数（literal / paraphrase / semantic）。
 pub(crate) const MIN_LAYER: usize = 10;
@@ -52,7 +52,7 @@ pub(crate) struct GateResult {
     pub failed: bool,
 }
 
-/// 机械校验 M4 证据门。`layers` 为报告层顺序，`agg` 为 eval 的 [n, A(4), B(4)] 聚合。
+/// 机械校验证据门。`layers` 为报告层顺序，`agg` 为 eval 的 [n, A(4), B(4)] 聚合。
 pub(crate) fn check(
     cases: &[EvalCase],
     layers: &[String],
@@ -107,7 +107,7 @@ fn check_mode(
         failed |= !ok;
     }
 
-    // 未知层不允许用来凑总数：M4 只认三层。
+    // 未知层不允许用来凑总数：证据门只认三层。
     for layer in layers {
         if !matches!(layer.as_str(), "literal" | "paraphrase" | "semantic") {
             lines.push(format!("gate: unknown layer {layer} FAIL"));

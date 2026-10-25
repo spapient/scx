@@ -5,9 +5,9 @@
 //! 扩展，间隔 <= window*3 合并；种子为零回退全图）；邻域权重只排序；context=0 完全跳过可选填充（针尖模式）；无信号 fail-open；
 //! `risk_gate` 在风险 HIGH 时保护失败级错误行(warn/警告 级除外)与事故标记行(root cause / fix hint / mitigation / recommendation / action / assertionerror)。只删不改、保留行逐字原文；省略以单行 "..." 标记；`lineno` 可为保留行附加原文行号前缀。
 //!
-//! 模块划分：`terms`（词面/切词/估算）、`classify`（错误/标记/结构分类）、`norm`（归一化/ANSI 剥离）、
-//! `compress`（压缩算法主体）为独立纯函数层，可供记忆库等外部复用；本文件只保留公共
-//! 类型（Config/Outcome）、模块声明与测试，维持单文件 <500 行门禁。
+//! 模块划分：`terms` 负责词面与估算，`analysis` 负责归一化与结构分类，
+//! `compress` 是算法主体。三者均为纯函数层；本文件只保留公共类型、模块声明和
+//! 跨模块行为测试。
 mod analysis;
 mod compress;
 mod terms;
@@ -61,8 +61,8 @@ pub struct Outcome {
     /// 压缩后的文本；passthrough / fail-open 时为输入原文。
     pub text: String,
     /// 保留行的原始输入行号（1-based，按原顺序；仅筛选模式有值，
-    /// passthrough/fail-open 为空）。P4.4+ 优化⑤：记忆库 --store 据此从输入
-    /// 提取原始证据行（证据行区间），L1 直答可回放原文。
+    /// passthrough/fail-open 为空）。记忆库 `--store` 据此从输入提取原始证据行，
+    /// L1 直答可回放原文。
     pub kept_lno: Vec<usize>,
     pub kept: usize,
     pub total: usize,
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn sieve_kept_lno_aligns_with_output_lines() {
-        // P4.4+ 优化⑤：保留行原始行号（1-based）与输出行一一对应、严格递增。
+        // 保留行原始行号（1-based）与输出行一一对应、严格递增。
         let mut lines: Vec<String> = (0..200)
             .map(|i| format!("pad alpha beta line {}", i))
             .collect();

@@ -396,8 +396,8 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
-    // 22) 坏段自愈旁路：store + --rebuild 建索引 → 截断 postings.bin 尾部 →
-    //     recall-only 仍正常（自动重建，不崩溃、输出确定）。
+    // 22) 坏段自愈：store + --rebuild 建索引 → 截断 postings.bin 尾部 →
+    //     普通召回自动重建；随后 recall-only 输出确定且不写库。
     let mem_cor_dir = std::env::temp_dir().join("scx-golden-mem-corrupt");
     let _ = std::fs::remove_dir_all(&mem_cor_dir);
     let mem_cor = mem_cor_dir.to_string_lossy().into_owned();
@@ -425,6 +425,17 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         let b = std::fs::read(&p).unwrap();
         std::fs::write(&p, &b[..b.len() - 5]).unwrap(); // 截断 crc+body 尾部 → 校验失败
     }
+    let _ = run_scx(
+        &[
+            "--query",
+            "db timeout conn_id",
+            "--recall",
+            "1",
+            "--mem-dir",
+            Box::leak(mem_cor.clone().into_boxed_str()),
+        ],
+        "",
+    );
     v.push((
         "memory_corrupt_heal".into(),
         vec![
@@ -437,7 +448,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
-    // 23) qmap 记忆图重放：store + 一次 recall-only 预热（qmap 回流落盘）→
+    // 23) qmap 记忆图重放：store + 一次普通 recall 预热（qmap 回流落盘）→
     //     二次同 query recall-only 走 qmap 直达，输出逐字节稳定。
     let mem_qm_dir = std::env::temp_dir().join("scx-golden-mem-qmap");
     let _ = std::fs::remove_dir_all(&mem_qm_dir);
@@ -457,7 +468,8 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         &[
             "--query",
             "db timeout conn_id",
-            "--recall-only",
+            "--recall",
+            "1",
             "--mem-dir",
             Box::leak(mem_qm.clone().into_boxed_str()),
         ],
@@ -540,8 +552,8 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
-    // 28) --eval-verbose 逐 case 诊断（P4.4+ 优化④：A/B top-10 + [hit]/[miss]，
-    //     服务 M4 人工标注校准；复用 memory_eval 的库与基线，默认 --eval 输出不变）。
+    // 25) --eval-verbose 逐 case 诊断：A/B top-10 与 [hit]/[miss]。
+    //     复用 memory_eval 的库与基线，默认 --eval 输出不变。
     v.push((
         "memory_eval_verbose".into(),
         vec![
@@ -554,7 +566,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
-    // 25) L1 要点摘要旁路（--recall-detail：mem 段追加 summary 行，字段+证据首行）。
+    // 26) L1 要点摘要旁路（--recall-detail：mem 段追加 summary 行，字段+证据首行）。
     let mem_sm_dir = std::env::temp_dir().join("scx-golden-mem-summary");
     let _ = std::fs::remove_dir_all(&mem_sm_dir);
     let mem_sm = mem_sm_dir.to_string_lossy().into_owned();
@@ -584,7 +596,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
-    // 26) L1 本地直答（P4.4+ 优化：--store 配 --fix 保存修复结论，recall-detail 输出 fix 行）。
+    // 27) L1 本地直答：--store 配 --fix 保存修复结论，recall-detail 输出 fix 行。
     let mem_fix_dir = std::env::temp_dir().join("scx-golden-mem-fix");
     let _ = std::fs::remove_dir_all(&mem_fix_dir);
     let mem_fix = mem_fix_dir.to_string_lossy().into_owned();
@@ -616,7 +628,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
-    // 27) 库盘点（P4.4+ 优化：--stats 输出 case/桶/状态/fix 覆盖率/质量/磁盘）。
+    // 28) 库盘点：--stats 输出 case/桶/状态/fix 覆盖率/质量/磁盘。
     // 两个 case 用隔离日志：db 场景（seed_log）+ 磁盘场景（专用日志），
     // 让基线展示多桶（failopen 全文保留会把无关家族词带进 text，同库会互相污染桶归属）。
     let mem_st_dir = std::env::temp_dir().join("scx-golden-mem-stats");
@@ -653,7 +665,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
-    // 29) 智能标注器（P4.4+ 优化⑥：--annotate 三层标注 + 自检证据，替代人工 M4 采集）。
+    // 29) 智能标注器：--annotate 三层标注与自检证据，仅用于回归集。
     let mem_an_dir = std::env::temp_dir().join("scx-golden-mem-annotate");
     let _ = std::fs::remove_dir_all(&mem_an_dir);
     let mem_an = mem_an_dir.to_string_lossy().into_owned();

@@ -1,11 +1,11 @@
-//! P4 评估系统与要点摘要（P4.1/P4.2，O8/O5 后半）。
+//! 评估系统：冻结 baseline 重放、A/B 指标与诊断输出。
 //!
 //! `--eval <baseline.json>`：冻结评估输入重放——标注集（query → expected case + 分层 +
 //! 相关度 0..2）上分三层（literal/paraphrase/semantic）输出 Recall@5 / MRR / NDCG@10。
 //! 对拍：A = 完整统计管线（recall::recall，字段加权+PRF+衰减+MMR+反馈+桶过滤），
 //! B = 朴素词面基线（`plain`：全库候选、纯词面匹配 + 长度归一化、无任何增强）。
 //!
-//! 口径说明（P4.4 评审处置）：打分词表两边都是去重词表（tf 恒 1），实际是
+//! 口径说明：打分词表两边都是去重词表（tf 恒 1），实际是
 //! "二值词面匹配 + 长度归一化 + 字段加权"，不是严格 BM25（tf 项恒为 1）。
 //! A/B 同词表对比仍公平，但任何结论须按此口径引用，不宣称"BM25 增益"。
 //! 确定性：无随机源，同 baseline + 同库 → 同输出，可重放存档。
@@ -69,7 +69,7 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
         };
         let query = get_str("query")?;
         let layer = get_str("layer")?;
-        // P4.4+ 优化⑩：盲测裁决门——judge:null（未裁决）一律拒绝，防止
+        // 盲测裁决门——judge:null（未裁决）一律拒绝，防止
         // "人工直接接受预填 rel = 自动标注自证"。先跑 --judge 再评估。
         if kvs
             .iter()
@@ -110,7 +110,7 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
                 rel.insert(e.clone(), 1.0);
             }
         }
-        // P4.4+ 优化⑭：读取 judge 元数据供 --gate 校验。自动标注集没有 judge
+        // 读取 judge 元数据供 --gate 校验。自动标注集没有 judge
         // 对象（或只有 rel），因此不能冒充人工裁决证据。
         let mut judged_by = None;
         let mut judged_date = None;
@@ -161,7 +161,7 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
 }
 
 /// expected/rel 的 id 匹配：支持完整 id、hash 后缀（tail）或 hash 后缀的后 8 位
-/// （P4.4 评审处置：case id 由 32 位升级 64 位后 tail=16 hex，标注集里的旧 8 位
+/// （case id 为 64 位后 tail=16 hex，标注集里的旧 8 位
 /// hash 仍须匹配，golden 免日期漂移）。完整 id 的日期前缀允许不同：重建库跨日
 /// 运行时 hash 不变，冻结 baseline 不应因此整体 miss。
 fn id_matches(exp: &str, id: &str) -> bool {
@@ -208,7 +208,7 @@ fn rel_of(c: &EvalCase, id: &str) -> f64 {
 }
 
 /// 单例指标：Recall@5 / Recall@10（expected 命中占比）、MRR（首个 expected 的 1/rank）、
-/// NDCG@10（rel 分级，DCG/IDCG）。r10 供弱相关层（semantic）口径使用（P4.4+ 优化⑦）。
+/// NDCG@10（rel 分级，DCG/IDCG）。r10 供弱相关 semantic 层使用。
 fn metric(c: &EvalCase, hits: &[RecallHit]) -> (f64, f64, f64, f64) {
     let (r5, r10) = if c.expected.is_empty() {
         (0.0, 0.0)
@@ -291,12 +291,12 @@ fn run_impl(
     let mut layers: Vec<String> = Vec::new();
     // [n, A:r5,r10,mrr,ndcg, B:r5,r10,mrr,ndcg]；semantic 层报告 r@10（弱相关口径）。
     let mut agg: HashMap<String, [f64; 9]> = HashMap::new();
-    // P4.4+ 优化⑩：每层每 case 的 A/B mrr/ndcg 值（bootstrap 95% CI 重采样用）。
+    // 每层每 case 的 A/B mrr/ndcg 值（bootstrap 95% CI 重采样用）。
     let mut per: HashMap<String, [Vec<f64>; 4]> = HashMap::new();
     // verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
     let mut diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)> = Vec::new();
     for c in &cases {
-        let a = recall::recall_at(root, &c.query, 10, eval_now_s)?;
+        let a = recall::recall_at(root, &c.query, 10, eval_now_s, &meta)?;
         let b = plain.search(&c.query, 10);
         if let Some(top) = a.first() {
             if hit_expected(&c.expected, &top.id) {
@@ -336,7 +336,7 @@ fn run_impl(
         }
     }
     let mut out = Vec::with_capacity(layers.len() + 2);
-    // P4.4+ 优化⑬（P1-5）：报告 NDCG 判别强度——multi-rel 条目（expected>1 或 rel 多值）
+    // 报告 NDCG 判别强度——multi-rel 条目（expected>1 或 rel 多值）
     // 使 NDCG 非二值；single-rel 条目 NDCG 接近二值（单相关时评估严格性有限）。
     let multi_rel = cases
         .iter()
@@ -397,7 +397,7 @@ fn run_impl(
             ));
         }
     }
-    // P2 阶段门残余：L1 直答命中率出表（[l1] 判据落地后首次可统计）。
+    // L1 直答命中率出表。
     let l1_rate = if l1_total > 0 {
         l1_hit as f64 / l1_total as f64
     } else {
@@ -406,7 +406,7 @@ fn run_impl(
     out.push(format!(
         "l1: hits={l1_hit} total={l1_total} rate={l1_rate:.3}"
     ));
-    // P4.4+ 优化⑭：M4 机械门——样本量/分层/裁决元数据/主指标 A≥B。
+    // 机械门——样本量/分层/裁决元数据/主指标 A≥B。
     let mut gate_failed = false;
     if let Some(mode) = gate_mode {
         let g = match mode {
@@ -417,7 +417,7 @@ fn run_impl(
         out.extend(g.lines);
         gate_failed = g.failed;
     }
-    // P4.4+ 优化④：逐 case 诊断段（A/B 各 top-10，case 尾 8 位与 --eval 口径一致）。
+    // 逐 case 诊断段（A/B 各 top-10，case 尾 8 位与 --eval 口径一致）。
     if verbose {
         for (i, (q, a, b)) in diag.iter().enumerate() {
             out.push(format!("case {}/{} q=\"{}\"", i + 1, diag.len(), q));
@@ -453,7 +453,7 @@ fn fmt_hits(hits: &[RecallHit], c: &EvalCase) -> String {
     parts.join(" | ")
 }
 
-/// P4.4+ 优化⑩：bootstrap 95% CI（百分位法，B=1000，固定 seed 确定性可重放）。
+/// bootstrap 95% CI（百分位法，固定 seed 确定性可重放）。
 /// 对每层每 case 的指标值有放回重采样，取 2.5/97.5 百分位——n 很小（9/3）时
 /// 置信区间如实展示不确定性，不允许"点值更高 = 更好"的结论。
 const CI_SEED: u64 = 0x5DEE_CE66_D202_6102;
@@ -494,7 +494,7 @@ fn boot_ci(vals: &[f64], seed: u64) -> (f64, f64) {
     (lo, hi)
 }
 
-/// P4.1 评估 B 基线：朴素 BM25。全库候选（无桶过滤）、纯词面 BM25（无字段加权/
+/// 评估 B 基线：朴素 BM25。全库候选（无桶过滤）、纯词面 BM25（无字段加权/
 /// 衰减/quality/词权/PRF/MMR）、sim=score/sm 归一、按 score 降序取 top-k。
 /// 语料只加载一次，150 条查询复用，避免每个 case 重复读取全库 JSON。
 struct PlainScorer {
@@ -584,7 +584,7 @@ impl PlainScorer {
     }
 }
 
-/// P2 阶段门残余：运行期 [l1] 历史出表（--l1-hist）——top1.sim 采样分布统计。
+/// 运行期 [l1] 历史出表（--l1-hist）——top1.sim 采样分布统计。
 /// hist 由 recall 侧每次 push_l1_hist 落盘（meta.toml [l1] hist，CAP 上限），
 /// 出表兑现"L1 命中率可统计"；over_base = 达到当前 l1_base 的采样占比。
 pub(crate) fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
@@ -755,7 +755,7 @@ mod tests {
         assert_eq!(cases[0].judged_method.as_deref(), Some("per-item-blind-v1"));
     }
 
-    /// P4.4+ 优化⑩：judge:null（未裁决）必须被 --eval 拒绝——防止"接受预填 rel=自证"。
+    /// judge:null（未裁决）必须被 --eval 拒绝，防止接受预填 rel 自证。
     #[test]
     fn parse_baseline_rejects_unjudged() {
         let v = crate::memory::json::parse(
@@ -779,7 +779,7 @@ mod tests {
         );
     }
 
-    /// P4.4+ 优化⑩：bootstrap CI 确定性（同 seed 同输出）且区间在 [min,max] 内。
+    /// bootstrap CI 必须确定性（同 seed 同输出）且区间在 [min,max] 内。
     #[test]
     fn bootstrap_ci_deterministic_and_bounded() {
         let vals = vec![1.0, 1.0, 1.0, 1.0, 0.5, 0.0];

@@ -1,4 +1,4 @@
-//! query 缓存：进程内会话快照 + 持久化 query 记忆图（O2/O3）。
+//! query 缓存：进程内会话快照 + 持久化 query 记忆图。
 //!
 //! 二进制布局（自产自销，零依赖；v2 起条目带库代际 gen，v3 起 recency 为 Unix 秒）：
 //! ```text
@@ -7,10 +7,10 @@
 //! ```
 //! 查询：归一化 query → 精确匹配直达（跳过 BM25，直接还原 score/sim 快照）；
 //! 编辑距离 ≤2 变体走轻量重排（新词面仍参与 BM25，见 recall 接线）。
-//! 同指纹多条时取 recency 最新。append-only：新条目追加；`rebuild` 合并（P3 落地，
+//! 同指纹多条时取 recency 最新。append-only：新条目追加；`rebuild` 合并，
 //! 本文件提供 load+write 原语）。
 //!
-//! 代际失效（P4.4 评审处置）：条目记录写入时的库 gen；lookup 时 `entry.gen < 当前 gen`
+//! 代际失效：条目记录写入时的库 gen；lookup 时 `entry.gen < 当前 gen`
 //! 的条目一律视为过期（新 case / 反馈 / 删除后，同 query 必须走 BM25 重算，
 //! 快照不得遮挡新状态）。
 

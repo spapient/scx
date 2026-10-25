@@ -37,7 +37,7 @@ bin/run --query "问题关键词" --ratio 0.35 /tmp/out.txt
 
 ## 记忆知识库（可选，默认关闭）
 - 沉淀：`--store 1 --fix "修复结论"` 把证据块与修复结论入库（入库前统一脱敏已知敏感模式，非通用 DLP）；不带 `--fix` 会警告。库目录 `--mem-dir DIR`（默认 `$SCX_MEM_DIR` 或 `~/.scx-memory`）；case id 形如 `<日期>_<16位hex>`。
-- 召回：`--recall K` 旁路输出 `mem:` 段；`--recall-detail` 附 `summary:`/`evidence:`/`fix:`；`--recall-only` 为只读模式，不写 qmap/L1 历史、不改库状态。`fix:` 行是**候选答案**（`candidate, sim=..`）——相似症状不同根因时不得无条件直答。
+- 召回：`--recall K` 旁路输出 `mem:` 段；`--recall-detail` 附 `summary:`/`evidence:`/`fix:`；`--recall-only` 为只读模式，不写 qmap、会话缓存、索引或 L1 历史，也不改 case/meta。`fix:` 行是**候选答案**（`candidate, sim=..`）——相似症状不同根因时不得无条件直答。
 - 反馈与维护：`--rate good|bad <case-id>`；`--stats` / `--gc` / `--delete` / `--rebuild`。多进程共享同一 `--mem-dir` 受支持（写入有互斥与自愈）。
 - 评估：`--eval <baseline.json>`、`--gate`、`--gate-human`、`--annotate`、`--judge` 等协议见 README「评估与维护」与 `eval/README.md`；召回路线、中文词表、存储格式与实现记录见 `docs/memory.md`。
 

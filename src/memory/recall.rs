@@ -1,15 +1,13 @@
-//! 召回：线性扫描 BM25 + 结构化字段加权（O1）+ 时间衰减（O4）+ 场景桶过滤（O6）。
+//! 召回：词面打分、结构化字段加权、时间衰减与场景桶过滤。
 //!
-//! P1 阶段规模决策：库 <1 万 case 时线性扫描（每次召回现算 df/avgdl），
-//! P3.1 起：库 ≥ 1 万（或 --rebuild 强制，meta index_force=1）自动启用倒排索引
-//! （index/postings.bin），候选集来自 term→doc 倒排，df/avgdl 为全库口径。
+//! 库小于 1 万 case 时线性扫描并现算 df/avgdl；达到 10k 或
+//! `meta [params] index_force=1` 时使用 `index/postings.bin` 倒排候选，
+//! df/avgdl 为全库口径。
 //! 零依赖、无随机源、确定性：同 query 同库同输出。
 //!
 //! 公式：bm25(t,d)=idf·tf·(k1+1)/(tf+k1·(1−b+b·dl/avgdl))；idf=ln(1+(N−df+0.5)/(df+0.5))
 //! score=Σ bm25+Σ 字段命中×权重；decay=1/(1+age/τ)（τ:90/solved 180/regressed 30）；sim=score·decay/score_max
-//! 场景桶（O6）：query 判候选桶，case 主桶不在候选桶集则跳过（候选桶空=全量扫防漏召）。
-
-// 非 test 构建暂放宽 dead_code（CLI 接线在 P1.5 前无调用点）。#![cfg_attr(not(test), allow(dead_code))]
+//! 场景桶：query 判候选桶，case 主桶不在候选桶集则跳过（候选桶空=全量扫，防漏召）。
 
 use crate::memory::bucket::candidate_buckets;
 use crate::memory::field;
@@ -26,7 +24,7 @@ pub struct RecallHit {
     pub sim: f64,
 }
 
-/// 候选 case 的召回上下文：一次读取，打分零二次 IO（P3 性能门：1 万条库 <5ms）。
+/// 候选 case 的召回上下文：一次读取，打分阶段零二次 I/O。
 struct DocCtx {
     terms: Arc<[String]>,
     /// 原始 case query 词表（线性/索引/实体桥路径同口径；query-field 重排）。
@@ -35,7 +33,7 @@ struct DocCtx {
     status: Arc<str>,
     quality: f64,
     updated_at: Arc<str>,
-    /// P4.3 实体边：与 query 共享的实体键数（0 = 词面候选，>0 = 桥入兄弟 case）。
+    /// 实体边：与 query 共享的实体键数（0 = 词面候选，>0 = 桥入兄弟 case）。
     edge_shared: usize,
 }
 
@@ -65,9 +63,25 @@ struct PassCtx<'a> {
 }
 
 /// 归一化得分 → 排序；sim 独立供 L1 置信判定。
-pub(crate) fn recall(root: &str, query: &str, k: usize) -> std::io::Result<Vec<RecallHit>> {
+pub(crate) fn recall(
+    root: &str,
+    query: &str,
+    k: usize,
+    meta: &Meta,
+) -> std::io::Result<Vec<RecallHit>> {
     let now_s = crate::memory::util::utc_now_secs();
-    recall_at(root, query, k, now_s)
+    recall_inner(root, query, k, now_s, meta, true)
+}
+
+/// 只读召回：索引缺失或损坏时回退线性扫描，绝不为修复缓存而写入磁盘。
+pub(crate) fn recall_read_only(
+    root: &str,
+    query: &str,
+    k: usize,
+    meta: &Meta,
+) -> std::io::Result<Vec<RecallHit>> {
+    let now_s = crate::memory::util::utc_now_secs();
+    recall_inner(root, query, k, now_s, meta, false)
 }
 
 /// 指定时间戳的召回：供评估/自检冻结衰减时钟，同库快照跨天可重放。
@@ -76,9 +90,20 @@ pub(crate) fn recall_at(
     query: &str,
     k: usize,
     now_s: u64,
+    meta: &Meta,
 ) -> std::io::Result<Vec<RecallHit>> {
-    let meta = store::load_meta(root)?;
-    // O2 query 记忆图：精确同指纹直接返回历史 top-k（跳过整个 BM25 管线）。
+    recall_inner(root, query, k, now_s, meta, true)
+}
+
+fn recall_inner(
+    root: &str,
+    query: &str,
+    k: usize,
+    now_s: u64,
+    meta: &Meta,
+    repair_index: bool,
+) -> std::io::Result<Vec<RecallHit>> {
+    // query 记忆图：精确同指纹直接返回历史 top-k（跳过整个 BM25 管线）。
     // 代际失效：条目 gen < 当前 meta.gen 视为过期（库已变化，走 BM25 重算）。
     if let Some((_, qhits, 0)) = crate::memory::query_cache::lookup(root, query, 2, meta.gen)? {
         let mut hits: Vec<RecallHit> = qhits
@@ -92,20 +117,21 @@ pub(crate) fn recall_at(
         hits.truncate(k);
         return Ok(hits);
     }
-    // P3.1 倒排路径：规模达标或 --rebuild 强制（index_force=1）时启用。
-    // 索引缺失/坏段（P3.2）→ 自动重建覆盖（build 确定性），重建失败回退线性扫描。
-    let idx = if index::use_index(&meta) {
+    // 倒排路径：规模达标或 --rebuild 强制（index_force=1）时启用。
+    // 索引缺失/坏段时自动重建覆盖（build 确定性），重建失败回退线性扫描。
+    let idx = if index::use_index(meta) {
         match index::load(root) {
             Ok(Some(i)) => Some(i),
-            _ => {
+            _ if repair_index => {
                 let _ = index::build(root);
                 index::load(root).ok().flatten()
             }
+            _ => None,
         }
     } else {
         None
     };
-    // O6 场景桶：候选桶由原始 query 判定一次，首轮与 PRF 第二轮共用（防扩展词带偏过滤）。
+    // 场景桶：候选桶由原始 query 判定一次，首轮与 PRF 第二轮共用（防扩展词带偏过滤）。
     let cand = candidate_buckets(query);
     // 消融开关（默认全开）：bucket_enable/prf_enable 只服务可复现的 A−组件对拍，
     // 不改变默认检索行为。
@@ -118,7 +144,7 @@ pub(crate) fn recall_at(
         query,
         &PassCtx {
             k,
-            meta: &meta,
+            meta,
             now_s,
             idx: idx.as_deref(),
             cand: &cand,
@@ -139,7 +165,7 @@ pub(crate) fn recall_at(
             query,
             &PassCtx {
                 k,
-                meta: &meta,
+                meta,
                 now_s,
                 idx: idx.as_deref(),
                 cand: &cand,
@@ -187,7 +213,7 @@ pub(crate) fn recall_at(
             query,
             &PassCtx {
                 k,
-                meta: &meta,
+                meta,
                 now_s,
                 idx: idx.as_deref(),
                 cand: &cand,
@@ -201,21 +227,21 @@ pub(crate) fn recall_at(
             }
         }
     }
-    // P2.3 PRF：低置信（top1.sim < confidence_high_sim）时粗召回 top-K 扩展查询再召一轮。
+    // PRF：低置信（top1.sim < confidence_high_sim）时粗召回 top-K 扩展查询再召一轮。
     // 编辑距离 ≤2 变体命中也在本轮覆盖（轻量重排 = 词面重新打分）。
     let low_conf = meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
     if low_conf {
-        if let Ok(ext) = crate::memory::ranking::expand(root, &hits, query, &meta) {
+        if let Ok(ext) = crate::memory::ranking::expand(root, &hits, query, meta) {
             if !ext.is_empty() {
                 let q2 = format!("{query} {}", ext.join(" "));
-                // P4.4+ 优化⑦：第二轮继承首轮候选桶（桶由原始 query 判定），
+                // 第二轮继承首轮候选桶（桶由原始 query 判定），
                 // 扩展词不得改变过滤语义——否则跨语言变体/无关词会把真目标桶误滤（A/B 不可比）。
                 if let Ok(hits2) = score_pass(
                     root,
                     &q2,
                     &PassCtx {
                         k,
-                        meta: &meta,
+                        meta,
                         now_s,
                         idx: idx.as_deref(),
                         cand: &cand,
@@ -225,7 +251,7 @@ pub(crate) fn recall_at(
                     },
                 ) {
                     if !hits2.is_empty() {
-                        // PRF 严格补漏（P4.4+ 优化⑦）：首轮顺序权威——首轮命中
+                        // PRF 严格补漏：首轮顺序权威——首轮命中
                         // （含实体边桥入、字段加权、桶内候选）位置不变；扩展轮只把
                         // 新命中的 case 按 q2 排序追加在尾部。绝不与首轮 score 混排
                         // （q2 口径 score 会被扩展词放大，混排会把真目标挤出——literal
@@ -300,7 +326,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         meta.param("field_weight_symbol"),
         meta.param("field_weight_num_fp"),
     ];
-    // P4.3 实体边：共享实体加权（0 则关，兼容老 meta 缺省开 1.0）。
+    // 实体边：共享实体加权（0 则关闭，兼容老 meta 缺省开 1.0）。
     let edge_w = meta.param("edge_weight");
     let orig_qterms = build_mem_terms(query);
     let qterms = if meta.param("synonyms_enable") > 0.0 {
@@ -322,10 +348,10 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         &qfields.symbol,
         &qfields.num_fp,
     ];
-    // P4.3 实体边一跳：query 实体键集合（去重在 edge 侧）。
+    // 实体边一跳：query 实体键集合（去重在 edge 侧）。
     let q_ent_list: Vec<String> = qf.iter().flat_map(|f| f.iter().cloned()).collect();
 
-    // O6 场景桶：query 判候选桶，case 主桶不在候选桶集内则跳过（由调用方统一传入）。
+    // 场景桶：query 判候选桶，case 主桶不在候选桶集内则跳过。
 
     // 候选 docs + df + 统计量：倒排路径（全库口径）或线性路径（候选集口径）。
     let (docs, df, n, avgdl): (Docs, Vec<usize>, f64, f64) = if let Some(idx) = idx {
@@ -341,7 +367,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
             }
             chosen.push((di, 0));
         }
-        // P4.3 实体边一跳：实体倒排由 postings 的 doc 快照派生，桥入无需重读
+        // 实体边一跳：实体倒排由 postings 的 doc 快照派生，桥入无需重读
         // 全库 case.json（旧实现每次冷启动重扫 1 万条，单次约 0.2s）。
         if meta.param("edge_enable") > 0.0 && !q_ent_list.is_empty() {
             let mut seen = vec![false; idx.n_docs];
@@ -417,7 +443,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
                 },
             ));
         }
-        // P4.3 实体边一跳：桥 case 并入后 avgdl 重算（df 保持词面候选口径）。
+        // 实体边一跳：桥 case 并入后 avgdl 重算（df 保持词面候选口径）。
         let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.clone()).collect();
         let (bridges, _) = crate::memory::edge::bridge_cases(root, meta, &q_ent_list, &exist_ids)?;
         for b in bridges {
@@ -444,7 +470,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     };
 
     let now_s = ctx.now_s;
-    // O5 词级调权表：query 词命中时按词权重加成（§3.9，无词条=0）。
+    // 词级调权表：query 词命中时按词权重加成（无词条=0）。
     let ww: HashMap<&str, f64> = meta.word_w.iter().map(|(k, v)| (k.as_str(), *v)).collect();
     let qinfo: Vec<QueryTerm<'_>> = qterms
         .iter()
@@ -460,7 +486,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
             }
         })
         .collect();
-    // O5 quality 排序先验（§4.1）：solved 且质量高的 case 提分。
+    // quality 排序先验：solved 且质量高的 case 提分。
     let q_prior = meta.param("quality_prior");
     // score_max：原始 query 词 idf 加字段全命中，作 sim 归一化分母。
     // 同义扩展只增加命中机会，不得抬高分母把原始 query 的 sim 稀释。
@@ -526,7 +552,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
                 }
             }
         }
-        // P4.3 实体边加权：共享实体数 × edge_weight（词面弱但实体强相关的兄弟 case 越线）。
+        // 实体边加权：共享实体数 × edge_weight（词面弱但实体强相关的兄弟 case 越线）。
         if dctx.edge_shared > 0 {
             fb += dctx.edge_shared as f64 * edge_w;
         }
@@ -534,7 +560,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         // 不能让零匹配 case 仅凭质量先验进入 top-k（否则任意候选会以 0 分返回，
         // 评估会把“按库顺序碰巧命中”误算成召回）。
         let support = score + fb;
-        // O4 时间衰减：age 用 updated_at（去重/反馈会刷新它），τ 随状态动态。
+        // 时间衰减：age 用 updated_at（去重/反馈会刷新），τ 随状态动态。
         let tau_eff = match &*dctx.status {
             "solved" => tau_solved,
             "regressed" => tau_regressed,
@@ -543,7 +569,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         let upd_s = crate::memory::util::parse_utc_secs(&dctx.updated_at);
         let age_days = (now_s.saturating_sub(upd_s)) as f64 / 86_400.0;
         let decay = 1.0 / (1.0 + age_days / tau_eff);
-        // O5 quality 排序先验（§4.1）：solved/质量高的 case 提分，regressed 压分。
+        // quality 排序先验：solved/质量高的 case 提分，regressed 压分。
         let qsign = if &*dctx.status == "regressed" {
             -1.0
         } else {
@@ -578,7 +604,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
         });
     }
 
-    // P2.5 MMR：得分排序后按多样性去冗余（λ 从 meta 读）。
+    // MMR：得分排序后按多样性去冗余（λ 从 meta 读）。
     let mut order = order_by_score(&hits);
     // 同事故兄弟 case 往往共享完整根因段，词面高度重合。首轮用整篇词表做
     // Jaccard 聚类，把 top1 的同族 case 收紧到 top1 之后：同一事故的兄弟
@@ -703,6 +729,10 @@ mod tests {
         }
     }
 
+    fn recall_test(root: &str, query: &str, k: usize) -> std::io::Result<Vec<RecallHit>> {
+        recall(root, query, k, &store::load_meta(root)?)
+    }
+
     #[test]
     fn query_field_strength_gates_low_confidence_by_script() {
         // 英文低置信 literal 不触发 title 重排（confirm2 case 136 回归）。
@@ -806,12 +836,63 @@ mod tests {
             vec![],
         )
         .unwrap();
-        let hits = recall(&root, "数据库连接超时 conn_id", 3).unwrap();
+        let hits = recall_test(&root, "数据库连接超时 conn_id", 3).unwrap();
         assert!(!hits.is_empty(), "同 query 应召回原 case");
         assert!(
             hits[0].sim > L1_SIM,
             "同 query 置信应过 L1 阈值：sim={}",
             hits[0].sim
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn read_only_recall_does_not_repair_the_index_cache() {
+        let root = tmp_root("ro");
+        ingest(
+            &root,
+            "db timeout conn_id",
+            vec!["conn_id".into()],
+            "ERROR db timeout conn_id=9f2a",
+            vec![],
+            &stats(),
+            vec![],
+        )
+        .unwrap();
+        crate::memory::meta::set_param(&root, "index_force", 1.0).unwrap();
+        let meta = store::load_meta(&root).unwrap();
+        let postings = index::postings_path(&root);
+
+        let hits = recall_read_only(&root, "db timeout conn_id", 3, &meta).unwrap();
+        assert!(!hits.is_empty());
+        assert!(
+            !postings.exists(),
+            "read-only recall must fall back to linear scan without writing an index"
+        );
+
+        assert!(!recall(&root, "db timeout conn_id", 3, &meta)
+            .unwrap()
+            .is_empty());
+        assert!(
+            postings.exists(),
+            "normal recall may build the disposable cache"
+        );
+
+        fs::write(&postings, b"corrupt").unwrap();
+        let hits = recall_read_only(&root, "db timeout conn_id", 3, &meta).unwrap();
+        assert!(!hits.is_empty());
+        assert_eq!(
+            fs::read(&postings).unwrap(),
+            b"corrupt",
+            "read-only recall must not overwrite a corrupt index"
+        );
+
+        assert!(!recall(&root, "db timeout conn_id", 3, &meta)
+            .unwrap()
+            .is_empty());
+        assert!(
+            index::load(&root).unwrap().is_some(),
+            "normal recall may repair the corrupt cache"
         );
         let _ = fs::remove_dir_all(&root);
     }
@@ -842,7 +923,7 @@ mod tests {
         )
         .unwrap();
         // 字段变体 query：含同 error_code，词面与 A 不同
-        let hits = recall(&root, "conn_id=9f2a 又超时了", 2).unwrap();
+        let hits = recall_test(&root, "conn_id=9f2a 又超时了", 2).unwrap();
         assert!(!hits.is_empty());
         let top = &hits[0];
         let top_case = store::read_case(&root, &top.id).unwrap();
@@ -892,7 +973,7 @@ mod tests {
         c.updated_at = older;
         store::write_case(&root, &c).unwrap();
 
-        let hits = recall(&root, "数据库连接超时", 2).unwrap();
+        let hits = recall_test(&root, "数据库连接超时", 2).unwrap();
         assert_eq!(hits.len(), 2);
         let fresh_id = ids.iter().find(|i| **i != ids[0]).unwrap();
         assert_eq!(
@@ -925,8 +1006,9 @@ mod tests {
             &store::read_case(&root, &ids[0]).unwrap().updated_at,
         );
         let query = "数据库连接超时 conn_id";
-        let at_update = recall_at(&root, query, 2, base).unwrap();
-        let one_day_later = recall_at(&root, query, 2, base + 86_400).unwrap();
+        let meta = store::load_meta(&root).unwrap();
+        let at_update = recall_at(&root, query, 2, base, &meta).unwrap();
+        let one_day_later = recall_at(&root, query, 2, base + 86_400, &meta).unwrap();
         assert_eq!(at_update[0].id, one_day_later[0].id);
         assert!(
             at_update[0].score > one_day_later[0].score,
@@ -963,17 +1045,17 @@ mod tests {
         )
         .unwrap();
         // db query 只能召到 A（B 被桶过滤）。
-        let hits = recall(&root, "数据库超时 conn_id", 5).unwrap();
+        let hits = recall_test(&root, "数据库超时 conn_id", 5).unwrap();
         let top_case = store::read_case(&root, &hits[0].id).unwrap();
         assert_eq!(top_case.bucket, "db", "桶过滤后 top 必须是 db 桶");
         assert_eq!(hits.len(), 1, "build 桶 case 不应参与打分");
         // 无家族命中的 query：候选桶空 → 全量扫（防漏召）。
-        let all = recall(&root, "hello", 5).unwrap();
+        let all = recall_test(&root, "hello", 5).unwrap();
         assert_eq!(all.len(), 1, "零词面支持的 case 不得以 0 分进入结果");
         let hello_case = store::read_case(&root, &all[0].id).unwrap();
         assert_eq!(hello_case.bucket, "build");
         assert!(
-            recall(&root, "zzz-no-match", 5).unwrap().is_empty(),
+            recall_test(&root, "zzz-no-match", 5).unwrap().is_empty(),
             "无任何支持度的 query 必须返回空结果，而不是按库顺序兜底"
         );
         let _ = fs::remove_dir_all(&root);
@@ -1009,7 +1091,7 @@ mod tests {
             )
             .unwrap();
             crate::memory::meta::set_param(&root, "index_force", force_index).unwrap();
-            let hits = recall(&root, "oversized file propagated network outage", 5).unwrap();
+            let hits = recall_test(&root, "oversized file propagated network outage", 5).unwrap();
             assert!(
                 hits.iter().any(|h| h.id == target),
                 "跨域 case 的多标签桶必须与 network 候选桶相交 (index_force={force_index})"
@@ -1048,7 +1130,7 @@ mod tests {
             )
             .unwrap();
             crate::memory::meta::set_param(&root, "index_force", force_index).unwrap();
-            let hits = recall(
+            let hits = recall_test(
                 &root,
                 "JVM upgrade changed Docker defaults and thread connection pools",
                 5,

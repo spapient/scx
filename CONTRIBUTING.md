@@ -17,23 +17,25 @@
 
 ```bash
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
-cargo fmt --check
+cargo fmt -- --check
 cargo clippy --locked --all-targets -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo test --locked
 cargo build --release --locked
+./bin/scx-eval selftest
 ```
 
 Windows PowerShell：
 
 ```powershell
 $env:CARGO_TARGET_DIR = "$env:TEMP\scx-cargo-target"
-cargo fmt --check
+cargo fmt -- --check
 cargo clippy --locked --all-targets -- -D warnings
 $env:RUSTDOCFLAGS = "-D warnings"
 cargo doc --locked --no-deps
 cargo test --locked
 cargo build --release --locked
+python bin/scx-eval selftest
 ```
 
 PR 描述中请粘贴实际执行的命令与结果；未执行的检查不要写成已通过。

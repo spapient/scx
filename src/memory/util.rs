@@ -44,7 +44,7 @@ pub(crate) fn utc_now() -> String {
     format!("{y:04}-{mo:02}-{d:02}T{hh:02}:{mi:02}:{ss:02}Z")
 }
 
-/// P4.4+ 优化⑫（P1-4）：入库前模式脱敏——token/密码/连接串/Bearer 等敏感值
+/// 入库前模式脱敏：token/密码/连接串/Bearer 等敏感值
 /// 在落盘前替换为 `<redacted>`。幂等（脱敏结果不再含可脱敏模式）、确定性、
 /// 不破坏行号与结构（键名保留、仅值替换）。朴素字节扫描（零依赖）。
 pub(crate) fn sanitize(s: &str) -> String {
@@ -244,7 +244,7 @@ fn match_bearer_value(b: &[u8], i: usize) -> Option<usize> {
     None
 }
 
-/// P4.4+ 优化⑫（P1-4）：终端输出安全转义——C0 控制字符与 ESC/ANSI 序列
+/// 终端输出安全转义：C0 控制字符与 ESC/ANSI 序列
 /// 转成可见字面（`\x1b`、`\xNN`），防 --recall-detail 回放证据时的转义注入。
 pub fn escape_ctrl(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -412,7 +412,7 @@ mod tests {
         assert_eq!(parse_utc_secs("2024-13-01T00:00:00Z"), 0);
     }
 
-    /// P4.4+ 优化⑫（P1-4）：脱敏覆盖全部模式 + 幂等 + 不误伤明文。
+    /// 脱敏覆盖全部模式、幂等且不误伤明文。
     #[test]
     fn sanitize_redacts_secrets_and_is_idempotent() {
         let cases: &[(&str, &str)] = &[
@@ -446,7 +446,7 @@ mod tests {
         assert!(nested.contains("Authorization:"));
     }
 
-    /// P4.4+ 优化⑫（P1-4）：控制字符/ANSI 转义可见化。
+    /// 控制字符与 ANSI 序列必须可见化。
     #[test]
     fn escape_ctrl_renders_controls_visibly() {
         assert_eq!(escape_ctrl("a\x1b[31mb"), "a\\x1b[31mb");
