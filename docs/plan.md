@@ -340,13 +340,14 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   参数 `-y @spapient/scx mcp`（三行）；管理页「连接器」显示 scx 且开关开启。
   豆包支持任意可执行命令（无千问那种 npx-only 限制）。**待办**：豆包内实际调用
   compress_context 的端到端验证（GUI 自动点击曾被 computer-use 服务故障中断）。
-- **千问办公（QwenWorkCN）✅ 已注册成功（2026-10-26 手动配置）**：`LOCAL_IDENTITY_PHASE_RESTRICTED`
-  仅拦截 **JSON 导入**，**手动填写表单可用**（用户主张正确）。两个关键坑：① 千问命令字段保存时
-  只保留第一个 token（`npx -y @spapient/scx mcp` 会存成 `command:"npx"`）→ 命令必须是单 token；
-  ② 本机无系统级 node/npx，千问 App PATH 找不到 npx → `process_not_found`。解法：本机已有
-  `/opt/homebrew/bin/scx`（brew 0.6.1），创建单 token 包装脚本 `/opt/homebrew/bin/scx-mcp`
-  （`exec /opt/homebrew/bin/scx mcp "$@"`），命令填该路径。保存后开关置 1、
-  `IDENTITY_CONNECTOR_CONNECTION_FAILED` 消失。**待办**：千问对话中端到端调用 compress_context。
+- **千问办公（QwenWorkCN）✅ 已注册成功（终版方案，2026-10-26）**：`LOCAL_IDENTITY_PHASE_RESTRICTED`
+  仅拦截 **JSON 导入**，**手动填写表单可用**（用户主张正确）。**最终配置：命令 `/opt/homebrew/bin/scx mcp`
+  （带显式 `mcp` 子命令参数）、环境变量留空**。三个关键坑：① `npx -y @spapient/scx mcp` 类命令保存时
+  只保留第一个 token（存成 `command:"npx"`），但绝对路径+参数（`/opt/homebrew/bin/scx mcp`）可完整保存；
+  ② 本机无系统级 node/npx，千问 PATH 找不到 npx → 旧 npx 配置 `process_not_found`；
+  ③ **千问 STDIO 不传环境变量给子进程**——`SCX_MCP=1` 在 JSON 预览正确生成但 spawn 时丢失，
+  scx 无参数启动打印 usage 退出（`code=unknown`、`Registered 0 tools`，main.log 实锤）。
+  0.6.2 保留 `SCX_MCP=1` env 开关（供支持 env 的客户端），千问侧不可用。**待办**：千问对话端到端调用。
 - **Codex / Claude Code / Cursor / Qwen Code**：`scx setup` 全自动注册 + 握手自检，
   三端实测通过（含 MCP 端到端调用）。
 
