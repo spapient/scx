@@ -8,7 +8,7 @@ mod input;
 use args::{parse_args, Opts};
 use input::{read_fix_file, read_input};
 use scx::memory::{recall_cases, Case, CaseStats, EvalMode, RecallHit, StoreInput};
-use scx::{compress, Outcome};
+use scx::{compress, Mode, Outcome};
 use std::io::{self, Write};
 use std::sync::mpsc;
 
@@ -394,7 +394,7 @@ fn prepare_store(opts: &Opts, input: &str, outcome: &Outcome) -> CliResult<Optio
 pass --fix \"...\" after a verified fix (HARD discipline)"
         );
     }
-    if outcome.mode.starts_with("failopen") {
+    if matches!(outcome.mode, Mode::FailOpenZeroSignal) {
         eprintln!(
             "scx: note: query had no hits; --store will persist the full input \
 (low-signal memory). inspect with --recall-only first"

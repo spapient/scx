@@ -10,6 +10,11 @@
 //! 模块划分：`terms` 负责词面与估算，`analysis` 负责归一化与结构分类，
 //! `compress` 是算法主体。三者均为纯函数层；本文件只保留公共类型、模块声明和
 //! 跨模块行为测试。
+//!
+//! 压缩模式与风险等级以 `Mode` / `Risk` 枚举表达（`Display` 输出保持 v0.4.1
+//! 字符串格式：`passthrough:small` / `failopen:zero-signal` / `LOW` / `HIGH` 等）。
+
+use std::fmt;
 mod analysis;
 mod compress;
 mod policy;
@@ -59,6 +64,65 @@ impl Default for Config {
     }
 }
 
+/// 压缩模式。`as_str` / `Display` 输出与 v0.4.1 统计行字符串逐字一致。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// 小输入直通（< `policy::SMALL_LINES` 行且 token 估算 < `policy::SMALL_TOK`）。
+    PassSmall,
+    /// 超长行直通（单行字节与字符均超过 `policy::LONGLINE_*`）。
+    PassLongline,
+    /// 无查询信号 fail-open（零命中且无 `--force` 命中），返回输入原文。
+    FailOpenZeroSignal,
+    /// 预算过紧未选出任何行，回退原文。
+    PassNoKept,
+    /// 正常筛选（sieve）。
+    Sieve,
+}
+
+impl Mode {
+    /// v0.4.1 统计行字符串（向后兼容；新增变体须保持冒号分段格式）。
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Mode::PassSmall => "passthrough:small",
+            Mode::PassLongline => "passthrough:longline",
+            Mode::FailOpenZeroSignal => "failopen:zero-signal",
+            Mode::PassNoKept => "passthrough:no-kept",
+            Mode::Sieve => "sieve",
+        }
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// 压缩风险等级（风险审计输出）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Risk {
+    Low,
+    Medium,
+    High,
+}
+
+impl Risk {
+    /// v0.4.1 统计行字符串（`LOW` / `MED` / `HIGH`）。
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Risk::Low => "LOW",
+            Risk::Medium => "MED",
+            Risk::High => "HIGH",
+        }
+    }
+}
+
+impl fmt::Display for Risk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// 压缩结果与统计。`seeds == evidence` 恒成立（结构性不变量，可断言）。
 pub struct Outcome {
     /// 压缩后的文本；passthrough / fail-open 时为输入原文。
@@ -75,13 +139,13 @@ pub struct Outcome {
     pub dup: usize,
     pub seeds: usize,
     pub evidence: usize,
-    pub risk: &'static str,
+    pub risk: Risk,
     pub guarded: u8,
     pub regions: usize,
     pub window: i64,
     pub terms: usize,
     pub forced: usize,
-    pub mode: &'static str,
+    pub mode: Mode,
 }
 
 // 零分配 u64→十进制行号写入（`N: ` 前缀，grep -n 风格；供 --lineno 使用）。
@@ -140,7 +204,7 @@ mod tests {
         lines[150] = "at Pool.java:214".to_string();
         let text = lines.join("\n");
         let o = compress(&text, "db timeout conn_id pool", &cfg());
-        assert!(o.mode.starts_with("sieve"));
+        assert_eq!(o.mode, Mode::Sieve);
         assert_eq!(o.kept_lno.len(), o.kept, "kept_lno 数量必须等于 kept");
         assert!(!o.kept_lno.is_empty(), "筛选模式必须给出证据行号");
         for w in o.kept_lno.windows(2) {
@@ -176,7 +240,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let o = compress(&text, "绝对不存在的词zz", &cfg());
-        assert_eq!(o.mode, "failopen:zero-signal");
+        assert_eq!(o.mode, Mode::FailOpenZeroSignal);
         assert_eq!(o.text, text);
     }
 
@@ -219,7 +283,7 @@ mod tests {
             ..Config::default()
         };
         let o = compress(&text, q, &needle);
-        assert_eq!(o.risk, "HIGH");
+        assert_eq!(o.risk, Risk::High);
         assert_eq!(o.guarded, 1);
         assert!(
             o.text.contains("Root cause:"),
@@ -317,13 +381,13 @@ mod tests {
             .collect::<Vec<_>>()
             .join(lf.as_str());
         let o = compress(&small, "line", &cfg());
-        assert_eq!(o.mode, "passthrough:small");
+        assert_eq!(o.mode, Mode::PassSmall);
         assert_eq!(o.text, small);
         let mut lines = vec!["x".repeat(150000)];
         lines.extend((0..60).map(|i| format!("filler error kvwrite line {}", i)));
         let text = lines.join(lf.as_str());
         let o2 = compress(&text, "kvwrite", &cfg());
-        assert_eq!(o2.mode, "passthrough:longline");
+        assert_eq!(o2.mode, Mode::PassLongline);
         assert_eq!(o2.text, text);
     }
 
@@ -393,7 +457,7 @@ mod tests {
             ..Config::default()
         };
         let o = compress(&text, "alpha", &needle);
-        assert_eq!(o.mode, "passthrough:no-kept");
+        assert_eq!(o.mode, Mode::PassNoKept);
         assert_eq!(o.text, text);
         assert_eq!(o.kept, o.total);
         assert_eq!(o.chars_out, o.chars_in);
@@ -430,7 +494,7 @@ mod tests {
         let line = format!("alpha {}", "x".repeat(5000));
         let text: String = (0..39).map(|_| line.clone()).collect::<Vec<_>>().join("\n");
         let o = compress(&text, "alpha", &cfg());
-        assert_ne!(o.mode, "passthrough:small");
+        assert_ne!(o.mode, Mode::PassSmall);
         assert!(o.seeds == 0);
     }
 
@@ -477,7 +541,7 @@ mod tests {
             .collect();
         let text = lines.join("\r\n");
         let o = compress(&text, "zzzznomatch", &cfg());
-        assert_eq!(o.mode, "failopen:zero-signal");
+        assert_eq!(o.mode, Mode::FailOpenZeroSignal);
         assert_eq!(o.text, text);
         assert_eq!(o.chars_in, text.chars().count());
     }
@@ -514,7 +578,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let o2 = compress(&s, "line", &small);
-        assert_eq!(o2.mode, "passthrough:small");
+        assert_eq!(o2.mode, Mode::PassSmall);
         assert_eq!(o2.text, s);
         assert!(!o2.text.contains("1: line 0"), "passthrough 不附加行号");
     }

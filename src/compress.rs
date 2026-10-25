@@ -12,7 +12,7 @@ use crate::analysis::{
 use crate::analysis::{norm_into, push_analysis_lower};
 use crate::policy::{RiskTable, ScoreTable, DEFAULT_RISK, DEFAULT_SCORES};
 use crate::terms::{build_terms, token_est};
-use crate::{push_lineno, Config, Outcome};
+use crate::{push_lineno, Config, Mode, Outcome, Risk};
 use std::collections::HashMap;
 
 /// 字符数用于报告与压缩比；日志常见纯 ASCII，可跳过逐字符迭代。
@@ -464,7 +464,7 @@ fn fill_budget(
 }
 
 /// 风险审计：统计被丢弃的失败级错误行与命中行，按 `keep_count` 归一化得出 risk_raw。
-fn audit_risk(keep: &[bool], err: &[bool], hits: &[usize], tbl: &RiskTable) -> &'static str {
+fn audit_risk(keep: &[bool], err: &[bool], hits: &[usize], tbl: &RiskTable) -> Risk {
     let mut err_dropped = 0usize;
     let mut hit_dropped = 0usize;
     let keep_count = keep.iter().filter(|&&k| k).count();
@@ -481,11 +481,11 @@ fn audit_risk(keep: &[bool], err: &[bool], hits: &[usize], tbl: &RiskTable) -> &
     }
     let risk_raw = (err_dropped + hit_dropped * tbl.hit_drop_w) as f64 / keep_count.max(1) as f64;
     if risk_raw >= tbl.high {
-        "HIGH"
+        Risk::High
     } else if risk_raw >= tbl.med {
-        "MED"
+        Risk::Medium
     } else {
-        "LOW"
+        Risk::Low
     }
 }
 
@@ -577,11 +577,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
               cut: f64,
               dup: usize,
               seeds: usize,
-              risk: &'static str,
+              risk: Risk,
               guarded: u8,
               regions: usize,
               kept_lno: Vec<usize>,
-              mode: &'static str|
+              mode: Mode|
      -> Outcome {
         Outcome {
             text: text_owned,
@@ -612,11 +612,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             0.0,
             0,
             0,
-            "LOW",
+            Risk::Low,
             0,
             0,
             Vec::new(),
-            "passthrough:small",
+            Mode::PassSmall,
         );
     }
     // 100k 字符的行必然至少 100k 字节；先做 O(1) 字节检查，只有超长行才
@@ -632,11 +632,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             0.0,
             0,
             0,
-            "LOW",
+            Risk::Low,
             0,
             0,
             Vec::new(),
-            "passthrough:longline",
+            Mode::PassLongline,
         );
     }
 
@@ -664,11 +664,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             0.0,
             dup_n,
             seeds_total,
-            "LOW",
+            Risk::Low,
             0,
             0,
             Vec::new(),
-            "failopen:zero-signal",
+            Mode::FailOpenZeroSignal,
         );
     }
 
@@ -704,7 +704,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
 
     let risk = audit_risk(&keep, &masks.err_v, &seeds.hits, &DEFAULT_RISK);
     let mut guarded = 0u8;
-    if risk == "HIGH" && cfg.risk_gate {
+    if risk == Risk::High && cfg.risk_gate {
         guarded = guard_high(&mut keep, &mut keep_count, &dup, &masks.guard_v, &masks.marker_v);
     }
 
@@ -721,7 +721,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             0,
             regions.count,
             Vec::new(),
-            "passthrough:no-kept",
+            Mode::PassNoKept,
         );
     }
 
@@ -747,6 +747,6 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         guarded,
         regions.count,
         kept_lno,
-        "sieve",
+        Mode::Sieve,
     )
 }
