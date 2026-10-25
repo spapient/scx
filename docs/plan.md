@@ -199,11 +199,31 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   时覆盖，修复了 None 冲掉文件设置的缺陷）；非法键/节/类型/范围报错含行号；
   不传时零影响（golden 37 零漂移）。
 
-### 遗留 / 待 P4（P3 新增 + P1/P2 结转）
+### 收尾 commit 链（接 P3 链之后，2026-10-25）
+
+| commit | 说明 |
+|---|---|
+| `a294630` | fix(json): derive Clone for shared Json — restore `--features mcp` compile（用户验收修复） |
+| `5b32a88` | feat(help): multi-line usage() covering P2/P3 flags（收尾 1/6） |
+| （README/SKILL/版本） | docs(readme): P1–P3 全面同步 + chore(version): 0.4.1 → 0.5.0（收尾 2–6，见交付报告） |
+
+### 修复与收尾记录（a294630 之后）
+
+- **`a294630`（用户验收修复）**：`src/json.rs` 派生 `Clone`——P3 交付时默认 +
+  semantic 双轨门禁全绿，但 mcp 轨编译未纳入每轮门禁，`--features mcp` 下
+  `Json` 缺少 `Clone` 导致编译回归；已由用户修复并提交。**教训：此后门禁
+  一律「默认 + semantic + mcp」三轨**（clippy 与 test 均三轨）。
+- **收尾 commit 链**（见下「收尾记录」）：`--help` 补齐 P2/P3 参数说明；
+  README/SKILL 全面更新至 0.5.0；版本 bump `0.4.1 → 0.5.0`（4 个用户可见
+  特性 + 2 个可选 feature + contain5 评测协议）；`docs/memory.md` 版本引用同步。
+- 遗留项 2（`--help` 缺失）已在本轮解决：usage() 现覆盖 `--max-tokens N` /
+  `--structure 0|1` / `--policy-file <path>` / `--force SUBSTR|re:PATTERN`，
+  `--semantic`（cfg-gated）仅 feature=semantic 构建时显示；帮助文本未纳入
+  golden 基线（无 golden 例覆盖 help 输出），无需重冻。
+
+### 遗留 / 待 P4（收尾后现状）
 
 1. P4「记忆库协议演进」：多进程写实测、L1 直答评测协议、与压缩内核解耦收尾。
-2. `--help/usage()` 未加 `[--max-tokens N]` / `[--structure 1]`（保 golden
-   字节取舍，文档待补；`--semantic` 属 cfg-gated 亦需注意）。
-3. `bin/scx-eval contain` 的 token 压减为确定性正则估算，非真实 LLM tokenizer。
-4. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审）。
-5. 既有 `memory/*` 函数圈复杂度 > 10 未拆（用户既有代码，P4 统一处理）。
+2. `bin/scx-eval contain` 的 token 压减为确定性正则估算，非真实 LLM tokenizer。
+3. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审）。
+4. 既有 `memory/*` 函数圈复杂度 > 10 未拆（用户既有代码，P4 统一处理）。
