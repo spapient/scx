@@ -5,7 +5,7 @@
 //! - [`Op`]：所有 CLI 一等操作的类型化表示（压缩 / 记忆库 / 评估 …）。
 //! - [`from_opts`]：`args::Opts` → `Op` 的映射（优先级与原 `main::run` 分派顺序一致）。
 //! - [`run`]：执行一个 `Op` 并渲染输出；不直接终止进程，失败收敛到 [`Failure`]。
-//! - [`render_stats`] / [`render_json`]：纯渲染函数（无 I/O），`render_json` 返回
+//! - `render_stats` / [`render_json`]：纯渲染函数（无 I/O），`render_json` 返回
 //!   无前缀纯 JSON，可被 MCP 等集成层直接复用；CLI 输出前缀由调用方拼接。
 //!
 //! 设计约束：本层只依赖 `crate::compress` / `crate::memory` 与 `args::Opts`，

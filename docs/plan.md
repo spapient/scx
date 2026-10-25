@@ -1,4 +1,4 @@
-# scx 架构优化路线图与 P1 交付记录
+# scx 架构优化路线图与阶段交付记录（P1–P2）
 
 > 本文档记录整体架构优化方案的阶段化落地状态（P1–P4）与每阶段的完成证据。
 > 方案正文为消息交付（不落盘）；本文档只维护可执行的路线与状态。
@@ -9,7 +9,7 @@
 | 阶段 | 主题 | 内容 | 状态 |
 |---|---|---|---|
 | P1 | 内核重构 + 评测协议 | compress 阶段拆分、Outcome 枚举化、args 声明式、conf 提取、--max-tokens、Containment 协议与基准资产 | ✅ 完成（见下） |
-| P2 | 结构感知与 MCP 集成层 | fence/import/at 链邻域、bin/scx-mcp（可选层，不破坏纯内核）、conf 策略文件接线 | 未开始 |
+| P2 | 结构感知与 MCP 集成层 | fence/import/at 链邻域、bin/scx-mcp（可选层，不破坏纯内核）、conf 策略文件接线 | ✅ 完成（见下） |
 | P3 | 配置化驱动深化 | policy 表文件化（--policy-file，conf::parse 消费）、语义增强 feature-gate 可选路径 | 未开始 |
 | P4 | 记忆库协议演进 | 多进程写实测、L1 直答评测协议、与压缩内核解耦收尾 | 未开始 |
 
@@ -90,3 +90,55 @@ golden **2 passed / 1 ignored（32 用例）** / doc 0；全部 `cargo test --lo
 4. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审）。
 5. `bin/scx-eval` 的 `contain` 输出 token 压减为确定性正则估算，非真实
    LLM tokenizer（文档已标注）。
+
+## P2 交付状态（2026-10-25）
+
+| 子项 | 状态 | 门禁结果 | 改动文件 | 新增测试 |
+|---|---|---|---|---|
+| 2.1 scx::ops 编排层 | ✅ | 全绿（golden 32 例零漂移） | `src/ops.rs`（新）、`src/main.rs`（薄壳）、`src/lib.rs`、`src/args.rs`、`src/input.rs` | lib +14（原 main 单体测试移入） |
+| 2.2 结构感知邻域 | ✅ | 全绿（golden 35 例零漂移） | `src/analysis.rs`、`src/compress.rs`、`src/policy.rs`（RegionCfg 数据表）、`src/lib.rs`（Config.structure）、`src/args.rs`（--structure）、`tests/golden.rs` + 3 基线 | +7 单测 +3 golden 例 |
+| 2.3 统计/JSON 升级 | ✅ | 全绿（golden 37 例零漂移） | `src/lib.rs`（Dropped/DropReason）、`src/compress.rs`（drop_runs）、`src/ops.rs`（render_json dropped）、`tests/golden.rs` + 2 基线 | +4 单测 +2 golden 例 |
+| 2.4 MCP 雏形 | ✅ | 全绿（feature 开/关双轨） | `Cargo.toml`（feature=mcp + bin）、`src/mcp.rs`（新）、`src/bin/scx-mcp.rs`（新）、`bin/setup`、`bin/doctor`、`tests/mcp_smoke.rs` | +1 集成（stdio 往返） |
+| 2.5 锁序契约 | ✅ | 全绿（golden 37 例零漂移） | `src/memory/lock.rs`（acquire_all）、`src/memory/meta.rs`、`src/memory/store.rs`（*_locked 变体）、`src/memory/maintenance.rs`（delete_case 重构）、`docs/locking.md`（新）、`tests/memory_concurrency.rs`（新） | +2 单测 +1 集成（多进程压力） |
+
+测试计数基线 → P2 末：lib **192** / integration **13** / cli **11** / contain **4** /
+golden **2 passed / 1 ignored（37 用例）** / mcp **1** / concurrency **1** / doc 0；
+`cargo test --locked --features mcp` 亦全绿（含 mcp 冒烟 + golden 37 零漂移）。
+
+### commit 链（P2，全部独立可回滚，接 P1 链之后）
+
+| commit | 说明 |
+|---|---|
+| `deb8dea` | refactor(ops): extract scx::ops orchestration layer（2.1） |
+| `12b231e` | feat(compress): structural-aware neighborhood（2.2） |
+| `9e47151` | feat(outcome): per-run drop ledger — Outcome.dropped + DropReason（2.3） |
+| `93027c4` | feat(mcp): stdio MCP server under cargo feature=mcp（2.4） |
+| `92e3ad7` | feat(memory): lock-order contract — acquire_all + multi-process stress（2.5） |
+
+### 关键语义（--structure / dropped，与方案偏差以代码为准）
+
+- `--structure 1` 默认关：`Config.structure=false` 时 `expand_regions` 走原路径，
+  与 v0.4.1 逐字节一致；结构并入是**叠加**非替代（基础种子邻域先行，含种子的
+  fence/import/stack 区域整段并入）；超长区域按 `REGION_DEFAULT.max_span=200`
+  裁剪为种子 ± 半窗，裁剪行为 Budget 候选。结构判定：`is_import_line` 排除
+  `use strict`/`use of`；堆栈帧要求前导空白缩进；fence 内行屏蔽 import/stack 判定。
+- `Outcome.dropped`：1-based 闭区间 + `DropReason{budget,max-tokens}`；
+  仅在 `--json` 输出（默认 stdout 统计行不含，golden 零漂移）；overflow 路径
+  记 `max-tokens`，其余删除（含结构裁剪）记 `budget`；passthrough/fail-open 为空。
+- MCP：`cargo build --release --features mcp` 产出 `target/release/scx-mcp`
+  （stdio，零第三方 crate）；tools = compress_context / connect_account /
+  usage_summary；只调 `compress::compress` + `ops::render_json`，不触 CLI 渲染。
+- 锁序契约（docs/locking.md）：`cases/{id} → index → meta → qmap →
+  fingerprints`；多锁唯一入口 `acquire_all`；持 meta 后写 meta 用 `*_locked` 变体。
+
+### 遗留 / 待 P3（P2 新增 + P1 结转）
+
+1. P3「配置化驱动深化」：policy 表文件化（`--policy-file`）、语义增强
+   feature-gate 可选路径（默认路径承诺逐字节不变）——架构方案 §2.5/§3.4。
+2. `--help/usage()` 未加 `[--max-tokens N]` / `[--structure 1]`（保 golden
+   字节的取舍，文档待补，P3 随 usage 重构处理）。
+3. `bin/scx-eval contain` 的 token 压减为确定性正则估算，非真实 LLM
+   tokenizer（P1 结转，已标注）。
+4. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审，
+   P1 结转）。
+5. 既有 `memory/*` 函数圈复杂度 > 10 未拆（用户既有代码，P4 统一处理）。

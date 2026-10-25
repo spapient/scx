@@ -60,7 +60,7 @@ pub struct Opts {
     /// `--annotate-raw` 输出未经自检筛选的全变体集，附目标摘要供人工盲判；
     /// 与 `--annotate` 互斥。
     pub annotate_raw: bool,
-    /// --annotate-out <path>：标注集输出路径（缺省 `<mem-dir>/baseline-auto.json`）。
+    /// --annotate-out `path`：标注集输出路径（缺省 ``mem-dir`/baseline-auto.json`）。
     pub annotate_out: Option<String>,
     /// --seed N：标注生成确定性种子（缺省 0，同 seed 可重放）。
     pub seed: u64,
@@ -69,7 +69,7 @@ pub struct Opts {
     pub annotate_max: usize,
     /// `--judge` 逐条读取 2/1/0/s，把 `judge:null` 替换为完整裁决元数据。
     pub judge: Option<String>,
-    /// --judge-by <name>：裁决人标识（缺省取 USERNAME）。
+    /// --judge-by `name`：裁决人标识（缺省取 USERNAME）。
     pub judge_by: Option<String>,
     /// 记忆库总容量软配额（字节）；写入前超限则拒绝。
     pub max_bytes: Option<u64>,
