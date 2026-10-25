@@ -20,7 +20,12 @@ pub(crate) use crate::memory::meta::{ensure_root, load_meta, Meta};
 pub(crate) use crate::memory::util::fnv1a;
 pub(crate) use crate::memory::util::{case_id, fnv1a_parts, utc_now};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+/// `case.json` 读取上限：正文 1 MiB 加上证据副本与最坏 JSON 转义后仍有余量，
+/// 同时把损坏/恶意文件的读取内存封顶，避免无界 `read_to_string`。
+pub(crate) const MAX_CASE_JSON: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Fields {
@@ -36,6 +41,17 @@ pub struct CaseStats {
     pub total: usize,
     pub cut_pct: f64,
     pub risk: String,
+}
+
+/// 测试夹具：与生产无关的固定统计形状；集中一处避免各模块复制。
+#[cfg(test)]
+pub(crate) fn sample_stats() -> CaseStats {
+    CaseStats {
+        kept: 5,
+        total: 100,
+        cut_pct: 95.0,
+        risk: "HIGH".to_string(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,10 +86,18 @@ pub struct Case {
 impl Case {
     pub fn new(id: String, query: String, terms: Vec<String>, text: String) -> Case {
         let now = utc_now();
+        let mut c = Self::empty(id, query, terms, text);
+        c.created_at = now.clone();
+        c.updated_at = now;
+        c
+    }
+
+    /// 反序列化专用空壳：不读取时钟，时间字段由 `case.json` 覆盖。
+    fn empty(id: String, query: String, terms: Vec<String>, text: String) -> Case {
         Case {
             id,
-            created_at: now.clone(),
-            updated_at: now,
+            created_at: String::new(),
+            updated_at: String::new(),
             query,
             terms,
             text,
@@ -232,40 +256,40 @@ fn as_str_arr(v: &Val) -> Vec<String> {
 /// 从 Val 反解 Case（未知/缺失键容错为默认值；schema 版本不符仍尽力读取）。
 pub(crate) fn val_to_case(v: &Val) -> Case {
     let obj = match v {
-        Val::Obj(o) => o.clone(),
+        Val::Obj(o) => o,
         _ => return Case::new("bad".into(), String::new(), Vec::new(), String::new()),
     };
-    let id = get(&obj, "id").map(as_str).unwrap_or_default();
-    let query = get(&obj, "query").map(as_str).unwrap_or_default();
-    let terms = get(&obj, "terms").map(as_str_arr).unwrap_or_default();
-    let text = get(&obj, "text").map(as_str).unwrap_or_default();
-    let mut c = Case::new(id, query, terms, text);
-    c.created_at = get(&obj, "created_at").map(as_str).unwrap_or_default();
-    c.updated_at = get(&obj, "updated_at").map(as_str).unwrap_or_default();
-    c.fp = get(&obj, "fp").map(as_str).unwrap_or_default();
+    let id = get(obj, "id").map(as_str).unwrap_or_default();
+    let query = get(obj, "query").map(as_str).unwrap_or_default();
+    let terms = get(obj, "terms").map(as_str_arr).unwrap_or_default();
+    let text = get(obj, "text").map(as_str).unwrap_or_default();
+    let mut c = Case::empty(id, query, terms, text);
+    c.created_at = get(obj, "created_at").map(as_str).unwrap_or_default();
+    c.updated_at = get(obj, "updated_at").map(as_str).unwrap_or_default();
+    c.fp = get(obj, "fp").map(as_str).unwrap_or_default();
     // fix 与原始证据字段缺键时兼容旧 case。
-    c.fix = get(&obj, "fix").map(as_str).unwrap_or_default();
-    c.evidence_lno = get(&obj, "evidence_lno")
+    c.fix = get(obj, "fix").map(as_str).unwrap_or_default();
+    c.evidence_lno = get(obj, "evidence_lno")
         .map(|v| match v {
             Val::Arr(items) => items.iter().map(|it| as_num(it) as usize).collect(),
             _ => Vec::new(),
         })
         .unwrap_or_default();
-    c.evidence = get(&obj, "evidence").map(as_str_arr).unwrap_or_default();
-    c.source = get(&obj, "source").map(as_str_arr).unwrap_or_default();
-    c.tags = get(&obj, "tags").map(as_str_arr).unwrap_or_default();
-    c.bucket = get(&obj, "bucket").map(as_str).unwrap_or_default();
-    c.status = get(&obj, "status")
+    c.evidence = get(obj, "evidence").map(as_str_arr).unwrap_or_default();
+    c.source = get(obj, "source").map(as_str_arr).unwrap_or_default();
+    c.tags = get(obj, "tags").map(as_str_arr).unwrap_or_default();
+    c.bucket = get(obj, "bucket").map(as_str).unwrap_or_default();
+    c.status = get(obj, "status")
         .map(as_str)
         .unwrap_or_else(|| "open".to_string());
-    c.forces = get(&obj, "forces").map(as_str_arr).unwrap_or_default();
-    if let Some(Val::Obj(f)) = get(&obj, "fields") {
+    c.forces = get(obj, "forces").map(as_str_arr).unwrap_or_default();
+    if let Some(Val::Obj(f)) = get(obj, "fields") {
         c.fields.error_code = get(f, "error_code").map(as_str_arr).unwrap_or_default();
         c.fields.file_loc = get(f, "file_loc").map(as_str_arr).unwrap_or_default();
         c.fields.symbol = get(f, "symbol").map(as_str_arr).unwrap_or_default();
         c.fields.num_fp = get(f, "num_fp").map(as_str_arr).unwrap_or_default();
     }
-    if let Some(Val::Obj(s)) = get(&obj, "stats") {
+    if let Some(Val::Obj(s)) = get(obj, "stats") {
         c.stats.kept = as_num(get(s, "kept").unwrap_or(&Val::Num(0.0))) as usize;
         c.stats.total = as_num(get(s, "total").unwrap_or(&Val::Num(0.0))) as usize;
         c.stats.cut_pct = as_num(get(s, "cut_pct").unwrap_or(&Val::Num(0.0)));
@@ -273,11 +297,11 @@ pub(crate) fn val_to_case(v: &Val) -> Case {
             .map(as_str)
             .unwrap_or_else(|| "LOW".to_string());
     }
-    if let Some(Val::Obj(f)) = get(&obj, "feedback") {
+    if let Some(Val::Obj(f)) = get(obj, "feedback") {
         c.feedback.good = as_num(get(f, "good").unwrap_or(&Val::Num(0.0))) as usize;
         c.feedback.bad = as_num(get(f, "bad").unwrap_or(&Val::Num(0.0))) as usize;
     }
-    c.quality = as_num(get(&obj, "quality").unwrap_or(&Val::Num(0.0)));
+    c.quality = as_num(get(obj, "quality").unwrap_or(&Val::Num(0.0)));
     c
 }
 
@@ -298,6 +322,12 @@ pub(crate) fn lock_case(root: &str, id: &str) -> std::io::Result<crate::memory::
 /// 写一个 case 到库（原子写 case.json）。
 /// 每次写入推进库代际，使 qmap 与会话缓存失效，保证新 case/反馈对同 query 可见。
 pub(crate) fn write_case(root: &str, c: &Case) -> std::io::Result<()> {
+    if !valid_id(&c.id) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid case id: {}", c.id),
+        ));
+    }
     // 索引锁覆盖“写 case → 删旧索引 → bump gen”整个窗口：索引构建要么看到
     // 写前状态并随后被失效，要么看到写后状态；不能在新 gen 下写回旧索引。
     let _idx = crate::memory::index::lock(root)?;
@@ -328,10 +358,40 @@ pub(crate) fn valid_id(id: &str) -> bool {
 
 /// 读一个 case。
 pub(crate) fn read_case(root: &str, id: &str) -> std::io::Result<Case> {
+    if !valid_id(id) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid case id: {id}"),
+        ));
+    }
     let p = case_path(root, id);
-    let txt = fs::read_to_string(p)?;
-    let v = json::parse(&txt).map_err(std::io::Error::other)?;
-    Ok(val_to_case(&v))
+    let mut txt = String::new();
+    fs::File::open(&p)
+        .and_then(|f| f.take(MAX_CASE_JSON + 1).read_to_string(&mut txt))
+        .map_err(|e| std::io::Error::new(e.kind(), format!("read case {}: {e}", p.display())))?;
+    if txt.len() as u64 > MAX_CASE_JSON {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "case {} too large: {} bytes > {MAX_CASE_JSON}",
+                p.display(),
+                txt.len()
+            ),
+        ));
+    }
+    let v = json::parse(&txt).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("parse case {}: {e}", p.display()),
+        )
+    })?;
+    let mut c = val_to_case(&v);
+    // 路径 id 是资产身份的唯一所有者；旧文件缺 id 或内容被篡改时也不能让
+    // 同一份 case 在 qmap/去重索引里冒充另一条记录。
+    if c.id != id {
+        c.id = id.to_string();
+    }
+    Ok(c)
 }
 
 /// 库内全部 case id（按目录列出，确定性排序）。
@@ -342,7 +402,7 @@ pub(crate) fn list_ids(root: &str) -> std::io::Result<Vec<String>> {
         let e = e?;
         if e.file_type()?.is_dir() {
             if let Some(name) = e.file_name().to_str() {
-                if case_path(root, name).exists() {
+                if valid_id(name) && case_path(root, name).exists() {
                     ids.push(name.to_string());
                 }
             }
@@ -469,6 +529,73 @@ mod tests {
         assert!(a.starts_with("2026-10-22_"));
         let c = case_id("2026-10-22T10:30:00Z", "q2", "t");
         assert_ne!(a, c, "query 变体必须产生不同 id");
+    }
+
+    #[test]
+    fn invalid_case_ids_cannot_escape_the_cases_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "scx-mem-id-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let root = root.to_str().unwrap().to_string();
+        ensure_root(&root).unwrap();
+
+        for bad in ["", "..", "../escape", "a/b", "a\\b", "with space"] {
+            assert!(
+                read_case(&root, bad).is_err(),
+                "read_case must reject {bad:?}"
+            );
+            let c = Case::new(bad.to_string(), "q".into(), vec![], "t".into());
+            assert!(
+                write_case(&root, &c).is_err(),
+                "write_case must reject {bad:?}"
+            );
+        }
+        // 外来的非法目录即使含 case.json 也不能进入库枚举。
+        let foreign = Path::new(&root).join("cases").join("with space");
+        fs::create_dir_all(&foreign).unwrap();
+        fs::write(foreign.join("case.json"), b"{}").unwrap();
+        assert!(list_ids(&root).unwrap().is_empty());
+
+        let valid = Case::new("ok_1".into(), "q".into(), vec![], "t".into());
+        write_case(&root, &valid).unwrap();
+        assert_eq!(list_ids(&root).unwrap(), vec!["ok_1"]);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn read_case_uses_the_validated_path_identity() {
+        let root = crate::memory::util::tmp_root("case-id");
+        ensure_root(&root).unwrap();
+        let mut c = Case::new("expected_id".into(), "q".into(), vec![], "t".into());
+        write_case(&root, &c).unwrap();
+
+        c.id = "tampered_id".into();
+        fs::write(
+            case_path(&root, "expected_id"),
+            json::write(&case_to_val(&c)),
+        )
+        .unwrap();
+        assert_eq!(read_case(&root, "expected_id").unwrap().id, "expected_id");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn read_case_rejects_an_oversized_asset() {
+        let root = crate::memory::util::tmp_root("case-size");
+        ensure_root(&root).unwrap();
+        let id = "oversized";
+        let dir = Path::new(&root).join("cases").join(id);
+        fs::create_dir_all(&dir).unwrap();
+        let file = fs::File::create(case_path(&root, id)).unwrap();
+        file.set_len(MAX_CASE_JSON + 1).unwrap();
+        let err = read_case(&root, id).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("too large"), "{err}");
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

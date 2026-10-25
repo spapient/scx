@@ -3,16 +3,16 @@
 //! 与 `compress` 完全隔离：compress 是纯函数（零 I/O），memory 是 I/O 侧模块，
 //! 只做旁路召回与评分先验，绝不注入压缩正文。
 //!
-//! 子模块按职责分为存储（`store`/`meta`/`index`/`lock`）、摄取与反馈、
-//! 召回排序（`recall`/`ranking`/`bucket`/`edge`/`query_cache`）以及评估
-//! （`eval`/`gate`/`annotate`）；具体文件职责见 `docs/memory.md`。
+//! 子模块按职责分为存储（`store`/`meta`/`index`/`lock`）、摄取与分类
+//! （`ingest`/`classify`）、召回排序（`recall`/`ranking`/`edge`/`query_cache`）、
+//! 反馈维护（`feedback`/`maintenance`）以及评估（`eval`/`gate`/`annotate`）；
+//! 具体文件职责见 `docs/memory.md`。
 
 mod annotate;
-mod bucket;
+mod classify;
 mod edge;
 mod eval;
 mod feedback;
-mod field;
 pub(crate) mod gate;
 mod index;
 mod ingest;
@@ -39,7 +39,7 @@ pub struct StoreInput<'a> {
     pub query: &'a str,
     pub text: &'a str,
     pub source: &'a [String],
-    pub stats: &'a store::CaseStats,
+    pub stats: &'a CaseStats,
     pub forces: &'a [String],
     pub fix: &'a str,
     pub evidence_lno: &'a [usize],
@@ -50,7 +50,7 @@ pub struct StoreInput<'a> {
 
 impl<'a> StoreInput<'a> {
     /// 最小输入：仅 query、证据块与统计；其余字段为空。
-    pub fn new(root: &'a str, query: &'a str, text: &'a str, stats: &'a store::CaseStats) -> Self {
+    pub fn new(root: &'a str, query: &'a str, text: &'a str, stats: &'a CaseStats) -> Self {
         Self {
             root,
             query,
@@ -96,7 +96,7 @@ pub fn store_case(input: StoreInput<'_>) -> std::io::Result<(bool, String)> {
 }
 
 /// 门面：读取完整 case，包括可回放的原始证据行。
-pub fn read_case(root: &str, id: &str) -> std::io::Result<store::Case> {
+pub fn read_case(root: &str, id: &str) -> std::io::Result<Case> {
     store::read_case(root, id)
 }
 
@@ -108,10 +108,13 @@ pub fn escape_control(s: &str) -> String {
 /// 门面：按 query 召回 top-k case（会话缓存 → qmap 直达 → BM25+字段加权+衰减+桶过滤）。
 ///
 /// 会话缓存：进程内存可配置窗口（默认 30 分钟），窗口内同 query 直接返回快照；
-/// 快照记录写入时的库代际，store/rate/delete 后自动失效。
+/// 快照记录写入时的库代际，store/rate/delete 后自动失效。快照还带结果条数：
+/// 请求的 `k` 超过快照条数时回退完整召回，避免小 k 查询污染后续大 k 查询。
 /// query 记忆图：recall 成功后把 (query → top-k id/score/sim) 回流写入 qmap.bin
-/// （append-only，带代际），二次同指纹 query 直接命中（跳过 BM25），编辑距离 ≤2
-/// 变体走轻量重排。回流失败静默（旁路原则：记忆图只是加速，不影响召回正确性）。
+/// （append-only，带代际），二次同指纹 query 直接命中（跳过 BM25）。变体 query
+/// 不复用快照：缓存只含 top-k，无法在不重扫全库的前提下保证变体排序正确。
+/// 快照只复用 1 小时，避免时间衰减排序长期停留在旧状态。
+/// 回流失败静默（旁路原则：记忆图只是加速，不影响召回正确性）。
 ///
 /// `read_only`：`--recall-only` 不写 qmap、会话缓存、L1 历史或索引缓存；
 /// 索引缺失/损坏时直接回退线性扫描，保证只读查看零磁盘副作用。
@@ -121,15 +124,18 @@ pub fn recall_cases(
     k: usize,
     read_only: bool,
 ) -> std::io::Result<Vec<RecallHit>> {
+    if k == 0 {
+        return Ok(Vec::new());
+    }
     let meta = store::load_meta(root)?;
     // 会话缓存命中直接返回快照（含 score/sim，L1 过滤可复用）。
     let cache_window = (meta.param("session_cache_minutes").max(0.0) * 60.0) as u64;
-    if let Some(hits) = query_cache::session_get(root, query, meta.gen, cache_window) {
-        let mut out: Vec<RecallHit> = hits
+    if let Some(hits) = query_cache::session_get(root, query, meta.gen, cache_window, k) {
+        let out: Vec<RecallHit> = hits
             .into_iter()
             .map(|(id, score, sim)| RecallHit { id, score, sim })
             .collect();
-        out.truncate(k);
+        debug_assert!(out.len() <= k, "session snapshot must respect k");
         return Ok(out);
     }
     let hits = if read_only {

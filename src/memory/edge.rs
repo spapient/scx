@@ -54,7 +54,7 @@ pub(crate) fn build(root: &str) -> std::io::Result<EdgeIndex> {
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
     for id in store::list_ids(root)? {
         let c = store::read_case(root, &id)?;
-        for e in crate::memory::field::entity_keys(&c.fields) {
+        for e in crate::memory::classify::entity_keys(&c.fields) {
             map.entry(e).or_default().push(id.clone());
         }
     }
@@ -89,27 +89,26 @@ pub(crate) struct BridgeCase {
 }
 
 /// 桥并入：query 实体 → 兄弟 case（未在 `exist` 中）读出完整上下文与共享实体计数。
-/// 返回 (桥 case 列表, 桥词长合计，供调用方 avgdl 重算)；df 口径由调用方保持。
-/// 仅当 edge_enable>0 且 query 确有实体时触发。
+/// 桥只增加候选；调用方保持全库 df/avgdl 口径。仅当 edge_enable>0 且 query
+/// 确有实体时触发。
 pub(crate) fn bridge_cases(
     root: &str,
     meta: &store::Meta,
     qf_ents: &[String],
     exist: &[String],
-) -> std::io::Result<(Vec<BridgeCase>, usize)> {
+) -> std::io::Result<Vec<BridgeCase>> {
     if meta.param("edge_enable") <= 0.0 {
-        return Ok((Vec::new(), 0));
+        return Ok(Vec::new());
     }
     let mut ents: Vec<String> = qf_ents.to_vec();
     ents.sort();
     ents.dedup();
     if ents.is_empty() {
-        return Ok((Vec::new(), 0));
+        return Ok(Vec::new());
     }
     let idx = cached_build(root)?;
     let bridge = idx.neighbors(&ents);
     let mut out = Vec::new();
-    let mut total = 0usize;
     for id in bridge {
         if exist.contains(&id) {
             continue;
@@ -125,7 +124,6 @@ pub(crate) fn bridge_cases(
                     || c.fields.num_fp.contains(e)
             })
             .count();
-        total += terms.len();
         out.push(BridgeCase {
             id,
             terms: terms.into(),
@@ -137,7 +135,7 @@ pub(crate) fn bridge_cases(
             edge_shared: shared,
         });
     }
-    Ok((out, total))
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -146,13 +144,8 @@ mod tests {
     use crate::memory::ingest::ingest;
     use crate::memory::recall::recall;
     use crate::memory::store::CaseStats;
+    use crate::memory::util::tmp_root;
     use std::fs;
-
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!("scx-edge-{}-{}", tag, store::fnv1a("e") & 0xff));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
 
     fn stats() -> CaseStats {
         CaseStats {

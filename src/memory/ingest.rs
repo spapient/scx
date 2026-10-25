@@ -222,12 +222,12 @@ pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)>
     c.stats = stats.clone();
     c.forces = forces.to_vec();
     // 摄取即抽取：判别字段随 case 写入，召回时无需重扫正文。
-    c.fields = crate::memory::field::extract(text);
+    c.fields = crate::memory::classify::extract(text);
     // 摄取即分桶：先用 case query 判家族，query 无证据再回退正文，
     // 避免根因里的宽域词把 query 已明确的场景带偏。
     let fvec = c.fields.error_code.clone();
     let qterms = crate::terms::build_mem_terms(&c.query);
-    c.bucket = crate::memory::bucket::bucket_of_query(&fvec, &qterms, text);
+    c.bucket = crate::memory::classify::bucket_of_query(&fvec, &qterms, text);
     store::write_case(root, &c)?;
     store::bump_case_count(root)?;
     remember_fp(root, &fp, &id)?;
@@ -315,14 +315,8 @@ pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
 mod tests {
     use super::*;
     use crate::memory::store;
+    use crate::memory::util::tmp_root;
     use std::fs;
-
-    fn tmp_root(tag: &str) -> String {
-        let r =
-            std::env::temp_dir().join(format!("scx-ingest-{}-{}", tag, store::fnv1a("x") & 0xff));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
 
     const TEXT: &str = "ERROR db timeout conn_id=9f2a\nat Pool.java:214\nRoot cause: pool size";
 

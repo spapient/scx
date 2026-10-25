@@ -23,8 +23,8 @@
 //!   读取（1 万条库召回 p50 < 5 ms）；df 快照随 build 返回，供 meta [df] 落盘。
 //! - 崩溃一致性：body_len 边界校验 + CRC-32（IEEE 查表）段尾校验；坏段 →
 //!   `load` 返回 Err（corrupt），调用方自动重建或回退线性扫描，不崩溃。
-//! - 口径说明：索引路径 df/avgdl 为全库口径（区别于线性路径的候选桶内口径），
-//!   同一路径内确定；评估统一以索引路径为准。
+//! - 口径说明：线性与索引两条路径的 df/avgdl 均为全库口径，桶过滤只裁候选；
+//!   同一 query 在两条路径下使用同一 BM25 统计量，A/B 对拍要求输出一致。
 
 use crate::memory::store::{self, Meta};
 use crate::terms::build_doc_terms;
@@ -139,7 +139,7 @@ pub(crate) struct Index {
 fn entity_map(docs: &[DocRec]) -> HashMap<String, Vec<usize>> {
     let mut entities: HashMap<String, Vec<usize>> = HashMap::new();
     for (di, rec) in docs.iter().enumerate() {
-        for key in crate::memory::field::entity_keys(&rec.fields) {
+        for key in crate::memory::classify::entity_keys(&rec.fields) {
             entities.entry(key).or_default().push(di);
         }
     }
@@ -201,7 +201,7 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
         let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
         let updated_s = crate::memory::util::parse_utc_secs(&c.updated_at);
         total_len += terms.len();
-        let buckets = crate::memory::bucket::case_buckets(&[], &query_terms, &c.text);
+        let buckets = crate::memory::classify::case_buckets(&[], &query_terms, &c.text);
         docs.push((
             id.clone(),
             DocRec {
@@ -509,6 +509,11 @@ pub(crate) fn term_df(idx: &Index, t: &str) -> usize {
     idx.dict.get(t).map(|(df, _)| *df).unwrap_or(0)
 }
 
+/// case id → doc 下标（`ids` 已按字典序，二分查找）。
+pub(crate) fn doc_by_id(idx: &Index, id: &str) -> Option<usize> {
+    idx.ids.binary_search_by(|x| x.as_ref().cmp(id)).ok()
+}
+
 /// query 实体命中的兄弟 doc（去重后按 doc_idx 升序），并给出共享实体数。
 pub(crate) fn entity_neighbors(idx: &Index, ents: &[String]) -> Vec<(usize, usize)> {
     let mut keys: Vec<&str> = ents.iter().map(String::as_str).collect();
@@ -546,21 +551,11 @@ mod tests {
     use super::*;
     use crate::memory::ingest::ingest;
     use crate::memory::store::{self, CaseStats};
+    use crate::memory::util::tmp_root;
     use std::fs;
 
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!("scx-idx-{}-{}", tag, store::fnv1a("i") & 0xff));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
-
     fn stats() -> CaseStats {
-        CaseStats {
-            kept: 5,
-            total: 100,
-            cut_pct: 95.0,
-            risk: "HIGH".to_string(),
-        }
+        crate::memory::store::sample_stats()
     }
 
     #[test]

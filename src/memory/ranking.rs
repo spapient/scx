@@ -53,14 +53,22 @@ pub(crate) fn expand(
     hits: &[RecallHit],
     query: &str,
     meta: &Meta,
+    idx: Option<&super::index::Index>,
 ) -> std::io::Result<Vec<String>> {
     let qterms = build_mem_terms(query);
-    let (n, df): (f64, HashMap<String, usize>) = if !meta.df.is_empty() {
-        (meta.case_count as f64, meta.df.iter().cloned().collect())
+    let mut n = idx.map(|i| i.n_docs).unwrap_or(meta.case_count) as f64;
+    // df 来源优先级：索引 postings（全库口径、零分配）→ meta df 快照（二分）
+    // → 小库全量现算。避免每次 PRF 都把整张 df 表克隆进 HashMap。
+    let df_snapshot = if idx.is_none() && !meta.df.is_empty() {
+        let sorted = meta.df.windows(2).all(|w| w[0].0 <= w[1].0);
+        Some((&meta.df, sorted))
     } else {
+        None
+    };
+    let df_map = if idx.is_none() && meta.df.is_empty() {
         // 线性阶段兜底：全库现算（小库可接受；大库必经 rebuild → 快照非空）。
         let all_ids = store::list_ids(root)?;
-        let n = all_ids.len() as f64;
+        n = all_ids.len() as f64;
         let mut df: HashMap<String, usize> = HashMap::new();
         for id in &all_ids {
             let c = store::read_case(root, id)?;
@@ -69,7 +77,9 @@ pub(crate) fn expand(
                 *df.entry(t.clone()).or_insert(0) += 1;
             }
         }
-        (n, df)
+        Some(df)
+    } else {
+        None
     };
     if n == 0.0 {
         return Ok(Vec::new());
@@ -80,6 +90,16 @@ pub(crate) fn expand(
     for h in hits {
         if h.sim <= 0.0 {
             continue;
+        }
+        // 索引路径直接复用 postings 的词表快照，避免 PRF 为 top-k 反复读 case.json。
+        // 快照是去重词表，批内 tf 按“出现该词的文档数”计；线性路径仍按原始词表计数。
+        if let Some(idx) = idx {
+            if let Some(di) = super::index::doc_by_id(idx, &h.id) {
+                for t in idx.docs[di].terms.iter() {
+                    *batch.entry(t.clone()).or_insert(0) += 1;
+                }
+                continue;
+            }
         }
         let c = store::read_case(root, &h.id)?;
         let mut terms = build_mem_terms(&c.query);
@@ -97,7 +117,29 @@ pub(crate) fn expand(
         if qterms.contains(t) {
             continue;
         }
-        let d = *df.get(t).unwrap_or(&0) as f64;
+        let d = if let Some(idx) = idx {
+            super::index::term_df(idx, t) as f64
+        } else if let Some((snapshot, sorted)) = df_snapshot {
+            let df = if sorted {
+                snapshot
+                    .binary_search_by(|(k, _)| k.as_str().cmp(t.as_str()))
+                    .ok()
+                    .map(|i| snapshot[i].1)
+                    .unwrap_or(0)
+            } else {
+                snapshot
+                    .iter()
+                    .find(|(k, _)| k == t)
+                    .map(|(_, n)| *n)
+                    .unwrap_or(0)
+            };
+            df as f64
+        } else {
+            df_map
+                .as_ref()
+                .and_then(|map| map.get(t).copied())
+                .unwrap_or(0) as f64
+        };
         let idf = idf(n, d);
         if idf > IDF_MIN {
             cand.push((t.clone(), idf));
@@ -186,25 +228,11 @@ mod tests {
     use crate::memory::ingest::ingest;
     use crate::memory::recall::RecallHit;
     use crate::memory::store::CaseStats;
+    use crate::memory::util::tmp_root;
     use std::fs;
 
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!(
-            "scx-prf-{}-{}",
-            tag,
-            crate::memory::util::fnv1a("p") & 0xff
-        ));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
-
     fn stats() -> CaseStats {
-        CaseStats {
-            kept: 5,
-            total: 100,
-            cut_pct: 95.0,
-            risk: "HIGH".to_string(),
-        }
+        crate::memory::store::sample_stats()
     }
 
     #[test]
@@ -277,7 +305,12 @@ mod tests {
                 sim: 1.0,
             })
             .collect();
-        let ext = expand(&root, &hits, q, &meta).unwrap();
+        let ext = expand(&root, &hits, q, &meta, None).unwrap();
+        // 索引 df 与 meta df 必须给出同一扩展集合；索引路径只是免去快照分配。
+        crate::memory::index::build(&root).unwrap();
+        let idx = crate::memory::index::load(&root).unwrap().unwrap();
+        let ext_idx = expand(&root, &hits, q, &meta, Some(&idx)).unwrap();
+        assert_eq!(ext_idx, ext, "索引 df 与 meta df 的扩展结果必须一致");
         // 扩展词应包含库内判别词（errno 或 conn_id 或 pool）。
         assert!(
             ext.iter()

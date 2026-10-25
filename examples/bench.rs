@@ -40,7 +40,11 @@ fn compress_bench() {
 
     let _ = compress(&text, "timeout conn_id pool", &cfg);
     let mut samples: Vec<u128> = Vec::new();
-    for _ in 0..9 {
+    let repeats = std::env::var("SCX_BENCH_REPEAT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9);
+    for _ in 0..repeats {
         let t = Instant::now();
         let outcome = compress(&text, "timeout conn_id pool", &cfg);
         samples.push(t.elapsed().as_micros());
@@ -128,8 +132,12 @@ fn memory_bench() {
     assert!(!warm.is_empty(), "index warm query must recall");
     println!("index warm: {} us", t.elapsed().as_micros());
 
+    let recall_repeats = std::env::var("SCX_BENCH_RECALL_REPEAT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(21);
     let mut recall = Vec::new();
-    for i in 0..21 {
+    for i in 0..recall_repeats {
         let query = bench_query(i);
         let t = Instant::now();
         let hits = recall_cases(&root, &query, 5, true).expect("recall failed");

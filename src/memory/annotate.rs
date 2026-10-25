@@ -573,13 +573,8 @@ mod tests {
     use crate::memory::eval;
     use crate::memory::ingest;
     use crate::memory::store::CaseStats;
+    use crate::memory::util::tmp_root;
     use std::fs;
-
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!("scx-annotate-{}-{}", tag, fnv1a("a") & 0xff));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
 
     fn seed_case() -> CaseStats {
         CaseStats {

@@ -16,6 +16,10 @@ fn run(args: &[&str]) -> Output {
     Command::new(bin()).args(args).output().unwrap()
 }
 
+fn run_owned(args: &[String]) -> Output {
+    Command::new(bin()).args(args).output().unwrap()
+}
+
 #[test]
 fn force_keeps_all_duplicate_matches() {
     let mut lines: Vec<String> = (0..200)
@@ -164,6 +168,147 @@ fn recall_failure_is_reported_without_failing_compression() {
         "failed optional recall must not create a library"
     );
     let _ = fs::remove_file(input);
+}
+
+#[test]
+fn recall_cache_never_truncates_a_larger_k() {
+    let root = std::env::temp_dir().join(format!(
+        "scx-cli-recall-k-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let query = "db timeout conn_id";
+    let mut inputs = Vec::new();
+    for word in ["alpha", "beta", "gamma", "delta", "epsilon"] {
+        let path = write_temp(
+            &format!("recall-k-{word}"),
+            &format!("ERROR db timeout conn_id={word}\nRoot cause: pool {word}\n"),
+        );
+        let out = run(&[
+            "--query",
+            query,
+            "--mem-dir",
+            root.to_str().unwrap(),
+            "--store",
+            "1",
+            "--force",
+            "Root cause",
+            path.to_str().unwrap(),
+        ]);
+        assert!(out.status.success(), "store failed: {out:?}");
+        inputs.push(path);
+    }
+    let empty = write_temp("recall-k-empty", "");
+    // 先用 k=1 暖 qmap：快照只有 1 条。
+    let warm = run(&[
+        "--query",
+        query,
+        "--mem-dir",
+        root.to_str().unwrap(),
+        "--recall",
+        "1",
+        empty.to_str().unwrap(),
+    ]);
+    assert!(warm.status.success(), "warm recall failed: {warm:?}");
+    // 再请求 k=5：不足 5 条的旧快照必须失效，完整召回 5 条。
+    let out = run(&[
+        "--query",
+        query,
+        "--mem-dir",
+        root.to_str().unwrap(),
+        "--recall-only",
+        "--recall",
+        "5",
+    ]);
+    assert!(out.status.success(), "k=5 recall failed: {out:?}");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(
+        stdout.lines().filter(|l| l.starts_with("mem: ")).count(),
+        5,
+        "k=1 的 qmap 快照不得截断 k=5 的结果: {stdout}"
+    );
+    for path in inputs {
+        let _ = fs::remove_file(path);
+    }
+    let _ = fs::remove_file(empty);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn corrupt_recall_snapshot_does_not_fail_compression() {
+    let root = std::env::temp_dir().join(format!(
+        "scx-cli-recall-corrupt-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let input = write_temp(
+        "recall-corrupt",
+        "ERROR unique_corrupt conn_id=9f2a timeout\nat Pool.java:214\n",
+    );
+    let args = |extra: &[&str]| -> Vec<String> {
+        let mut v = vec![
+            "--query".to_string(),
+            "ERROR unique_corrupt timeout".to_string(),
+            "--mem-dir".to_string(),
+            root.to_str().unwrap().to_string(),
+            input.to_str().unwrap().to_string(),
+        ];
+        v.extend(extra.iter().map(|s| s.to_string()));
+        v
+    };
+    let stored = run_owned(&args(&["--store", "1"]));
+    assert!(stored.status.success(), "store failed: {stored:?}");
+
+    // 强制索引路径，让召回打分只读 postings；随后损坏 case.json，验证
+    // 旁路详情读取失败不会把已经成功的压缩变成失败。
+    let meta_path = root.join("meta.toml");
+    let meta = fs::read_to_string(&meta_path).unwrap();
+    fs::write(
+        &meta_path,
+        meta.replace("index_force = 0", "index_force = 1"),
+    )
+    .unwrap();
+    let rebuilt = run(&["--rebuild", "--mem-dir", root.to_str().unwrap()]);
+    assert!(rebuilt.status.success(), "rebuild failed: {rebuilt:?}");
+    let case = fs::read_dir(root.join("cases"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path()
+        .join("case.json");
+    fs::write(&case, b"{corrupt").unwrap();
+
+    let out = run_owned(&args(&["--recall", "1"]));
+    assert!(
+        out.status.success(),
+        "optional recall detail must not fail compression: {out:?}"
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("compressed:"),
+        "compression output missing: {text}"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("unreadable"),
+        "corrupt recall detail must be reported: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let strict = run_owned(&args(&["--recall-only"]));
+    assert_eq!(
+        strict.status.code(),
+        Some(2),
+        "--recall-only is the primary operation and must surface corruption"
+    );
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_dir_all(root);
 }
 
 #[test]

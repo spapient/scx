@@ -103,25 +103,11 @@ mod tests {
     use super::*;
     use crate::memory::ingest::ingest;
     use crate::memory::store::{self, CaseStats};
+    use crate::memory::util::tmp_root;
     use std::fs;
 
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!(
-            "scx-fb-{}-{}",
-            tag,
-            crate::memory::util::fnv1a("f") & 0xff
-        ));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
-
     fn stats() -> CaseStats {
-        CaseStats {
-            kept: 5,
-            total: 100,
-            cut_pct: 95.0,
-            risk: "HIGH".to_string(),
-        }
+        crate::memory::store::sample_stats()
     }
 
     #[test]

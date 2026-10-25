@@ -61,7 +61,9 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
     let total = lines.len();
     // token 估算只服务小输入直通与可选预算；针尖档大盘无需整份扫描。
-    let total_tok: f64 = if context != 0 || total < 40 {
+    // 小输入先算一次即可（随后可能直接 passthrough）；大输入把估算并入下面的
+    // 逐行分析循环，避免为同一批行再走一趟缓存。
+    let small_tok: f64 = if total < 40 {
         lines.iter().map(|s| token_est(s)).sum()
     } else {
         0.0
@@ -101,7 +103,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         }
     };
 
-    if total < 40 && total_tok < 1200.0 {
+    if total < 40 && small_tok < 1200.0 {
         return mk(
             original.to_string(),
             total,
@@ -144,8 +146,12 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let mut marker_v = vec![false; total];
     let mut guard_v = vec![false; total];
     let mut force_v = vec![false; total];
+    let mut total_tok = if total >= 40 { 0.0 } else { small_tok };
     let mut low = String::new();
     for i in 0..total {
+        if total >= 40 && context != 0 {
+            total_tok += token_est(lines[i]);
+        }
         low.clear();
         push_analysis_lower(lines[i], &mut low);
         let ll = low.as_str();

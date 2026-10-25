@@ -9,8 +9,7 @@
 //! score=Σ bm25+Σ 字段命中×权重；decay=1/(1+age/τ)（τ:90/solved 180/regressed 30）；sim=score·decay/score_max
 //! 场景桶：query 判候选桶，case 主桶不在候选桶集则跳过（候选桶空=全量扫，防漏召）。
 
-use crate::memory::bucket::candidate_buckets;
-use crate::memory::field;
+use crate::memory::classify::{self, candidate_buckets};
 use crate::memory::index::{self, Index};
 use crate::memory::store::{self, Meta};
 use crate::terms::{build_doc_terms, build_mem_terms};
@@ -87,7 +86,7 @@ impl QueryPlan {
         if meta.param("synonyms_enable") > 0.0 {
             terms = crate::terms::expand_recall_terms(&terms);
         }
-        let fields = field::extract(query);
+        let fields = classify::extract(query);
         let entities = [
             &fields.error_code,
             &fields.file_loc,
@@ -152,10 +151,14 @@ fn recall_inner(
     meta: &Meta,
     repair_index: bool,
 ) -> std::io::Result<Vec<RecallHit>> {
+    if k == 0 {
+        return Ok(Vec::new());
+    }
     // query 记忆图：精确同指纹直接返回历史 top-k（跳过整个 BM25 管线）。
     // 代际失效：条目 gen < 当前 meta.gen 视为过期（库已变化，走 BM25 重算）。
-    if let Some((_, qhits, 0)) = crate::memory::query_cache::lookup(root, query, 2, meta.gen)? {
-        let mut hits: Vec<RecallHit> = qhits
+    // 条数不足 k 的快照同样不可用：快照只含当时的 top-k，不能证明它覆盖本次 k。
+    if let Some((_, qhits)) = crate::memory::query_cache::lookup(root, query, k, meta.gen)? {
+        let hits: Vec<RecallHit> = qhits
             .into_iter()
             .map(|h| RecallHit {
                 id: h.id,
@@ -163,7 +166,6 @@ fn recall_inner(
                 sim: h.sim as f64,
             })
             .collect();
-        hits.truncate(k);
         return Ok(hits);
     }
     // 倒排路径：规模达标或 --rebuild 强制（index_force=1）时启用。
@@ -278,10 +280,10 @@ fn recall_inner(
         }
     }
     // PRF：低置信（top1.sim < confidence_high_sim）时粗召回 top-K 扩展查询再召一轮。
-    // 编辑距离 ≤2 变体命中也在本轮覆盖（轻量重排 = 词面重新打分）。
+    // 扩展轮严格补漏，不覆盖首轮顺序（见下方合并逻辑）。
     let low_conf = meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
     if low_conf {
-        if let Ok(ext) = crate::memory::ranking::expand(root, &hits, query, meta) {
+        if let Ok(ext) = crate::memory::ranking::expand(root, &hits, query, meta, idx.as_deref()) {
             if !ext.is_empty() {
                 let q2 = format!("{query} {}", ext.join(" "));
                 let q2_plan = QueryPlan::new(&q2, meta);
@@ -398,7 +400,7 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
 
     // 场景桶：query 判候选桶，case 主桶不在候选桶集内则跳过。
 
-    // 候选 docs + df + 统计量：倒排路径（全库口径）或线性路径（候选集口径）。
+    // 候选 docs + df + 统计量：倒排/线性两条路径都用全库口径；桶过滤只裁候选。
     let (docs, df, n, avgdl): (Docs, Vec<usize>, f64, f64) = if let Some(idx) = idx {
         // 索引路径：doc 打分快照自包含在 postings 内，候选打分零 case.json IO。
         let cand_di = index::candidates(idx, qterms);
@@ -462,7 +464,7 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
         for id in &ids {
             let c = store::read_case(root, id)?;
             let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
-            let buckets = crate::memory::bucket::case_buckets(&[], &query_terms, &c.text);
+            let buckets = classify::case_buckets(&[], &query_terms, &c.text);
             total_len += terms.len();
             for (qi, qt) in qterms.iter().enumerate() {
                 if terms.binary_search(qt).is_ok() {
@@ -488,9 +490,9 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
                 },
             ));
         }
-        // 实体边一跳：桥 case 并入后 avgdl 重算（df 保持词面候选口径）。
+        // 实体边一跳：桥 case 只并入候选；df/n/avgdl 仍取全库词面口径。
         let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.to_string()).collect();
-        let (bridges, _) = crate::memory::edge::bridge_cases(root, meta, q_ent_list, &exist_ids)?;
+        let bridges = crate::memory::edge::bridge_cases(root, meta, q_ent_list, &exist_ids)?;
         for b in bridges {
             docs.push((
                 b.id.into(),
@@ -572,8 +574,8 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
         }
         // 可选 BM25F 风格的 case-query 字段加权：目标 case 的 query 字段通常
         // 比正文更短、更接近用户的问题描述。默认关闭（0），只用显式参数开启，
-        // 避免在未完成 held-out 验证前改变默认检索语义。索引路径暂不携带
-        // query_terms，因此该特征只在 150 条小库的线性路径生效。
+        // 避免在未完成 held-out 验证前改变默认检索语义。线性与索引快照都携带
+        // query_terms，因此该特征在两条路径使用同一口径。
         let qf_w = qf_weight;
         let mut qf_add = 0.0;
         if qf_w > 0.0 {
@@ -649,7 +651,16 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
     }
 
     // MMR：得分排序后按多样性去冗余（λ 从 meta 读）。
-    let mut order = order_by_score(&hits, &docs);
+    // 关闭 MMR（默认）时最终只需要 top-k；同族收紧最多查看前 3k 个候选，
+    // 因此先做 O(n) 的部分选择再排序 3k，避免为 5 条结果排序整个 10k 候选集。
+    // 打开 MMR 时仍保留完整顺序，多样性选择可能越过 3k 窗口。
+    let mmr_enabled = meta.param("mmr_enable") > 0.0;
+    let window = if mmr_enabled {
+        hits.len()
+    } else {
+        k.saturating_mul(3).max(k).min(hits.len())
+    };
+    let mut order = order_top(&hits, &docs, window);
     // 同事故兄弟 case 往往共享完整根因段，词面高度重合。首轮用整篇词表做
     // Jaccard 聚类，把 top1 的同族 case 收紧到 top1 之后：同一事故的兄弟
     // 在人工口径里通常同为 rel=2，散落在弱相关候选之后会拉低 NDCG。
@@ -664,12 +675,13 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
     let lambda = meta.param("mmr_lambda");
     // MMR 默认关闭：v2 对拍显示 λ=0.5 会把同事故的精确目标挤出 top-5
     // （paraphrase r@5 0.783→0.867 当关闭）。需要多样性时置 mmr_enable=1。
-    let picked = if meta.param("mmr_enable") > 0.0 {
+    let picked = if mmr_enabled {
         let scores_norm: Vec<f64> = hits.iter().map(|h| h.sim).collect();
         let doc_terms: Vec<Vec<String>> = docs.iter().map(|(_, d)| d.terms.to_vec()).collect();
         crate::memory::ranking::mmr_select(&order, &doc_terms, &scores_norm, k, lambda)
     } else {
-        order.into_iter().take(k).collect()
+        order.truncate(k);
+        order
     };
     let mut out: Vec<RecallHit> = Vec::with_capacity(picked.len());
     for &i in &picked {
@@ -683,19 +695,30 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
     Ok(out)
 }
 
-/// 确定性排序：分数降序，同分按 case id 升序。
+/// 确定性排序：分数降序，同分按 case id 升序；只保留前 `limit` 个。
 ///
 /// `sort_by` 稳定，但输入 `docs` 的顺序来自倒排/哈希遍历，跨进程不保证；
 /// 不设次级键会让同分兄弟 case 的 NDCG 每次运行不同（MRR 因目标不并列而看似稳定）。
-fn order_by_score(hits: &[Ranked], docs: &Docs) -> Vec<usize> {
+/// 比较器同时包含分数与唯一 id，是全序，因此 `select_nth_unstable_by` 的
+/// 非稳定性不会引入跨运行差异。
+fn order_top(hits: &[Ranked], docs: &Docs, limit: usize) -> Vec<usize> {
     let mut order: Vec<usize> = (0..hits.len()).collect();
-    order.sort_by(|&a, &b| {
-        hits[b]
+    let cmp = |a: &usize, b: &usize| {
+        hits[*b]
             .score
-            .partial_cmp(&hits[a].score)
+            .partial_cmp(&hits[*a].score)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| docs[hits[a].doc].0.cmp(&docs[hits[b].doc].0))
-    });
+            .then_with(|| docs[hits[*a].doc].0.cmp(&docs[hits[*b].doc].0))
+    };
+    let keep = limit.min(order.len());
+    if keep == 0 {
+        return Vec::new();
+    }
+    if keep < order.len() {
+        order.select_nth_unstable_by(keep, cmp);
+        order.truncate(keep);
+    }
+    order.sort_unstable_by(cmp);
     order
 }
 
@@ -748,22 +771,11 @@ mod tests {
 
     const L1_SIM: f64 = 0.55;
     use crate::memory::store::{self, CaseStats};
+    use crate::memory::util::tmp_root;
     use std::fs;
 
-    fn tmp_root(tag: &str) -> String {
-        let r =
-            std::env::temp_dir().join(format!("scx-recall-{}-{}", tag, store::fnv1a("y") & 0xff));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
-
     fn stats() -> CaseStats {
-        CaseStats {
-            kept: 5,
-            total: 100,
-            cut_pct: 95.0,
-            risk: "HIGH".to_string(),
-        }
+        crate::memory::store::sample_stats()
     }
 
     fn recall_test(root: &str, query: &str, k: usize) -> std::io::Result<Vec<RecallHit>> {
@@ -857,7 +869,7 @@ mod tests {
             ranked(2, 2.0, 1.0),
             ranked(3, 1.0, 1.0),
         ];
-        let ids: Vec<&str> = order_by_score(&hits, &docs)
+        let ids: Vec<&str> = order_top(&hits, &docs, usize::MAX)
             .into_iter()
             .map(|i| &*docs[hits[i].doc].0)
             .collect();
@@ -868,10 +880,28 @@ mod tests {
     fn sibling_gate_requires_confident_anchor() {
         let docs = vec![doc("low", &[]), doc("high", &[])];
         let hits = vec![ranked(0, 1.0, 0.29), ranked(1, 1.0, 0.30)];
-        let order = order_by_score(&hits, &docs);
+        let order = order_top(&hits, &docs, usize::MAX);
         assert!(sibling_anchor_ok(&hits, &order, 0.30));
         assert!(!sibling_anchor_ok(&hits, &order, 0.31));
         assert!(!sibling_anchor_ok(&[], &[], 0.30));
+    }
+
+    #[test]
+    fn partial_order_matches_full_top_prefix() {
+        let docs: Vec<(Arc<str>, DocCtx)> =
+            (0..64).map(|i| doc(&format!("d{i:02}"), &[])).collect();
+        let hits: Vec<Ranked> = (0..64)
+            .map(|i| ranked(i, (i * 37 % 23) as f64, 1.0))
+            .collect();
+        let full = order_top(&hits, &docs, usize::MAX);
+        for limit in [1usize, 5, 15, 63, 64, 100] {
+            let part = order_top(&hits, &docs, limit);
+            assert_eq!(
+                part,
+                full[..limit.min(full.len())],
+                "partial top-{limit} must equal the full-order prefix"
+            );
+        }
     }
 
     #[test]

@@ -36,6 +36,7 @@ fn write_mem_lines(
     hits: &[RecallHit],
     root: &str,
     detail: bool,
+    tolerate_unreadable: bool,
 ) -> io::Result<()> {
     for h in hits {
         let short = h.id.rsplit('_').next().unwrap_or(&h.id);
@@ -44,7 +45,14 @@ fn write_mem_lines(
             "mem: sim={:.2} score={:.2} case={}",
             h.sim, h.score, short
         )?;
-        let c = scx::memory::read_case(root, &h.id)?;
+        let c = match scx::memory::read_case(root, &h.id) {
+            Ok(c) => c,
+            Err(e) if tolerate_unreadable => {
+                eprintln!("scx: warning: recall case {short} unreadable: {e}");
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
         if detail {
             writeln!(out, "  summary: {}", escape(&summary(&c)))?;
             for (i, &lno) in c.evidence_lno.iter().enumerate() {
@@ -86,19 +94,31 @@ fn summary(c: &Case) -> String {
             || t.contains("WARN")
             || t.contains("警告")
     };
-    let line = c
-        .text
-        .lines()
-        .map(str::trim)
-        .find(|t| !t.is_empty() && is_err_line(t))
-        .or_else(|| c.text.lines().map(str::trim).find(|t| !t.is_empty()));
+    // 单趟找“首个错误行”，找不到再用“首个非空行”；避免对整篇正文扫两遍。
+    let mut first_nonempty = None;
+    let mut first_error = None;
+    for line in c.text.lines().map(str::trim).filter(|t| !t.is_empty()) {
+        if first_nonempty.is_none() {
+            first_nonempty = Some(line);
+        }
+        if is_err_line(line) {
+            first_error = Some(line);
+            break;
+        }
+    }
+    let line = first_error.or(first_nonempty);
     if let Some(line) = line {
         parts.push(line);
     }
     let s = parts.join(" | ");
-    let mut out: String = s.chars().take(300).collect();
-    if s.chars().count() > 300 {
-        out.push('…');
+    // 只数到截断点：超长日志行不应为“是否加省略号”再扫一遍剩余字符。
+    let mut out = String::with_capacity(s.len().min(900));
+    for (i, ch) in s.chars().enumerate() {
+        if i == 300 {
+            out.push('…');
+            break;
+        }
+        out.push(ch);
     }
     out
 }
@@ -113,7 +133,7 @@ fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) -> io::Result<
     let hits = recall_cases(mem_dir, query, k, true)?;
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    write_mem_lines(&mut out, &hits, mem_dir, detail)
+    write_mem_lines(&mut out, &hits, mem_dir, detail, false)
 }
 
 fn stats_line(r: &Outcome) -> String {
@@ -335,6 +355,7 @@ fn run_compress(opts: &Opts) -> CliResult {
                     &qualified,
                     &opts.mem_dir,
                     opts.recall_detail,
+                    true,
                 ))?;
             }
             Err(e) => eprintln!("scx: warning: --recall skipped: {e}"),
@@ -434,8 +455,15 @@ fn extract_evidence(input: &str, lno: &[usize]) -> Vec<String> {
     if lno.is_empty() {
         return Vec::new();
     }
-    let norm = input.replace("\r\n", "\n");
-    let mut lines: Vec<&str> = norm.split('\n').collect();
+    // 常见 LF 输入零拷贝；只有真正含 CR 时才做整文归一化。
+    let normalized;
+    let input = if input.contains('\r') {
+        normalized = input.replace("\r\n", "\n");
+        normalized.as_str()
+    } else {
+        input
+    };
+    let mut lines: Vec<&str> = input.split('\n').collect();
     if lines.last().is_some_and(|line| line.is_empty()) {
         lines.pop();
     }

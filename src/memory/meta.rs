@@ -393,17 +393,8 @@ fn meta_toml(case_count: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::util::tmp_root;
     use std::fs;
-
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!(
-            "scx-meta-{}-{}",
-            tag,
-            crate::memory::util::fnv1a("m") & 0xff
-        ));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
 
     #[test]
     fn meta_roundtrip() {

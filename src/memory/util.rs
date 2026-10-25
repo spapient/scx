@@ -319,55 +319,27 @@ pub(crate) fn parse_utc_secs(s: &str) -> u64 {
     days * 86_400 + hh * 3600 + mi * 60 + ss
 }
 
-/// 编辑距离（Levenshtein），band 限制：超过 `max` 直接剪枝返回 None。
-/// 用于 qmap 变体识别（≤2）。滚动两行数组，O(min(m,n)) 空间。
-pub(crate) fn edit_dist(a: &str, b: &str, max: usize) -> Option<usize> {
-    let a: Vec<char> = a.chars().collect();
-    let b: Vec<char> = b.chars().collect();
-    if a.len().abs_diff(b.len()) > max {
-        return None;
-    }
-    let (s, t) = if a.len() <= b.len() {
-        (&a, &b)
-    } else {
-        (&b, &a)
-    };
-    let mut prev: Vec<usize> = (0..=s.len()).collect();
-    let mut cur: Vec<usize> = vec![0; s.len() + 1];
-    for (j, cj) in t.iter().enumerate() {
-        cur[0] = j + 1;
-        for (i, ci) in s.iter().enumerate() {
-            let cost = if ci == cj { 0 } else { 1 };
-            cur[i + 1] = (prev[i + 1] + 1).min(cur[i] + 1).min(prev[i] + cost);
-        }
-        // 当前前缀最小距离 > max 则不可能到达 ≤max，剪枝。
-        if cur.iter().min().unwrap() > &max {
-            return None;
-        }
-        std::mem::swap(&mut prev, &mut cur);
-    }
-    let d = prev[s.len()];
-    if d > max {
-        None
-    } else {
-        Some(d)
-    }
+/// 测试用独立临时库根：进程号 + 单调序号保证并行测试不共享目录。
+///
+/// 之前每个测试模块各有一份 `tmp_root`，同名标签在并行执行时可能落到同一
+/// 路径；集中到一处后只保留一个所有权和一套清理约定。
+#[cfg(test)]
+pub(crate) fn tmp_root(tag: &str) -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "scx-test-{}-{}-{}",
+        std::process::id(),
+        tag,
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    dir.to_string_lossy().into_owned()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn edit_dist_band() {
-        assert_eq!(edit_dist("abc", "abc", 2), Some(0));
-        assert_eq!(edit_dist("abc", "abd", 2), Some(1));
-        assert_eq!(edit_dist("abc", "abcd", 2), Some(1));
-        assert_eq!(edit_dist("连接池", "连接池爆", 2), Some(1));
-        assert_eq!(edit_dist("abc", "xyz", 2), None);
-        assert_eq!(edit_dist("abcdef", "ab", 2), None);
-        assert_eq!(edit_dist("连接池爆了", "连接池满", 3), Some(2));
-    }
 
     #[test]
     fn fnv1a_deterministic_and_sensitive() {

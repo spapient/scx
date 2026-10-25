@@ -182,17 +182,9 @@ fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::util::tmp_root;
     use std::sync::Arc;
     use std::thread;
-
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!(
-            "scx-lock-{tag}-{}",
-            TOKEN_SEQ.fetch_add(1, Ordering::Relaxed)
-        ));
-        let _ = fs::remove_dir_all(&r);
-        r.to_string_lossy().into_owned()
-    }
 
     #[test]
     fn atomic_write_keeps_last_complete_value() {

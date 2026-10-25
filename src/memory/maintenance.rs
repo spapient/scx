@@ -18,7 +18,7 @@ use crate::memory::util::{parse_utc_secs, utc_now};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// 全量重建索引 + qmap 合并 + df 快照。返回 (n_docs, n_terms)。
 pub(crate) fn rebuild(root: &str) -> std::io::Result<(usize, usize)> {
@@ -75,20 +75,15 @@ pub(crate) fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
     crate::memory::ingest::invalidate_fp_index(root);
     crate::memory::meta::bump_gen(root)?;
     if let Ok(_g) = crate::memory::lock::acquire(root, "qmap.lock") {
-        let _ = fs::remove_file(qmap_path(root));
+        let _ = fs::remove_file(query_cache::qmap_path(root));
     }
     Ok(true)
 }
 
-fn qmap_path(root: &str) -> PathBuf {
-    Path::new(root).join("index").join("qmap.bin")
-}
-
 /// 写 meta.toml [df] 快照（来自 index::build）。
 /// 不写 `index_force`：索引只是缓存，重建不得改变召回语义
-/// （线性路径 df/avgdl 为候选桶口径，索引路径为全库口径，强制切换会让排序跳变、
-/// A/B 评估不可比）。索引启用只由规模阈值决定；强制索引走独立测试参数（预留）。
-/// 失败静默旁路。
+/// （线性/索引两条路径的 df/avgdl 均为全库口径，桶过滤只裁候选；强制索引只用于
+/// A/B 对拍，不写回 meta）。索引启用只由规模阈值决定。失败静默旁路。
 fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
     let Ok(_g) = crate::memory::lock::acquire(root, "meta.lock") else {
         return;
@@ -195,21 +190,11 @@ mod tests {
     use super::*;
     use crate::memory::ingest::{ingest, ingest_with_fix};
     use crate::memory::store::{self, CaseStats};
+    use crate::memory::util::tmp_root;
     use std::fs;
 
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!("scx-hk-{}-{}", tag, store::fnv1a("h") & 0xff));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
-
     fn stats() -> CaseStats {
-        CaseStats {
-            kept: 5,
-            total: 100,
-            cut_pct: 95.0,
-            risk: "HIGH".to_string(),
-        }
+        crate::memory::store::sample_stats()
     }
 
     #[test]
@@ -352,13 +337,7 @@ mod stats_tests {
     use super::*;
     use crate::memory::ingest::{ingest, ingest_with_fix};
     use crate::memory::store::CaseStats;
-
-    fn tmp_root(tag: &str) -> String {
-        let r =
-            std::env::temp_dir().join(format!("scx-stats-{}-{}", tag, store::fnv1a("s") & 0xff));
-        let _ = fs::remove_dir_all(&r);
-        r.to_str().unwrap().to_string()
-    }
+    use crate::memory::util::tmp_root;
 
     fn case_stats() -> CaseStats {
         CaseStats {

@@ -47,6 +47,9 @@ pub(crate) const INCIDENT_MARKERS: &[&str] = &[
 /// 一次扫描同时得到“是否错误行”和“是否失败级（可受风险守卫）”。
 /// warn/警告只参与错误判定，不成批进入守卫；遇到失败级词即可提前返回。
 pub(crate) fn error_flags(ll: &str) -> (bool, bool) {
+    if ll.is_ascii() {
+        return error_flags_ascii(ll);
+    }
     let mut err = false;
     for n in ERR_NEEDLES {
         if ll.contains(n) {
@@ -54,6 +57,45 @@ pub(crate) fn error_flags(ll: &str) -> (bool, bool) {
             if !matches!(*n, "warn" | "警告") {
                 return (true, true);
             }
+        }
+    }
+    (err, false)
+}
+
+/// ASCII 快路径：按首字节分组做单趟扫描，避免对每行执行 20+ 次完整 contains。
+///
+/// 每个 ASCII 词必须在这里有对应分支；`ascii_fast_path_covers_all_needles`
+/// 测试会在新增词表项而忘记接线时失败。
+fn error_flags_ascii(ll: &str) -> (bool, bool) {
+    let bytes = ll.as_bytes();
+    let mut err = false;
+    for i in 0..bytes.len() {
+        let rest = &bytes[i..];
+        match bytes[i] {
+            b'e' if rest.starts_with(b"error") || rest.starts_with(b"exception") => {
+                return (true, true);
+            }
+            b'p' if rest.starts_with(b"panic") => return (true, true),
+            b'a' if rest.starts_with(b"assert") => return (true, true),
+            b'd' if rest.starts_with(b"denied") => return (true, true),
+            b'r' if rest.starts_with(b"refused") => return (true, true),
+            b't' if rest.starts_with(b"timeout")
+                || rest.starts_with(b"timed out")
+                || rest.starts_with(b"traceback") =>
+            {
+                return (true, true);
+            }
+            b'c' if rest.starts_with(b"cannot") => return (true, true),
+            b'u' if rest.starts_with(b"unable") || rest.starts_with(b"undefined") => {
+                return (true, true);
+            }
+            b's' if rest.starts_with(b"segfault") => return (true, true),
+            b'f' if rest.starts_with(b"fail") || rest.starts_with(b"fatal") => {
+                return (true, true);
+            }
+            b'n' if rest.starts_with(b"npm err") => return (true, true),
+            b'w' if rest.starts_with(b"warn") => err = true,
+            _ => {}
         }
     }
     (err, false)
@@ -225,6 +267,7 @@ fn norm_generic(s: &str, out: &mut String, run: &mut String) {
 
 /// ASCII 快路径：与通用路径语义一致，跳过 Unicode 解码与临时十六进制缓冲。
 fn norm_ascii(s: &[u8], out: &mut String) {
+    out.reserve(s.len());
     let mut i = 0usize;
     let mut pending_space = false;
     while i < s.len() {
@@ -326,7 +369,11 @@ fn norm_identity_generic(s: &str, out: &mut String) {
 pub(crate) fn push_analysis_lower(s: &str, out: &mut String) {
     // 日志分析最常见的是无控制符 ASCII 行。按字节小写可跳过 Unicode
     // 大小写迭代与 ESC/CR 状态机；输出语义与通用路径完全一致。
-    if s.is_ascii() && !s.as_bytes().iter().any(|b| matches!(*b, b'\x1b' | b'\r')) {
+    // 单趟同时确认 ASCII 与无 ESC/CR；避免先 is_ascii 再 any 扫两遍。
+    if s.as_bytes()
+        .iter()
+        .all(|&b| b.is_ascii() && b != b'\x1b' && b != b'\r')
+    {
         out.reserve(s.len());
         out.extend(s.bytes().map(|b| b.to_ascii_lowercase() as char));
         return;
@@ -382,6 +429,19 @@ mod tests {
         assert_eq!(error_flags("warning only"), (true, false));
         assert_eq!(error_flags("failed to connect"), (true, true));
         assert_eq!(error_flags("info heartbeat"), (false, false));
+        assert_eq!(error_flags("warn then error"), (true, true));
+    }
+
+    #[test]
+    fn ascii_fast_path_covers_all_needles() {
+        for needle in ERR_NEEDLES.iter().filter(|n| n.is_ascii()) {
+            let expected = (true, *needle != "warn");
+            assert_eq!(
+                error_flags(needle),
+                expected,
+                "ASCII fast path mismatch for needle {needle:?}"
+            );
+        }
     }
 
     #[test]
@@ -428,6 +488,27 @@ mod tests {
                     "ASCII identity fast path mismatch for {input:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn ascii_chunked_normalization_matches_generic_on_generated_input() {
+        // 确定性 LCG 覆盖数字/十六进制/空白/标点边界；分块拷贝不得改变折叠语义。
+        let alphabet = b" abcdefABCDEF0123456789[]()=:/.-_\\\t\r\n\x0b";
+        let mut state = 0x9e37_79b9u32;
+        for _ in 0..4_000 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let len = (state as usize >> 8) % 64;
+            let mut input = String::with_capacity(len);
+            for _ in 0..len {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                input.push(alphabet[(state as usize >> 16) % alphabet.len()] as char);
+            }
+            let mut expected = String::new();
+            norm_generic(&input, &mut expected, &mut String::new());
+            let mut actual = String::new();
+            norm_ascii(input.as_bytes(), &mut actual);
+            assert_eq!(actual, expected, "chunked mismatch for {input:?}");
         }
     }
 

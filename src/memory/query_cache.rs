@@ -5,16 +5,18 @@
 //! [magic u32 "QMAP"][version u16]
 //! (rec)*  每条： [qlen u16][norm(query) bytes][n u16][(idlen u8)(id bytes)(score f32)(sim f32)*n][recency u32][gen u64]
 //! ```
-//! 查询：归一化 query → 精确匹配直达（跳过 BM25，直接还原 score/sim 快照）；
-//! 编辑距离 ≤2 变体走轻量重排（新词面仍参与 BM25，见 recall 接线）。
-//! 同指纹多条时取 recency 最新。append-only：新条目追加；`rebuild` 合并，
-//! 本文件提供 load+write 原语）。
+//! 查询：归一化 query → 精确匹配直达（跳过 BM25，直接还原 score/sim 快照）。
+//! 变体 query 不复用其它 query 的快照：缓存只保存 top-k，无法在不重扫全库的
+//! 前提下保证变体排序正确，因此交给 BM25 重算。快照条数不足请求的 k 时也回退
+//! BM25，避免小 k 查询截断后续大 k 查询。append-only：新条目追加；`--rebuild`
+//! 时 `merge` 合并（同 query 取最新写入，同一秒内按文件顺序后者优先）。
+//! 快照只在 1 小时内复用：时间衰减会随当前时钟缓慢改变排序，过期后重算。
 //!
 //! 代际失效：条目记录写入时的库 gen；lookup 时 `entry.gen < 当前 gen`
 //! 的条目一律视为过期（新 case / 反馈 / 删除后，同 query 必须走 BM25 重算，
 //! 快照不得遮挡新状态）。
 
-use crate::memory::util::{edit_dist, fnv1a_parts, utc_now_secs};
+use crate::memory::util::{fnv1a_parts, utc_now_secs};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -24,6 +26,9 @@ use std::sync::{Mutex, OnceLock};
 const QMAP_MAGIC: u32 = 0x5041_4d51; // "QMAP"
 const QMAP_VER: u16 = 3;
 const HEADER_LEN: usize = 6;
+/// 时间衰减的最短 τ 为 30 天；1 小时快照造成的相对分数漂移上限约 0.14%
+/// （1h / (30d + 1h)），同时覆盖同一排障会话内的重复 CLI 查询。
+const QMAP_TTL_SECS: u64 = 60 * 60;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct QHit {
@@ -43,7 +48,7 @@ pub(crate) struct QEntry {
     pub gen: u64,
 }
 
-fn qmap_path(root: &str) -> PathBuf {
+pub(crate) fn qmap_path(root: &str) -> PathBuf {
     Path::new(root).join("index").join("qmap.bin")
 }
 
@@ -115,8 +120,33 @@ pub(crate) fn append(
     } else {
         f.seek(SeekFrom::End(0))?;
     }
+    // 同一 query/代际已有覆盖当前结果（相同或更大 top-k 且前缀一致）时无需追加：
+    // 重复 CLI 召回不会让 append-only 文件无限膨胀。分数不同的重算仍会追加，
+    // 因而参数或库状态变化不会被跳过。
+    let now = recency as u64;
+    if decoded.header_ok
+        && decoded.entries.iter().rev().any(|e| {
+            e.q == q && e.gen == gen && is_fresh(e.recency, now) && snapshot_covers(&e.hits, hits)
+        })
+    {
+        return Ok(());
+    }
     f.write_all(&buf)?;
     Ok(())
+}
+
+fn snapshot_covers(existing: &[QHit], incoming: &[(String, f64, f64)]) -> bool {
+    existing.len() >= incoming.len()
+        && existing
+            .iter()
+            .zip(incoming)
+            .all(|(old, (id, score, sim))| {
+                old.id == *id && old.score == *score as f32 && old.sim == *sim as f32
+            })
+}
+
+fn is_fresh(recency: u32, now: u64) -> bool {
+    now.saturating_sub(recency as u64) <= QMAP_TTL_SECS
 }
 
 fn write_header(f: &mut fs::File) -> std::io::Result<()> {
@@ -232,40 +262,36 @@ pub(crate) fn load_all(root: &str) -> std::io::Result<Vec<QEntry>> {
     Ok(decode(&buf).entries)
 }
 
-/// 精确或编辑距离 ≤ max 的记忆图命中（取 recency 最新；精确优先）。
+/// 精确记忆图命中（取最新的可用快照；append-only 顺序即写入顺序）。
 /// `meta_gen` = 当前库代际：`entry.gen < meta_gen` 的旧快照视为过期（跳过），
 /// 保证 store/rate/delete 后的库变化不被快照遮挡。
-/// 返回 (命中的归一化 query, hits, 编辑距离)。
+///
+/// `k` = 本次请求的结果上限。快照只保存当时 `truncate(k)` 后的 top-k，因此
+/// 只有 `hits.len() >= k` 才能复用：否则无法证明快照包含本次需要的全部结果。
+/// 例如先用 `--recall 1` 暖缓存、再用 `--recall 5`，必须回到 BM25 重算，
+/// 不能把 1 条结果当成“库里只有 1 条”。反向扫描也允许命中更早写入的更大快照。
+/// 返回 (命中的归一化 query, hits)。
 pub(crate) fn lookup(
     root: &str,
     query: &str,
-    max: usize,
+    k: usize,
     meta_gen: u64,
-) -> std::io::Result<Option<(String, Vec<QHit>, usize)>> {
+) -> std::io::Result<Option<(String, Vec<QHit>)>> {
     let q = norm_query(query);
     let entries = load_all(root)?;
-    let mut exact: Option<(String, Vec<QHit>, usize)> = None;
-    let mut best: Option<(String, Vec<QHit>, usize)> = None;
-    let mut best_rec: u32 = 0;
-    for e in entries {
-        if e.gen < meta_gen {
-            continue; // 库已变化：快照过期，不走直达。
-        }
-        if e.q == q {
-            exact = Some((e.q.clone(), e.hits.clone(), 0));
-        }
-        if let Some(d) = edit_dist(&e.q, &q, max) {
-            if d > 0 && (best.is_none() || e.recency > best_rec) {
-                best = Some((e.q.clone(), e.hits.clone(), d));
-                best_rec = e.recency;
-            }
+    let now = utc_now_secs();
+    for e in entries.into_iter().rev() {
+        if e.gen >= meta_gen && e.q == q && is_fresh(e.recency, now) && e.hits.len() >= k {
+            let mut hits = e.hits;
+            hits.truncate(k);
+            return Ok(Some((e.q, hits)));
         }
     }
-    // 精确命中永远优先于变体。
-    Ok(exact.or(best))
+    Ok(None)
 }
 
-/// 合并重写（--rebuild）：同归一化 query 只留 recency 最新一条；按 query 字典序。
+/// 合并重写（--rebuild）：同归一化 query 只留最新一条（同秒按写入顺序取后者）；
+/// 按 query 字典序写回。
 pub(crate) fn merge(root: &str) -> std::io::Result<()> {
     // 锁必须在 load 之前：否则 append 在 load 与 write 之间进来的记录会被合并覆盖。
     let _g = crate::memory::lock::acquire(root, "qmap.lock")?;
@@ -281,7 +307,9 @@ pub(crate) fn merge(root: &str) -> std::io::Result<()> {
     let mut best: std::collections::HashMap<String, QEntry> = std::collections::HashMap::new();
     for e in entries {
         match best.get_mut(&e.q) {
-            Some(cur) if e.recency > cur.recency => *cur = e,
+            // 同一秒内 recency 相等时，文件顺序更精确：后写者在后，必须覆盖先写者，
+            // 与 lookup 的“取最新可用快照”语义保持一致。
+            Some(cur) if e.recency >= cur.recency => *cur = e,
             Some(_) => {}
             None => {
                 best.insert(e.q.clone(), e);
@@ -371,6 +399,15 @@ impl SessionCache {
     }
 
     fn put(&mut self, key: u64, hit: SessionHit) {
+        // 同代际下保留更大的 top-k：一次小 k 查询不能覆盖此前更大的快照，
+        // 否则同进程后续更大 k 的查询会被不必要的缓存 miss 拖慢。
+        if let Some(old) = self.map.get_mut(&key) {
+            if old.gen == hit.gen && old.hits.len() >= hit.hits.len() {
+                old.born = hit.born;
+                self.touch(key);
+                return;
+            }
+        }
         self.map.insert(key, hit);
         self.touch(key);
     }
@@ -382,18 +419,27 @@ fn session_cache() -> &'static Mutex<SessionCache> {
 }
 
 /// 窗口内且库代际一致的会话快照；窗口 0 关闭缓存。
+///
+/// 与 qmap 相同，只有快照条数达到 `k` 才可复用；不足 `k` 时返回 `None`
+/// 交给完整召回，避免小 k 查询污染后续大 k 查询。
 pub(crate) fn session_get(
     root: &str,
     query: &str,
     gen: u64,
     window_secs: u64,
+    k: usize,
 ) -> Option<Vec<(String, f64, f64)>> {
     let key = session_key(root, query);
-    session_cache()
+    let hit = session_cache()
         .lock()
         .ok()
-        .and_then(|mut cache| cache.get(key, utc_now_secs(), gen, window_secs))
-        .map(|hit| hit.hits)
+        .and_then(|mut cache| cache.get(key, utc_now_secs(), gen, window_secs))?;
+    if hit.hits.len() < k {
+        return None;
+    }
+    let mut hits = hit.hits;
+    hits.truncate(k);
+    Some(hits)
 }
 
 /// 写入会话快照；失败静默（缓存只是加速，不影响召回正确性）。
@@ -420,15 +466,8 @@ fn session_key(root: &str, query: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::util::fnv1a;
+    use crate::memory::util::tmp_root;
     use std::fs;
-
-    fn tmp_root(tag: &str) -> String {
-        let r = std::env::temp_dir().join(format!("scx-qmap-{}-{}", tag, fnv1a("q") & 0xff));
-        let _ = fs::remove_dir_all(&r);
-        let _ = fs::create_dir_all(r.join("index"));
-        r.to_str().unwrap().to_string()
-    }
 
     #[test]
     fn qmap_hit_after_append() {
@@ -445,7 +484,7 @@ mod tests {
             entry.recency.abs_diff(utc_now_secs() as u32) <= 2,
             "recency 必须是 Unix 秒，而不是时间字符串的哈希"
         );
-        let hit = lookup(&root, "数据库连接超时", 0, 3).unwrap();
+        let hit = lookup(&root, "数据库连接超时", 2, 3).unwrap();
         assert_eq!(
             hit,
             Some((
@@ -461,19 +500,13 @@ mod tests {
                         score: 0.8,
                         sim: 0.6
                     },
-                ],
-                0
+                ]
             ))
         );
-        // 编辑距离 1 变体：加一字。
-        let v = lookup(&root, "数据库连接超时了", 2, 3).unwrap();
-        assert!(v.is_some(), "≤2 变体应命中记忆图");
-        assert_eq!(v.unwrap().2, 1);
-        // 编辑距离 4：不命中。
-        let far = lookup(&root, "磁盘空间不足了", 2, 3).unwrap();
-        assert!(far.is_none());
+        // 变体不复用快照：缓存只有 top-k，交给 BM25 重算才不会被旧排序误导。
+        assert!(lookup(&root, "数据库连接超时了", 2, 3).unwrap().is_none());
         // 代际失效：库 gen 前进后，同 gen 快照必须过期（走 BM25 重算）。
-        let stale = lookup(&root, "数据库连接超时", 0, 4).unwrap();
+        let stale = lookup(&root, "数据库连接超时", 2, 4).unwrap();
         assert!(stale.is_none(), "gen 落后的快照不得直达");
         let _ = fs::remove_dir_all(&root);
     }
@@ -485,10 +518,123 @@ mod tests {
         append(&root, "q", &[("b".to_string(), 0.7, 0.5)], 1).unwrap();
         let all = load_all(&root).unwrap();
         assert_eq!(all.len(), 2, "append-only：两次追加为两条");
-        // lookup 精确命中取 recency 最新——两条 recency 相同(同一秒)时取先写，
-        // 因此断言至少能命中且 id 为其中一条。
-        let hit = lookup(&root, "q", 0, 1).unwrap().unwrap();
-        assert!(hit.1[0].id == "a" || hit.1[0].id == "b");
+        // append-only 顺序即写入顺序；精确命中取最后一条（最新写入）。
+        let hit = lookup(&root, "q", 1, 1).unwrap().unwrap();
+        assert_eq!(hit.1[0].id, "b");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn qmap_never_serves_fewer_hits_than_requested() {
+        let root = tmp_root("k");
+        // 先用小 k 写入 1 条，再写 2 条；大 k 查询必须回到更大的快照，
+        // 不能让最新但更小的快照把结果截断。
+        append(&root, "q", &[("a".to_string(), 1.0, 0.9)], 7).unwrap();
+        assert!(lookup(&root, "q", 2, 7).unwrap().is_none());
+        append(
+            &root,
+            "q",
+            &[("a".to_string(), 1.0, 0.9), ("b".to_string(), 0.8, 0.7)],
+            7,
+        )
+        .unwrap();
+        let two = lookup(&root, "q", 2, 7).unwrap().unwrap().1;
+        assert_eq!(two.len(), 2);
+        // 再写一条更小的快照：反向扫描必须越过它，命中此前更大的快照。
+        append(&root, "q", &[("c".to_string(), 0.9, 0.8)], 7).unwrap();
+        let still_two = lookup(&root, "q", 2, 7).unwrap().unwrap().1;
+        assert_eq!(still_two.len(), 2);
+        assert!(lookup(&root, "q", 3, 7).unwrap().is_none());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn qmap_skips_redundant_snapshots_without_hiding_recomputed_scores() {
+        let root = tmp_root("dedup");
+        let hits = |id: &str, score: f64| vec![(id.to_string(), score, score / 2.0)];
+        append(&root, "q", &hits("a", 1.0), 7).unwrap();
+        append(&root, "q", &hits("a", 1.0), 7).unwrap();
+        assert_eq!(load_all(&root).unwrap().len(), 1, "相同快照不应重复追加");
+
+        append(&root, "q", &hits("a", 0.9), 7).unwrap();
+        assert_eq!(load_all(&root).unwrap().len(), 2, "重算分数必须保留新快照");
+
+        append(
+            &root,
+            "q",
+            &[("a".to_string(), 1.0, 0.5), ("b".to_string(), 0.8, 0.4)],
+            7,
+        )
+        .unwrap();
+        append(&root, "q", &hits("a", 1.0), 7).unwrap();
+        assert_eq!(
+            load_all(&root).unwrap().len(),
+            3,
+            "较小 k 快照已被更大的同前缀快照覆盖，不应追加"
+        );
+        assert_eq!(
+            lookup(&root, "q", 2, 7).unwrap().unwrap().1.len(),
+            2,
+            "复用大 k 结果时仍必须得到完整两条"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn qmap_expires_stale_time_decay_snapshots() {
+        let root = tmp_root("ttl");
+        let hits = vec![("a".to_string(), 1.0, 0.5)];
+        append(&root, "q", &hits, 7).unwrap();
+        let p = qmap_path(&root);
+        let mut f = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&p)
+            .unwrap();
+        let len = f.metadata().unwrap().len();
+        f.seek(SeekFrom::Start(len - 12)).unwrap();
+        let stale = (utc_now_secs() - QMAP_TTL_SECS - 1) as u32;
+        f.write_all(&stale.to_le_bytes()).unwrap();
+        drop(f);
+
+        assert!(
+            lookup(&root, "q", 1, 7).unwrap().is_none(),
+            "过期快照必须重算"
+        );
+        append(&root, "q", &hits, 7).unwrap();
+        assert!(
+            lookup(&root, "q", 1, 7).unwrap().is_some(),
+            "新快照必须可复用"
+        );
+        assert_eq!(load_all(&root).unwrap().len(), 2, "过期快照不得阻止刷新");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn qmap_merge_prefers_later_write_on_equal_recency() {
+        let root = tmp_root("merge");
+        let p = qmap_path(&root);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&QMAP_MAGIC.to_le_bytes());
+        buf.extend_from_slice(&QMAP_VER.to_le_bytes());
+        let now = utc_now_secs();
+        for (id, score) in [("older", 0.1f32), ("newer", 0.9f32)] {
+            buf.extend_from_slice(&1u16.to_le_bytes());
+            buf.push(b'q');
+            buf.extend_from_slice(&1u16.to_le_bytes());
+            buf.push(id.len() as u8);
+            buf.extend_from_slice(id.as_bytes());
+            buf.extend_from_slice(&score.to_le_bytes());
+            buf.extend_from_slice(&score.to_le_bytes());
+            buf.extend_from_slice(&(now as u32).to_le_bytes());
+            buf.extend_from_slice(&1u64.to_le_bytes());
+        }
+        fs::write(&p, buf).unwrap();
+        merge(&root).unwrap();
+        let hit = lookup(&root, "q", 1, 1).unwrap().unwrap();
+        assert_eq!(hit.1[0].id, "newer", "同一秒内后写者必须胜出");
+        assert_eq!(load_all(&root).unwrap().len(), 1, "merge 后只剩一条");
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -513,7 +659,7 @@ mod tests {
         let mut buf = fs::read(&p).unwrap();
         buf.truncate(buf.len() - 2);
         fs::write(&p, &buf).unwrap();
-        let r = lookup(&root, "数据库超时", 0, 1);
+        let r = lookup(&root, "数据库超时", 1, 1);
         assert!(r.is_ok(), "尾部损坏必须容错，不崩溃");
         // 残段被丢弃（该条 recency 缺失）→ 命中可为空；rebuild 后恢复。
         let _ = fs::remove_dir_all(&root);
@@ -529,11 +675,11 @@ mod tests {
         let mut f = fs::OpenOptions::new().append(true).open(&p).unwrap();
         f.write_all(&[0x7f]).unwrap();
         drop(f);
-        assert!(lookup(&root, "first", 0, 1).unwrap().is_some());
+        assert!(lookup(&root, "first", 1, 1).unwrap().is_some());
         append(&root, "second", &[("c2".to_string(), 0.8, 0.7)], 1).unwrap();
         assert_eq!(load_all(&root).unwrap().len(), 2, "残尾修复后两条都应可读");
         assert_eq!(
-            lookup(&root, "second", 0, 1).unwrap().unwrap().1[0].id,
+            lookup(&root, "second", 1, 1).unwrap().unwrap().1[0].id,
             "c2"
         );
         let _ = fs::remove_dir_all(&root);
@@ -543,9 +689,10 @@ mod tests {
     fn qmap_rebuilds_bad_header_on_append() {
         let root = tmp_root("hdr");
         let p = qmap_path(&root);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(&p, b"garbage").unwrap();
         append(&root, "q", &[("c1".to_string(), 1.0, 0.9)], 1).unwrap();
-        assert_eq!(lookup(&root, "q", 0, 1).unwrap().unwrap().1[0].id, "c1");
+        assert_eq!(lookup(&root, "q", 1, 1).unwrap().unwrap().1[0].id, "c1");
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -568,28 +715,45 @@ mod tests {
     #[test]
     fn session_cache_hit_within_window() {
         assert_eq!(
-            session_get("/test/a", "缓存命中测试 query alpha", 1, 30 * 60),
+            session_get("/test/a", "缓存命中测试 query alpha", 1, 30 * 60, 2),
             None,
             "首次必 miss"
         );
         let hits = vec![("c1".to_string(), 1.5, 0.9), ("c2".to_string(), 1.2, 0.8)];
         session_put("/test/a", "缓存命中测试 query alpha", hits.clone(), 1);
         assert_eq!(
-            session_get("/test/a", "缓存命中测试 query alpha", 1, 30 * 60),
+            session_get("/test/a", "缓存命中测试 query alpha", 1, 30 * 60, 2),
             Some(hits),
             "窗口内二次命中（快照逐字段一致）"
         );
         assert_eq!(
-            session_get("/test/a", "缓存命中测试 query beta", 1, 30 * 60),
+            session_get("/test/a", "缓存命中测试 query beta", 1, 30 * 60, 2),
             None
         );
         assert_eq!(
-            session_get("/test/b", "缓存命中测试 query alpha", 1, 30 * 60),
+            session_get("/test/b", "缓存命中测试 query alpha", 1, 30 * 60, 2),
             None,
             "不同记忆库不得共享会话快照"
         );
         assert_eq!(
-            session_get("/test/a", "缓存命中测试 query alpha", 2, 30 * 60),
+            session_get("/test/a", "缓存命中测试 query alpha", 1, 30 * 60, 3),
+            None,
+            "快照条数不足 k 时必须 miss"
+        );
+        // 小 k 查询不能覆盖已经缓存的更大快照。
+        session_put(
+            "/test/a",
+            "缓存命中测试 query alpha",
+            vec![("c1".to_string(), 1.5, 0.9)],
+            1,
+        );
+        assert_eq!(
+            session_get("/test/a", "缓存命中测试 query alpha", 1, 30 * 60, 2).map(|v| v.len()),
+            Some(2),
+            "较大快照必须保留"
+        );
+        assert_eq!(
+            session_get("/test/a", "缓存命中测试 query alpha", 2, 30 * 60, 2),
             None,
             "gen 不符必须 miss"
         );
@@ -607,7 +771,7 @@ mod tests {
             },
         );
         assert_eq!(
-            session_get("/test/expire", "过期测试 query", 0, 30 * 60),
+            session_get("/test/expire", "过期测试 query", 0, 30 * 60, 1),
             None,
             "窗口外必须 miss"
         );
@@ -622,7 +786,7 @@ mod tests {
             0,
         );
         assert_eq!(
-            session_get("/test/zero", "关闭缓存测试 query", 0, 0),
+            session_get("/test/zero", "关闭缓存测试 query", 0, 0, 1),
             None,
             "窗口 0 必须 miss"
         );
