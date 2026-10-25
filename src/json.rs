@@ -5,6 +5,7 @@
 // 公共工具模块：mcp/semantic 各 feature 下消费点不同，允许部分方法在某构建未用。
 #![allow(dead_code)]
 
+#[derive(Clone)]
 pub enum Json {
     Null,
     Bool(bool),
