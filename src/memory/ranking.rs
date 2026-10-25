@@ -43,6 +43,108 @@ const IDF_MIN: f64 = 0.6;
 /// 扩展词数量上限。
 const EXPAND_MAX: usize = 6;
 
+/// 小库线性兜底：全库现算 df，返回 (库规模 n, df 表)。
+fn scan_all_df(root: &str) -> std::io::Result<(f64, HashMap<String, usize>)> {
+    let all_ids = store::list_ids(root)?;
+    let n = all_ids.len() as f64;
+    let mut df: HashMap<String, usize> = HashMap::new();
+    for id in &all_ids {
+        let c = store::read_case(root, id)?;
+        let (_, terms) = build_doc_terms(&c.query, &c.text);
+        for t in &terms {
+            *df.entry(t.clone()).or_insert(0) += 1;
+        }
+    }
+    Ok((n, df))
+}
+
+/// 统计批内词频：只算 sim>0 的相关 case；索引路径复用 postings 词表快照。
+fn collect_batch_tf(
+    root: &str,
+    hits: &[RecallHit],
+    idx: Option<&super::index::Index>,
+) -> std::io::Result<HashMap<String, usize>> {
+    let mut batch: HashMap<String, usize> = HashMap::new();
+    for h in hits {
+        if h.sim <= 0.0 {
+            continue;
+        }
+        if let Some(idx) = idx {
+            if let Some(di) = super::index::doc_by_id(idx, &h.id) {
+                for t in idx.docs[di].terms.iter() {
+                    *batch.entry(t.clone()).or_insert(0) += 1;
+                }
+                continue;
+            }
+        }
+        let c = store::read_case(root, &h.id)?;
+        let mut terms = build_mem_terms(&c.query);
+        terms.extend(build_mem_terms(&c.text));
+        for t in &terms {
+            *batch.entry(t.clone()).or_insert(0) += 1;
+        }
+    }
+    Ok(batch)
+}
+
+/// 按 df 来源（索引 postings / meta 快照 / 线性现算）查单词 df。
+fn lookup_df(
+    idx: Option<&super::index::Index>,
+    snapshot: Option<(&[(String, usize)], bool)>,
+    df_map: Option<&HashMap<String, usize>>,
+    t: &str,
+) -> f64 {
+    if let Some(idx) = idx {
+        super::index::term_df(idx, t) as f64
+    } else if let Some((snapshot, sorted)) = snapshot {
+        let df = if sorted {
+            snapshot
+                .binary_search_by(|(k, _)| k[..].cmp(t))
+                .ok()
+                .map(|i| snapshot[i].1)
+                .unwrap_or(0)
+        } else {
+            snapshot
+                .iter()
+                .find(|(k, _)| k == t)
+                .map(|(_, n)| *n)
+                .unwrap_or(0)
+        };
+        df as f64
+    } else {
+        df_map
+            .as_ref()
+            .and_then(|map| map.get(t).copied())
+            .unwrap_or(0) as f64
+    }
+}
+
+/// 从批内 tf 表筛出扩展候选（tf≥MIN、idf>IDF_MIN、不在 query 词表）。
+fn filter_candidates(
+    batch: &HashMap<String, usize>,
+    qterms: &[String],
+    n: f64,
+    idx: Option<&super::index::Index>,
+    snapshot: Option<(&[(String, usize)], bool)>,
+    df_map: Option<&HashMap<String, usize>>,
+) -> Vec<(String, f64)> {
+    let mut cand: Vec<(String, f64)> = Vec::new();
+    for (t, tf) in batch {
+        if *tf < MIN_BATCH_TF {
+            continue;
+        }
+        if qterms.contains(t) {
+            continue;
+        }
+        let d = lookup_df(idx, snapshot, df_map, t);
+        let idf = idf(n, d);
+        if idf > IDF_MIN {
+            cand.push((t.clone(), idf));
+        }
+    }
+    cand
+}
+
 /// 返回扩展词（未含 query 原词的、库内高判别词）。
 /// `hits`：粗召回 top-K 候选（含 sim；仅 sim>0 的 case 参与词频统计）。
 /// `meta`：df 快照与库规模。
@@ -59,24 +161,16 @@ pub(crate) fn expand(
     let mut n = idx.map(|i| i.n_docs).unwrap_or(meta.case_count) as f64;
     // df 来源优先级：索引 postings（全库口径、零分配）→ meta df 快照（二分）
     // → 小库全量现算。避免每次 PRF 都把整张 df 表克隆进 HashMap。
-    let df_snapshot = if idx.is_none() && !meta.df.is_empty() {
+    let snapshot = if idx.is_none() && !meta.df.is_empty() {
         let sorted = meta.df.windows(2).all(|w| w[0].0 <= w[1].0);
-        Some((&meta.df, sorted))
+        Some((&meta.df[..], sorted))
     } else {
         None
     };
     let df_map = if idx.is_none() && meta.df.is_empty() {
         // 线性阶段兜底：全库现算（小库可接受；大库必经 rebuild → 快照非空）。
-        let all_ids = store::list_ids(root)?;
-        n = all_ids.len() as f64;
-        let mut df: HashMap<String, usize> = HashMap::new();
-        for id in &all_ids {
-            let c = store::read_case(root, id)?;
-            let (_, terms) = build_doc_terms(&c.query, &c.text);
-            for t in &terms {
-                *df.entry(t.clone()).or_insert(0) += 1;
-            }
-        }
+        let (n_scan, df) = scan_all_df(root)?;
+        n = n_scan;
         Some(df)
     } else {
         None
@@ -84,71 +178,10 @@ pub(crate) fn expand(
     if n == 0.0 {
         return Ok(Vec::new());
     }
-    // 批内 tf：只统计与 query 词面相关（sim>0）的 case——无关 case 的私有词
-    // 是噪声源，会把桶判定与重排带偏，因此明确排除。
-    let mut batch: HashMap<String, usize> = HashMap::new();
-    for h in hits {
-        if h.sim <= 0.0 {
-            continue;
-        }
-        // 索引路径直接复用 postings 的词表快照，避免 PRF 为 top-k 反复读 case.json。
-        // 快照是去重词表，批内 tf 按“出现该词的文档数”计；线性路径仍按原始词表计数。
-        if let Some(idx) = idx {
-            if let Some(di) = super::index::doc_by_id(idx, &h.id) {
-                for t in idx.docs[di].terms.iter() {
-                    *batch.entry(t.clone()).or_insert(0) += 1;
-                }
-                continue;
-            }
-        }
-        let c = store::read_case(root, &h.id)?;
-        let mut terms = build_mem_terms(&c.query);
-        terms.extend(build_mem_terms(&c.text));
-        for t in &terms {
-            *batch.entry(t.clone()).or_insert(0) += 1;
-        }
-    }
+    let batch = collect_batch_tf(root, hits, idx)?;
     // 筛选：批内 tf≥MIN、全局 idf>IDF_MIN、不在 query 词表。
-    let mut cand: Vec<(String, f64)> = Vec::new();
-    for (t, tf) in &batch {
-        if *tf < MIN_BATCH_TF {
-            continue;
-        }
-        if qterms.contains(t) {
-            continue;
-        }
-        let d = if let Some(idx) = idx {
-            super::index::term_df(idx, t) as f64
-        } else if let Some((snapshot, sorted)) = df_snapshot {
-            let df = if sorted {
-                snapshot
-                    .binary_search_by(|(k, _)| k.as_str().cmp(t.as_str()))
-                    .ok()
-                    .map(|i| snapshot[i].1)
-                    .unwrap_or(0)
-            } else {
-                snapshot
-                    .iter()
-                    .find(|(k, _)| k == t)
-                    .map(|(_, n)| *n)
-                    .unwrap_or(0)
-            };
-            df as f64
-        } else {
-            df_map
-                .as_ref()
-                .and_then(|map| map.get(t).copied())
-                .unwrap_or(0) as f64
-        };
-        let idf = idf(n, d);
-        if idf > IDF_MIN {
-            cand.push((t.clone(), idf));
-        }
-    }
-    // 确定性全序：idf 降序，idf 相等时按词面升序。`batch` 是 HashMap，迭代序随进程
-    // 随机；仅按 idf 排序时并列词会继承随机序，truncate(EXPAND_MAX) 因而跨进程选出
-    // 不同的扩展词集合，导致 PRF 第二轮命中数/排序不可重放（实测同一 query 跨进程
-    // 候选数在 6..10 抖动）。补词面次级键使排序唯一。
+    let mut cand = filter_candidates(&batch, &qterms, n, idx, snapshot, df_map.as_ref());
+    // 确定性全序：idf 降序，idf 相等按词面升序（见下方注释）。
     sort_expansion_candidates(&mut cand);
     cand.truncate(EXPAND_MAX);
     Ok(cand.into_iter().map(|(t, _)| t).collect())

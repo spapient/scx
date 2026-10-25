@@ -52,14 +52,8 @@ pub(crate) fn qmap_path(root: &str) -> PathBuf {
     Path::new(root).join("index").join("qmap.bin")
 }
 
-/// 追加一条记忆图记录（不查重，rebuild 时合并）；记录写入时的库代际 `gen`。
-pub(crate) fn append(
-    root: &str,
-    query: &str,
-    hits: &[(String, f64, f64)],
-    gen: u64,
-) -> std::io::Result<()> {
-    let q = norm_query(query);
+/// 校验 append 输入边界（query/命中数/case id 长度）。
+fn validate_append_inputs(q: &str, hits: &[(String, f64, f64)]) -> Result<(), std::io::Error> {
     if q.len() > u16::MAX as usize {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -78,6 +72,11 @@ pub(crate) fn append(
             format!("qmap case id too long: {}", id.len()),
         ));
     }
+    Ok(())
+}
+
+/// 构建一条待追加的记录字节（不含 header）。
+fn build_entry_buf(q: &str, hits: &[(String, f64, f64)], recency: u32, gen: u64) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::with_capacity(64 + hits.iter().map(|h| h.0.len()).sum::<usize>());
     buf.extend_from_slice(&(q.len() as u16).to_le_bytes());
     buf.extend_from_slice(q.as_bytes());
@@ -88,9 +87,58 @@ pub(crate) fn append(
         buf.extend_from_slice(&(*score as f32).to_le_bytes());
         buf.extend_from_slice(&(*sim as f32).to_le_bytes());
     }
-    let recency = u32::try_from(utc_now_secs()).unwrap_or(u32::MAX);
     buf.extend_from_slice(&recency.to_le_bytes());
     buf.extend_from_slice(&gen.to_le_bytes());
+    buf
+}
+
+/// 修复追加前的文件状态：坏 header 重建、残尾截掉、正常则定位到末尾。
+fn repair_append_file(f: &mut fs::File, existing: &[u8], decoded: &Decoded) -> std::io::Result<()> {
+    if !decoded.header_ok {
+        f.set_len(0)?;
+        f.seek(SeekFrom::Start(0))?;
+        write_header(f)?;
+    } else if decoded.end < existing.len() {
+        f.set_len(decoded.end as u64)?;
+        f.seek(SeekFrom::End(0))?;
+    } else {
+        f.seek(SeekFrom::End(0))?;
+    }
+    Ok(())
+}
+
+/// 单条已解码记录是否与本次写入同 query/同 gen/新鲜且快照已覆盖。
+fn matches_snapshot(e: &QEntry, q: &str, gen: u64, now: u64, hits: &[(String, f64, f64)]) -> bool {
+    e.q == q && e.gen == gen && is_fresh(e.recency, now) && snapshot_covers(&e.hits, hits)
+}
+
+/// 是否已存在可复用的同 query/同 gen 快照（无需追加）。
+fn already_cached(
+    decoded: &Decoded,
+    q: &str,
+    gen: u64,
+    now: u64,
+    hits: &[(String, f64, f64)],
+) -> bool {
+    decoded.header_ok
+        && decoded
+            .entries
+            .iter()
+            .rev()
+            .any(|e| matches_snapshot(e, q, gen, now, hits))
+}
+
+/// 追加一条记忆图记录（不查重，rebuild 时合并）；记录写入时的库代际 `gen`。
+pub(crate) fn append(
+    root: &str,
+    query: &str,
+    hits: &[(String, f64, f64)],
+    gen: u64,
+) -> std::io::Result<()> {
+    let q = norm_query(query);
+    validate_append_inputs(&q, hits)?;
+    let recency = u32::try_from(utc_now_secs()).unwrap_or(u32::MAX);
+    let buf = build_entry_buf(&q, hits, recency, gen);
 
     // append-only 文件也必须串行：两个进程同时写 header/记录会让读者看到交错段。
     let _g = crate::memory::lock::acquire(root, "qmap.lock")?;
@@ -110,25 +158,12 @@ pub(crate) fn append(
     let mut existing = Vec::new();
     f.read_to_end(&mut existing)?;
     let decoded = decode(&existing);
-    if !decoded.header_ok {
-        f.set_len(0)?;
-        f.seek(SeekFrom::Start(0))?;
-        write_header(&mut f)?;
-    } else if decoded.end < existing.len() {
-        f.set_len(decoded.end as u64)?;
-        f.seek(SeekFrom::End(0))?;
-    } else {
-        f.seek(SeekFrom::End(0))?;
-    }
+    repair_append_file(&mut f, &existing, &decoded)?;
     // 同一 query/代际已有覆盖当前结果（相同或更大 top-k 且前缀一致）时无需追加：
     // 重复 CLI 召回不会让 append-only 文件无限膨胀。分数不同的重算仍会追加，
     // 因而参数或库状态变化不会被跳过。
     let now = recency as u64;
-    if decoded.header_ok
-        && decoded.entries.iter().rev().any(|e| {
-            e.q == q && e.gen == gen && is_fresh(e.recency, now) && snapshot_covers(&e.hits, hits)
-        })
-    {
+    if already_cached(&decoded, &q, gen, now, hits) {
         return Ok(());
     }
     f.write_all(&buf)?;
@@ -269,7 +304,7 @@ pub(crate) fn load_all(root: &str) -> std::io::Result<Vec<QEntry>> {
 /// `k` = 本次请求的结果上限。快照只保存当时 `truncate(k)` 后的 top-k，因此
 /// 只有 `hits.len() >= k` 才能复用：否则无法证明快照包含本次需要的全部结果。
 /// 例如先用 `--recall 1` 暖缓存、再用 `--recall 5`，必须回到 BM25 重算，
-/// 不能把 1 条结果当成“库里只有 1 条”。反向扫描也允许命中更早写入的更大快照。
+/// 不能把 1 条结果当成"库里只有 1 条"。反向扫描也允许命中更早写入的更大快照。
 /// 返回 (命中的归一化 query, hits)。
 pub(crate) fn lookup(
     root: &str,
@@ -290,25 +325,13 @@ pub(crate) fn lookup(
     Ok(None)
 }
 
-/// 合并重写（--rebuild）：同归一化 query 只留最新一条（同秒按写入顺序取后者）；
-/// 按 query 字典序写回。
-pub(crate) fn merge(root: &str) -> std::io::Result<()> {
-    // 锁必须在 load 之前：否则 append 在 load 与 write 之间进来的记录会被合并覆盖。
-    let _g = crate::memory::lock::acquire(root, "qmap.lock")?;
-    let entries = load_all(root)?;
-    if entries.is_empty() {
-        // 损坏/空 qmap 在 rebuild 时直接丢弃，避免下一次 append 继续追加到坏 header 后。
-        let p = qmap_path(root);
-        if p.exists() {
-            let _ = fs::remove_file(p);
-        }
-        return Ok(());
-    }
+/// 同归一化 query 去重：保留最新写入；同一秒内后写者（文件顺序）覆盖先写者。
+fn dedup_entries(entries: Vec<QEntry>) -> std::collections::HashMap<String, QEntry> {
     let mut best: std::collections::HashMap<String, QEntry> = std::collections::HashMap::new();
     for e in entries {
         match best.get_mut(&e.q) {
             // 同一秒内 recency 相等时，文件顺序更精确：后写者在后，必须覆盖先写者，
-            // 与 lookup 的“取最新可用快照”语义保持一致。
+            // 与 lookup 的"取最新可用快照"语义保持一致。
             Some(cur) if e.recency >= cur.recency => *cur = e,
             Some(_) => {}
             None => {
@@ -316,12 +339,11 @@ pub(crate) fn merge(root: &str) -> std::io::Result<()> {
             }
         }
     }
-    let mut sorted: Vec<QEntry> = best.into_values().collect();
-    sorted.sort_by(|a, b| a.q.cmp(&b.q));
-    let p = qmap_path(root);
-    if let Some(d) = p.parent() {
-        crate::memory::lock::create_dir_all(d)?;
-    }
+    best
+}
+
+/// 序列化合并后的 qmap（header + 按 query 字典序的条目）。
+fn serialize_qmap(sorted: &[QEntry]) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::with_capacity(16 + sorted.len() * 64);
     buf.extend_from_slice(&QMAP_MAGIC.to_le_bytes());
     buf.extend_from_slice(&QMAP_VER.to_le_bytes());
@@ -338,6 +360,31 @@ pub(crate) fn merge(root: &str) -> std::io::Result<()> {
         buf.extend_from_slice(&e.recency.to_le_bytes());
         buf.extend_from_slice(&e.gen.to_le_bytes());
     }
+    buf
+}
+
+/// 合并重写（--rebuild）：同归一化 query 只留最新一条（同秒按写入顺序取后者）；
+/// 按 query 字典序写回。
+pub(crate) fn merge(root: &str) -> std::io::Result<()> {
+    // 锁必须在 load 之前：否则 append 在 load 与 write 之间进来的记录会被合并覆盖。
+    let _g = crate::memory::lock::acquire(root, "qmap.lock")?;
+    let entries = load_all(root)?;
+    if entries.is_empty() {
+        // 损坏/空 qmap 在 rebuild 时直接丢弃，避免下一次 append 继续追加到坏 header 后。
+        let p = qmap_path(root);
+        if p.exists() {
+            let _ = fs::remove_file(p);
+        }
+        return Ok(());
+    }
+    let best = dedup_entries(entries);
+    let mut sorted: Vec<QEntry> = best.into_values().collect();
+    sorted.sort_by(|a, b| a.q.cmp(&b.q));
+    let p = qmap_path(root);
+    if let Some(d) = p.parent() {
+        crate::memory::lock::create_dir_all(d)?;
+    }
+    let buf = serialize_qmap(&sorted);
     crate::memory::lock::atomic_write(&p, &buf)
 }
 

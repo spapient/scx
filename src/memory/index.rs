@@ -146,7 +146,7 @@ fn entity_map(docs: &[DocRec]) -> HashMap<String, Vec<usize>> {
     entities
 }
 
-/// 获取索引写锁。调用方在“case 资产变更 + 索引失效 + gen 前进”期间持锁，
+/// 获取索引写锁。调用方在"case 资产变更 + 索引失效 + gen 前进"期间持锁，
 /// 防止 index::build 在失效之后又把旧快照写回。
 pub(crate) fn lock(root: &str) -> std::io::Result<crate::memory::lock::FileLock> {
     crate::memory::lock::acquire(root, "index.lock")
@@ -188,15 +188,11 @@ fn cache() -> &'static Mutex<Option<CacheEntry>> {
 /// df 快照行：term 字典序 → 库内出现次数。
 pub(crate) type Df = Vec<(String, usize)>;
 
-/// 全量构建 postings.bin（读取全部 case 的 query∪text 词表）。
-/// 返回 (n_docs, n_terms, df 快照按 term 字典序) —— df 供 meta [df] 节落盘。
-pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
-    // 跨进程串行构建：避免两个 rebuild/自动构建同时写 postings.bin。
-    let _g = lock(root)?;
-    let ids = store::list_ids(root)?;
+/// 读取全部 case 构建 doc 打分快照；返回 (docs, 全库词数 total_len)。
+fn build_doc_recs(root: &str, ids: &[String]) -> std::io::Result<(Vec<(String, DocRec)>, usize)> {
     let mut docs: Vec<(String, DocRec)> = Vec::with_capacity(ids.len());
     let mut total_len = 0usize;
-    for id in &ids {
+    for id in ids {
         let c = store::read_case(root, id)?;
         let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
         let updated_s = crate::memory::util::parse_utc_secs(&c.updated_at);
@@ -217,35 +213,37 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
             },
         ));
     }
+    Ok((docs, total_len))
+}
+
+/// 由 doc 快照派生 term → doc_idx 列表（doc_idx 升序 = docs 迭代序）。
+fn build_dict(docs: &[(String, DocRec)]) -> HashMap<String, Vec<usize>> {
     let mut dict: HashMap<String, Vec<usize>> = HashMap::new();
     for (di, (_, rec)) in docs.iter().enumerate() {
         for t in rec.terms.iter() {
             dict.entry(t.clone()).or_default().push(di);
         }
     }
-    let mut body: Vec<u8> = Vec::with_capacity(32 + docs.len() * 96);
-    body.extend_from_slice(&(docs.len() as u32).to_le_bytes());
-    body.extend_from_slice(&(total_len as u64).to_le_bytes());
-    body.extend_from_slice(&(dict.len() as u32).to_le_bytes());
-    for (id, rec) in &docs {
-        // doc 记录：id + 去重词表 + 4 字段 + 状态/质量/时间（打分快照）。
+    dict
+}
+
+/// 序列化一条字符串列表段：[len u32][(u8 len + bytes)*]。
+fn put_str_list(body: &mut Vec<u8>, list: &[String]) {
+    body.extend_from_slice(&(list.len() as u32).to_le_bytes());
+    for s in list {
+        body.push(s.len() as u8);
+        body.extend_from_slice(s.as_bytes());
+    }
+}
+
+/// 写 doc 表（id + 词表 + 4 字段 + 状态/质量/时间快照）。
+fn write_doc_table(body: &mut Vec<u8>, docs: &[(String, DocRec)]) {
+    for (id, rec) in docs {
         body.push(id.len() as u8);
         body.extend_from_slice(id.as_bytes());
-        body.extend_from_slice(&(rec.terms.len() as u32).to_le_bytes());
-        for t in rec.terms.iter() {
-            body.push(t.len() as u8);
-            body.extend_from_slice(t.as_bytes());
-        }
-        body.extend_from_slice(&(rec.query_terms.len() as u32).to_le_bytes());
-        for t in rec.query_terms.iter() {
-            body.push(t.len() as u8);
-            body.extend_from_slice(t.as_bytes());
-        }
-        body.extend_from_slice(&(rec.buckets.len() as u32).to_le_bytes());
-        for b in &rec.buckets {
-            body.push(b.len() as u8);
-            body.extend_from_slice(b.as_bytes());
-        }
+        put_str_list(body, &rec.terms);
+        put_str_list(body, &rec.query_terms);
+        put_str_list(body, &rec.buckets);
         for f in [
             &rec.fields.error_code,
             &rec.fields.file_loc,
@@ -266,6 +264,10 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
         body.push(rec.updated_at.len() as u8);
         body.extend_from_slice(rec.updated_at.as_bytes());
     }
+}
+
+/// 写 term 表（term 字典序 + df + delta-varint doc_idx 序列）。
+fn write_term_table(body: &mut Vec<u8>, dict: &HashMap<String, Vec<usize>>) {
     let mut term_keys: Vec<&String> = dict.keys().collect();
     term_keys.sort(); // term 字典序，确定性
     for t in &term_keys {
@@ -275,15 +277,30 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
         body.extend_from_slice(&(post.len() as u32).to_le_bytes());
         let mut prev = 0usize;
         for &di in post {
-            varint_put(&mut body, (di - prev) as u64);
+            varint_put(body, (di - prev) as u64);
             prev = di;
         }
     }
+}
+
+/// 全量构建 postings.bin（读取全部 case 的 query∪text 词表）。
+/// 返回 (n_docs, n_terms, df 快照按 term 字典序) —— df 供 meta [df] 节落盘。
+pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
+    // 跨进程串行构建：避免两个 rebuild/自动构建同时写 postings.bin。
+    let _g = lock(root)?;
+    let ids = store::list_ids(root)?;
+    let (docs, total_len) = build_doc_recs(root, &ids)?;
+    let dict = build_dict(&docs);
+    let mut body: Vec<u8> = Vec::with_capacity(32 + docs.len() * 96);
+    body.extend_from_slice(&(docs.len() as u32).to_le_bytes());
+    body.extend_from_slice(&(total_len as u64).to_le_bytes());
+    body.extend_from_slice(&(dict.len() as u32).to_le_bytes());
+    write_doc_table(&mut body, &docs);
+    write_term_table(&mut body, &dict);
     write_postings(root, &body)?;
-    let df: Vec<(String, usize)> = term_keys
-        .iter()
-        .map(|t| ((*t).clone(), dict[*t].len()))
-        .collect();
+    // df 快照按 term 字典序输出（与原 term_keys.sort() 同序）。
+    let mut df: Vec<(String, usize)> = dict.iter().map(|(t, v)| (t.clone(), v.len())).collect();
+    df.sort_by(|a, b| a.0.cmp(&b.0));
     Ok((docs.len(), dict.len(), df))
 }
 
@@ -315,9 +332,51 @@ pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
     Ok(arc)
 }
 
-/// 解析字节切片为内存索引（纯函数，输入来自 fs::read）。
-pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
-    let corrupt = |m: &str| std::io::Error::other(format!("postings.bin corrupt: {m}"));
+/// 解析失败统一错误（postings.bin corrupt: ...）。
+fn corrupt(m: &str) -> std::io::Error {
+    std::io::Error::other(format!("postings.bin corrupt: {m}"))
+}
+
+/// 从游标语境取 u32（边界不足返回 None）。
+fn take_u32(body: &[u8], i: &mut usize) -> Option<u32> {
+    if *i + 4 > body.len() {
+        return None;
+    }
+    let v = u32::from_le_bytes(body[*i..*i + 4].try_into().unwrap());
+    *i += 4;
+    Some(v)
+}
+
+/// 从游标语境取一条 u8 长度前缀字符串。
+fn take_str(body: &[u8], i: &mut usize) -> std::io::Result<String> {
+    if *i >= body.len() {
+        return Err(corrupt("str len truncated"));
+    }
+    let len = body[*i] as usize;
+    *i += 1;
+    if *i + len > body.len() {
+        return Err(corrupt("str overflow"));
+    }
+    let s = String::from_utf8_lossy(&body[*i..*i + len]).into_owned();
+    *i += len;
+    Ok(s)
+}
+
+/// 从游标语境取一个 u32 长度前缀的字符串列表（用于 4 个字段向量）。
+fn take_vec(body: &[u8], i: &mut usize) -> std::io::Result<Vec<String>> {
+    let n = take_u32(body, i).ok_or_else(|| corrupt("no field n"))? as usize;
+    if n > body.len() {
+        return Err(corrupt("field count exceeds body"));
+    }
+    let mut v = Vec::with_capacity(n);
+    for _ in 0..n {
+        v.push(take_str(body, i)?);
+    }
+    Ok(v)
+}
+
+/// 校验 header（magic/version/body_len/crc32），返回 body 切片。
+fn open_body(buf: &[u8]) -> std::io::Result<&[u8]> {
     if buf.len() < 14 {
         return Err(corrupt("too short"));
     }
@@ -345,94 +404,57 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
     if crc32(body) != crc {
         return Err(corrupt("crc mismatch"));
     }
-    let mut i = 0usize;
-    let take_u32 = |i: &mut usize| -> Option<u32> {
-        if *i + 4 > body.len() {
-            return None;
-        }
-        let v = u32::from_le_bytes(body[*i..*i + 4].try_into().unwrap());
-        *i += 4;
-        Some(v)
-    };
-    let n_docs = take_u32(&mut i).ok_or_else(|| corrupt("no n_docs"))? as usize;
-    if n_docs > body.len() {
-        return Err(corrupt("n_docs exceeds body"));
-    }
-    if i + 8 > body.len() {
-        return Err(corrupt("no total_len"));
-    }
-    let total_len = u64::from_le_bytes(body[i..i + 8].try_into().unwrap()) as usize;
-    i += 8;
-    let n_terms = take_u32(&mut i).ok_or_else(|| corrupt("no n_terms"))? as usize;
-    if n_terms > body.len() {
-        return Err(corrupt("n_terms exceeds body"));
-    }
+    Ok(body)
+}
+
+/// 解析 doc 表（n_docs 条打分快照），返回 (ids, docs)。
+fn parse_doc_recs(
+    body: &[u8],
+    n_docs: usize,
+    i: &mut usize,
+) -> std::io::Result<(Vec<Arc<str>>, Vec<DocRec>)> {
     let mut ids: Vec<Arc<str>> = Vec::with_capacity(n_docs);
     let mut docs: Vec<DocRec> = Vec::with_capacity(n_docs);
-    let take_str = |i: &mut usize, body: &[u8]| -> std::io::Result<String> {
-        if *i >= body.len() {
-            return Err(corrupt("str len truncated"));
-        }
-        let len = body[*i] as usize;
-        *i += 1;
-        if *i + len > body.len() {
-            return Err(corrupt("str overflow"));
-        }
-        let s = String::from_utf8_lossy(&body[*i..*i + len]).into_owned();
-        *i += len;
-        Ok(s)
-    };
     for _ in 0..n_docs {
-        let id = take_str(&mut i, body)?;
-        let nterms = take_u32(&mut i).ok_or_else(|| corrupt("no doc nterms"))? as usize;
+        let id = take_str(body, i)?;
+        let nterms = take_u32(body, i).ok_or_else(|| corrupt("no doc nterms"))? as usize;
         if nterms > body.len() {
             return Err(corrupt("doc nterms exceeds body"));
         }
         let mut terms = Vec::with_capacity(nterms);
         for _ in 0..nterms {
-            terms.push(take_str(&mut i, body)?);
+            terms.push(take_str(body, i)?);
         }
-        let nqterms = take_u32(&mut i).ok_or_else(|| corrupt("no doc nqterms"))? as usize;
+        let nqterms = take_u32(body, i).ok_or_else(|| corrupt("no doc nqterms"))? as usize;
         if nqterms > body.len() {
             return Err(corrupt("doc nqterms exceeds body"));
         }
         let mut query_terms = Vec::with_capacity(nqterms);
         for _ in 0..nqterms {
-            query_terms.push(take_str(&mut i, body)?);
+            query_terms.push(take_str(body, i)?);
         }
-        let nbuckets = take_u32(&mut i).ok_or_else(|| corrupt("no doc nbuckets"))? as usize;
+        let nbuckets = take_u32(body, i).ok_or_else(|| corrupt("no doc nbuckets"))? as usize;
         if nbuckets > body.len() {
             return Err(corrupt("doc nbuckets exceeds body"));
         }
         let mut buckets = Vec::with_capacity(nbuckets);
         for _ in 0..nbuckets {
-            buckets.push(take_str(&mut i, body)?);
+            buckets.push(take_str(body, i)?);
         }
-        let take_vec = |i: &mut usize, body: &[u8]| -> std::io::Result<Vec<String>> {
-            let n = take_u32(i).ok_or_else(|| corrupt("no field n"))? as usize;
-            if n > body.len() {
-                return Err(corrupt("field count exceeds body"));
-            }
-            let mut v = Vec::with_capacity(n);
-            for _ in 0..n {
-                v.push(take_str(i, body)?);
-            }
-            Ok(v)
-        };
         let fields = crate::memory::store::Fields {
-            error_code: take_vec(&mut i, body)?,
-            file_loc: take_vec(&mut i, body)?,
-            symbol: take_vec(&mut i, body)?,
-            num_fp: take_vec(&mut i, body)?,
+            error_code: take_vec(body, i)?,
+            file_loc: take_vec(body, i)?,
+            symbol: take_vec(body, i)?,
+            num_fp: take_vec(body, i)?,
         };
-        let bucket = take_str(&mut i, body)?;
-        let status = take_str(&mut i, body)?;
-        if i + 4 > body.len() {
+        let bucket = take_str(body, i)?;
+        let status = take_str(body, i)?;
+        if *i + 4 > body.len() {
             return Err(corrupt("no quality"));
         }
-        let quality = f32::from_le_bytes(body[i..i + 4].try_into().unwrap()) as f64;
-        i += 4;
-        let updated_at = take_str(&mut i, body)?;
+        let quality = f32::from_le_bytes(body[*i..*i + 4].try_into().unwrap()) as f64;
+        *i += 4;
+        let updated_at = take_str(body, i)?;
         let updated_s = crate::memory::util::parse_utc_secs(&updated_at);
         ids.push(id.into());
         docs.push(DocRec {
@@ -447,27 +469,37 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
             updated_s,
         });
     }
+    Ok((ids, docs))
+}
+
+/// 解析 term 表（n_terms 条倒排），返回 term → (df, doc_idx 升序列表)。
+fn parse_dict(
+    body: &[u8],
+    n_terms: usize,
+    n_docs: usize,
+    i: &mut usize,
+) -> std::io::Result<HashMap<String, (usize, Vec<usize>)>> {
     let mut dict: HashMap<String, (usize, Vec<usize>)> = HashMap::with_capacity(n_terms);
     for _ in 0..n_terms {
-        if i + 2 > body.len() {
+        if *i + 2 > body.len() {
             return Err(corrupt("term len truncated"));
         }
-        let tlen = u16::from_le_bytes(body[i..i + 2].try_into().unwrap()) as usize;
-        i += 2;
-        if i + tlen + 4 > body.len() {
+        let tlen = u16::from_le_bytes(body[*i..*i + 2].try_into().unwrap()) as usize;
+        *i += 2;
+        if *i + tlen + 4 > body.len() {
             return Err(corrupt("term overflow"));
         }
-        let term = String::from_utf8_lossy(&body[i..i + tlen]).into_owned();
-        i += tlen;
-        let df = u32::from_le_bytes(body[i..i + 4].try_into().unwrap()) as usize;
-        i += 4;
+        let term = String::from_utf8_lossy(&body[*i..*i + tlen]).into_owned();
+        *i += tlen;
+        let df = u32::from_le_bytes(body[*i..*i + 4].try_into().unwrap()) as usize;
+        *i += 4;
         if df > body.len() {
             return Err(corrupt("df exceeds body"));
         }
         let mut post = Vec::with_capacity(df);
         let mut prev = 0usize;
         for _ in 0..df {
-            let d = varint_get(body, &mut i).ok_or_else(|| corrupt("posting varint"))?;
+            let d = varint_get(body, i).ok_or_else(|| corrupt("posting varint"))?;
             let doc = prev + d as usize;
             if doc >= n_docs {
                 return Err(corrupt("doc idx overflow"));
@@ -477,6 +509,28 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         }
         dict.insert(term, (df, post));
     }
+    Ok(dict)
+}
+
+/// 解析字节切片为内存索引（纯函数，输入来自 fs::read）。
+pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
+    let body = open_body(buf)?;
+    let mut i = 0usize;
+    let n_docs = take_u32(body, &mut i).ok_or_else(|| corrupt("no n_docs"))? as usize;
+    if n_docs > body.len() {
+        return Err(corrupt("n_docs exceeds body"));
+    }
+    if i + 8 > body.len() {
+        return Err(corrupt("no total_len"));
+    }
+    let total_len = u64::from_le_bytes(body[i..i + 8].try_into().unwrap()) as usize;
+    i += 8;
+    let n_terms = take_u32(body, &mut i).ok_or_else(|| corrupt("no n_terms"))? as usize;
+    if n_terms > body.len() {
+        return Err(corrupt("n_terms exceeds body"));
+    }
+    let (ids, docs) = parse_doc_recs(body, n_docs, &mut i)?;
+    let dict = parse_dict(body, n_terms, n_docs, &mut i)?;
     Ok(Index {
         n_docs,
         total_len,
