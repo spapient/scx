@@ -21,11 +21,15 @@ pub(crate) fn case_id(now: &str, query: &str, text: &str) -> String {
 }
 
 /// UTC 时间戳（秒精度，ISO-8601 `YYYY-MM-DDTHH:MM:SSZ`，零依赖自算日历）。
-pub(crate) fn utc_now() -> String {
-    let secs = std::time::SystemTime::now()
+pub(crate) fn utc_now_secs() -> u64 {
+    std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
+
+pub(crate) fn utc_now() -> String {
+    let secs = utc_now_secs();
     let days = secs / 86_400;
     let rem = secs % 86_400;
     let (y, mo, d) = civil_from_days(days);

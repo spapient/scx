@@ -113,6 +113,131 @@ fn invalid_option_and_no_kept_fallback_are_explicit() {
 }
 
 #[test]
+fn recall_only_does_not_create_a_missing_memory_directory() {
+    let root = std::env::temp_dir().join(format!(
+        "scx-cli-readonly-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let out = run(&[
+        "--query",
+        "missing library",
+        "--recall-only",
+        "--mem-dir",
+        root.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(!root.exists(), "--recall-only must stay read-only");
+}
+
+#[test]
+fn recall_failure_is_reported_without_failing_compression() {
+    let root = std::env::temp_dir().join(format!(
+        "scx-cli-recall-missing-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let input = write_temp("recall-missing", "INFO alpha\n");
+    let out = run(&[
+        "--query",
+        "alpha",
+        "--recall",
+        "1",
+        "--mem-dir",
+        root.to_str().unwrap(),
+        input.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("--recall skipped"),
+        "missing memory must be reported, not silently dropped: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !root.exists(),
+        "failed optional recall must not create a library"
+    );
+    let _ = fs::remove_file(input);
+}
+
+#[test]
+fn oversize_fix_file_is_rejected_before_storage() {
+    let root = std::env::temp_dir().join(format!(
+        "scx-cli-fix-cap-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let input = write_temp("fix-cap-input", "ERROR fix cap unique\n");
+    let fix = write_temp("fix-cap-body", &"x".repeat(5000));
+    let out = run(&[
+        "--query",
+        "ERROR fix cap",
+        "--store",
+        "1",
+        "--fix-file",
+        fix.to_str().unwrap(),
+        "--mem-dir",
+        root.to_str().unwrap(),
+        input.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("4096-byte limit"));
+    assert!(
+        !root.join("cases").exists(),
+        "oversize fix must fail before writing a case"
+    );
+    for p in [input, fix] {
+        let _ = fs::remove_file(p);
+    }
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn storage_quota_rejects_before_writing_a_case() {
+    let root = std::env::temp_dir().join(format!(
+        "scx-cli-quota-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let input = write_temp(
+        "quota",
+        "ERROR quota test unique_alpha\nINFO filler unique_beta\n",
+    );
+    let out = run(&[
+        "--query",
+        "ERROR quota",
+        "--store",
+        "1",
+        "--max-bytes",
+        "1",
+        "--mem-dir",
+        root.to_str().unwrap(),
+        input.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("memory quota exceeded"));
+    let cases = root.join("cases");
+    assert!(
+        !cases.exists() || fs::read_dir(&cases).unwrap().next().is_none(),
+        "quota failure must not write a case"
+    );
+    let _ = fs::remove_file(input);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn concurrent_store_processes_keep_all_cases_and_meta_updates() {
     let root = std::env::temp_dir().join(format!(
         "scx-cli-conc-{}-{}",
@@ -165,6 +290,13 @@ fn concurrent_store_processes_keep_all_cases_and_meta_updates() {
     assert!(
         meta.lines().any(|l| l.trim() == "gen = 8"),
         "每次写 case 的 gen 递增都必须保留: {meta}"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("index/fingerprints.ready"))
+            .unwrap()
+            .trim(),
+        "8",
+        "并发去重索引必须覆盖全部 case"
     );
     for p in inputs {
         let _ = fs::remove_file(p);

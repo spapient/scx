@@ -9,6 +9,8 @@
 //!    兄弟 case 提过截止线。
 //!
 //! 零依赖、确定性；实体表全库现算（小库口径）。
+//! 倒排路径直接使用 `index::entity_neighbors`（postings 自带字段快照），本模块
+//! 只服务 <10k 的线性召回路径。
 //!
 //! P4.4+ 优化⑬（P1-5）：`build` 原本每次召回重建全库实体表（1 万条库 read_case×N
 //! ≈ 0.85s/次，P3 性能回归）。改为进程内缓存（root+meta.toml mtime 键，与 index
@@ -53,19 +55,7 @@ pub(crate) fn build(root: &str) -> std::io::Result<EdgeIndex> {
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
     for id in store::list_ids(root)? {
         let c = store::read_case(root, &id)?;
-        let mut ents: Vec<String> = Vec::with_capacity(
-            c.fields.error_code.len()
-                + c.fields.file_loc.len()
-                + c.fields.symbol.len()
-                + c.fields.num_fp.len(),
-        );
-        ents.extend(c.fields.error_code.iter().cloned());
-        ents.extend(c.fields.file_loc.iter().cloned());
-        ents.extend(c.fields.symbol.iter().cloned());
-        ents.extend(c.fields.num_fp.iter().cloned());
-        ents.sort();
-        ents.dedup();
-        for e in ents {
+        for e in crate::memory::field::entity_keys(&c.fields) {
             map.entry(e).or_default().push(id.clone());
         }
     }
@@ -90,12 +80,12 @@ fn cached_build(root: &str) -> std::io::Result<Arc<EdgeIndex>> {
 /// 桥 case 的召回上下文（与 recall::DocCtx 同构，由调用方转写）。
 pub(crate) struct BridgeCase {
     pub id: String,
-    pub terms: Vec<String>,
-    pub query_terms: Vec<String>,
-    pub fields: store::Fields,
-    pub status: String,
+    pub terms: std::sync::Arc<[String]>,
+    pub query_terms: std::sync::Arc<[String]>,
+    pub fields: std::sync::Arc<store::Fields>,
+    pub status: std::sync::Arc<str>,
     pub quality: f64,
-    pub updated_at: String,
+    pub updated_at: std::sync::Arc<str>,
     pub edge_shared: usize,
 }
 
@@ -143,12 +133,12 @@ pub(crate) fn bridge_cases(
         total += terms.len();
         out.push(BridgeCase {
             id,
-            terms,
-            query_terms,
-            fields: c.fields,
-            status: c.status,
+            terms: terms.into(),
+            query_terms: query_terms.into(),
+            fields: std::sync::Arc::new(c.fields),
+            status: c.status.into(),
             quality: c.quality,
-            updated_at: c.updated_at,
+            updated_at: c.updated_at.into(),
             edge_shared: shared,
         });
     }

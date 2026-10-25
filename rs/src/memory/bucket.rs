@@ -269,7 +269,7 @@ fn lower(s: &str) -> String {
         }
     }
     let mut out = String::new();
-    crate::norm::push_analysis_lower(&cleaned, &mut out);
+    crate::normalize::push_analysis_lower(&cleaned, &mut out);
     out
 }
 

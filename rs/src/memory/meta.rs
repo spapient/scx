@@ -4,7 +4,9 @@
 //! 与 case 资产分离：损坏时整库仍可用，rebuild 可重建。
 
 use crate::memory::lock;
-use crate::memory::model::{ENG_VER, SCHEMA};
+/// case.json 的当前 schema 版本。旧版本读取按缺字段默认值兼容。
+pub(crate) const SCHEMA: u32 = 2;
+pub(crate) const ENG_VER: &str = "stat-v1";
 use crate::memory::util::utc_now;
 use std::fs;
 use std::path::Path;
@@ -29,6 +31,9 @@ pub(crate) fn ensure_root(root: &str) -> std::io::Result<()> {
 }
 
 pub(crate) struct Meta {
+    /// 建库时间（UTC）。评估/自检用它冻结衰减时钟，保证同一库快照可重放；
+    /// 线上召回仍使用当前时间。
+    pub created_at: String,
     pub case_count: usize,
     /// 库代际（P4.4 评审处置）：任何 case 写入 / 删除都 +1；
     /// qmap 快照与会话缓存条目记录写入时的 gen，`gen < 当前` 视为过期
@@ -111,6 +116,7 @@ pub(crate) const L1_HIST_CAP: usize = 64;
 pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
     let p = Path::new(root).join("meta.toml");
     let txt = fs::read_to_string(p)?;
+    let mut created_at = String::new();
     let mut case_count = 0usize;
     let mut gen = 0u64;
     let mut df = Vec::new();
@@ -132,7 +138,9 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
         let v = line[eq + 1..].trim();
         match section {
             "" => {
-                if k == "case_count" {
+                if k == "created_at" {
+                    created_at = v.trim_matches('"').to_string();
+                } else if k == "case_count" {
                     case_count = v.parse().unwrap_or(0);
                 } else if k == "gen" {
                     gen = v.parse().unwrap_or(0);
@@ -166,6 +174,7 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
         }
     }
     Ok(Meta {
+        created_at,
         case_count,
         gen,
         df,
@@ -402,6 +411,11 @@ mod tests {
         ensure_root(&root).unwrap();
         let m = load_meta(&root).unwrap();
         assert_eq!(m.case_count, 0);
+        assert!(
+            m.created_at.ends_with('Z') && m.created_at.contains('T'),
+            "建库时间必须可读，供评估冻结时钟: {:?}",
+            m.created_at
+        );
         assert!(m.df.is_empty(), "新库 df 快照应为空（摄取后才增量写入）");
         assert!(
             m.params

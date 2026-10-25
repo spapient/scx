@@ -1,6 +1,6 @@
 # 真实历史事故语料来源（公开复盘）
 
-本文档是 `eval-real/real-mem` 真实事故语料库的**来源清单与出处**。
+本文档是 `eval/corpora/real.json` 真实事故语料库的**来源清单与出处**。
 每一份入库 case 都派生自下列公开复盘，改写/引用，不编造事故与原始日志。
 入库文本中标注 `公开复盘, 来源: <URL>`，原始日志不存在于本项目。
 
@@ -28,6 +28,6 @@
 
 ## 派生 case 覆盖
 
-每起事故派生 1 条 literal（原文症状短语）、1 条 paraphrase（英文改写）、1 条 semantic（中文/跨领域描述），
-另追加 7 条变体（不同故障侧面）使三层各 ≥10、总数 ≥40。逐条 mapping 见
-`eval-real/real-cases.csv` 的 `note` 列与 `eval-real/real-baseline.json`。
+语料共 40 条 case，覆盖上表 11 起事故，层分布为
+literal 14 / paraphrase 13 / semantic 13。逐条 query、来源与根因 mapping
+见 `eval/corpora/real.json`；最终案例级标签见 `eval/labels/real.json`。

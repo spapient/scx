@@ -27,7 +27,8 @@ pub(crate) fn is_cjk_or_fullwidth(c: char) -> bool {
     is_cjk(c) || (0x3000..=0x303F).contains(&u) || (0xFF00..=0xFFEF).contains(&u)
 }
 
-pub(crate) fn build_terms(query: &str) -> Vec<String> {
+/// 压缩与记忆库共享的词法扫描；两种口径只在 CJK 子词展开策略上不同。
+fn build_terms_mode(query: &str, memory: bool) -> Vec<String> {
     let stop = |s: &str| STOP.contains(&s);
     let is_tok = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || "_./\\:@-".contains(c);
     let mut terms: Vec<String> = Vec::new();
@@ -37,91 +38,12 @@ pub(crate) fn build_terms(query: &str) -> Vec<String> {
             cur.push(c);
             continue;
         }
-        if cur.chars().count() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
+        if cur.len() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
             terms.push(cur.clone());
         }
         cur.clear();
     }
-    if cur.chars().count() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
-        terms.push(cur);
-    }
-    let mut run = String::new();
-    let mut runs: Vec<String> = Vec::new();
-    for c in query.chars() {
-        if is_cjk(c) {
-            run.push(c);
-            continue;
-        }
-        if run.chars().count() >= 2 {
-            runs.push(run.clone());
-        }
-        run.clear();
-    }
-    if run.chars().count() >= 2 {
-        runs.push(run);
-    }
-    for r in runs {
-        // CJK 没有空格分词：保留整段，并保证尾部不因 6 字切块而丢掉单字。
-        if stop(&r) {
-            continue;
-        }
-        let chars: Vec<char> = r.chars().collect();
-        if chars.len() <= 6 {
-            if chars.len() >= 2 {
-                terms.push(r);
-            }
-            continue;
-        }
-        let mut start = 0;
-        while start < chars.len() {
-            let end = (start + 6).min(chars.len());
-            if end - start >= 2 {
-                terms.push(chars[start..end].iter().collect());
-            }
-            start += 6;
-        }
-        if chars.len() % 6 == 1 {
-            terms.push(chars[chars.len() - 2..].iter().collect());
-        }
-    }
-    let mut uniq: Vec<String> = Vec::new();
-    for t in terms {
-        if uniq.len() >= MAX_QUERY_TERMS {
-            break;
-        }
-        if !uniq.contains(&t) {
-            uniq.push(t);
-        }
-    }
-    uniq
-}
-
-/// P4.4+ 优化⑪（P1-3）：记忆库召回用词表——在 build_terms 基础上对 **CJK 段/块
-/// （≤6 字）** 追加重叠 bigram/trigram（相邻 2/3 字），保留整段用于精确匹配。
-///
-/// 动机：整段/6 字块对中文释义层几乎不重叠（"数据库连接池耗尽" vs "连接池满了"
-/// 词面无交集）。重叠 n-gram 让"症状不同、根因相同"的中文变体桥接（共享 trigram
-/// "连接池"）。>6 字长段切成 6 字块后，**每块仍走 n-gram**（块 ≤6 字，膨胀可控，
-/// 长证据 doc 词表约 170 tokens/百字中文段）。尾部 1 字按现有补齐。
-///
-/// 记忆库 query 与 doc（index/edge/eval-B/feedback/annotate）统一走本函数，
-/// A/B 对拍保持同词表口径。compress 引擎维持 build_terms 不动（压缩语义不变）。
-pub(crate) fn build_mem_terms(query: &str) -> Vec<String> {
-    let stop = |s: &str| STOP.contains(&s);
-    let is_tok = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || "_./\\:@-".contains(c);
-    let mut terms: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    for c in query.to_lowercase().chars() {
-        if is_tok(c) {
-            cur.push(c);
-            continue;
-        }
-        if cur.chars().count() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
-            terms.push(cur.clone());
-        }
-        cur.clear();
-    }
-    if cur.chars().count() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
+    if cur.len() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
         terms.push(cur);
     }
     let mut run = String::new();
@@ -147,17 +69,31 @@ pub(crate) fn build_mem_terms(query: &str) -> Vec<String> {
         if chars.len() < 2 {
             continue;
         }
-        // CJK 段 → ≤6 字块（每块整段+bigram+trigram）；整段 ≤6 字直接一块。
+        // CJK 没有空格分词：≤6 字整段成词；长段按 6 字块切分，尾部单字用
+        // 最后两字补齐。记忆库在块内追加重叠 bigram/trigram 以桥接释义变体。
+        if !memory && chars.len() <= 6 {
+            terms.push(r);
+            continue;
+        }
         let mut start = 0;
         while start < chars.len() {
             let end = (start + 6).min(chars.len());
             if end - start >= 2 {
-                push_zh(&mut terms, &chars[start..end]);
+                if memory {
+                    push_zh(&mut terms, &chars[start..end]);
+                } else {
+                    terms.push(chars[start..end].iter().collect());
+                }
             }
             start += 6;
         }
         if chars.len() % 6 == 1 {
-            push_zh(&mut terms, &chars[chars.len() - 2..]);
+            let tail = &chars[chars.len() - 2..];
+            if memory {
+                push_zh(&mut terms, tail);
+            } else {
+                terms.push(tail.iter().collect());
+            }
         }
     }
     let mut uniq: Vec<String> = Vec::new();
@@ -170,6 +106,25 @@ pub(crate) fn build_mem_terms(query: &str) -> Vec<String> {
         }
     }
     uniq
+}
+
+/// 压缩引擎词表（CJK 整段/6 字块，不展开滑动 n-gram）。
+pub(crate) fn build_terms(query: &str) -> Vec<String> {
+    build_terms_mode(query, false)
+}
+
+/// P4.4+ 优化⑪（P1-3）：记忆库召回用词表——在 build_terms 基础上对 **CJK 段/块
+/// （≤6 字）** 追加重叠 bigram/trigram（相邻 2/3 字），保留整段用于精确匹配。
+///
+/// 动机：整段/6 字块对中文释义层几乎不重叠（"数据库连接池耗尽" vs "连接池满了"
+/// 词面无交集）。重叠 n-gram 让"症状不同、根因相同"的中文变体桥接（共享 trigram
+/// "连接池"）。>6 字长段切成 6 字块后，**每块仍走 n-gram**（块 ≤6 字，膨胀可控，
+/// 长证据 doc 词表约 170 tokens/百字中文段）。尾部 1 字按现有补齐。
+///
+/// 记忆库 query 与 doc（index/edge/eval-B/feedback/annotate）统一走本函数，
+/// A/B 对拍保持同词表口径。compress 引擎维持 build_terms 不动（压缩语义不变）。
+pub(crate) fn build_mem_terms(query: &str) -> Vec<String> {
+    build_terms_mode(query, true)
 }
 
 /// 一个 ≤6 字 CJK 块：整段（精确）+ 重叠 bigram + 重叠 trigram（模糊桥接）。

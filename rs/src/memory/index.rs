@@ -26,32 +26,98 @@
 //! - 口径说明：索引路径 df/avgdl 为全库口径（区别于线性路径的候选桶内口径），
 //!   同一路径内确定；P4 评估统一以索引路径为准。
 
-use crate::memory::postings::{
-    self, crc32, postings_path, varint_get, varint_put, POST_MAGIC, POST_VER,
-};
 use crate::memory::store::{self, Meta};
 use crate::terms::build_mem_terms;
 use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
 
 /// 自动启用倒排的规模阈值（库 case 数）；`meta [params] index_force=1` 可强制小库启用。
 pub(crate) const INDEX_MIN_DOCS: usize = 10_000;
 
+const POST_MAGIC: u32 = 0x5453_4f50; // "POST"
+const POST_VER: u16 = 3;
+
+pub(crate) fn postings_path(root: &str) -> PathBuf {
+    Path::new(root).join("index").join("postings.bin")
+}
+
+/// 写 postings.bin：header + body + crc32（段尾校验，P3.2）。
+fn write_postings(root: &str, body: &[u8]) -> std::io::Result<()> {
+    let p = postings_path(root);
+    if let Some(d) = p.parent() {
+        crate::memory::lock::create_dir_all(d)?;
+    }
+    let crc = crc32(body);
+    let mut buf = Vec::with_capacity(14 + body.len() + 4);
+    buf.extend_from_slice(&POST_MAGIC.to_le_bytes());
+    buf.extend_from_slice(&POST_VER.to_le_bytes());
+    buf.extend_from_slice(&(body.len() as u64).to_le_bytes());
+    buf.extend_from_slice(body);
+    buf.extend_from_slice(&crc.to_le_bytes());
+    crate::memory::lock::atomic_write(&p, &buf)
+}
+
+fn varint_put(buf: &mut Vec<u8>, mut v: u64) {
+    while v >= 0x80 {
+        buf.push((v as u8) | 0x80);
+        v >>= 7;
+    }
+    buf.push(v as u8);
+}
+
+fn varint_get(buf: &[u8], i: &mut usize) -> Option<u64> {
+    let mut v = 0u64;
+    let mut shift = 0u32;
+    loop {
+        let b = *buf.get(*i)?;
+        *i += 1;
+        v |= u64::from(b & 0x7f) << shift;
+        if b & 0x80 == 0 {
+            return Some(v);
+        }
+        shift += 7;
+        if shift >= 64 {
+            return None;
+        }
+    }
+}
+
+fn crc32(data: &[u8]) -> u32 {
+    let mut table = [0u32; 256];
+    for i in 0..256u32 {
+        let mut c = i;
+        for _ in 0..8 {
+            c = if c & 1 != 0 {
+                0xEDB8_8320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
+        }
+        table[i as usize] = c;
+    }
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in data {
+        crc = table[((crc ^ u32::from(b)) & 0xFF) as usize] ^ (crc >> 8);
+    }
+    !crc
+}
+
 /// doc 打分快照（与 case.json 同源，build 时落盘进 postings，避免召回期二次 IO）。
 #[derive(Debug, Clone)]
 pub(crate) struct DocRec {
-    pub terms: Vec<String>,
+    pub terms: Arc<[String]>,
     /// 原始 case query 词表（query-field 重排特征；与 terms 的 query∪text 不同）。
-    pub query_terms: Vec<String>,
+    pub query_terms: Arc<[String]>,
     /// 多标签场景桶（query/正文任一命中）；过滤用交集，stats 仍用主 bucket。
     pub buckets: Vec<String>,
     pub bucket: String,
-    pub fields: crate::memory::store::Fields,
-    pub status: String,
+    pub fields: Arc<crate::memory::store::Fields>,
+    pub status: Arc<str>,
     pub quality: f64,
-    pub updated_at: String,
+    pub updated_at: Arc<str>,
 }
 
 pub(crate) struct Index {
@@ -63,6 +129,19 @@ pub(crate) struct Index {
     pub docs: Vec<DocRec>,
     /// term → (df, doc_idx 升序列表)。
     pub dict: HashMap<String, (usize, Vec<usize>)>,
+    /// 实体键 → doc_idx 升序列表；由 doc 快照派生，避免召回时重读全库 case。
+    pub entities: HashMap<String, Vec<usize>>,
+}
+
+/// 从 doc 字段快照派生实体倒排（实体键去重、doc_idx 升序）。
+fn entity_map(docs: &[DocRec]) -> HashMap<String, Vec<usize>> {
+    let mut entities: HashMap<String, Vec<usize>> = HashMap::new();
+    for (di, rec) in docs.iter().enumerate() {
+        for key in crate::memory::field::entity_keys(&rec.fields) {
+            entities.entry(key).or_default().push(di);
+        }
+    }
+    entities
 }
 
 /// 获取索引写锁。调用方在“case 资产变更 + 索引失效 + gen 前进”期间持锁，
@@ -127,20 +206,20 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
         docs.push((
             id.clone(),
             DocRec {
-                terms,
-                query_terms,
+                terms: terms.into(),
+                query_terms: query_terms.into(),
                 buckets,
                 bucket: c.bucket,
-                fields: c.fields,
-                status: c.status,
+                fields: Arc::new(c.fields),
+                status: c.status.into(),
                 quality: c.quality,
-                updated_at: c.updated_at,
+                updated_at: c.updated_at.into(),
             },
         ));
     }
     let mut dict: HashMap<String, Vec<usize>> = HashMap::new();
     for (di, (_, rec)) in docs.iter().enumerate() {
-        for t in &rec.terms {
+        for t in rec.terms.iter() {
             dict.entry(t.clone()).or_default().push(di);
         }
     }
@@ -153,12 +232,12 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
         body.push(id.len() as u8);
         body.extend_from_slice(id.as_bytes());
         body.extend_from_slice(&(rec.terms.len() as u32).to_le_bytes());
-        for t in &rec.terms {
+        for t in rec.terms.iter() {
             body.push(t.len() as u8);
             body.extend_from_slice(t.as_bytes());
         }
         body.extend_from_slice(&(rec.query_terms.len() as u32).to_le_bytes());
-        for t in &rec.query_terms {
+        for t in rec.query_terms.iter() {
             body.push(t.len() as u8);
             body.extend_from_slice(t.as_bytes());
         }
@@ -200,7 +279,7 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
             prev = di;
         }
     }
-    postings::write_file(root, &body)?;
+    write_postings(root, &body)?;
     let df: Vec<(String, usize)> = term_keys
         .iter()
         .map(|t| ((*t).clone(), dict[*t].len()))
@@ -357,14 +436,14 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         let updated_at = take_str(&mut i, body)?;
         ids.push(id);
         docs.push(DocRec {
-            terms,
-            query_terms,
+            terms: terms.into(),
+            query_terms: query_terms.into(),
             buckets,
             bucket,
-            fields,
-            status,
+            fields: Arc::new(fields),
+            status: status.into(),
             quality,
-            updated_at,
+            updated_at: updated_at.into(),
         });
     }
     let mut dict: HashMap<String, (usize, Vec<usize>)> = HashMap::with_capacity(n_terms);
@@ -397,12 +476,14 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         }
         dict.insert(term, (df, post));
     }
+    let entities = entity_map(&docs);
     Ok(Index {
         n_docs,
         total_len,
         ids,
         docs,
         dict,
+        entities,
     })
 }
 
@@ -428,6 +509,24 @@ pub(crate) fn candidates(idx: &Index, qterms: &[String]) -> Vec<usize> {
 /// term 的全库 df（未收录 = 0）。
 pub(crate) fn term_df(idx: &Index, t: &str) -> usize {
     idx.dict.get(t).map(|(df, _)| *df).unwrap_or(0)
+}
+
+/// query 实体命中的兄弟 doc（去重后按 doc_idx 升序），并给出共享实体数。
+pub(crate) fn entity_neighbors(idx: &Index, ents: &[String]) -> Vec<(usize, usize)> {
+    let mut keys: Vec<&str> = ents.iter().map(String::as_str).collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let mut shared: HashMap<usize, usize> = HashMap::new();
+    for key in keys {
+        if let Some(docs) = idx.entities.get(key) {
+            for &di in docs {
+                *shared.entry(di).or_insert(0) += 1;
+            }
+        }
+    }
+    let mut out: Vec<(usize, usize)> = shared.into_iter().collect();
+    out.sort_unstable_by_key(|&(di, _)| di);
+    out
 }
 
 /// 是否启用倒排路径：规模达标（meta 可覆盖）或 --rebuild 后强制（index_force=1）。
@@ -456,6 +555,26 @@ mod tests {
             cut_pct: 95.0,
             risk: "HIGH".to_string(),
         }
+    }
+
+    #[test]
+    fn crc_and_varint_are_deterministic() {
+        let a = crc32(b"hello world");
+        assert_eq!(a, crc32(b"hello world"));
+        assert_ne!(a, crc32(b"hello worle"));
+        let mut buf = Vec::new();
+        varint_put(&mut buf, 0);
+        varint_put(&mut buf, 127);
+        varint_put(&mut buf, 128);
+        varint_put(&mut buf, 300);
+        varint_put(&mut buf, 1 << 35);
+        let mut i = 0;
+        assert_eq!(varint_get(&buf, &mut i), Some(0));
+        assert_eq!(varint_get(&buf, &mut i), Some(127));
+        assert_eq!(varint_get(&buf, &mut i), Some(128));
+        assert_eq!(varint_get(&buf, &mut i), Some(300));
+        assert_eq!(varint_get(&buf, &mut i), Some(1 << 35));
+        assert_eq!(varint_get(&buf, &mut i), None, "越界返回 None");
     }
 
     fn seed(root: &str) {
@@ -521,6 +640,9 @@ mod tests {
         // C 的 "error: could not" 冒号并入 token → "error:" 独立（df=1）。
         assert_eq!(idx.dict.get("error").map(|(df, _)| *df), Some(2));
         assert_eq!(idx.dict.get("error:").map(|(df, _)| *df), Some(1));
+        let entities = entity_neighbors(&idx, &["conn_id=9f2a".to_string()]);
+        assert_eq!(entities.len(), 1, "实体倒排应直接来自 doc 快照");
+        assert_eq!(entities[0].1, 1, "共享实体数必须参与实体加权");
         let _ = fs::remove_dir_all(&root);
     }
 

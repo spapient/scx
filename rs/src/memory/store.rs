@@ -10,16 +10,92 @@
 //! ```
 //!
 //! 原则：cases/ 是资产（可迁移），index/ 是可丢弃缓存（rebuild 重建）。
-//! 数据模型在 model.rs、哈希/时间在 util.rs、meta 在 meta.rs；本文件只负责
-//! case 的 JSON 序列化、读写与库内 case 枚举。
+//! case 数据模型、JSON 序列化、读写与库内枚举由本文件统一拥有；哈希/时间在
+//! util.rs，meta 在 meta.rs。
 
 use crate::memory::json::{self, Val};
+pub(crate) use crate::memory::meta::SCHEMA;
 pub(crate) use crate::memory::meta::{ensure_root, load_meta, Meta};
-pub(crate) use crate::memory::model::SCHEMA;
-pub use crate::memory::model::{Case, CaseStats, Feedback, Fields};
 pub(crate) use crate::memory::util::{case_id, fnv1a, utc_now};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Fields {
+    pub error_code: Vec<String>,
+    pub file_loc: Vec<String>,
+    pub symbol: Vec<String>,
+    pub num_fp: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CaseStats {
+    pub kept: usize,
+    pub total: usize,
+    pub cut_pct: f64,
+    pub risk: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Feedback {
+    pub good: usize,
+    pub bad: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Case {
+    pub id: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub query: String,
+    pub terms: Vec<String>,
+    pub text: String,
+    pub fix: String,
+    pub evidence_lno: Vec<usize>,
+    pub evidence: Vec<String>,
+    pub fp: String,
+    pub source: Vec<String>,
+    pub tags: Vec<String>,
+    pub bucket: String,
+    pub fields: Fields,
+    pub status: String,
+    pub stats: CaseStats,
+    pub forces: Vec<String>,
+    pub feedback: Feedback,
+    pub quality: f64,
+}
+
+impl Case {
+    pub fn new(id: String, query: String, terms: Vec<String>, text: String) -> Case {
+        let now = utc_now();
+        Case {
+            id,
+            created_at: now.clone(),
+            updated_at: now,
+            query,
+            terms,
+            text,
+            fix: String::new(),
+            evidence_lno: Vec::new(),
+            evidence: Vec::new(),
+            fp: String::new(),
+            source: Vec::new(),
+            tags: Vec::new(),
+            bucket: String::new(),
+            fields: Fields::default(),
+            status: "open".to_string(),
+            stats: CaseStats {
+                kept: 0,
+                total: 0,
+                cut_pct: 0.0,
+                risk: "LOW".to_string(),
+            },
+            forces: Vec::new(),
+            feedback: Feedback { good: 0, bad: 0 },
+            quality: 0.0,
+        }
+    }
+}
 
 // ---- case 读写（JSON 子集）----
 
@@ -274,6 +350,35 @@ pub(crate) fn list_ids(root: &str) -> std::io::Result<Vec<String>> {
     }
     ids.sort();
     Ok(ids)
+}
+
+/// 库总字节数（cases + meta + index）。用于写入前的软配额检查。
+pub(crate) fn bytes_total(root: &str) -> std::io::Result<u64> {
+    let root = Path::new(root);
+    if root.exists() {
+        dir_bytes(root)
+    } else {
+        Ok(0)
+    }
+}
+
+/// 目录递归字节数；符号链接按文件元数据计，不跟随目录链接。
+pub(crate) fn dir_bytes(dir: &Path) -> std::io::Result<u64> {
+    let mut total = 0u64;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let kind = entry.file_type()?;
+            if kind.is_dir() {
+                stack.push(path);
+            } else if kind.is_file() {
+                total += entry.metadata()?.len();
+            }
+        }
+    }
+    Ok(total)
 }
 
 /// case_count 递增（新 case 写入后调用）；同时持久化回 meta.toml。

@@ -12,7 +12,7 @@
 //! 线性路径首查）——M4 基准数字站得住：p95 反映真实长尾，冷启动反映"开箱即用"。
 
 use scx::memory::CaseStats;
-use scx::memory::{rebuild, recall_cases, store_case};
+use scx::memory::{rebuild, recall_cases, store_case, StoreInput};
 use std::path::Path;
 use std::time::Instant;
 
@@ -82,7 +82,7 @@ fn main() {
             );
             s
         };
-        store_case(&root, &q, &txt, vec![], &stats, vec![]).expect("store_case 失败");
+        store_case(StoreInput::new(&root, &q, &txt, &stats)).expect("store_case 失败");
         if v == 0 {
             println!(
                 "text sizes: short ~120B / long ~2KB (seed 0 len={})",
@@ -171,5 +171,20 @@ fn main() {
         println!("P3 gate: FAIL (p50 {p50} us >= 5ms)");
         std::process::exit(2);
     }
+
+    // 6) 宽查询：所有 case 都命中 `error`，候选集为全库。该路径覆盖字段/桶
+    //    过滤与打分分配成本，防止只在稀疏命中查询上“看起来很快”。
+    let mut broad: Vec<u128> = Vec::new();
+    for i in 0..7 {
+        let q = format!("ERROR timeout pool {}", letters(i));
+        let t = Instant::now();
+        let hits = recall_cases(&root, &q, 5, true).expect("宽查询召回失败");
+        broad.push(t.elapsed().as_micros());
+        assert!(!hits.is_empty());
+    }
+    broad.sort_unstable();
+    let (b50, b95, b99) = percentiles(&broad);
+    println!("broad recall: p50={b50} p95={b95} p99={b99} us | samples={broad:?} us");
+
     let _ = std::fs::remove_dir_all(&root);
 }

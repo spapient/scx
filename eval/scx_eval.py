@@ -1,0 +1,1061 @@
+#!/usr/bin/env python3
+"""One tool for scx corpus replay, blind review, and paired statistics.
+
+Only the Python standard library is used. The Rust binary remains the single
+implementation of retrieval and gates; this tool only prepares inputs and
+analyses the deterministic `--eval-verbose` output.
+
+Commands:
+  seed       corpus JSON -> memory cases + eval CSV
+  baseline   eval CSV -> mechanical target baseline JSON
+  stats      baseline + verbose (+ memory for strata) -> significance CSV
+  blind      make/import/check/progress/review a frozen per-candidate packet
+  verify     check a packet hash and its row count
+  selftest   dependency-free assertions over the shared helpers
+"""
+
+import argparse
+import csv
+import hashlib
+import json
+import math
+import os
+import random
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from collections import OrderedDict
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+EVAL_DIR = Path(__file__).resolve().parent
+LAYERS = ("literal", "paraphrase", "semantic")
+GRADE_HELP = "2=同事故/同根因或直接修复  1=同故障族/部分有用  0=无关"
+STOP = {
+    "the", "a", "an", "of", "to", "and", "in", "on", "for", "with", "by",
+    "from", "after", "before", "was", "were", "is", "are", "be", "that",
+    "this", "it", "as", "at", "into", "during", "caused", "cause", "causing",
+}
+
+
+# ---------------------------------------------------------------------------
+# Shared I/O and identity helpers
+# ---------------------------------------------------------------------------
+
+
+def load_json(path):
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle, object_pairs_hook=OrderedDict)
+
+
+def dump_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as handle:
+        json.dump(value, handle, ensure_ascii=False, indent=1)
+        handle.write("\n")
+    os.replace(tmp, path)
+
+
+def write_csv(path, fields, rows):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = list(fields)
+    for row in rows:
+        for key in row:
+            if key not in fields:
+                fields.append(key)
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=fields, lineterminator="\n", restval=""
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def sha256_text(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def tail_of(key):
+    return key.rsplit("_", 1)[-1]
+
+
+def id_matches(exp, case_id):
+    tail = tail_of(case_id)
+    tail8 = tail[-8:]
+    return (
+        exp == case_id
+        or exp == tail
+        or exp == tail8
+        or tail_of(exp) == tail
+    )
+
+
+def rel_of(case, case_id):
+    rel = case.get("rel") or {}
+    if case_id in rel:
+        return float(rel[case_id])
+    tail = tail_of(case_id)
+    if tail in rel:
+        return float(rel[tail])
+    tail8 = tail[-8:]
+    if tail8 in rel:
+        return float(rel[tail8])
+    for key in sorted(rel):
+        if id_matches(key, case_id):
+            return float(rel[key])
+    return 0.0
+
+
+def clean(text, limit=220):
+    text = " ".join(str(text).replace("\t", " ").replace("\r", " ").split())
+    return text[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Corpus seeding and baseline construction
+# ---------------------------------------------------------------------------
+
+
+def default_binary():
+    names = ("scx.exe", "scx")
+    for base in (ROOT / "rs" / "target" / "release", ROOT / "bin"):
+        for name in names:
+            path = base / name
+            if path.is_file():
+                return str(path)
+    return ""
+
+
+def _inside(path, parent):
+    try:
+        Path(path).resolve().relative_to(Path(parent).resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def prepare_mem_dir(mem_dir, force):
+    path = Path(mem_dir).resolve()
+    if path.exists() and any(path.iterdir()):
+        if not force:
+            sys.exit(f"seed: memory dir is not empty: {path} (use --force)")
+        temp_root = Path(tempfile.gettempdir()).resolve()
+        if not (_inside(path, ROOT) or _inside(path, temp_root)):
+            sys.exit(f"seed: refusing to clear a non-workspace path: {path}")
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def validate_corpus(corpus):
+    incidents = corpus.get("incidents") or []
+    if len(incidents) != corpus.get("expected_incidents", len(incidents)):
+        sys.exit(
+            f"corpus: incidents={len(incidents)} "
+            f"expected={corpus.get('expected_incidents')}"
+        )
+    seen_ids, seen_store = set(), set()
+    layers = {layer: 0 for layer in LAYERS}
+    total = 0
+    for incident in incidents:
+        ident = str(incident.get("id") or "").strip()
+        source = str(incident.get("source") or "").strip()
+        root_cause = str(incident.get("root_cause") or "").strip()
+        fix = str(incident.get("fix") or "").strip()
+        if not ident or ident in seen_ids:
+            sys.exit(f"corpus: missing or duplicate incident id: {ident!r}")
+        if not source.startswith(("http://", "https://")):
+            sys.exit(f"corpus: incident {ident} has no public source URL")
+        if not root_cause or not fix:
+            sys.exit(f"corpus: incident {ident} has empty root_cause/fix")
+        seen_ids.add(ident)
+        for case in incident.get("cases") or []:
+            layer = str(case.get("layer") or "")
+            store_query = str(case.get("store_query") or "").strip()
+            eval_query = str(case.get("eval_query") or "").strip()
+            if layer not in layers:
+                sys.exit(f"corpus: incident {ident} has bad layer: {layer!r}")
+            if not store_query or not eval_query:
+                sys.exit(f"corpus: incident {ident} has an empty query")
+            normalized = store_query.casefold()
+            if normalized in seen_store:
+                sys.exit(f"corpus: duplicate stored query: {store_query!r}")
+            seen_store.add(normalized)
+            layers[layer] += 1
+            total += 1
+    if total != corpus.get("expected_cases", total):
+        sys.exit(f"corpus: cases={total} expected={corpus.get('expected_cases')}")
+    return layers
+
+
+def corpus_cases(corpus):
+    for incident in corpus["incidents"]:
+        for case in incident["cases"]:
+            yield incident, case
+
+
+def seed_corpus(corpus, mem_dir, binary, force):
+    layers = validate_corpus(corpus)
+    binary = binary or default_binary()
+    if not binary or not Path(binary).is_file():
+        sys.exit("seed: missing release binary; run `cargo build --release --locked`")
+    mem_dir = prepare_mem_dir(mem_dir, force)
+    rows = []
+    with tempfile.TemporaryDirectory(prefix="scx-eval-") as tmp:
+        for index, (incident, case) in enumerate(corpus_cases(corpus), 1):
+            text_query = case.get("text_query") or case["store_query"]
+            text = (
+                f"{text_query}\n"
+                f"公开复盘, 来源: {incident['source']}\n"
+                f"根因: {incident['root_cause']}"
+            )
+            log_path = Path(tmp) / f"{index:04d}.log"
+            log_path.write_text(text, encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    binary, "--query", case["store_query"], "--store", "1",
+                    "--fix", incident["fix"], "--mem-dir", str(mem_dir),
+                    str(log_path),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            output = (proc.stdout or "") + (proc.stderr or "")
+            match = re.search(r"stored case=(\S+) added=yes", output)
+            if proc.returncode != 0 or not match:
+                sys.exit(f"seed: store failed for {case['store_query']!r}\n{output}")
+            case_id = match.group(1)
+            rows.append(
+                {
+                    "query": case["eval_query"],
+                    "layer": case["layer"],
+                    "case_id": case_id,
+                    "note": f"target={tail_of(case_id)} source={incident['source']}",
+                }
+            )
+    return rows, layers
+
+
+def cmd_seed(args):
+    corpus = load_json(args.corpus)
+    rows, layers = seed_corpus(
+        corpus, args.mem_dir, args.binary or default_binary(), args.force
+    )
+    if args.csv:
+        write_csv(args.csv, ("query", "layer", "case_id", "note"), rows)
+    print(
+        f"seed: corpus={corpus.get('name')} cases={len(rows)} "
+        f"literal={layers['literal']} paraphrase={layers['paraphrase']} "
+        f"semantic={layers['semantic']} mem={args.mem_dir}"
+    )
+    if args.csv:
+        print(f"seed: wrote {args.csv}")
+
+
+def cmd_baseline(args):
+    rows = list(csv.DictReader(open(args.csv, encoding="utf-8-sig")))
+    if not rows:
+        sys.exit(f"baseline: no data rows: {args.csv}")
+    cases = []
+    counts = {layer: 0 for layer in LAYERS}
+    for number, row in enumerate(rows, 2):
+        query = (row.get("query") or "").strip()
+        layer = (row.get("layer") or "").strip().lower()
+        case_id = (row.get("case_id") or "").strip()
+        if not query or not case_id or layer not in counts:
+            sys.exit(f"baseline: bad row {number}")
+        case = OrderedDict()
+        case["query"] = query
+        case["layer"] = layer
+        case["expected"] = [case_id]
+        case["rel"] = {case_id: 2}
+        case["judge"] = OrderedDict(
+            (("by", args.judge_by), ("date", args.judge_date))
+        )
+        note = (row.get("note") or "").strip()
+        case["note"] = "target-only" + (f"; {note}" if note else "")
+        cases.append(case)
+        counts[layer] += 1
+    dump_json(args.out, {"cases": cases})
+    print(
+        f"baseline: wrote {args.out} cases={len(cases)} "
+        f"literal={counts['literal']} paraphrase={counts['paraphrase']} "
+        f"semantic={counts['semantic']}"
+    )
+    if (
+        len(cases) < 30
+        or any(counts[layer] < 10 for layer in LAYERS)
+    ):
+        print("baseline: WARNING not gate-ready (need total>=30 and each layer>=10)")
+
+
+# ---------------------------------------------------------------------------
+# Verbose parsing, strata, and paired statistics
+# ---------------------------------------------------------------------------
+
+
+def parse_verbose(path, expected_cases):
+    text = Path(path).read_text(encoding="utf-8").splitlines()
+    rows = []
+    current = None
+    for line in text:
+        match = re.match(r'case (\d+)/\d+ q="(.*)"', line)
+        if match:
+            current = {"A": [], "B": []}
+            rows.append(current)
+            continue
+        match = re.match(r"  ([AB]): (.*)", line)
+        if match and current is not None:
+            current[match.group(1)] = re.findall(r"\) (\S+) sim=", match.group(2))
+    if len(rows) != expected_cases:
+        sys.exit(f"stats: verbose cases={len(rows)} baseline cases={expected_cases}")
+    return rows
+
+
+def target_rank(ids, target):
+    tail = tail_of(target)
+    for index, case_id in enumerate(ids[:10]):
+        if case_id == target or case_id == tail or case_id[-8:] == tail[-8:]:
+            return index + 1
+    return 0
+
+
+def mrr(rank):
+    return 1.0 / rank if rank else 0.0
+
+
+def dcg(rels):
+    return sum(rel / math.log2(i + 2.0) for i, rel in enumerate(rels))
+
+
+def ndcg(case, ids):
+    observed = [rel_of(case, case_id) for case_id in ids[:10]]
+    ideal = sorted(
+        (float(v) for v in (case.get("rel") or {}).values() if float(v) > 0.0),
+        reverse=True,
+    )[:10]
+    ideal_dcg = dcg(ideal)
+    return dcg(observed) / ideal_dcg if ideal_dcg > 0.0 else 0.0
+
+
+def tokens(text):
+    out = set()
+    for match in re.finditer(r"[a-z0-9][a-z0-9_\-.]*", text.lower()):
+        token = match.group(0).strip(".-_")
+        if len(token) >= 2 and token not in STOP:
+            out.add(token)
+    for match in re.finditer(r"[\u4e00-\u9fff]+", text):
+        run = match.group(0)
+        for index, char in enumerate(run):
+            out.add(char)
+            if index + 1 < len(run):
+                out.add(run[index : index + 2])
+    return out
+
+
+def jaccard(left, right):
+    a, b = tokens(left), tokens(right)
+    if not a and not b:
+        return 0.0
+    union = len(a) + len(b) - len(a & b)
+    return len(a & b) / union if union else 0.0
+
+
+def tier_of(value):
+    if value > 0.5:
+        return "easy"
+    if value >= 0.2:
+        return "medium"
+    return "hard"
+
+
+def load_case_queries(mem_dir):
+    root = Path(mem_dir) / "cases"
+    if not root.is_dir():
+        sys.exit(f"stats: missing memory cases dir: {root}")
+    by_full, by_tail = {}, {}
+    for directory in sorted(root.iterdir()):
+        path = directory / "case.json"
+        if not path.is_file():
+            continue
+        case = load_json(path)
+        ident = str(case.get("id") or directory.name)
+        by_full[ident] = str(case.get("query") or "")
+        by_tail[tail_of(ident)] = str(case.get("query") or "")
+    return by_full, by_tail
+
+
+def strata_for(cases, mem_dir, strata_csv=None):
+    if strata_csv:
+        tiers = {}
+        for row in csv.DictReader(open(strata_csv, encoding="utf-8-sig")):
+            tiers[int(row["case_index"])] = row.get("tier", "")
+        return tiers
+    if not mem_dir:
+        sys.exit("stats: --mem-dir or --strata is required")
+    by_full, by_tail = load_case_queries(mem_dir)
+    tiers = {}
+    for index, case in enumerate(cases):
+        target = str(case["expected"][0])
+        query = by_full.get(target) or by_tail.get(tail_of(target))
+        if query is None:
+            sys.exit(f"stats: target {target} not found in memory dir {mem_dir}")
+        tiers[index] = tier_of(jaccard(str(case["query"]), query))
+    return tiers
+
+
+def analyze(name, rows, boot, perm, seed, mde, metric):
+    if not rows:
+        return None
+    deltas = [row["a"] - row["b"] for row in rows]
+    n = len(deltas)
+    observed = sum(deltas) / n
+    rng = random.Random(seed)
+    means = sorted(
+        sum(deltas[rng.randrange(n)] for _ in range(n)) / n
+        for _ in range(boot)
+    )
+    lo = means[int(0.025 * (boot - 1))]
+    hi = means[int(0.975 * (boot - 1))]
+    hits = sum(
+        1
+        for _ in range(perm)
+        if abs(sum(x if rng.random() >= 0.5 else -x for x in deltas) / n)
+        >= abs(observed)
+    )
+    p_value = (hits + 1.0) / (perm + 1.0)
+    return {
+        "group": name,
+        "n": n,
+        f"A_{metric}": round(sum(row["a"] for row in rows) / n, 4),
+        f"B_{metric}": round(sum(row["b"] for row in rows) / n, 4),
+        "delta": round(observed, 4),
+        "ci_lo": round(lo, 4),
+        "ci_hi": round(hi, 4),
+        "perm_p": round(p_value, 4),
+        "mde": mde,
+        "advantage": int(lo > 0 and observed >= mde and p_value < 0.05),
+    }
+
+
+def analyze_cluster(rows, cluster_size, boot, perm, seed, mde, metric):
+    groups = {}
+    for row in rows:
+        groups.setdefault(row["i"] // cluster_size, []).append(row)
+    clusters = list(groups.values())
+    if len(clusters) < 2:
+        return None
+    deltas = [row["a"] - row["b"] for row in rows]
+    observed = sum(deltas) / len(deltas)
+    rng = random.Random(seed)
+    means = []
+    for _ in range(boot):
+        sample = [clusters[rng.randrange(len(clusters))] for _ in clusters]
+        values = [row["a"] - row["b"] for cluster in sample for row in cluster]
+        means.append(sum(values) / len(values))
+    means.sort()
+    lo = means[int(0.025 * (boot - 1))]
+    hi = means[int(0.975 * (boot - 1))]
+    hits = 0
+    for _ in range(perm):
+        total = count = 0
+        for cluster in clusters:
+            sign = 1.0 if rng.random() >= 0.5 else -1.0
+            for row in cluster:
+                total += sign * (row["a"] - row["b"])
+                count += 1
+        if abs(total / count) >= abs(observed):
+            hits += 1
+    p_value = (hits + 1.0) / (perm + 1.0)
+    return {
+        "group": "tier:hard:cluster",
+        "n": len(rows),
+        "n_clusters": len(clusters),
+        f"A_{metric}": round(sum(row["a"] for row in rows) / len(rows), 4),
+        f"B_{metric}": round(sum(row["b"] for row in rows) / len(rows), 4),
+        "delta": round(observed, 4),
+        "ci_lo": round(lo, 4),
+        "ci_hi": round(hi, 4),
+        "perm_p": round(p_value, 4),
+        "mde": mde,
+        "advantage": int(lo > 0 and observed >= mde and p_value < 0.05),
+    }
+
+
+def cmd_stats(args):
+    if args.boot < 1 or args.perm < 1:
+        sys.exit("stats: --boot and --perm must be positive")
+    baseline = load_json(args.baseline)
+    cases = baseline.get("cases") or []
+    verbose = parse_verbose(args.verbose, len(cases))
+    tiers = strata_for(cases, args.mem_dir, args.strata)
+    rows = []
+    for index, (case, hits) in enumerate(zip(cases, verbose)):
+        target = str(case["expected"][0])
+        if args.metric == "mrr":
+            left = mrr(target_rank(hits["A"], target))
+            right = mrr(target_rank(hits["B"], target))
+        else:
+            left, right = ndcg(case, hits["A"]), ndcg(case, hits["B"])
+        rows.append(
+            {
+                "i": int(case.get("case_index", index)),
+                "layer": case["layer"],
+                "tier": tiers.get(index, ""),
+                "a": left,
+                "b": right,
+            }
+        )
+    results = []
+    for layer in LAYERS:
+        group = [row for row in rows if row["layer"] == layer]
+        if group:
+            results.append(
+                analyze(layer, group, args.boot, args.perm, args.seed, args.mde, args.metric)
+            )
+    for tier in sorted({row["tier"] for row in rows if row["tier"]}):
+        group = [row for row in rows if row["tier"] == tier]
+        results.append(
+            analyze(
+                f"tier:{tier}", group, args.boot, args.perm, args.seed,
+                args.mde, args.metric,
+            )
+        )
+    results.append(
+        analyze("all", rows, args.boot, args.perm, args.seed, args.mde, args.metric)
+    )
+    if args.cluster_size:
+        hard = [row for row in rows if row["tier"] == "hard"]
+        cluster = analyze_cluster(
+            hard,
+            args.cluster_size,
+            args.boot,
+            args.perm,
+            args.seed,
+            args.mde,
+            args.metric,
+        )
+        if cluster:
+            results.append(cluster)
+    results = [row for row in results if row]
+    fields = list(results[0].keys())
+    write_csv(args.out, fields, results)
+    for row in results:
+        if "n_clusters" not in row:
+            a_key, b_key = f"A_{args.metric}", f"B_{args.metric}"
+            print(
+                f"{row['group']:14s} n={row['n']:3d} A={row[a_key]:.4f} "
+                f"B={row[b_key]:.4f} d={row['delta']:+.4f} "
+                f"CI=[{row['ci_lo']:+.4f},{row['ci_hi']:+.4f}] p={row['perm_p']:.4f}"
+            )
+        else:
+            print(
+                f"{row['group']:14s} n={row['n']:3d} "
+                f"clusters={row['n_clusters']:3d} d={row['delta']:+.4f} "
+                f"CI=[{row['ci_lo']:+.4f},{row['ci_hi']:+.4f}] p={row['perm_p']:.4f}"
+            )
+    print(f"stats: wrote {args.out} groups={len(results)} metric={args.metric}")
+
+
+# ---------------------------------------------------------------------------
+# Blind review
+# ---------------------------------------------------------------------------
+
+
+def case_index(mem_dir):
+    root = Path(mem_dir) / "cases"
+    if not root.is_dir():
+        sys.exit(f"blind: missing memory cases dir: {root}")
+    out = {}
+    for directory in sorted(root.iterdir()):
+        path = directory / "case.json"
+        if not path.is_file():
+            continue
+        case = load_json(path)
+        full = str(case.get("id") or directory.name)
+        out[tail_of(full)] = (
+            full,
+            str(case.get("query") or ""),
+            str(case.get("fix") or ""),
+        )
+    return out
+
+
+def read_packet(path):
+    with open(path, encoding="utf-8") as handle:
+        head = handle.readline().rstrip("\n").split("\t")
+        need = ["row", "case_index", "layer", "query", "candidate", "hint", "grade"]
+        if head[: len(need)] != need:
+            sys.exit(f"blind: bad header: {head}")
+        rows = [line.rstrip("\n").split("\t") for line in handle if line.strip()]
+    return [dict(zip(head, row)) for row in rows]
+
+
+def cmd_blind_make(args):
+    baseline = load_json(args.baseline)
+    cases = baseline["cases"]
+    by_layer = OrderedDict()
+    for index, case in enumerate(cases):
+        by_layer.setdefault(case["layer"], []).append(index)
+    picks = []
+    for layer, indexes in by_layer.items():
+        want = args.per_layer.get(layer, 0)
+        if want > len(indexes):
+            sys.exit(f"blind: layer {layer} has {len(indexes)} cases < {want}")
+        ranked = sorted(indexes, key=lambda i: sha256_text(f"{args.seed}:{layer}:{i}"))
+        picks.extend(ranked[:want])
+    picks.sort(key=lambda i: sha256_text(f"{args.seed}:case:{i}"))
+    memory = case_index(args.mem_dir)
+    rows, manifest_cases = [], []
+    for case_index_value in picks:
+        case = cases[case_index_value]
+        keys = list((case.get("rel") or {}).keys())
+        if not keys:
+            sys.exit(f"blind: case {case_index_value} has empty rel pool")
+        ordered = sorted(
+            keys, key=lambda key: sha256_text(f"{args.seed}:{case_index_value}:{key}")
+        )
+        filled = []
+        for key in ordered:
+            hit = memory.get(tail_of(key))
+            if hit is None:
+                sys.exit(
+                    f"blind: candidate {key} (case {case_index_value}) missing in memory"
+                )
+            full, query, fix = hit
+            hint = query + (f" || fix: {fix}" if fix else "")
+            filled.append((key, full, clean(hint)))
+        manifest_cases.append(
+            {
+                "case_index": case_index_value,
+                "layer": case["layer"],
+                "candidates": len(filled),
+            }
+        )
+        for key, _full, hint in filled:
+            rows.append(
+                (case_index_value, case["layer"], clean(case["query"]), key, hint)
+            )
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    with open(args.out, "w", encoding="utf-8", newline="") as handle:
+        handle.write("row\tcase_index\tlayer\tquery\tcandidate\thint\tgrade\n")
+        for number, (ci, layer, query, key, hint) in enumerate(rows, 1):
+            handle.write(f"{number}\t{ci}\t{layer}\t{query}\t{key}\t{hint}\t\n")
+    manifest = {
+        "name": args.name,
+        "seed": args.seed,
+        "baseline": str(Path(args.baseline).resolve()),
+        "baseline_sha256": sha256_file(args.baseline),
+        "memory_dir": str(Path(args.mem_dir).resolve()),
+        "packet": str(Path(args.out).resolve()),
+        "packet_sha256": sha256_file(args.out),
+        "protocol": GRADE_HELP,
+        "cases": manifest_cases,
+        "sample_cases": len(manifest_cases),
+        "total_cases": len(cases),
+        "judgments": len(rows),
+    }
+    dump_json(args.manifest, manifest)
+    print(
+        f"blind: cases={len(manifest_cases)}/{len(cases)} judgments={len(rows)} "
+        f"packet={args.out}"
+    )
+    print(f"blind: packet_sha256={manifest['packet_sha256']}")
+    print(f"blind: {GRADE_HELP}")
+
+
+def parse_grades(rows, allow_partial):
+    if not rows:
+        sys.exit("blind: empty packet")
+    grades = {}
+    for row in rows:
+        grade = (row.get("grade") or "").strip()
+        if grade not in {"0", "1", "2"}:
+            if allow_partial:
+                continue
+            sys.exit(
+                f"blind: row {row['row']} grade={grade!r} "
+                "(fill every row or pass --allow-partial)"
+            )
+        key = (int(row["case_index"]), row["candidate"])
+        if key in grades:
+            sys.exit(f"blind: duplicate row for case {key[0]} candidate {key[1]}")
+        grades[key] = float(grade)
+    if not grades:
+        sys.exit("blind: no graded rows")
+    return grades
+
+
+def cmd_blind_import(args):
+    rows = read_packet(args.packet)
+    grades = parse_grades(rows, args.allow_partial)
+    baseline = load_json(args.baseline)
+    cases = baseline["cases"]
+    by_case = {}
+    for (case_index_value, candidate), grade in grades.items():
+        if not 0 <= case_index_value < len(cases):
+            sys.exit(f"blind: case_index out of range: {case_index_value}")
+        by_case.setdefault(case_index_value, {})[candidate] = grade
+    output, violations = [], []
+    for case_index_value in sorted(by_case):
+        case = cases[case_index_value]
+        pool = set((case.get("rel") or {}).keys())
+        got = set(by_case[case_index_value])
+        if got != pool:
+            sys.exit(
+                f"blind: case {case_index_value} coverage mismatch "
+                f"missing={sorted(pool - got)[:3]} extra={sorted(got - pool)[:3]}"
+            )
+        rel = OrderedDict(
+            (key, by_case[case_index_value][key]) for key in case["rel"].keys()
+        )
+        target = tail_of(case["expected"][0])
+        target_grade = next(
+            (value for key, value in rel.items() if tail_of(key) == target), None
+        )
+        if case["layer"] == "literal" and target_grade != 2.0:
+            violations.append((case_index_value + 1, target[:8], target_grade))
+        items = OrderedDict((key, {"by": args.judge, "date": args.date}) for key in rel)
+        new_case = OrderedDict()
+        new_case["query"] = case["query"]
+        new_case["layer"] = case["layer"]
+        new_case["expected"] = case["expected"]
+        new_case["case_index"] = case_index_value
+        new_case["rel"] = rel
+        new_case["judge"] = {
+            "by": args.judge,
+            "date": args.date,
+            "method": args.method,
+            "packet_sha256": sha256_file(args.packet),
+            "packet": str(Path(args.packet).resolve()),
+        }
+        new_case["judge_items"] = items
+        new_case["note"] = f"per-item blind review; packet={Path(args.packet).name}"
+        if args.note:
+            new_case["note"] += f"; {args.note}"
+        output.append(new_case)
+    if violations:
+        for case_number, target, grade in violations[:8]:
+            print(
+                f"blind: literal case {case_number} target {target} graded {grade} (must be 2)",
+                file=sys.stderr,
+            )
+        sys.exit(
+            f"blind: {len(violations)} literal self-match rows are not 2; nothing written"
+        )
+    dump_json(args.out, {"name": args.name, "provenance": "per-item-blind-v1", "cases": output})
+    counts = {2: 0, 1: 0, 0: 0}
+    for case in output:
+        for value in case["rel"].values():
+            if value in counts:
+                counts[int(value)] += 1
+    print(
+        f"blind: wrote {args.out} cases={len(output)} "
+        f"items={sum(counts.values())} rel2={counts[2]} rel1={counts[1]} rel0={counts[0]}"
+    )
+
+
+def cmd_blind_check(args):
+    baseline = load_json(args.baseline)
+    bad = items = 0
+    for index, case in enumerate(baseline["cases"]):
+        pool = set((case.get("rel") or {}).keys())
+        got = set((case.get("judge_items") or {}).keys())
+        items += len(got)
+        if pool != got:
+            bad += 1
+            print(
+                f"blind: case {index} uncovered={len(pool - got)} "
+                f"extra={len(got - pool)}"
+            )
+    print(f"blind: cases={len(baseline['cases'])} items={items} incomplete={bad}")
+    return 1 if bad else 0
+
+
+def cmd_blind_progress(args):
+    rows = read_packet(args.packet)
+    done = sum(1 for row in rows if (row.get("grade") or "").strip() in {"0", "1", "2"})
+    print(f"blind: graded={done}/{len(rows)} remaining={len(rows) - done}")
+    return 0 if done == len(rows) else 1
+
+
+def agreement(cases_a, cases_b):
+    if len(cases_a) != len(cases_b):
+        sys.exit(f"blind: case counts differ: {len(cases_a)} vs {len(cases_b)}")
+    matrix = [[0, 0, 0] for _ in range(3)]
+    disagreements = []
+    total = agree = 0
+    for index, (left, right) in enumerate(zip(cases_a, cases_b), 1):
+        rel_left = left.get("rel") or {}
+        rel_right = right.get("rel") or {}
+        for candidate, left_value in rel_left.items():
+            if candidate not in rel_right:
+                continue
+            try:
+                a = int(left_value)
+                b = int(rel_right[candidate])
+            except (TypeError, ValueError):
+                sys.exit(f"blind: non-integer grade at case {index} candidate {candidate}")
+            if a not in range(3) or b not in range(3):
+                sys.exit(f"blind: grade outside 0..2 at case {index} candidate {candidate}")
+            matrix[a][b] += 1
+            total += 1
+            if a == b:
+                agree += 1
+            else:
+                disagreements.append((index, left.get("query", ""), candidate, a, b))
+    if not total:
+        return 0, 0.0, 0.0, matrix, disagreements
+    raw = agree / total
+    rows = [sum(row) for row in matrix]
+    columns = [sum(matrix[a][b] for a in range(3)) for b in range(3)]
+    expected = sum(rows[i] * columns[i] for i in range(3)) / (total * total)
+    kappa = 1.0 if expected >= 1.0 else (raw - expected) / (1.0 - expected)
+    return total, raw, kappa, matrix, disagreements
+
+
+def cmd_blind_agree(args):
+    left = load_json(args.a).get("cases") or []
+    right = load_json(args.b).get("cases") or []
+    total, raw, kappa, matrix, disagreements = agreement(left, right)
+    if not total:
+        print("blind: no common adjudicated candidates")
+        return 0
+    off_diag = sum(matrix[a][b] for a in range(3) for b in range(3) if a != b)
+    print(f"blind: common={total} raw={raw:.3f} kappa={kappa:.3f}")
+    print(
+        f"  matrix(rows=A,cols=B) 2,2={matrix[2][2]} 1,1={matrix[1][1]} "
+        f"0,0={matrix[0][0]} off-diag={off_diag}"
+    )
+    print("  disagreements:" if disagreements else "  disagreements: 0")
+    for index, query, candidate, a, b in disagreements:
+        print(f'    case={index} q="{query}" cand={candidate} A={a} B={b}')
+    return 0
+
+
+def cmd_blind_review(args):
+    with open(args.packet, encoding="utf-8") as handle:
+        head = handle.readline().rstrip("\n").split("\t")
+        rows = [line.rstrip("\n").split("\t") for line in handle if line.strip()]
+    columns = {key: index for index, key in enumerate(head)}
+    grade_index = columns["grade"]
+    todo = [row for row in rows if not row[grade_index].strip()]
+    print(f"blind: {len(rows) - len(todo)}/{len(rows)} already graded; {len(todo)} to go")
+    print(f"blind: {GRADE_HELP}  (s=skip  q=save&quit)")
+    dirty = False
+    try:
+        for row in todo:
+            print(
+                f"\n[row {row[columns['row']]}/{len(rows)}] "
+                f"layer={row[columns['layer']]}\nquery: {row[columns['query']]}"
+                f"\nhint:  {row[columns['hint']]}"
+            )
+            while True:
+                answer = input("grade? [2/1/0/s/q] > ").strip().lower()
+                if answer == "q":
+                    raise KeyboardInterrupt
+                if answer in {"2", "1", "0"}:
+                    row[grade_index] = answer
+                    dirty = True
+                    break
+                if answer == "s":
+                    break
+            if dirty:
+                tmp = args.packet + ".tmp"
+                with open(tmp, "w", encoding="utf-8", newline="") as handle:
+                    handle.write("\t".join(head) + "\n")
+                    handle.write("".join("\t".join(row) + "\n" for row in rows))
+                os.replace(tmp, args.packet)
+                dirty = False
+    except (KeyboardInterrupt, EOFError):
+        pass
+    graded = sum(1 for row in rows if row[grade_index].strip() in {"0", "1", "2"})
+    print(f"\nblind: graded={graded}/{len(rows)} (saved)")
+    return 0 if graded == len(rows) else 1
+
+
+def cmd_blind(args):
+    handlers = {
+        "make": cmd_blind_make,
+        "import": cmd_blind_import,
+        "check": cmd_blind_check,
+        "progress": cmd_blind_progress,
+        "agree": cmd_blind_agree,
+        "review": cmd_blind_review,
+    }
+    return handlers[args.blind_cmd](args)
+
+
+# ---------------------------------------------------------------------------
+# Verification and self-test
+# ---------------------------------------------------------------------------
+
+
+def cmd_verify(args):
+    actual = sha256_file(args.packet)
+    if args.sha256 and actual.lower() != args.sha256.lower():
+        sys.exit(f"verify: packet drifted: {actual} != {args.sha256}")
+    rows = read_packet(args.packet)
+    print(f"verify: packet={args.packet} rows={len(rows)} sha256={actual}")
+
+
+def selftest():
+    assert id_matches("2026-10-22_abcdef12", "abcdef12")
+    assert id_matches("2026-10-22_abcdef12", "2026-10-25_abcdef12")
+    assert not id_matches("2026-10-22_abcdef12", "deadbeef")
+    case = {"rel": {"abcdef12": 2, "2026-10-22_beefcafe": 1}}
+    assert rel_of(case, "abcdef12") == 2
+    assert rel_of(case, "beefcafe") == 1
+    assert rel_of(case, "00000000") == 0
+    assert ndcg({"rel": {"a": 2, "b": 1}}, ["a", "b"]) == 1.0
+    assert abs(mrr(2) - 0.5) < 1e-12
+    rows = [
+        {"a": 1.0, "b": 0.0},
+        {"a": 0.0, "b": 0.0},
+    ]
+    first = analyze("all", rows, 200, 200, 7, 0.05, "mrr")
+    second = analyze("all", rows, 200, 200, 7, 0.05, "mrr")
+    assert first == second and first["delta"] == 0.5
+    assert jaccard("database timeout", "database timeout") == 1.0
+    cases = [
+        {"query": "q1", "rel": {"a": 2, "b": 1}},
+        {"query": "q2", "rel": {"c": 2, "d": 0}},
+    ]
+    total, raw, kappa, matrix, disagreements = agreement(cases, cases)
+    assert total == 4 and raw == 1.0 and kappa == 1.0
+    assert matrix[2][2] == 2 and not disagreements
+    partial = parse_grades(
+        [
+            {"row": "1", "case_index": "0", "candidate": "a", "grade": "2"},
+            {"row": "2", "case_index": "0", "candidate": "b", "grade": ""},
+        ],
+        True,
+    )
+    assert partial == {(0, "a"): 2.0}
+    cluster = analyze_cluster(
+        [{"i": 0, "a": 1.0, "b": 0.0}, {"i": 5, "a": 0.0, "b": 0.0}],
+        5,
+        20,
+        20,
+        7,
+        0.05,
+        "ndcg",
+    )
+    assert cluster["A_ndcg"] == 0.5 and "A_mrr" not in cluster
+    for name, cases in (("confirm5", 150), ("v2", 150), ("real", 40)):
+        corpus = load_json(EVAL_DIR / "corpora" / f"{name}.json")
+        layers = validate_corpus(corpus)
+        assert sum(layers.values()) == cases
+    print("selftest: PASS")
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    seed = sub.add_parser("seed", help="corpus JSON -> memory cases + eval CSV")
+    seed.add_argument("corpus")
+    seed.add_argument("--mem-dir", required=True)
+    seed.add_argument("--csv")
+    seed.add_argument("--binary", default="")
+    seed.add_argument("--force", action="store_true")
+    seed.set_defaults(func=cmd_seed)
+
+    baseline = sub.add_parser("baseline", help="eval CSV -> target baseline")
+    baseline.add_argument("--csv", required=True)
+    baseline.add_argument("--out", required=True)
+    baseline.add_argument("--judge-by", default="mechanical-target-v1")
+    baseline.add_argument("--judge-date", default="2026-10-23T00:00:00Z")
+    baseline.set_defaults(func=cmd_baseline)
+
+    stats = sub.add_parser("stats", help="verbose + baseline -> significance CSV")
+    stats.add_argument("--baseline", required=True)
+    stats.add_argument("--verbose", required=True)
+    stats.add_argument("--out", required=True)
+    stats.add_argument("--mem-dir")
+    stats.add_argument("--strata")
+    stats.add_argument("--metric", choices=("mrr", "ndcg"), default="mrr")
+    stats.add_argument("--boot", type=int, default=10000)
+    stats.add_argument("--perm", type=int, default=10000)
+    stats.add_argument("--seed", type=int, default=20261023)
+    stats.add_argument("--mde", type=float, default=0.05)
+    stats.add_argument("--cluster-size", type=int, default=0)
+    stats.set_defaults(func=cmd_stats)
+
+    blind = sub.add_parser("blind", help="frozen per-candidate blind review")
+    blind_sub = blind.add_subparsers(dest="blind_cmd", required=True)
+
+    make = blind_sub.add_parser("make")
+    make.add_argument("--baseline", required=True)
+    make.add_argument("--mem-dir", required=True)
+    make.add_argument("--out", required=True)
+    make.add_argument("--manifest", required=True)
+    make.add_argument("--name", default="confirm5-blind40")
+    make.add_argument("--seed", default="confirm5-blind-v1")
+    make.add_argument(
+        "--per-layer", default="literal=14,paraphrase=13,semantic=13"
+    )
+
+    imp = blind_sub.add_parser("import")
+    imp.add_argument("--baseline", required=True)
+    imp.add_argument("--packet", required=True)
+    imp.add_argument("--out", required=True)
+    imp.add_argument("--judge", required=True)
+    imp.add_argument("--date", required=True)
+    imp.add_argument("--name", default="confirm5-blind40")
+    imp.add_argument("--method", default="per-item-blind-v1")
+    imp.add_argument("--note", default="")
+    imp.add_argument("--allow-partial", action="store_true")
+
+    check = blind_sub.add_parser("check")
+    check.add_argument("--baseline", required=True)
+
+    progress = blind_sub.add_parser("progress")
+    progress.add_argument("--packet", required=True)
+
+    agree = blind_sub.add_parser("agree")
+    agree.add_argument("--a", required=True)
+    agree.add_argument("--b", required=True)
+
+    review = blind_sub.add_parser("review")
+    review.add_argument("--packet", required=True)
+    blind.set_defaults(func=cmd_blind)
+
+    verify = sub.add_parser("verify", help="packet hash and row count")
+    verify.add_argument("--packet", required=True)
+    verify.add_argument("--sha256")
+    verify.set_defaults(func=cmd_verify)
+
+    test = sub.add_parser("selftest")
+    test.set_defaults(func=lambda _args: selftest())
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.cmd == "blind" and args.blind_cmd == "make":
+        args.per_layer = {
+            key: int(value)
+            for key, value in (part.split("=", 1) for part in args.per_layer.split(","))
+        }
+    return args.func(args) or 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

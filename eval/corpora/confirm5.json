@@ -1,0 +1,998 @@
+{
+ "name": "confirm5",
+ "description": "30 public incidents; five sibling cases each.",
+ "expected_incidents": 30,
+ "expected_cases": 150,
+ "incidents": [
+  {
+   "id": "bintray",
+   "source": "https://web.archive.org/web/20210421222929/https://status.bintray.com/incidents/w4dfr0rpznkt",
+   "root_cause": "攻击者冒充合法发布者向 Bintray JCenter 植入恶意 Maven 包，相关包存在一年多并被多个 Android 应用依赖，导致恶意代码进入应用",
+   "fix": "下架恶意 Maven 包、通知受影响项目并加强发布者身份校验",
+   "cases": [
+    {
+     "store_query": "bintray jcenter malicious maven packages impersonation",
+     "eval_query": "bintray jcenter malicious maven packages impersonation",
+     "layer": "literal"
+    },
+    {
+     "store_query": "android dependencies pulled malware from jcenter",
+     "eval_query": "android dependencies pulled malware from jcenter",
+     "layer": "literal"
+    },
+    {
+     "store_query": "malicious maven packages were published to jcenter through an impersonation attack",
+     "eval_query": "an attacker impersonated a vendor and planted malicious maven artifacts in jcenter",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "jcenter hosted the impersonated maven packages for more than a year",
+     "eval_query": "android apps included malware after resolving dependencies from the poisoned jcenter repository",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Bintray JCenter 恶意 Maven 包冒充合法依赖，Android 应用被植入木马",
+     "eval_query": "冒充发布的 Maven 包在 JCenter 待了一年多，Android 项目依赖后带进了恶意代码",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "bitly",
+   "source": "https://blog.bitly.com/post/85260908544/more-detail",
+   "root_cause": "Bitly 托管源代码仓库中包含可访问备份的凭证，导致备份数据及密码哈希暴露",
+   "fix": "轮换凭证、限制备份访问并清理仓库中的秘密",
+   "cases": [
+    {
+     "store_query": "bitly source repository leaked backup credentials",
+     "eval_query": "bitly source repository leaked backup credentials",
+     "layer": "literal"
+    },
+    {
+     "store_query": "hashed passwords exposed through code repo secrets",
+     "eval_query": "hashed passwords exposed through code repo secrets",
+     "layer": "literal"
+    },
+    {
+     "store_query": "credentials in a hosted source code repository granted access to bitly backups",
+     "eval_query": "secrets committed to a code repository exposed hashed passwords from bitly backups",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "a repository contained credentials that could read the backup store",
+     "eval_query": "the leaked repository credentials allowed access to backups containing password hashes",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Bitly 源码仓库泄漏凭证，备份中的密码哈希被访问",
+     "eval_query": "代码托管仓库里放了能读备份的密钥，用户密码哈希随备份一起暴露",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "browserstack",
+   "source": "https://www.browserstack.com/attack-and-downtime-on-9-November",
+   "root_cause": "BrowserStack 一台仍存在 Shellshock 漏洞的旧原型机保存了密钥，攻击者利用其导致生产系统入侵",
+   "fix": "下线未修复主机、轮换密钥并隔离生产访问",
+   "cases": [
+    {
+     "store_query": "browserstack old prototype shellshock production breach",
+     "eval_query": "browserstack old prototype shellshock production breach",
+     "layer": "literal"
+    },
+    {
+     "store_query": "shellshock vulnerable machine held secret keys",
+     "eval_query": "shellshock vulnerable machine held secret keys",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an old prototype machine still vulnerable to shellshock held secret keys",
+     "eval_query": "the forgotten prototype with shellshock exposed keys that led to a production breach",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "attackers reached production through secret keys stored on an unpatched prototype",
+     "eval_query": "a prototype host missed patching and its secret keys compromised production",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "BrowserStack 遗留原型机未修复 Shellshock，密钥泄漏导致生产环境被入侵",
+     "eval_query": "一台忘记下线的旧测试机带着 Shellshock 漏洞和密钥，最终让生产系统被攻破",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "chef",
+   "source": "https://www.chef.io/blog/2014/07/10/supermarket-intermittent-unresponsiveness-postmortem/",
+   "root_cause": "Chef Supermarket 使用过低的健康检查超时，正常实例被误判为不健康，上线两小时后服务崩溃",
+   "fix": "调高健康检查超时并修正实例摘除策略",
+   "cases": [
+    {
+     "store_query": "chef supermarket low health check timeout crash",
+     "eval_query": "chef supermarket low health check timeout crash",
+     "layer": "literal"
+    },
+    {
+     "store_query": "health check timeout killed supermarket after launch",
+     "eval_query": "health check timeout killed supermarket after launch",
+     "layer": "literal"
+    },
+    {
+     "store_query": "very low health check timeouts caused supermarket to crash two hours after launch",
+     "eval_query": "the new recipe site failed because health checks timed out too aggressively",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "aggressive health check timeouts removed healthy instances and the service collapsed",
+     "eval_query": "supermarket went down after launch when its low timeout settings failed healthy nodes",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Chef Supermarket 健康检查超时过短，上线两小时后节点被误判并崩溃",
+     "eval_query": "Chef 的新社区站点刚上线，健康检查阈值太短把正常实例判死，服务很快挂了",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "marsclimate",
+   "source": "https://en.wikipedia.org/wiki/Mars_Climate_Orbiter",
+   "root_cause": "NASA 火星气候探测器的地面导航软件与探测器使用不同单位制，推力冲量计算错误，导致轨道偏差并进入火星大气层",
+   "fix": "统一单位制并增加接口单位校验",
+   "cases": [
+    {
+     "store_query": "mars climate orbiter metric english unit mismatch",
+     "eval_query": "mars climate orbiter metric english unit mismatch",
+     "layer": "literal"
+    },
+    {
+     "store_query": "navigation software used wrong thrust units",
+     "eval_query": "navigation software used wrong thrust units",
+     "layer": "literal"
+    },
+    {
+     "store_query": "the navigation software used metric and english units inconsistently for thruster impulse",
+     "eval_query": "a unit mismatch between ground software and the spacecraft destroyed the mission",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "thruster data was interpreted in the wrong unit system during trajectory correction",
+     "eval_query": "the orbiter entered the atmosphere because navigation burned the wrong amount of fuel",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "火星气候探测器公制与英制单位混用，导航点火量错误",
+     "eval_query": "地面软件按错单位算推力，火星气候探测器进入大气层烧毁",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "mozillacert",
+   "source": "https://web.archive.org/web/20250303152906/https://hacks.mozilla.org/2019/07/add-ons-outage-post-mortem-result/",
+   "root_cause": "Mozilla 用于验证 Firefox 扩展的中间证书过期，浏览器禁用几乎所有附加组件，约九小时后通过推送特权修复恢复",
+   "fix": "签发新证书并推送特权扩展修复验证链",
+   "cases": [
+    {
+     "store_query": "mozilla firefox addons certificate expired outage",
+     "eval_query": "mozilla firefox addons certificate expired outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "expired intermediate certificate disabled all addons",
+     "eval_query": "expired intermediate certificate disabled all addons",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an expired intermediate certificate used to verify add-ons made firefox disable them",
+     "eval_query": "firefox could no longer validate extensions and almost all add-ons stopped working",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the certificate chain expired and Mozilla had to push a privileged fix",
+     "eval_query": "add-ons returned only after a new valid certificate chain was injected",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Mozilla Firefox 扩展签名证书过期，几乎所有附加组件被禁用",
+     "eval_query": "Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "stackregex",
+   "source": "http://web.archive.org/web/20160720200842/https://stackstatus.net/post/147710624694/outage-postmortem-july-20-2016",
+   "root_cause": "Stack Exchange 底层正则引擎在处理一篇帖子时发生灾难性回溯，请求处理阻塞并导致健康检查失败，站点中断",
+   "fix": "限制正则回溯并修复健康检查超时",
+   "cases": [
+    {
+     "store_query": "stack exchange regex backtracking health check outage",
+     "eval_query": "stack exchange regex backtracking health check outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "expensive regex caused health checks to fail",
+     "eval_query": "expensive regex caused health checks to fail",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a regex in the engine backtracked excessively on one post and blocked request handling",
+     "eval_query": "the expensive regular expression made health checks fail and took stack exchange down",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "a single post triggered catastrophic regex backtracking in the platform",
+     "eval_query": "load balancers removed instances after the regex stalled health checks",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Stack Exchange 正则灾难性回溯拖垮健康检查，站点中断",
+     "eval_query": "一篇帖子触发正则灾难性回溯，健康检查全超时，Stack Exchange 实例被摘掉",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "discord",
+   "source": "https://status.discordapp.com/incidents/dj3l6lw926kl",
+   "root_cause": "Discord 一个服务反复抖动，恢复时大量客户端同时重连形成惊群，前端内部队列堆积并耗尽内存，导致级联故障",
+   "fix": "限制重连速率并保护前端队列",
+   "cases": [
+    {
+     "store_query": "discord flapping service reconnection thundering herd",
+     "eval_query": "discord flapping service reconnection thundering herd",
+     "layer": "literal"
+    },
+    {
+     "store_query": "frontend memory exhausted by reconnect queues",
+     "eval_query": "frontend memory exhausted by reconnect queues",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a flapping service caused a reconnection thundering herd when it recovered",
+     "eval_query": "millions of clients reconnected at once and filled frontend queues until memory ran out",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the reconnect storm exhausted frontend memory and cascaded through discord services",
+     "eval_query": "frontend services ran out of memory because queued reconnects grew without bound",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Discord 服务抖动引发重连惊群，前端队列堆积耗尽内存",
+     "eval_query": "一个服务反复抖动后恢复，客户端同时重连把前端队列塞满，Discord 前端 OOM",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "duo",
+   "source": "https://status.duo.com/incidents/4w07bmvnt359",
+   "root_cause": "Duo 请求队列超过数据库现有容量，容量规划与监控不足，导致级联故障",
+   "fix": "扩容数据库、限制队列并补充容量监控",
+   "cases": [
+    {
+     "store_query": "duo request queue overloaded database capacity",
+     "eval_query": "duo request queue overloaded database capacity",
+     "layer": "literal"
+    },
+    {
+     "store_query": "insufficient db capacity caused cascading failure",
+     "eval_query": "insufficient db capacity caused cascading failure",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a request queue overloaded the existing database capacity and caused a cascading failure",
+     "eval_query": "database capacity was too small for the queue and failures spread across the service",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the queue kept growing until the database could not accept more work",
+     "eval_query": "insufficient capacity planning and monitoring turned a request spike into a cascading outage",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Duo 请求队列压垮数据库容量，监控不足导致级联故障",
+     "eval_query": "Duo 的请求队列越积越多，数据库容量和监控都不够，最后整个服务级联失败",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "elastic",
+   "source": "https://www.elastic.co/blog/elastic-cloud-january-18-2019-incident-report",
+   "root_cause": "Elastic Cloud 在 AWS eu-west-1 的部署受区域故障影响，约三小时严重降级，其中约二十分钟完全不可用",
+   "fix": "等待区域恢复并改进跨区容灾",
+   "cases": [
+    {
+     "store_query": "elastic cloud aws eu west region degradation",
+     "eval_query": "elastic cloud aws eu west region degradation",
+     "layer": "literal"
+    },
+    {
+     "store_query": "aws ireland outage degraded elastic clusters",
+     "eval_query": "aws ireland outage degraded elastic clusters",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an AWS eu west one outage degraded elastic cloud deployments for about three hours",
+     "eval_query": "clusters in ireland became unavailable for twenty minutes during the regional incident",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the AWS region problem reduced access to hosted elasticsearch clusters",
+     "eval_query": "elastic cloud customers in eu west one saw degraded access and a brief full outage",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Elastic Cloud 受 AWS eu-west-1 区域故障影响，集群降级约三小时",
+     "eval_query": "AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "eslint",
+   "source": "https://eslint.org/blog/2018/07/postmortem-for-malicious-package-publishes",
+   "root_cause": "攻击者入侵 ESLint 维护者的 npm 账号并发布恶意包，影响从 npm registry 安装依赖的用户",
+   "fix": "撤销恶意版本、重置账号并启用双因素认证",
+   "cases": [
+    {
+     "store_query": "eslint npm maintainer account malicious packages",
+     "eval_query": "eslint npm maintainer account malicious packages",
+     "layer": "literal"
+    },
+    {
+     "store_query": "compromised npm account published malware",
+     "eval_query": "compromised npm account published malware",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an attacker compromised an eslint maintainer npm account and published malicious packages",
+     "eval_query": "the hijacked npm account pushed malware into the eslint package stream",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "malicious versions appeared in the npm registry under a trusted maintainer",
+     "eval_query": "developers installing eslint dependencies received packages published by the attacker",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "ESLint 维护者 npm 账号被入侵，恶意包发布到官方仓库",
+     "eval_query": "ESLint 维护者的 npm 账号被盗，攻击者用官方名义发了带恶意代码的包",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "etsy",
+   "source": "https://blog.etsy.com/news/2012/demystifying-site-outages/",
+   "root_cause": "Etsy 一个小修复部署意外升级了运行中的生产数据库，同时有符号 32 位 ID 溢出导致数据库操作失败，团队停站执行完整性检查",
+   "fix": "回滚部署、迁移 ID 类型并隔离数据库升级流程",
+   "cases": [
+    {
+     "store_query": "etsy deploy upgraded live database int32 id overflow",
+     "eval_query": "etsy deploy upgraded live database int32 id overflow",
+     "layer": "literal"
+    },
+    {
+     "store_query": "signed 32 bit id overflow forced site shutdown",
+     "eval_query": "signed 32 bit id overflow forced site shutdown",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a bugfix deploy upgraded live databases and a signed 32 bit id overflow broke writes",
+     "eval_query": "the unexpected database upgrade and int32 overflow made etsy stop serving traffic",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "id values exceeded the signed int range while the deploy changed production databases",
+     "eval_query": "etsy took the site down for integrity checks after the deploy and id overflow",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Etsy 部署意外升级生产数据库，INT32 ID 溢出迫使全站停机检查",
+     "eval_query": "一次小修复上线时顺手升级了生产库，ID 又超过 32 位有符号上限，Etsy 只能停站做完整性检查",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "flowdock",
+   "source": "https://web.archive.org/web/20220704223244/https://flowdock-resources.s3.amazonaws.com/legal/Flowdock-RCA-For-Incident-On-2020-04-21.pdf",
+   "root_cause": "COVID-19 期间远程办公使 Flowdock 使用量骤增，CPU 过载导致应用数据库挂起，服务中断约 24 小时并造成部分用户数据永久丢失",
+   "fix": "扩容容量、限流并修复数据库恢复与备份",
+   "cases": [
+    {
+     "store_query": "flowdock covid work from home load database hang",
+     "eval_query": "flowdock covid work from home load database hang",
+     "layer": "literal"
+    },
+    {
+     "store_query": "sudden remote work traffic caused db hang",
+     "eval_query": "sudden remote work traffic caused db hang",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a sudden surge of remote work traffic during covid raised cpu and hung the application database",
+     "eval_query": "flowdock could not handle the work from home load and lost some user data",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "high cpu from pandemic usage caused the database to stop responding for about a day",
+     "eval_query": "the service was unavailable for twenty four hours and some data was permanently lost",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Flowdock 疫情期间远程办公流量激增，CPU 高企拖死数据库并丢失部分数据",
+     "eval_query": "疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "foursquare",
+   "source": "https://web.archive.org/web/20230602082218/https://news.ycombinator.com/item?id=1769761",
+   "root_cause": "Foursquare 签到查询每次读取用户完整历史，数据局部性差并拉入大量无用页，MongoDB 内存耗尽后崩溃，监控缺失使故障持续约 17 小时",
+   "fix": "优化查询与索引、限制内存使用并补充监控",
+   "cases": [
+    {
+     "store_query": "foursquare mongodb out of memory low locality reads",
+     "eval_query": "foursquare mongodb out of memory low locality reads",
+     "layer": "literal"
+    },
+    {
+     "store_query": "checkin history query read entire user data",
+     "eval_query": "checkin history query read entire user data",
+     "layer": "literal"
+    },
+    {
+     "store_query": "each checkin read the user's full history with low locality and exhausted mongodb memory",
+     "eval_query": "mongodb ran out of memory under the inefficient checkin query pattern",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the read pattern pulled unnecessary pages until mongodb failed catastrophically",
+     "eval_query": "monitoring missed the growing load and the outage lasted seventeen hours",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Foursquare MongoDB 查询局部性差打满内存，故障持续十七小时",
+     "eval_query": "每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "githubmlag",
+   "source": "https://blog.github.com/news-insights/the-library/downtime-last-saturday/",
+   "root_cause": "GitHub 聚合交换机 ISSU 升级时终止一个代理，MLAG 故障切换走了中断路径，网络冻结约 90 秒；Pacemaker/Heartbeat/DRBD 心跳超时后互相 STONITH，恢复耗时超过五小时",
+   "fix": "修正 MLAG 升级流程并调整集群心跳与围栏策略",
+   "cases": [
+    {
+     "store_query": "github aggregation switch mlag failover stonith",
+     "eval_query": "github aggregation switch mlag failover stonith",
+     "layer": "literal"
+    },
+    {
+     "store_query": "pacemaker drbd nodes fenced each other",
+     "eval_query": "pacemaker drbd nodes fenced each other",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a disruptive mlag failover during an aggregation switch upgrade froze the network for ninety seconds",
+     "eval_query": "the network freeze made pacemaker and drbd pairs stonith each other",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "both nodes in active passive pairs powered off after missing heartbeats",
+     "eval_query": "recovery required identifying the previously active node for every fenced pair",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "GitHub 交换机 MLAG 切换冻结网络，Pacemaker/DRBD 节点互相 STONITH",
+     "eval_query": "交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "githubddos",
+   "source": "https://githubengineering.com/ddos-incident-report/",
+   "root_cause": "GitHub 遭遇峰值约 1.35 Tbps 的分布式拒绝服务攻击，流量打满边缘网络并造成站点不可用",
+   "fix": "启用流量清洗与上游缓解，恢复边缘服务",
+   "cases": [
+    {
+     "store_query": "github ddos 1.35 tbps traffic flood",
+     "eval_query": "github ddos 1.35 tbps traffic flood",
+     "layer": "literal"
+    },
+    {
+     "store_query": "massive volumetric attack saturated github",
+     "eval_query": "massive volumetric attack saturated github",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a distributed denial of service attack reached one point three five terabits per second",
+     "eval_query": "the volumetric flood saturated github's edge and took the site offline",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "traffic from a huge botnet overwhelmed network capacity",
+     "eval_query": "github mitigated the record breaking ddos after a brief outage",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "GitHub 遭遇 1.35 Tbps 超大流量 DDoS，边缘网络被打满",
+     "eval_query": "GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "mandrill",
+   "source": "https://mailchimp.com/what-we-learned-from-the-recent-mandrill-outage/",
+   "root_cause": "Mandrill 的 PostgreSQL 事务 ID 回卷触发数据库保护，写入受阻，造成约一天半的部分服务中断",
+   "fix": "执行 VACUUM FREEZE 并监控事务 ID 年龄",
+   "cases": [
+    {
+     "store_query": "mandrill postgres transaction id wraparound",
+     "eval_query": "mandrill postgres transaction id wraparound",
+     "layer": "literal"
+    },
+    {
+     "store_query": "txid wraparound caused day and a half outage",
+     "eval_query": "txid wraparound caused day and a half outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a postgres transaction id wraparound caused a partial outage for a day and a half",
+     "eval_query": "postgres exhausted its transaction id space and mandrill stopped serving some requests",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the database entered a wraparound emergency and writes were blocked",
+     "eval_query": "recovery from the transaction id wraparound took roughly thirty six hours",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Mandrill PostgreSQL 事务 ID 回卷，部分服务中断约一天半",
+     "eval_query": "Postgres 的事务 ID 用完了，Mandrill 进入回卷保护，部分功能停了一天半",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "nasa-pathfinder",
+   "source": "https://web.archive.org/web/20161230103247/https://research.microsoft.com/en-us/um/people/mbj/Mars_Pathfinder/Authoritative_Account.html",
+   "root_cause": "NASA 火星探路者号 VxWorks 发生优先级反转，低优先级气象任务持有互斥锁，高优先级总线管理任务被阻塞，看门狗反复重启系统",
+   "fix": "远程启用优先级继承并修补 VxWorks 调度器",
+   "cases": [
+    {
+     "store_query": "mars pathfinder priority inversion system resets",
+     "eval_query": "mars pathfinder priority inversion system resets",
+     "layer": "literal"
+    },
+    {
+     "store_query": "vxworks priority inversion watchdog reboot",
+     "eval_query": "vxworks priority inversion watchdog reboot",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a priority inversion in vxworks caused repeated system resets on mars pathfinder",
+     "eval_query": "the low priority weather task held a lock and blocked the high priority bus task",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "watchdog timers rebooted the spacecraft because the critical task could not run",
+     "eval_query": "nasa remotely enabled priority inheritance to stop the resets",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "火星探路者 VxWorks 优先级反转触发看门狗重启",
+     "eval_query": "火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "nasa-apollo",
+   "source": "https://www.doneyles.com/LM/Tales.html",
+   "root_cause": "阿波罗 11 交会雷达设计缺陷产生额外 CPU 负载，制导计算机在登月下降期间过载并触发程序报警与重启",
+   "fix": "利用优先级调度让关键制导任务继续执行",
+   "cases": [
+    {
+     "store_query": "apollo 11 rendezvous radar cpu overload restarts",
+     "eval_query": "apollo 11 rendezvous radar cpu overload restarts",
+     "layer": "literal"
+    },
+    {
+     "store_query": "radar design flaw caused computer alarms",
+     "eval_query": "radar design flaw caused computer alarms",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a design flaw in the apollo 11 rendezvous radar produced excess cpu load",
+     "eval_query": "the guidance computer restarted during lunar descent because radar interrupts consumed its cycles",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "unneeded radar work overloaded the computer and triggered program alarms",
+     "eval_query": "the landing continued after the computer recovered from repeated overload",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "阿波罗 11 交会雷达设计缺陷造成制导计算机 CPU 过载重启",
+     "eval_query": "登月舱雷达不停占用计算资源，阿波罗 11 的计算机过载报警并反复重启",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "openai",
+   "source": "https://web.archive.org/web/20240426015133/https://openai.com/blog/march-20-chatgpt-outage",
+   "root_cause": "OpenAI ChatGPT 的 Redis 缓存中请求与响应队列损坏并失序，部分响应返回给错误用户，暴露应用活动与账单信息",
+   "fix": "下线修复队列、清除损坏缓存并修补隔离逻辑",
+   "cases": [
+    {
+     "store_query": "openai chatgpt redis queue corruption data leak",
+     "eval_query": "openai chatgpt redis queue corruption data leak",
+     "layer": "literal"
+    },
+    {
+     "store_query": "out of order responses exposed other users data",
+     "eval_query": "out of order responses exposed other users data",
+     "layer": "literal"
+    },
+    {
+     "store_query": "corrupted request and response queues in redis returned data to the wrong users",
+     "eval_query": "responses went out of sequence and exposed app activity and billing information",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the redis cache corrupted queue state and mixed one user's response with another",
+     "eval_query": "openai took chatgpt offline to repair the queue corruption and patch the data exposure",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "OpenAI ChatGPT Redis 队列错乱，部分用户看到他人的活动与账单信息",
+     "eval_query": "ChatGPT 的 Redis 请求响应队列乱了，返回内容串到别人账号，暴露活动和账单数据",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "okta",
+   "source": "https://www.okta.com/blog/2022/03/oktas-investigation-of-the-january-2022-compromise/",
+   "root_cause": "攻击者通过第三方支持工程师被入侵的笔记本电脑获得访问权限，进入 Okta 系统",
+   "fix": "撤销第三方访问、轮换凭据并加强供应商终端安全",
+   "cases": [
+    {
+     "store_query": "okta third party support engineer laptop compromise",
+     "eval_query": "okta third party support engineer laptop compromise",
+     "layer": "literal"
+    },
+    {
+     "store_query": "support laptop access led to okta breach",
+     "eval_query": "support laptop access led to okta breach",
+     "layer": "literal"
+    },
+    {
+     "store_query": "attackers gained access through a third party support engineer's laptop",
+     "eval_query": "a compromised support laptop let the intruders reach okta systems",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the third party endpoint was the entry point for the okta compromise",
+     "eval_query": "okta investigated after attackers accessed systems from the support provider",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Okta 第三方支持工程师笔记本被入侵，成为攻击入口",
+     "eval_query": "攻击者先拿下第三方支持人员的电脑，再借它的访问进入 Okta",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "platformsh",
+   "source": "https://web.archive.org/web/20201202234639/https://medium.com/@florian_7764/technical-post-mortem-of-the-august-incident-82ab4c3d6547",
+   "root_cause": "Platform.sh 在计划维护中因 ZooKeeper 保存的数据量过大而无法启动，导致维护窗口内服务中断",
+   "fix": "清理并压缩 ZooKeeper 数据，验证启动容量",
+   "cases": [
+    {
+     "store_query": "platform sh zookeeper too much data boot failure",
+     "eval_query": "platform sh zookeeper too much data boot failure",
+     "layer": "literal"
+    },
+    {
+     "store_query": "maintenance outage because zookeeper could not start",
+     "eval_query": "maintenance outage because zookeeper could not start",
+     "layer": "literal"
+    },
+    {
+     "store_query": "zookeeper could not boot because the stored data volume was too large",
+     "eval_query": "a scheduled maintenance outage extended when zookeeper failed to come up",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the cluster configuration data exceeded what zookeeper could load at startup",
+     "eval_query": "platform sh stayed down while engineers reduced the zookeeper dataset",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Platform.sh ZooKeeper 数据量过大无法启动，维护窗口变成故障",
+     "eval_query": "维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "roblox",
+   "source": "https://blog.roblox.com/2022/01/roblox-return-to-service-10-28-10-31-2021/",
+   "root_cause": "Roblox 因 Consul streaming 与 BoltDB 相关故障导致服务中断约 73 小时",
+   "fix": "修复 Consul 与 BoltDB 状态并恢复集群",
+   "cases": [
+    {
+     "store_query": "roblox consul streaming boltdb seventy three hour outage",
+     "eval_query": "roblox consul streaming boltdb seventy three hour outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "consul and boltdb issues kept roblox down",
+     "eval_query": "consul and boltdb issues kept roblox down",
+     "layer": "literal"
+    },
+    {
+     "store_query": "problems with consul streaming and boltdb caused a seventy three hour outage",
+     "eval_query": "the service stayed down for three days while consul and storage recovery failed",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "consul streaming and boltdb corruption blocked recovery of the platform",
+     "eval_query": "roblox returned after engineers repaired consul and the boltdb state",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Roblox Consul streaming 与 BoltDB 故障导致 73 小时停机",
+     "eval_query": "Consul 流式复制和 BoltDB 存储一起出问题，Roblox 停了三天才恢复",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "salesforce",
+   "source": "https://help.salesforce.com/apex/HTViewSolution?urlname=Root-Cause-Message-for-Disruption-of-Service-on-NA14-May-2016&language=en_US",
+   "root_cause": "Salesforce 一个数据中心断电，随后数据库集群和文件不一致导致跨数据中心故障切换受阻",
+   "fix": "恢复供电、核对数据并修复跨站切换流程",
+   "cases": [
+    {
+     "store_query": "salesforce datacenter power failure database failover",
+     "eval_query": "salesforce datacenter power failure database failover",
+     "layer": "literal"
+    },
+    {
+     "store_query": "power loss cascaded into cross datacenter failover",
+     "eval_query": "power loss cascaded into cross datacenter failover",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a power failure in one datacenter cascaded into database and file consistency failures",
+     "eval_query": "the outage spread across datacenters when failover could not reconcile database state",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "database cluster and file discrepancies blocked a clean cross datacenter failover",
+     "eval_query": "salesforce recovered after restoring power and reconciling data across sites",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Salesforce 机房断电引发数据库与文件不一致，跨机房切换失败",
+     "eval_query": "一个机房断电后数据库和文件状态对不上，Salesforce 跨机房切换也失败",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "linuxleap",
+   "source": "https://web.archive.org/web/20220427012208/https://lkml.org/lkml/2009/1/2/373",
+   "root_cause": "Linux 闰秒代码在定时器中断持有 xtime_lock 时调用 printk，klogd 为取时间再次等待该锁，形成死锁并挂起系统",
+   "fix": "避免在 xtime 锁内 printk 并修复闰秒处理路径",
+   "cases": [
+    {
+     "store_query": "linux leap second printk deadlock xtime lock",
+     "eval_query": "linux leap second printk deadlock xtime lock",
+     "layer": "literal"
+    },
+    {
+     "store_query": "timer interrupt deadlock during leap second",
+     "eval_query": "timer interrupt deadlock during leap second",
+     "layer": "literal"
+    },
+    {
+     "store_query": "leap second code in the timer interrupt called printk while holding xtime lock",
+     "eval_query": "klogd tried to read time, waited on xtime lock, and deadlocked the kernel",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "a printk under xtime lock created a lock cycle during the leap second",
+     "eval_query": "the leap second handler deadlocked the timer interrupt and hung systems",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Linux 闰秒处理在 xtime 锁内 printk，触发内核死锁",
+     "eval_query": "闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "stackdriver",
+   "source": "https://www.stackdriver.com/post-mortem-october-23-stackdriver-outage/",
+   "root_cause": "Stackdriver 的 Cassandra 集群崩溃，消息总线生产者阻塞在队列写入上，故障扩散到整个应用",
+   "fix": "恢复 Cassandra 与消息总线，限制阻塞和重试",
+   "cases": [
+    {
+     "store_query": "stackdriver cassandra crash queue blocking",
+     "eval_query": "stackdriver cassandra crash queue blocking",
+     "layer": "literal"
+    },
+    {
+     "store_query": "message bus producers blocked on cassandra",
+     "eval_query": "message bus producers blocked on cassandra",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a cassandra cluster crash blocked producers writing to the message bus",
+     "eval_query": "queue inserts stalled and the failure spread to the whole application",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "services waiting on cassandra kept retrying and blocked their own request queues",
+     "eval_query": "stackdriver recovered after the cassandra cluster and message pipeline were restored",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Stackdriver Cassandra 集群崩溃，消息队列阻塞扩散成全局服务故障",
+     "eval_query": "Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "stackexchange",
+   "source": "http://web.archive.org/web/20170130231315/https://stackstatus.net/post/156407746074/outage-postmortem-january-24-2017",
+   "root_cause": "Stack Exchange 主 SQL Server 进程触发 bugcheck，站点进入只读模式并最终完全中断",
+   "fix": "重启 SQL Server、恢复数据库并排查 bugcheck 根因",
+   "cases": [
+    {
+     "store_query": "stack exchange sql server bugcheck read only",
+     "eval_query": "stack exchange sql server bugcheck read only",
+     "layer": "literal"
+    },
+    {
+     "store_query": "primary sql server bugcheck forced read only",
+     "eval_query": "primary sql server bugcheck forced read only",
+     "layer": "literal"
+    },
+    {
+     "store_query": "the primary sql server process hit a bugcheck and stack exchange went read only",
+     "eval_query": "a sql server bugcheck made the sites reject writes and then go fully offline",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the database process crashed and the platform could not serve normal traffic",
+     "eval_query": "stack exchange recovered after restarting the sql server and restoring writes",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Stack Exchange 主 SQL Server 触发 bugcheck，站点进入只读并最终全断",
+     "eval_query": "主 SQL Server 进程触发 bugcheck，Stack Exchange 先变只读，后来整个站都打不开",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "tarsnap",
+   "source": "https://mail.tarsnap.com/tarsnap-announce/msg00035.html",
+   "root_cause": "Tarsnap 的 S3 块清理批处理在重试失败时无限写本地日志，文件系统被填满，其他写入失败并导致服务停止",
+   "fix": "删除超大日志、限制日志增长并修复重试逻辑",
+   "cases": [
+    {
+     "store_query": "tarsnap batch log filled filesystem",
+     "eval_query": "tarsnap batch log filled filesystem",
+     "layer": "literal"
+    },
+    {
+     "store_query": "unbounded log growth stopped backup service",
+     "eval_query": "unbounded log growth stopped backup service",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a batch job log grew without bound until the filesystem filled",
+     "eval_query": "failed block cleanup retries wrote endless logs and tarsnap could not write data",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the disk filled with retry logs and other filesystem writes failed",
+     "eval_query": "removing the oversized log file restored the tarsnap service",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Tarsnap 批处理日志无限增长写满磁盘，备份服务停止",
+     "eval_query": "清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "trivago",
+   "source": "https://tech.trivago.com/2021/10/05/postmortem-removing-all-users-from-github.com/trivago/",
+   "root_cause": "trivago 在执行手工重复任务时误删 Azure Active Directory 安全组，该组控制 GitHub 组织访问，导致全部工程师失去代码平台权限",
+   "fix": "重建安全组与成员关系，并为高风险手工操作增加保护",
+   "cases": [
+    {
+     "store_query": "trivago azure ad security group removal github access",
+     "eval_query": "trivago azure ad security group removal github access",
+     "layer": "literal"
+    },
+    {
+     "store_query": "manual task deleted group controlling github org",
+     "eval_query": "manual task deleted group controlling github org",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a manual repetitive task removed the azure ad security group that controlled github access",
+     "eval_query": "all engineers lost github organization access after the group was deleted",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the azure ad group removal cut off the central source code platform",
+     "eval_query": "trivago restored access after recreating the group and its memberships",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "trivago 手工操作误删 Azure AD 安全组，所有工程师失去 GitHub 访问",
+     "eval_query": "重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "zerodha",
+   "source": "https://zerodha.com/marketintel/bulletin/229363/post-mortem-of-technical-issue-august-29-2019",
+   "root_cause": "Zerodha 一笔 100 万单位仙股订单被拆成超过 10 万笔交易，远超常见数百笔，导致 Refinitiv 提供的 OMS 过载崩溃",
+   "fix": "限制拆单规模并扩容 OMS 处理能力",
+   "cases": [
+    {
+     "store_query": "zerodha order management system million unit order overload",
+     "eval_query": "zerodha order management system million unit order overload",
+     "layer": "literal"
+    },
+    {
+     "store_query": "penny stock order split into hundred thousand trades",
+     "eval_query": "penny stock order split into hundred thousand trades",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an order for one million penny stock units was split into over one hundred thousand trades",
+     "eval_query": "the unexpected trade count collapsed the order management system",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the provider had never seen such a burst and its oms could not keep up",
+     "eval_query": "zerodha and refinitiv restored order processing after the oms collapse",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Zerodha 百万股订单被拆成十万笔成交，OMS 过载崩溃",
+     "eval_query": "一笔百万股的仙股订单被拆成十几万笔，Zerodha 的 OMS 从没见过这种量，直接崩了",
+     "layer": "semantic"
+    }
+   ]
+  }
+ ]
+}

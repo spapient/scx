@@ -8,8 +8,8 @@
 //!   rate 时重算 l1_base = P50(历史) 写回 [params]，CLI 过滤用动态基线 + margin。
 
 use crate::memory::meta::{self, Meta};
-use crate::memory::model::Feedback;
 use crate::memory::store;
+use crate::memory::store::{Case, Feedback};
 use crate::memory::util::utc_now;
 
 /// 反馈后重算 L1 自适应基线并写回 meta [params]（失败静默，旁路）。
@@ -35,11 +35,7 @@ fn adapt_l1_base(root: &str) {
 
 /// 反馈标注：good=true 记 good，false 记 bad。
 /// 返回更新后的 case（含 quality/status），供 CLI 输出核对。
-pub(crate) fn rate(
-    root: &str,
-    id: &str,
-    good: bool,
-) -> std::io::Result<crate::memory::model::Case> {
+pub(crate) fn rate(root: &str, id: &str, good: bool) -> std::io::Result<Case> {
     let _case_lock = store::lock_case(root, id)?;
     let mut c = store::read_case(root, id)?;
     let fb = if good {

@@ -1,16 +1,33 @@
-// scx — CLI：主流程编排。参数解析在 cli_args，输入读取在 cli_io，
-// 记忆接线在 cli_mem；筛选逻辑全在库 crate（scx::compress）。本文件只做编排。
-mod cli_args;
-mod cli_io;
-mod cli_mem;
+// scx CLI：参数解析在 args，输入读取在 input，记忆接线在 memory_cli；
+// 筛选逻辑全在库 crate（scx::compress）。本文件只做命令编排与输出。
+mod args;
+mod input;
+mod memory_cli;
 
-use cli_args::{parse_args, Opts};
-use cli_io::read_input;
-use cli_mem::{run_recall, store, write_mem_lines};
-use scx::memory::CaseStats;
+use args::{parse_args, Opts};
+use input::{read_fix_file, read_input};
+use memory_cli::{run_recall, write_mem_lines};
+use scx::memory::{CaseStats, EvalMode, StoreInput};
 use scx::{compress, Outcome};
 use std::io::{self, Write};
 use std::sync::mpsc;
+
+/// CLI 失败必须收敛到单一出口；库与业务层不直接终止进程。
+enum Failure {
+    Usage(String),
+    Message(String),
+    GateFailed,
+}
+
+impl Failure {
+    fn message(text: impl Into<String>) -> Self {
+        Self::Message(text.into())
+    }
+}
+
+type CliResult<T = ()> = Result<T, Failure>;
+type StoreResult = io::Result<(bool, String)>;
+type StoreReceiver = mpsc::Receiver<StoreResult>;
 
 fn stats_line(r: &Outcome) -> String {
     format!(
@@ -26,10 +43,11 @@ fn json_line(r: &Outcome) {
     );
 }
 
-fn report_write_error(e: io::Error) {
-    if e.kind() != io::ErrorKind::BrokenPipe {
-        eprintln!("scx: cannot write output: {}", e);
-        std::process::exit(2);
+fn checked_write(result: io::Result<()>) -> CliResult {
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(Failure::message(format!("cannot write output: {e}"))),
     }
 }
 
@@ -42,7 +60,7 @@ fn early_exit(args: &[String]) -> bool {
             continue;
         }
         if !after_terminator && (a == "--help" || a == "-h") {
-            println!("{}", cli_args::usage());
+            println!("{}", args::usage());
             return true;
         }
         if !after_terminator && (a == "--version" || a == "-V") {
@@ -53,392 +71,285 @@ fn early_exit(args: &[String]) -> bool {
     false
 }
 
+fn emit(result: io::Result<Vec<String>>, action: &str) -> CliResult {
+    let lines = result.map_err(|e| Failure::message(format!("{action} failed: {e}")))?;
+    for line in lines {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+fn emit_eval(result: io::Result<(Vec<String>, bool)>) -> CliResult {
+    let (lines, gate_failed) = result.map_err(|e| Failure::message(format!("eval failed: {e}")))?;
+    for line in lines {
+        println!("{line}");
+    }
+    if gate_failed {
+        Err(Failure::GateFailed)
+    } else {
+        Ok(())
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if early_exit(&args) {
-        std::process::exit(0);
+    let failure = match run(&args) {
+        Ok(()) => return,
+        Err(failure) => failure,
+    };
+    match failure {
+        Failure::Usage(message) => {
+            eprintln!("scx: {message}");
+            eprintln!("{}", args::usage());
+        }
+        Failure::Message(message) => eprintln!("scx: {message}"),
+        Failure::GateFailed => {}
     }
-    let opts: Opts = parse_args(&args);
+    std::process::exit(2);
+}
+
+fn run(args: &[String]) -> CliResult {
+    if early_exit(args) {
+        return Ok(());
+    }
+    let opts: Opts = parse_args(args).map_err(Failure::Usage)?;
+
     if opts.recall_only {
-        run_recall(&opts.mem_dir, &opts.query, opts.recall, opts.recall_detail);
-        return;
-    }
-    // P4.1 评估系统：--eval <baseline.json> 冻结重放，A/B 分层对拍（独立于压缩主流程）。
-    // P4.4+ 优化④：--eval-verbose 时追加逐 case A/B top-10 候选诊断（服务 M4 标注校准）。
-    if let Some(path) = &opts.eval {
-        // P4.4+ 优化⑭：--gate 在报告后机械校验 M4 证据门；失败 exit 2。
-        let res: std::io::Result<(Vec<String>, bool)> = if opts.eval_gate_human {
-            scx::memory::eval_cases_gate_human(&opts.mem_dir, path, opts.eval_verbose)
-        } else if opts.eval_gate_items {
-            scx::memory::eval_cases_gate_items(&opts.mem_dir, path, opts.eval_verbose)
-        } else if opts.eval_gate {
-            scx::memory::eval_cases_gate(&opts.mem_dir, path, opts.eval_verbose)
-        } else if opts.eval_verbose {
-            scx::memory::eval_cases_verbose(&opts.mem_dir, path).map(|lines| (lines, false))
-        } else {
-            scx::memory::eval_cases(&opts.mem_dir, path).map(|lines| (lines, false))
+        return match run_recall(&opts.mem_dir, &opts.query, opts.recall, opts.recall_detail) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+            Err(e) => Err(Failure::message(format!("--recall-only failed: {e}"))),
         };
-        match res {
-            Ok((lines, gate_failed)) => {
-                for l in lines {
-                    println!("{l}");
-                }
-                if gate_failed {
-                    std::process::exit(2);
-                }
-            }
-            Err(e) => {
-                eprintln!("scx: eval failed: {}", e);
-                std::process::exit(2);
-            }
-        }
-        return;
     }
-    // P2 阶段门残余：--l1-hist 运行期 [l1] 直答命中分布出表（读 meta.toml [l1] hist）。
+
+    if let Some(path) = &opts.eval {
+        let mode = if opts.eval_gate_human {
+            EvalMode::Human
+        } else if opts.eval_gate_items {
+            EvalMode::Items
+        } else if opts.eval_gate {
+            EvalMode::Mechanical
+        } else {
+            EvalMode::Report
+        };
+        return emit_eval(scx::memory::eval_cases(
+            &opts.mem_dir,
+            path,
+            mode,
+            opts.eval_verbose,
+        ));
+    }
     if opts.l1_hist {
-        match scx::memory::l1_hist_table(&opts.mem_dir) {
-            Ok(lines) => {
-                for l in lines {
-                    println!("{l}");
-                }
-            }
-            Err(e) => {
-                eprintln!("scx: l1-hist failed: {}", e);
-                std::process::exit(2);
-            }
-        }
-        return;
+        return emit(scx::memory::l1_hist_table(&opts.mem_dir), "l1-hist");
     }
-    // P4.4+ 优化：--stats 库盘点（case/桶/状态/fix 覆盖率/质量/磁盘，豁免 --query）。
     if opts.stats {
-        match scx::memory::stats_table(&opts.mem_dir) {
-            Ok(lines) => {
-                for l in lines {
-                    println!("{l}");
-                }
-            }
-            Err(e) => {
-                eprintln!("scx: stats failed: {}", e);
-                std::process::exit(2);
-            }
-        }
-        return;
+        return emit(scx::memory::stats_table(&opts.mem_dir), "stats");
     }
-    // O4 反馈标注：--rate good|bad <case-id>，独立于压缩主流程。
     if let Some((good, id)) = &opts.rate {
-        match scx::memory::rate_case(&opts.mem_dir, id, *good) {
-            Ok(c) => {
-                println!(
-                    "rate: good={} bad={} quality={:.2} status={} case={}",
-                    c.feedback.good, c.feedback.bad, c.quality, c.status, id
-                );
-                if *good {
-                    let (base, _) = scx::memory::l1_params(&opts.mem_dir);
-                    println!("l1_base: {base:.3} (自适应)");
-                }
-            }
-            Err(e) => {
-                eprintln!("scx: rate failed: {}", e);
-                std::process::exit(2);
-            }
+        let case = scx::memory::rate_case(&opts.mem_dir, id, *good)
+            .map_err(|e| Failure::message(format!("rate failed: {e}")))?;
+        println!(
+            "rate: good={} bad={} quality={:.2} status={} case={}",
+            case.feedback.good, case.feedback.bad, case.quality, case.status, id
+        );
+        if *good {
+            let (base, _) = scx::memory::l1_params(&opts.mem_dir);
+            println!("l1_base: {base:.3} (自适应)");
         }
-        return;
+        return Ok(());
     }
-    // P3.3 库维护模式：重建索引 / 过期清理 / 删除 case（均独立于压缩主流程）。
     if opts.rebuild {
-        match scx::memory::rebuild(&opts.mem_dir) {
-            Ok((n_docs, n_terms)) => println!("rebuild: docs={n_docs} terms={n_terms}"),
-            Err(e) => {
-                eprintln!("scx: rebuild failed: {}", e);
-                std::process::exit(2);
-            }
-        }
-        return;
+        let (docs, terms) = scx::memory::rebuild(&opts.mem_dir)
+            .map_err(|e| Failure::message(format!("rebuild failed: {e}")))?;
+        println!("rebuild: docs={docs} terms={terms}");
+        return Ok(());
     }
     if opts.gc {
-        match scx::memory::gc(&opts.mem_dir) {
-            Ok(removed) => println!("gc: removed={removed}"),
-            Err(e) => {
-                eprintln!("scx: gc failed: {}", e);
-                std::process::exit(2);
-            }
-        }
-        return;
+        let removed = scx::memory::gc(&opts.mem_dir)
+            .map_err(|e| Failure::message(format!("gc failed: {e}")))?;
+        println!("gc: removed={removed}");
+        return Ok(());
     }
     if let Some(id) = &opts.delete {
-        match scx::memory::delete_case(&opts.mem_dir, id) {
-            Ok(true) => println!("delete: removed case={id}"),
-            Ok(false) => {
-                eprintln!("scx: no such case: {id}");
-                std::process::exit(2);
+        return match scx::memory::delete_case(&opts.mem_dir, id) {
+            Ok(true) => {
+                println!("delete: removed case={id}");
+                Ok(())
             }
-            Err(e) => {
-                eprintln!("scx: delete failed: {}", e);
-                std::process::exit(2);
-            }
-        }
-        return;
+            Ok(false) => Err(Failure::message(format!("no such case: {id}"))),
+            Err(e) => Err(Failure::message(format!("delete failed: {e}"))),
+        };
     }
-    // P4.4+ 优化⑥：智能标注器（--annotate，豁免 --query）——生成 M4 证据门标注集。
-    // P4.4+ 优化⑧：--annotate-raw 盲测模式——不过自检的全变体集（人工裁决用，选择偏差消除）。
     if opts.annotate || opts.annotate_raw {
-        let report = match if opts.annotate_raw {
-            scx::memory::annotate_raw_report(&opts.mem_dir, opts.seed, opts.annotate_max)
-        } else {
-            scx::memory::annotate_report(&opts.mem_dir, opts.seed, opts.annotate_max)
-        } {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("scx: annotate failed: {}", e);
-                std::process::exit(2);
-            }
-        };
-        let cases = &report.cases;
-        let path = opts.annotate_out.clone().unwrap_or_else(|| {
-            std::path::Path::new(&opts.mem_dir)
-                .join(if opts.annotate_raw {
-                    "baseline-raw.json"
-                } else {
-                    "baseline-auto.json"
-                })
-                .to_string_lossy()
-                .into_owned()
-        });
-        let bytes = {
-            let mut buf: Vec<u8> = Vec::new();
-            if let Err(e) = scx::memory::annotate::write_baseline(&mut buf, cases) {
-                eprintln!("scx: annotate serialize failed: {}", e);
-                std::process::exit(2);
-            }
-            buf
-        };
-        if let Err(e) = std::fs::write(&path, bytes) {
-            eprintln!("scx: annotate write {} failed: {}", path, e);
-            std::process::exit(2);
-        }
-        for line in scx::memory::annotate::stats_report(&report) {
-            println!("{line}");
-        }
-        let out_name = std::path::Path::new(&path)
-            .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.clone());
-        println!("  out: {out_name}");
-        return;
+        return run_annotate(&opts);
     }
-    // P4.4+ 优化⑩：盲测裁决（--judge <baseline.json>）——逐条 stdin 录入 2/1/0/s，
-    // judge:null → rel+judge 元数据；未裁决保持 judge:null（--eval 仍拒绝）。
     if let Some(path) = &opts.judge {
         let by = opts
             .judge_by
             .clone()
             .unwrap_or_else(|| std::env::var("USERNAME").unwrap_or_else(|_| "anonymous".into()));
-        match scx::memory::judge::judge(path, &by) {
-            Ok(lines) => {
-                for l in lines {
-                    println!("{l}");
-                }
-            }
-            Err(e) => {
-                eprintln!("scx: judge failed: {}", e);
-                std::process::exit(2);
-            }
-        }
-        return;
+        return emit(scx::memory::judge_baseline(path, &by), "judge");
     }
-    let text = match read_input(&opts.files) {
-        Ok(text) => text,
-        Err(e) => {
-            eprintln!("scx: {}", e);
-            std::process::exit(2);
-        }
-    };
-    let o = compress(&text, &opts.query, &opts.config);
+    run_compress(&opts)
+}
+
+fn run_annotate(opts: &Opts) -> CliResult {
+    let path = opts.annotate_out.clone().unwrap_or_else(|| {
+        std::path::Path::new(&opts.mem_dir)
+            .join(if opts.annotate_raw {
+                "baseline-raw.json"
+            } else {
+                "baseline-auto.json"
+            })
+            .to_string_lossy()
+            .into_owned()
+    });
+    let lines = scx::memory::annotate_to_file(
+        &opts.mem_dir,
+        opts.seed,
+        opts.annotate_max,
+        opts.annotate_raw,
+        &path,
+    )
+    .map_err(|e| Failure::message(format!("annotate failed: {e}")))?;
+    for line in lines {
+        println!("{line}");
+    }
+    let out_name = std::path::Path::new(&path)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.clone());
+    println!("  out: {out_name}");
+    Ok(())
+}
+
+fn run_compress(opts: &Opts) -> CliResult {
+    let text = read_input(&opts.files).map_err(Failure::message)?;
+    let outcome = compress(&text, &opts.query, &opts.config);
     let stdout = io::stdout();
     let mut out = stdout.lock();
     if !opts.stat {
-        if let Err(e) = out.write_all(o.text.as_bytes()) {
-            report_write_error(e);
-            return;
-        }
-        if !o.text.is_empty() && !o.text.ends_with('\n') {
-            if let Err(e) = out.write_all(b"\n") {
-                report_write_error(e);
-                return;
-            }
+        checked_write(out.write_all(outcome.text.as_bytes()))?;
+        if !outcome.text.is_empty() && !outcome.text.ends_with('\n') {
+            checked_write(out.write_all(b"\n"))?;
         }
     }
-    // P3.4 写后台化：--store 时摄取入队后台线程（std::thread + mpsc，零依赖），
-    // 正文先回显、进程退出前 join 落盘确认；与 --recall 组合时保持同步
-    // （recall 需看到新 case，顺序依赖）。
-    let mut store_rx: Option<mpsc::Receiver<std::io::Result<(bool, String)>>> = None;
+
+    let mut store_rx: Option<StoreReceiver> = None;
     if opts.store {
-        // P4.4+ 优化⑫（P1-4）：--max-bytes 总容量软配额——库已超限则拒绝写入
-        // （保留现有资产；提示 --gc / --delete 清理）。
-        if let Some(max) = opts.max_bytes {
-            let total = scx::memory::housekeep::bytes_total(&opts.mem_dir).unwrap_or(0);
-            if total > max {
-                eprintln!(
-                    "scx: memory quota exceeded: {} bytes > --max-bytes {max} - run --gc or --delete first",
-                    total
-                );
-                std::process::exit(2);
-            }
-        }
-        // P4.4+ 优化⑩：--fix-file 读取（多行修复结论，换行保留）→ 等价 --fix。
-        let fix = if let Some(p) = &opts.fix_file {
-            match std::fs::read_to_string(p) {
-                Ok(t) => {
-                    let t = t.trim_end().to_string();
-                    if t.is_empty() {
-                        eprintln!(
-                            "scx: note: --fix-file {} is empty; case stored without fix",
-                            p
-                        );
-                    }
-                    t
-                }
-                Err(e) => {
-                    eprintln!("scx: --fix-file {} unreadable: {}", p, e);
-                    std::process::exit(2);
-                }
-            }
-        } else {
-            opts.fix.clone()
-        };
-        // P4.4+ 优化⑩：--store 不带 --fix 时 warning——L1 无法回答"上次怎么解决的"，
-        // 北极星直答依赖 fix 覆盖率（HARD 纪律：已验证修复后必须回写 --fix）。
-        if fix.is_empty() {
-            eprintln!(
-                "scx: note: --store without --fix; L1 cannot answer 'how was it solved' - \
-pass --fix \"...\" after a verified fix (HARD discipline)"
-            );
-        }
-        // P4.4+ 优化③：query 零命中（failopen）时压缩结果=全文，store 会持久化
-        // 低信号记忆——stderr 警告（不拒绝：用户可能刻意沉淀原文作底料）。
-        if o.mode.starts_with("failopen") {
-            eprintln!(
-                "scx: note: query had no hits; --store will persist the full input \
-(low-signal memory). inspect with --recall-only first"
-            );
-        }
-        let stats = CaseStats {
-            kept: o.kept,
-            total: o.total,
-            cut_pct: o.cut_pct,
-            risk: o.risk.to_string(),
-        };
-        // P4.4+ 优化⑤：证据行区间 + 原始证据（评审缺口 B）——按 kept_lno 从输入提取
-        // 保留行原文（与 compress 内部同一归一化口径：\r\n→\n、末行空行剔除）。
-        // failopen/passthrough 的 kept_lno 为空 → evidence 为空（全文仅存 text 快照，
-        // 低信号记忆语义不变）。
-        let evidence_lno = o.kept_lno.clone();
-        let evidence = extract_evidence(&text, &evidence_lno);
-        if opts.recall > 0 {
-            store(
-                &opts.mem_dir,
-                &opts.query,
-                &o.text,
-                &opts.files,
-                &stats,
-                &opts.config.forces,
-                &fix,
-                &evidence_lno,
-                &evidence,
-            );
-        } else {
-            let (tx, rx) = mpsc::channel();
-            let mem_dir = opts.mem_dir.clone();
-            let query = opts.query.clone();
-            let text = o.text.clone();
-            let files = opts.files.clone();
-            let forces = opts.config.forces.clone();
-            let fix = fix.clone();
-            let ev_lno = evidence_lno.clone();
-            let ev = evidence.clone();
-            std::thread::spawn(move || {
-                // P4.4+ 优化：--fix 非空走带修复结论的摄取（L1 本地直答）。
-                let r = if ev_lno.is_empty() {
-                    if fix.is_empty() {
-                        scx::memory::store_case(&mem_dir, &query, &text, files, &stats, forces)
-                    } else {
-                        scx::memory::store_case_fix(
-                            &mem_dir, &query, &text, files, &stats, forces, &fix,
-                        )
-                    }
-                } else {
-                    scx::memory::store_case_full(
-                        &mem_dir, &query, &text, files, &stats, forces, &fix, &ev_lno, &ev,
-                    )
-                };
-                let _ = tx.send(r);
-            });
-            store_rx = Some(rx);
-        }
+        store_rx = prepare_store(opts, &text, &outcome)?;
     }
-    // 召回：--recall K 时把本地记忆命中段追加到 stdout（旁路，L1 自适应置信过滤）。
-    // 主流程是"学习路径"：召回回流 qmap/缓存/L1 历史（read_only=false）。
     if opts.recall > 0 {
-        if let Ok(hits) = scx::memory::recall_cases(&opts.mem_dir, &opts.query, opts.recall, false)
-        {
-            let (base, margin) = scx::memory::l1_params(&opts.mem_dir);
-            let top1 = hits.first().map(|h| h.sim).unwrap_or(0.0);
-            let top2 = hits.get(1).map(|h| h.sim).unwrap_or(0.0);
-            // §5.1：sim_top1 ≥ l1_base 且 (top1−top2) ≥ margin 才输出 mem 段。
-            let qualified: Vec<_> = if scx::memory::l1_qualified(top1, top2, base, margin, 1.0) {
-                hits.into_iter().collect()
-            } else {
-                Vec::new()
-            };
-            if let Err(e) = write_mem_lines(&mut out, &qualified, &opts.mem_dir, opts.recall_detail)
-            {
-                report_write_error(e);
-                return;
+        match scx::memory::recall_cases(&opts.mem_dir, &opts.query, opts.recall, false) {
+            Ok(hits) => {
+                let qualified = scx::memory::l1_hits(&opts.mem_dir, hits);
+                checked_write(write_mem_lines(
+                    &mut out,
+                    &qualified,
+                    &opts.mem_dir,
+                    opts.recall_detail,
+                ))?;
             }
+            Err(e) => eprintln!("scx: warning: --recall skipped: {e}"),
         }
     }
     if !opts.no_stats {
-        if let Err(e) = writeln!(out, "{}", stats_line(&o)) {
-            report_write_error(e);
-            return;
-        }
+        checked_write(writeln!(out, "{}", stats_line(&outcome)))?;
     }
     if opts.json {
-        json_line(&o);
+        json_line(&outcome);
     }
-    // 后台摄取落盘确认（失败不阻塞正文/统计输出，进程退出前报错退出）。
-    // P4.4+ 优化③：成功时 stderr 报告 stored 行（完整 case id，可立即 --rate/--delete）。
     if let Some(rx) = store_rx {
-        match rx.recv() {
-            Ok(Ok((added, id))) => {
-                eprintln!(
-                    "scx: stored case={} added={}",
-                    id,
-                    if added { "yes" } else { "dedup" }
-                );
-            }
-            Ok(Err(e)) => {
-                eprintln!("scx: memory store failed: {}", e);
-                std::process::exit(2);
-            }
-            Err(_) => {
-                eprintln!("scx: memory store thread lost");
-                std::process::exit(2);
-            }
-        }
+        let result = rx
+            .recv()
+            .map_err(|_| Failure::message("memory store thread lost"))?;
+        report_store(result)?;
     }
+    Ok(())
 }
 
-/// P4.4+ 优化⑤：按保留行原始行号（1-based）从输入提取证据行原文（评审缺口 B）。
-/// 与 compress 内部同一归一化口径（\r\n→\n、末行空行剔除），保证 evidence 行与
-/// 压缩保留行逐字一致；行号越界（异常输入）跳过该行，不 panic。
+fn prepare_store(opts: &Opts, input: &str, outcome: &Outcome) -> CliResult<Option<StoreReceiver>> {
+    let fix = if let Some(path) = &opts.fix_file {
+        let text =
+            read_fix_file(path, scx::memory::MAX_FIX_BYTES as u64).map_err(Failure::message)?;
+        let text = text.trim_end().to_string();
+        if text.is_empty() {
+            eprintln!("scx: note: --fix-file {path} is empty; case stored without fix");
+        }
+        text
+    } else {
+        opts.fix.clone()
+    };
+    if fix.is_empty() {
+        eprintln!(
+            "scx: note: --store without --fix; L1 cannot answer 'how was it solved' - \
+pass --fix \"...\" after a verified fix (HARD discipline)"
+        );
+    }
+    if outcome.mode.starts_with("failopen") {
+        eprintln!(
+            "scx: note: query had no hits; --store will persist the full input \
+(low-signal memory). inspect with --recall-only first"
+        );
+    }
+    let stats = CaseStats {
+        kept: outcome.kept,
+        total: outcome.total,
+        cut_pct: outcome.cut_pct,
+        risk: outcome.risk.to_string(),
+    };
+    let evidence_lno = outcome.kept_lno.clone();
+    let evidence = extract_evidence(input, &evidence_lno);
+    if opts.recall > 0 {
+        let mut store_input = StoreInput::new(&opts.mem_dir, &opts.query, &outcome.text, &stats);
+        store_input.source = &opts.files;
+        store_input.forces = &opts.config.forces;
+        store_input.fix = &fix;
+        store_input.evidence_lno = &evidence_lno;
+        store_input.evidence = &evidence;
+        store_input.max_bytes = opts.max_bytes;
+        report_store(scx::memory::store_case(store_input))?;
+        return Ok(None);
+    }
+
+    let (tx, rx) = mpsc::channel();
+    let mem_dir = opts.mem_dir.clone();
+    let query = opts.query.clone();
+    let text = outcome.text.clone();
+    let files = opts.files.clone();
+    let forces = opts.config.forces.clone();
+    let max_bytes = opts.max_bytes;
+    std::thread::spawn(move || {
+        let mut store_input = StoreInput::new(&mem_dir, &query, &text, &stats);
+        store_input.source = &files;
+        store_input.forces = &forces;
+        store_input.fix = &fix;
+        store_input.evidence_lno = &evidence_lno;
+        store_input.evidence = &evidence;
+        store_input.max_bytes = max_bytes;
+        let _ = tx.send(scx::memory::store_case(store_input));
+    });
+    Ok(Some(rx))
+}
+
+fn report_store(result: StoreResult) -> CliResult {
+    let (added, id) = result.map_err(|e| Failure::message(format!("memory store failed: {e}")))?;
+    eprintln!(
+        "scx: stored case={} added={}",
+        id,
+        if added { "yes" } else { "dedup" }
+    );
+    Ok(())
+}
+
+/// 按保留行原始行号从输入提取证据原文；行号越界时保留空串，不 panic。
 fn extract_evidence(input: &str, lno: &[usize]) -> Vec<String> {
     if lno.is_empty() {
         return Vec::new();
     }
     let norm = input.replace("\r\n", "\n");
     let mut lines: Vec<&str> = norm.split('\n').collect();
-    if lines.last().is_some_and(|l| l.is_empty()) {
+    if lines.last().is_some_and(|line| line.is_empty()) {
         lines.pop();
     }
     lno.iter()

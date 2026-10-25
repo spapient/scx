@@ -9,14 +9,13 @@
 //! "二值词面匹配 + 长度归一化 + 字段加权"，不是严格 BM25（tf 项恒为 1）。
 //! A/B 同词表对比仍公平，但任何结论须按此口径引用，不宣称"BM25 增益"。
 //! 确定性：无随机源，同 baseline + 同库 → 同输出，可重放存档。
+//! 时间衰减时钟冻结到库的 `created_at`，避免同一快照因运行时刻不同而在近似并列处换序。
 //!
-//! `case_summary`：L1 直答要点行（error_code + file_loc + 证据块首个非空行，≤300 字符），
-//! 供 CLI `--recall-detail` 展开摘要，不把整块正文塞进直答。
-
 use crate::memory::gate::GateMode;
 use crate::memory::json::Val;
 use crate::memory::recall::{self, RecallHit};
 use crate::memory::store;
+use crate::memory::EvalMode;
 use crate::terms::build_mem_terms;
 use std::collections::HashMap;
 
@@ -256,50 +255,20 @@ fn dcg(rels: &[f64]) -> f64 {
         .sum()
 }
 
-/// 评估入口（默认报告）：读取 baseline.json → 逐例 A/B 召回 → 分层聚合 → 报告行（确定性）。
-pub(crate) fn run(root: &str, path: &str) -> std::io::Result<Vec<String>> {
-    run_impl(root, path, false, None).map(|(lines, _)| lines)
-}
-
-/// 评估入口（--eval-verbose）：聚合报告 + 逐 case 的 A/B top-10 候选诊断
-/// （rank/sim/score/case 尾 8 /[hit]|[miss]）——标注者可见"召回为什么对/错"，
-/// 直接服务 M4 证据门的人工标注与校准（P4.4+ 优化④）。
-pub(crate) fn run_verbose(root: &str, path: &str) -> std::io::Result<Vec<String>> {
-    run_impl(root, path, true, None).map(|(lines, _)| lines)
-}
-
-/// P4.4+ 优化⑭：M4 机械门（`--eval --gate`）——报告 + 是否通过。
-pub(crate) fn run_gate(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
-    run_impl(root, path, false, Some(GateMode::Mechanical))
-}
-
-/// `--eval --gate --eval-verbose`：门禁结论 + 逐 case 诊断。
-pub(crate) fn run_gate_verbose(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
-    run_impl(root, path, true, Some(GateMode::Mechanical))
-}
-
-/// `--eval --gate-human`：人工弱相关/负例闭环门（全量人工元数据 + 控制标签 + NDCG）。
-pub(crate) fn run_gate_human(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
-    run_impl(root, path, false, Some(GateMode::Human))
-}
-
-pub(crate) fn run_gate_human_verbose(
+/// 单一评估入口：报告/三种门禁 × 是否逐例诊断由参数决定，不再维护函数矩阵。
+pub(crate) fn run(
     root: &str,
     path: &str,
+    mode: EvalMode,
+    verbose: bool,
 ) -> std::io::Result<(Vec<String>, bool)> {
-    run_impl(root, path, true, Some(GateMode::Human))
-}
-
-/// `--eval --gate-items`：逐候选裁决门（允许 AI 裁决人，证据等级低于 human）。
-pub(crate) fn run_gate_items(root: &str, path: &str) -> std::io::Result<(Vec<String>, bool)> {
-    run_impl(root, path, false, Some(GateMode::Items))
-}
-
-pub(crate) fn run_gate_items_verbose(
-    root: &str,
-    path: &str,
-) -> std::io::Result<(Vec<String>, bool)> {
-    run_impl(root, path, true, Some(GateMode::Items))
+    let gate_mode = match mode {
+        EvalMode::Report => None,
+        EvalMode::Mechanical => Some(GateMode::Mechanical),
+        EvalMode::Human => Some(GateMode::Human),
+        EvalMode::Items => Some(GateMode::Items),
+    };
+    run_impl(root, path, verbose, gate_mode)
 }
 
 fn run_impl(
@@ -313,6 +282,7 @@ fn run_impl(
         .map_err(|e| std::io::Error::other(format!("eval: {e}")))?;
     let cases = parse_baseline(&v).map_err(std::io::Error::other)?;
     let meta = store::load_meta(root)?;
+    let eval_now_s = crate::memory::util::parse_utc_secs(&meta.created_at);
     let (l1_base, l1_margin) = crate::memory::feedback::l1_params(&meta);
     let plain = PlainScorer::load(root, &meta)?;
     let mut l1_hit = 0usize;
@@ -326,7 +296,7 @@ fn run_impl(
     // verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
     let mut diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)> = Vec::new();
     for c in &cases {
-        let a = recall::recall(root, &c.query, 10)?;
+        let a = recall::recall_at(root, &c.query, 10, eval_now_s)?;
         let b = plain.search(&c.query, 10);
         if let Some(top) = a.first() {
             if hit_expected(&c.expected, &top.id) {
@@ -575,19 +545,20 @@ impl PlainScorer {
             .iter()
             .map(|qt| {
                 let d = *self.df.get(qt).unwrap_or(&0) as f64;
-                crate::memory::bm25::idf(self.n, d)
+                crate::memory::ranking::idf(self.n, d)
             })
             .collect();
         let sm: f64 = qidf.iter().sum();
         let mut scored: Vec<(usize, f64)> = Vec::with_capacity(self.docs.len());
         for (idx, (_, terms)) in self.docs.iter().enumerate() {
             let mut score = 0.0;
-            let denom = crate::memory::bm25::denom(self.k1, self.b, terms.len() as f64, self.avgdl);
+            let denom =
+                crate::memory::ranking::denom(self.k1, self.b, terms.len() as f64, self.avgdl);
             for (qt, idf) in qterms.iter().zip(&qidf) {
                 if terms.binary_search(qt).is_err() {
                     continue;
                 }
-                score += crate::memory::bm25::score(*idf, self.k1, denom);
+                score += crate::memory::ranking::score(*idf, self.k1, denom);
             }
             // 与 A 管线的零支持度过滤同口径：没有 query 词命中的 case 不得以
             // 0 分进入 top-k，否则 B 会靠库顺序“碰巧命中”被高估。
@@ -640,43 +611,6 @@ pub(crate) fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
         p(0.50),
         p(0.90),
     )])
-}
-
-/// P4.2 L1 要点行摘要：error_code + file_loc + 证据块内首个错误行（无则首非空行），
-/// ≤300 字符（省略加 …）。
-pub(crate) fn case_summary(root: &str, id: &str) -> std::io::Result<String> {
-    let c = store::read_case(root, id)?;
-    let mut parts: Vec<String> = Vec::new();
-    for v in &c.fields.error_code {
-        parts.push(v.clone());
-    }
-    for v in &c.fields.file_loc {
-        parts.push(v.clone());
-    }
-    let is_err_line = |t: &str| {
-        t.contains("error")
-            || t.contains("ERROR")
-            || t.contains("错误")
-            || t.contains("ERR")
-            || t.contains("warn")
-            || t.contains("WARN")
-            || t.contains("警告")
-    };
-    let line = c
-        .text
-        .lines()
-        .map(|l| l.trim())
-        .find(|t| !t.is_empty() && is_err_line(t))
-        .or_else(|| c.text.lines().map(|l| l.trim()).find(|t| !t.is_empty()));
-    if let Some(l) = line {
-        parts.push(l.to_string());
-    }
-    let s = parts.join(" | ");
-    let mut out: String = s.chars().take(300).collect();
-    if s.chars().count() > 300 {
-        out.push('…');
-    }
-    Ok(out)
 }
 
 #[cfg(test)]
@@ -822,36 +756,6 @@ mod tests {
             Some("fei")
         );
         assert_eq!(cases[0].judged_method.as_deref(), Some("per-item-blind-v1"));
-    }
-
-    #[test]
-    fn summary_truncates_to_300() {
-        use crate::memory::ingest::ingest;
-        use crate::memory::store::CaseStats;
-        use std::fs;
-        let r = std::env::temp_dir().join(format!("scx-eval-smry-{}", store::fnv1a("y") & 0xff));
-        let root = r.to_str().unwrap().to_string();
-        let _ = fs::remove_dir_all(&root);
-        ingest(
-            &root,
-            "q alpha",
-            vec!["alpha".into()],
-            &format!("ERROR {}", "x".repeat(400)),
-            vec!["/a.log".into()],
-            &CaseStats {
-                kept: 1,
-                total: 1,
-                cut_pct: 0.0,
-                risk: "HIGH".to_string(),
-            },
-            vec![],
-        )
-        .unwrap();
-        let ids = store::list_ids(&root).unwrap();
-        let s = case_summary(&root, &ids[0]).unwrap();
-        assert_eq!(s.chars().count(), 301, "300 字符 + 省略号");
-        assert!(s.ends_with('…'));
-        let _ = fs::remove_dir_all(&root);
     }
 
     /// P4.4+ 优化⑩：judge:null（未裁决）必须被 --eval 拒绝——防止"接受预填 rel=自证"。

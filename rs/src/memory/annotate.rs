@@ -3,7 +3,7 @@
 //! top-k），证据链（指纹 / 同义词改写 / 结构化字段 / 自检 sim-score-rank）随标注落盘，
 //! 自检失败的变体显式丢弃并计入报告。零依赖、确定性（`--seed` 固定可重放）。
 //!
-//! 三层生成规则（与 docs/eval-baseline-template.md §2 对齐）：
+//! 三层生成规则（与 eval/README.md 的 labeling contract 对齐）：
 //! - literal：query = case.query 原样（同指纹，rel=2，证据 `fingerprint`）；
 //! - paraphrase：确定性同义词改写（seed 驱动的 SYN 表字面替换，替换后 ≠ 原 query），
 //!   自检放行 → rel=2，证据 `synonym` + `recall sim/score/rank`；
@@ -13,13 +13,13 @@
 //! 输出 baseline.json 兼容 `--eval`（query/layer/expected/rel；extra 键 evidence/note
 //! 被 eval 解析器忽略）；expected 用 hash16 后缀（免日期漂移）。
 
-use crate::memory::model::Case;
+use crate::memory::store::Case;
 use crate::memory::synonyms::PAIRS as SYN;
 use crate::memory::{recall, store, util::fnv1a};
-use std::io::{self, Write};
+use std::io;
 
 /// 一条自动标注（对应 baseline.json 的一个 case 条目 + 证据链）。
-pub struct AnnotatedCase {
+pub(crate) struct AnnotatedCase {
     pub query: String,
     pub layer: String,
     pub expected: Vec<String>,
@@ -36,7 +36,7 @@ pub struct AnnotatedCase {
 /// `dropped` 必须随报告输出：只报“生成了多少组”而不报“筛掉了多少 A 的失败
 /// 变体”，会让自检变成看不见的选择偏差。`--annotate` 现在打印
 /// `dropped: paraphrase=.. semantic=..`。
-pub struct AnnotateReport {
+pub(crate) struct AnnotateReport {
     pub cases: Vec<AnnotatedCase>,
     /// 自检未通过（目标不在 A 的 top-k）而丢弃的变体。
     pub dropped: Vec<(&'static str, String)>,
@@ -74,6 +74,8 @@ pub(crate) fn annotate_report(
             format!("no cases in memory at {root}; store some with --store first"),
         ));
     }
+    // 自检与评估使用同一冻结时钟：标注结果不得因运行时刻改变近邻排序。
+    let ann_now_s = crate::memory::util::parse_utc_secs(&store::load_meta(root)?.created_at);
     // P4.4+ 优化⑦：max_cases=0 表示全库（证据门规模可调），否则取 min 且至少 1。
     let cap = if max_cases == 0 {
         ids.len()
@@ -101,7 +103,7 @@ pub(crate) fn annotate_report(
         // 注意：本分支不得 continue 跳过 semantic 生成（golden 回归实证）。
         if let Some(q) = rewrite(&c, seed) {
             if !raw {
-                match self_check(root, &q, &c, 5) {
+                match self_check(root, &q, &c, 5, ann_now_s) {
                     Some(s) => out.push(AnnotatedCase {
                         query: q,
                         layer: "paraphrase".to_string(),
@@ -137,7 +139,7 @@ pub(crate) fn annotate_report(
         let sq = semantic_query(&c);
         if !sq.is_empty() {
             if !raw {
-                match self_check(root, &sq, &c, 10) {
+                match self_check(root, &sq, &c, 10, ann_now_s) {
                     Some(s) => out.push(AnnotatedCase {
                         query: sq,
                         layer: "semantic".to_string(),
@@ -192,6 +194,7 @@ fn target_hint(c: &Case) -> String {
 }
 
 /// 兼容入口：只要标注集（测试/门面复用）。
+#[cfg(test)]
 pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Vec<AnnotatedCase>> {
     Ok(annotate_report(root, seed, max_cases, false)?.cases)
 }
@@ -296,9 +299,9 @@ fn semantic_query(c: &Case) -> String {
 /// 自检：该 query 召回 top-k 是否含目标 case（tail16 匹配）。零写入（纯检索）。
 /// 门槛按相关度分层（P4.4+ 优化⑦）：literal/paraphrase（强相关）top-5；
 /// semantic（弱相关，rel=1）放宽 top-10——语义变体词面重叠天然低，top-5 会系统性误杀。
-fn self_check(root: &str, query: &str, target: &Case, k: usize) -> Option<SelfCheck> {
+fn self_check(root: &str, query: &str, target: &Case, k: usize, now_s: u64) -> Option<SelfCheck> {
     let target_tail = hash16_of(target);
-    let hits = recall::recall(root, query, k).ok()?;
+    let hits = recall::recall_at(root, query, k, now_s).ok()?;
     for (rank, h) in hits.iter().enumerate() {
         let tail = h.id.rsplit('_').next().unwrap_or(&h.id);
         if tail == target_tail {
@@ -323,7 +326,7 @@ fn quote(s: &str) -> String {
 /// 把标注集序列化为 baseline.json（兼容 --eval；expected 用 hash16）。
 /// judged=false（盲测 raw 集）时不写 rel，改写 `"judge": null`——人工未裁决，
 /// `--eval` 解析到 judge:null 直接报错拒绝（防止"接受预填 rel = 自动标注自证"）。
-pub fn write_baseline(out: &mut dyn Write, cases: &[AnnotatedCase]) -> io::Result<()> {
+pub(crate) fn write_baseline(cases: &[AnnotatedCase]) -> String {
     let mut body = String::from("{\"cases\":[");
     for (i, c) in cases.iter().enumerate() {
         if i > 0 {
@@ -360,8 +363,7 @@ pub fn write_baseline(out: &mut dyn Write, cases: &[AnnotatedCase]) -> io::Resul
         body.push('}');
     }
     body.push_str("]}");
-    out.write_all(body.as_bytes())?;
-    Ok(())
+    body
 }
 
 /// rel 序列化：2.0 → "2"，1.0 → "1"（省体积，eval 解析 0..=2 数值容错整数）。
@@ -375,7 +377,7 @@ fn fmt_rel(r: f64) -> String {
 
 /// 标注统计（stdout 报告用）：层分布 / rel 分布 / 组数。
 /// judged=false（raw 盲测集）的条目不计入 rel2/rel1，单独报 `unjudged`（P4.4+ 优化⑩）。
-pub fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
+pub(crate) fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
     let mut by_layer: std::collections::BTreeMap<String, usize> = Default::default();
     let mut rel2 = 0usize;
     let mut unjudged = 0usize;
@@ -405,7 +407,7 @@ pub fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
 }
 
 /// 含丢弃统计的报告行：让选择偏差可见。
-pub fn stats_report(report: &AnnotateReport) -> Vec<String> {
+pub(crate) fn stats_report(report: &AnnotateReport) -> Vec<String> {
     let mut lines = stats(&report.cases);
     let paraphrase = report
         .dropped
@@ -432,7 +434,7 @@ mod tests {
     use super::*;
     use crate::memory::eval;
     use crate::memory::ingest;
-    use crate::memory::model::CaseStats;
+    use crate::memory::store::CaseStats;
     use std::fs;
 
     fn tmp_root(tag: &str) -> String {
@@ -494,12 +496,8 @@ mod tests {
         let root = tmp_root("eval");
         seed_lib(&root);
         let cases = annotate(&root, 0, 16).unwrap();
-        let mut buf: Vec<u8> = Vec::new();
-        write_baseline(&mut buf, &cases).unwrap();
-        let parsed = eval::parse_baseline(
-            &crate::memory::json::parse(std::str::from_utf8(&buf).unwrap()).unwrap(),
-        )
-        .unwrap();
+        let text = write_baseline(&cases);
+        let parsed = eval::parse_baseline(&crate::memory::json::parse(&text).unwrap()).unwrap();
         assert_eq!(parsed.len(), cases.len(), "roundtrip 组数一致");
         let _ = fs::remove_dir_all(&root);
     }

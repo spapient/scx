@@ -78,6 +78,18 @@ git clone https://github.com/spapient/scx.git \
   "${CODEX_HOME:-$HOME/.codex}/skills/scx"
 ```
 
+### 安装自检
+
+Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技能存在但实际不可用”的常见原因：
+
+```bash
+"${CODEX_HOME:-$HOME/.codex}/skills/scx/bin/run" --version
+"$HOME/.claude/skills/scx/bin/run" --version   # 安装到 Claude Code 时
+scx --version                                  # 已将入口加入 PATH 时
+```
+
+三条命令都应输出版本号（当前为 `scx 0.4.1`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
+
 ### 第一次压缩
 
 ```bash
@@ -234,11 +246,7 @@ scx --query "..." [OPTIONS] [file...]
 
 入库前会对已知的 password、token、Authorization、Bearer 和 URL 用户信息模式做脱敏，但这只是尽力而为的已知模式匹配，**不是通用 DLP**。分享日志或记忆库前请人工复核。
 
-设计、存储格式与实现记录：
-
-- [记忆库设计](docs/memory-rag-design.md)
-- [实现计划](docs/rag-implementation-plan.md)
-- [实施记录](docs/rag-implementation-log.md)
+设计、存储格式、运维与实现记录统一见 [本地记忆库](docs/memory.md)。
 
 ## Rust 库
 
@@ -279,12 +287,12 @@ fn main() {
 |---|---|
 | `rs/src/lib.rs` | 公共 API、`Config`、`Outcome` |
 | `rs/src/compress.rs` | 纯函数筛选与预算分配 |
-| `rs/src/terms.rs`, `classify.rs`, `norm.rs` | 切词、结构分类、ANSI/换行归一化 |
+| `rs/src/terms.rs`, `classify.rs`, `normalize.rs` | 切词、结构分类、ANSI/换行归一化 |
 | `rs/src/memory/` | 本地 case 存储、召回、反馈、索引与评估 |
-| `rs/src/main.rs`, `cli_*.rs` | CLI 编排、参数和文件 I/O |
+| `rs/src/main.rs`, `args.rs`, `input.rs`, `memory_cli.rs` | CLI 编排、参数和文件 I/O |
 | `bin/run`, `bin/run.cmd` | 跨平台自举入口 |
 | `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门 |
-| `eval-real/` | 可重建语料、盲审包和评估结果 |
+| `eval/` | 可重建语料、冻结标签、盲审包与统一评估工具 |
 | `docs/` | 设计、评测协议与证据报告 |
 
 有意修改 CLI 语义时，需要运行冻结基线更新并逐项审查差异：
@@ -300,8 +308,10 @@ cargo test --manifest-path rs/Cargo.toml \
 
 - `cargo fmt --check`
 - `cargo clippy --locked --all-targets -- -D warnings`
+- `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps`
 - 单元、CLI 集成、并发和金标测试
 - `cargo build --release --locked`
+- Rust 1.82 声明 MSRV 实编译
 - 50k 行压缩基准
 - Ubuntu、macOS、Windows 三平台 CI
 - confirm5 冻结语料上的质量回归门，以及“policy/AI 标签不得冒充人工闭环”的负向测试
@@ -316,10 +326,9 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 
 完整协议、结果与限制见：
 
-- [confirm5 报告](docs/m4-confirm5-report.md)
-- [v2 基准](docs/m4-v2-benchmark.md)
-- [证据评估与口径修正](docs/m4-evidence-report.md)
-- [盲审预注册](eval-real/confirm5-blind40-preregistration.md)
+- [评估结果与证据边界](docs/evaluation-results.md)
+- [盲审预注册](docs/eval-blind40-preregistration.md)
+- [评估工具与复现命令](eval/README.md)
 
 ### 性能快照
 
@@ -327,8 +336,9 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 
 | 工作负载 | 结果 | 条件 |
 |---|---|---|
-| 50k 行 / 2,338,389 字符压缩 | 中位 **18 ms**，样本 17–20 ms | Apple M5 Pro，5 次采样 |
-| 10k case 本地召回 | p50 **263 µs**，p95 **328 µs** | 4 次采样；未建索引冷查约 0.96 s |
+| 50k 行 / 2,338,389 字符压缩 | 中位 **15 ms**，样本 14–19 ms | Apple M5 Pro，5 次采样 |
+| 10k case 稀疏查询召回 | p50 **215 µs**，p95 **245 µs** | 最新一轮 21 次采样；三轮 p50 0.22–0.34 ms |
+| 10k case 全候选宽查询 | p50 **2.1 ms** | 最新一轮 7 次采样；三轮 p50 2.1–3.0 ms |
 
 复现：
 
@@ -336,6 +346,7 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
 cargo test --manifest-path rs/Cargo.toml --locked
 cargo run --release --locked --manifest-path rs/Cargo.toml --example bench
+cargo run --release --locked --manifest-path rs/Cargo.toml --example mem_bench
 ```
 
 ## 边界与限制
@@ -356,6 +367,7 @@ cargo run --release --locked --manifest-path rs/Cargo.toml --example bench
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
 cargo fmt --manifest-path rs/Cargo.toml -- --check
 cargo clippy --locked --all-targets --manifest-path rs/Cargo.toml -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --manifest-path rs/Cargo.toml
 cargo test --locked --manifest-path rs/Cargo.toml
 cargo build --release --locked --manifest-path rs/Cargo.toml
 ```

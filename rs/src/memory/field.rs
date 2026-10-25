@@ -12,9 +12,22 @@
 
 use crate::classify::{is_err, is_frame, is_lineref};
 use crate::memory::store::Fields;
-use crate::norm::{norm_into, push_analysis_lower};
+use crate::normalize::{norm_into, push_analysis_lower};
 
 pub(crate) const CAP: usize = 16;
+
+/// 四类结构化字段的稳定实体键（排序去重，供倒排与实体边共用）。
+pub(crate) fn entity_keys(f: &Fields) -> Vec<String> {
+    let mut keys =
+        Vec::with_capacity(f.error_code.len() + f.file_loc.len() + f.symbol.len() + f.num_fp.len());
+    keys.extend(f.error_code.iter().cloned());
+    keys.extend(f.file_loc.iter().cloned());
+    keys.extend(f.symbol.iter().cloned());
+    keys.extend(f.num_fp.iter().cloned());
+    keys.sort();
+    keys.dedup();
+    keys
+}
 
 /// 从证据块抽取四类字段。逐行扫描，去重、截断、封顶。
 ///

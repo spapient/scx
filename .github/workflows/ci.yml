@@ -48,8 +48,9 @@ jobs:
         run: bin\run.cmd --version
 
   quality:
-    # Frozen confirm5 regression: rebuild the corpus from its incident source,
-    # then fail if the pre-registered hard-query advantage disappears.
+    # Rebuild the confirm5 corpus from the tracked incident JSON, then enforce
+    # the mechanical, human, AI, and policy evidence boundaries plus the
+    # pre-registered advantage rule.
     timeout-minutes: 45
     runs-on: windows-latest
     steps:
@@ -61,93 +62,104 @@ jobs:
           components: rustfmt, clippy
       - name: Build release
         run: cargo build --manifest-path rs/Cargo.toml --release --locked
+      - name: Rustdoc
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --manifest-path rs/Cargo.toml --locked --no-deps
+      - name: Tool selftest
+        run: python eval/scx_eval.py selftest
       - name: Rebuild confirm5 corpus
-        shell: pwsh
-        run: ./eval-real/seed-confirm5.ps1 -Force -MemDir .\eval-real\confirm5-ci-mem -Csv .\eval-real\confirm5-ci-cases.csv
-      - name: Build confirm5 CI baseline
-        shell: pwsh
-        run: ./scripts/holdout-build.ps1 -Csv .\eval-real\confirm5-ci-cases.csv -Out .\eval-real\confirm5-ci-baseline.json -JudgeBy mechanical-target-confirm5-v1 -JudgeDate 2026-10-23T00:00:00Z
-      - name: Run confirm5 gate
+        run: >-
+          python eval/scx_eval.py seed eval/corpora/confirm5.json
+          --mem-dir eval/ci-mem --csv eval/ci-cases.csv
+          --binary rs/target/release/scx.exe --force
+      - name: Build mechanical baseline
+        run: >-
+          python eval/scx_eval.py baseline
+          --csv eval/ci-cases.csv --out eval/ci-baseline.json
+          --judge-by mechanical-target-confirm5-v1
+          --judge-date 2026-10-23T00:00:00Z
+      - name: Confirm5 mechanical gate and verbose replay
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval-real\confirm5-ci-baseline.json --gate --eval-verbose --mem-dir .\eval-real\confirm5-ci-mem 1> .\eval-real\confirm5-ci.txt 2> .\eval-real\confirm5-ci.err
+          .\rs\target\release\scx.exe --eval .\eval\ci-baseline.json --gate --eval-verbose --mem-dir .\eval\ci-mem 1> .\eval\ci-verbose.txt 2> .\eval\ci-verbose.err
           if ($LASTEXITCODE -ne 0) {
-            Get-Content .\eval-real\confirm5-ci.txt -Tail 40
-            Get-Content .\eval-real\confirm5-ci.err -Tail 40
+            Get-Content .\eval\ci-verbose.txt -Tail 40
+            Get-Content .\eval\ci-verbose.err -Tail 40
             throw "confirm5 gate failed with exit $LASTEXITCODE"
           }
       - name: Reject policy labels as human closure
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval-real\confirm5-baseline-human.json --gate-human --mem-dir .\eval-real\confirm5-ci-mem 1> .\eval-real\confirm5-policy-human-gate.txt 2> .\eval-real\confirm5-policy-human-gate.err
+          .\rs\target\release\scx.exe --eval .\eval\labels\confirm5-policy.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-policy-gate.txt 2> $null
           if ($LASTEXITCODE -ne 2) {
-            Get-Content .\eval-real\confirm5-policy-human-gate.txt -Tail 40
-            throw "policy-materialized labels must not pass --gate-human (exit $LASTEXITCODE)"
+            Get-Content .\eval\ci-policy-gate.txt -Tail 40
+            throw "policy labels must not pass --gate-human (exit $LASTEXITCODE)"
           }
           $global:LASTEXITCODE = 0
-      - name: Rebuild real-incident corpus
-        shell: pwsh
-        run: ./eval-real/seed-real.ps1 -Force -MemDir .\eval-real\real-ci-mem -Csv .\eval-real\real-ci-cases.csv
-      - name: Frozen per-item blind packet
-        shell: pwsh
-        run: |
-          $want = 'b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f'
-          $got = (Get-FileHash .\eval-real\confirm5-blind40-packet.tsv -Algorithm SHA256).Hash.ToLower()
-          if ($got -ne $want) { throw "blind packet drifted: $got" }
-      - name: AI per-item gate passes, human gate still rejects
+      - name: Frozen blind packet
+        run: >-
+          python eval/scx_eval.py verify
+          --packet eval/blind/confirm5-40-packet.tsv
+          --sha256 b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f
+      - name: AI labels pass items gate, fail human gate
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval-real\confirm5-blind40-ai.json --gate-items --mem-dir .\eval-real\confirm5-ci-mem 1> .\eval-real\ai-items-gate.txt 2> $null
+          .\rs\target\release\scx.exe --eval .\eval\labels\confirm5-ai.json --gate-items --mem-dir .\eval\ci-mem 1> .\eval\ci-ai-items.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
-            Get-Content .\eval-real\ai-items-gate.txt -Tail 30
+            Get-Content .\eval\ci-ai-items.txt -Tail 30
             throw "AI per-item gate failed with exit $LASTEXITCODE"
           }
-          if ((Get-Content .\eval-real\ai-items-gate.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
+          if ((Get-Content .\eval\ci-ai-items.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
             throw "AI gate must declare non-human adjudication"
           }
-          .\rs\target\release\scx.exe --eval .\eval-real\confirm5-blind40-ai.json --gate-human --mem-dir .\eval-real\confirm5-ci-mem 1> $null 2> $null
+          .\rs\target\release\scx.exe --eval .\eval\labels\confirm5-ai.json --gate-human --mem-dir .\eval\ci-mem 1> $null 2> $null
           if ($LASTEXITCODE -ne 2) { throw "AI labels must not pass --gate-human (exit $LASTEXITCODE)" }
           $global:LASTEXITCODE = 0
-      - name: Case-level signoff must fail per-item gate (real incidents)
+      - name: Human per-item gate
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval-real\real-baseline-arb.json --gate-human --mem-dir .\eval-real\real-ci-mem 1> .\eval-real\real-ci-gate.txt 2> .\eval-real\real-ci-gate.err
-          if ($LASTEXITCODE -ne 2) {
-            Get-Content .\eval-real\real-ci-gate.txt -Tail 40
-            Get-Content .\eval-real\real-ci-gate.err -Tail 40
-            throw "case-level signoff must not pass per-item gate (exit $LASTEXITCODE)"
+          .\rs\target\release\scx.exe --eval .\eval\labels\confirm5-hao.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-hao-gate.txt 2> $null
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content .\eval\ci-hao-gate.txt -Tail 40
+            throw "human per-item gate failed with exit $LASTEXITCODE"
           }
-          if ((Get-Content .\eval-real\real-ci-gate.txt -Raw) -notmatch 'human per-item provenance items=0/\d+') {
-            throw "missing per-item provenance failure line"
+          if ((Get-Content .\eval\ci-hao-gate.txt -Raw) -notmatch 'gate: PASS') {
+            throw "human per-item gate did not print PASS"
           }
-          $global:LASTEXITCODE = 0
-      - name: Case-level signoff must fail per-item gate (baseline-final)
+      - name: Confirm5 paired statistics
+        run: >-
+          python eval/scx_eval.py stats
+          --baseline eval/ci-baseline.json
+          --verbose eval/ci-verbose.txt
+          --mem-dir eval/ci-mem
+          --out eval/ci-stats.csv
+          --cluster-size 5
+          --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
+      - name: Enforce pre-registered advantage
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval-real\baseline-final.json --gate-human --mem-dir .\eval-real\mem 1> .\eval-real\baseline-human-gate.txt 2> .\eval-real\baseline-human-gate.err
-          if ($LASTEXITCODE -ne 2) {
-            Get-Content .\eval-real\baseline-human-gate.txt -Tail 40
-            Get-Content .\eval-real\baseline-human-gate.err -Tail 40
-            throw "baseline-final case-level signoff must fail per-item gate (exit $LASTEXITCODE)"
-          }
-          if ((Get-Content .\eval-real\baseline-human-gate.txt -Raw) -notmatch 'human per-item provenance items=0/116') {
-            throw "missing per-item provenance failure line"
-          }
-          $global:LASTEXITCODE = 0
-      - name: Compute confirm5 statistics
-        shell: pwsh
-        run: |
-          ./eval-real/v2-rank-diff.ps1 -Verbose .\eval-real\confirm5-ci.txt -Baseline .\eval-real\confirm5-ci-baseline.json -Out .\eval-real\confirm5-ci-rank.csv
-          ./eval-real/v2-strata.ps1 -Baseline .\eval-real\confirm5-ci-baseline.json -MemDir .\eval-real\confirm5-ci-mem -Verbose .\eval-real\confirm5-ci.txt -Out .\eval-real\confirm5-ci-strata.csv
-          ./eval-real/v2-significance.ps1 -RankDiff .\eval-real\confirm5-ci-rank.csv -Strata .\eval-real\confirm5-ci-strata.csv -Out .\eval-real\confirm5-ci-significance.csv -Boot 10000 -Perm 10000 -Mde 0.05 -Seed 20261023
-          ./eval-real/cluster-significance.ps1 -RankDiff .\eval-real\confirm5-ci-rank.csv -Strata .\eval-real\confirm5-ci-strata.csv -Out .\eval-real\confirm5-ci-significance-cluster.csv -Boot 10000 -Perm 10000 -Mde 0.05 -Seed 20261023
-          $hard = @(Import-Csv .\eval-real\confirm5-ci-significance.csv | Where-Object { $_.group -eq 'tier:hard' })
+          $rows = @(Import-Csv .\eval\ci-stats.csv)
+          $hard = @($rows | Where-Object { $_.group -eq 'tier:hard' })
           if ($hard.Count -ne 1) { throw "confirm5 hard result missing" }
           if ([double]$hard[0].delta -lt 0.05 -or [double]$hard[0].ci_lo -le 0 -or [double]$hard[0].perm_p -ge 0.05) {
             $hard | Format-List | Out-String | Write-Host
             throw "confirm5 quality advantage not established"
           }
-          $cluster = @(Import-Csv .\eval-real\confirm5-ci-significance-cluster.csv)
+          $cluster = @($rows | Where-Object { $_.group -eq 'tier:hard:cluster' })
           if ($cluster.Count -ne 1 -or [double]$cluster[0].ci_lo -le 0) {
             throw "confirm5 cluster sensitivity failed"
           }
+
+  msrv:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.82.0
+      - name: Check declared MSRV
+        run: cargo check --manifest-path rs/Cargo.toml --locked --all-targets

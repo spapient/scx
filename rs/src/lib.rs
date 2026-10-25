@@ -10,7 +10,7 @@
 //! 类型（Config/Outcome）、模块声明与测试，维持单文件 <500 行门禁。
 mod classify;
 mod compress;
-mod norm;
+mod normalize;
 mod terms;
 
 /// 记忆知识库（旁路，默认不启用）：I/O 侧模块，与纯函数 `compress` 完全隔离。
@@ -103,7 +103,7 @@ pub(crate) fn push_lineno(out: &mut String, n: usize) {
 mod tests {
     use super::*;
     use crate::classify::{is_diffline, is_frame, is_incident_marker, is_lineref};
-    use crate::norm::{norm_into, push_analysis_lower};
+    use crate::normalize::{norm_into, push_analysis_lower};
     use crate::terms::build_terms;
 
     fn cfg() -> Config {

@@ -20,6 +20,7 @@ export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
 cd rs
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo test --locked
 cargo build --release --locked
 ```
@@ -31,6 +32,8 @@ $env:CARGO_TARGET_DIR = "$env:TEMP\scx-cargo-target"
 cd rs
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
+$env:RUSTDOCFLAGS = "-D warnings"
+cargo doc --locked --no-deps
 cargo test --locked
 cargo build --release --locked
 ```

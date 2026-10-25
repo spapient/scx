@@ -1,0 +1,998 @@
+{
+ "name": "v2",
+ "description": "30 public incidents; five sibling cases each; discriminative A/B benchmark.",
+ "expected_incidents": 30,
+ "expected_cases": 150,
+ "incidents": [
+  {
+   "id": "cf2019",
+   "source": "https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019/",
+   "root_cause": "WAF 新规则正则回溯，全球边缘节点 CPU 打满约 27 分钟",
+   "fix": "回滚该 WAF 正则规则，加回溯上限并分阶段灰度发布",
+   "cases": [
+    {
+     "store_query": "waf regex backtracking cpu exhaustion 502",
+     "eval_query": "waf regex backtracking cpu exhaustion 502",
+     "layer": "literal"
+    },
+    {
+     "store_query": "edge 502 regex cpu 100",
+     "eval_query": "edge 502 regex cpu 100",
+     "layer": "literal"
+    },
+    {
+     "store_query": "web firewall regex catastrophic backtracking pegged all edge cpus",
+     "eval_query": "regex in a firewall rule caused catastrophic backtracking and total cpu saturation",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "single waf rule rollback restored global edge traffic",
+     "eval_query": "reverting one firewall rule stopped the worldwide 502 storm",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "边缘节点 CPU 被打满导致网站全部 502",
+     "eval_query": "WAF 正则回溯把全球边缘 CPU 打满，流量大面积失败",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "gitlab2017",
+   "source": "https://about.gitlab.com/blog/2017/02/10/postmortem-of-database-outage-of-january-31/",
+   "root_cause": "复制故障期间误删主库数据目录，约 6 小时数据丢失",
+   "fix": "从备份恢复，修复复制与备份流程并加安全操作护栏",
+   "cases": [
+    {
+     "store_query": "database replication failure data loss",
+     "eval_query": "database replication failure data loss",
+     "layer": "literal"
+    },
+    {
+     "store_query": "primary data directory deleted replication",
+     "eval_query": "primary data directory deleted replication",
+     "layer": "literal"
+    },
+    {
+     "store_query": "primary database directory was removed while engineers fixed replica lag",
+     "eval_query": "replication trouble recovery accidentally erased the primary data directory",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "backup restore recovered only part of the lost six hours",
+     "eval_query": "restoring from backup could not recover all writes from the outage window",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "误删数据库主目录导致六小时数据丢失",
+     "eval_query": "复制故障处理时删掉主库目录，只能从备份恢复部分数据",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "github2018",
+   "source": "https://github.blog/news-insights/company-news/oct21-post-incident-analysis/",
+   "root_cause": "网络分区触发 MySQL 主库切换与裂脑写入，约 24 小时降级",
+   "fix": "恢复拓扑，加主从选举护栏与分区检测",
+   "cases": [
+    {
+     "store_query": "mysql network partition split brain",
+     "eval_query": "mysql network partition split brain",
+     "layer": "literal"
+    },
+    {
+     "store_query": "network partition database failover inconsistency",
+     "eval_query": "network partition database failover inconsistency",
+     "layer": "literal"
+    },
+    {
+     "store_query": "network split caused the mysql primary to fail over and split writes",
+     "eval_query": "network partition between sites triggered mysql primary failover and duplicate writes",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "inconsistent metadata required restoring the database topology",
+     "eval_query": "repairing the replication topology took most of the twenty four hours",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "网络分区导致数据库主备裂脑、元数据不一致",
+     "eval_query": "机房之间网络断开后主库切换出错，数据出现两份写入",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "reddit2023",
+   "source": "https://www.reddit.com/r/RedditEng/comments/11xx5o0/you_broke_reddit_the_piday_outage/",
+   "root_cause": "K8s 升级与 route reflector 标签重命名冲突，致全站中断",
+   "fix": "回滚升级，对齐 route reflector 配置并清理旧版命令",
+   "cases": [
+    {
+     "store_query": "kubernetes upgrade route reflector breakage",
+     "eval_query": "kubernetes upgrade route reflector breakage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "k8s 1.24 route reflector label",
+     "eval_query": "k8s 1.24 route reflector label",
+     "layer": "literal"
+    },
+    {
+     "store_query": "cluster upgrade to 1.24 broke the route reflector label configuration",
+     "eval_query": "a kubernetes version bump conflicted with legacy route reflector commands",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "stale end of life cluster configuration collided with the upgrade",
+     "eval_query": "stale end of life kubernetes manifests collided with the cluster upgrade",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Kubernetes 升级后路由反射器配置冲突导致全站中断",
+     "eval_query": "K8s 版本升级触发 route reflector 配置冲突，整站服务中断",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "fastly2021",
+   "source": "https://www.fastly.com/blog/summary-of-june-8-outage",
+   "root_cause": "合法配置变更触发未发现缺陷，约 50 分钟 85% 网络报错",
+   "fix": "回滚配置并修复缺陷，补回归测试",
+   "cases": [
+    {
+     "store_query": "config change triggers software bug outage",
+     "eval_query": "config change triggers software bug outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "valid customer config latent bug",
+     "eval_query": "valid customer config latent bug",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a valid customer configuration change activated a latent software bug",
+     "eval_query": "a valid customer configuration change triggered a latent edge software bug",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "rolling back the configuration restored most of the network",
+     "eval_query": "rolling back the customer configuration restored most of the edge network",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "合法配置变更触发未发现缺陷导致全球 CDN 故障",
+     "eval_query": "客户改了一个正常配置，却触发隐藏 bug 让大部分节点报错",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "atlassian2022",
+   "source": "https://www.atlassian.com/blog/company-news/post-incident-review-april-2022-outage",
+   "root_cause": "脚本用错执行模式与 ID 列表，误删客户站点数据",
+   "fix": "引入软删除策略，复核脚本与 runbook 并恢复数据",
+   "cases": [
+    {
+     "store_query": "script wrong mode deletes customer data",
+     "eval_query": "script wrong mode deletes customer data",
+     "layer": "literal"
+    },
+    {
+     "store_query": "maintenance script wrong id list",
+     "eval_query": "maintenance script wrong id list",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a maintenance script ran with the wrong mode and the wrong id list",
+     "eval_query": "an operator executed a cleanup script against an unintended set of identifiers",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "soft delete and backup recovery were added after the deletion",
+     "eval_query": "the fix was to prevent hard deletes and restore from disaster recovery",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "运维脚本用错执行模式和 ID 列表误删客户数据",
+     "eval_query": "维护脚本拿错 ID 清单，把客户站点直接删掉了",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "facebook2021",
+   "source": "https://engineering.fb.com/2021/10/05/networking-traffic/outage-details/",
+   "root_cause": "骨干维护命令使 BGP 路由撤回、DNS 不可用约 6 小时",
+   "fix": "恢复骨干路由，解耦 DNS 与 BGP 依赖并加防护",
+   "cases": [
+    {
+     "store_query": "bgp routes withdrawn dns unavailable",
+     "eval_query": "bgp routes withdrawn dns unavailable",
+     "layer": "literal"
+    },
+    {
+     "store_query": "backbone command withdrew bgp",
+     "eval_query": "backbone command withdrew bgp",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a backbone maintenance command withdrew all bgp routes",
+     "eval_query": "the dns servers lost reachability after the backbone stopped announcing prefixes",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "dns and bgp dependencies had to be decoupled",
+     "eval_query": "the remediation decoupled dns resolution from bgp backbone reachability",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "骨干网维护命令导致 BGP 路由撤回、DNS 不可用",
+     "eval_query": "维护操作把骨干路由全撤了，域名解析也随之失效",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "slack2021",
+   "source": "https://slack.engineering/what-happened-during-slacks-dnssec-rollout/",
+   "root_cause": "DNSSEC 上线触发 Route53 通配符缺陷与 NSEC 错误，SERVFAIL 约 24 小时",
+   "fix": "回退签名，改 ALIAS 记录并修复 NSEC",
+   "cases": [
+    {
+     "store_query": "dnssec rollout servfail wildcard bug",
+     "eval_query": "dnssec rollout servfail wildcard bug",
+     "layer": "literal"
+    },
+    {
+     "store_query": "dnssec nsec servfail route53",
+     "eval_query": "dnssec nsec servfail route53",
+     "layer": "literal"
+    },
+    {
+     "store_query": "enabling dnssec triggered a provider wildcard bug and an nsec error",
+     "eval_query": "the domain started returning servfail after the dnssec signing rollout",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "backing out signing and switching to alias records restored resolution",
+     "eval_query": "the rollback replaced cname records with alias records",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "上线 DNSSEC 后域名解析返回 SERVFAIL",
+     "eval_query": "DNSSEC 签名上线触发解析服务商缺陷，域名长时间解析失败",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "aws2011",
+   "source": "https://aws.amazon.com/message/65648/",
+   "root_cause": "us-east-1 网络事件引发 EBS re-mirroring 风暴与容量耗尽",
+   "fix": "扩容并修复控制面，错峰 re-mirroring",
+   "cases": [
+    {
+     "store_query": "ebs re-mirroring storm capacity shortage",
+     "eval_query": "ebs re-mirroring storm capacity shortage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "ebs volume stuck remirroring",
+     "eval_query": "ebs volume stuck remirroring",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a network event triggered an ebs re-mirroring storm",
+     "eval_query": "volumes could not be created because re-mirroring exhausted capacity in one zone",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "adding capacity and staggering re-mirroring recovered the control plane",
+     "eval_query": "the recovery throttled volume re-mirroring and added storage capacity",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "网络事件引发 EBS 重新镜像风暴，可用区容量耗尽",
+     "eval_query": "云盘大规模重建副本把可用区容量打满，新卷无法创建",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "gcp2019",
+   "source": "https://status.cloud.google.com/incident/cloud-networking/19009",
+   "root_cause": "配置变更叠加软件缺陷导致多区域网络拥塞约 4 小时",
+   "fix": "回滚配置并修复缺陷",
+   "cases": [
+    {
+     "store_query": "network configuration change congestion outage",
+     "eval_query": "network configuration change congestion outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "gcp config change network congestion",
+     "eval_query": "gcp config change network congestion",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a configuration change plus software bugs caused multi region congestion",
+     "eval_query": "a configuration change combined with latent software bugs degraded several us regions",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "reverting the configuration restored normal network behavior",
+     "eval_query": "reverting the configuration restored normal traffic behavior in the affected regions",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "配置变更叠加软件缺陷导致多区域网络拥塞",
+     "eval_query": "一次网络配置改动触发隐藏 bug，多个区域同时拥塞",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "azure2021",
+   "source": "https://azure.status.microsoft/en-us/status/history/",
+   "root_cause": "密钥轮换错误移除关键密钥，令牌校验失败约 14 小时",
+   "fix": "回滚元数据，修复轮换逻辑并加速缓存恢复",
+   "cases": [
+    {
+     "store_query": "signing key rotation token validation failure",
+     "eval_query": "signing key rotation token validation failure",
+     "layer": "literal"
+    },
+    {
+     "store_query": "key rotation removed signing key",
+     "eval_query": "key rotation removed signing key",
+     "layer": "literal"
+    },
+    {
+     "store_query": "routine signing key rotation mistakenly removed a critical key",
+     "eval_query": "token validation failed after the automated key rollover dropped a key",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "restoring the key metadata allowed tokens to validate again",
+     "eval_query": "the rollback republished the missing signing key metadata",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "签名密钥轮换出错导致令牌校验失败",
+     "eval_query": "自动轮换密钥时删掉了关键签名密钥，登录令牌大面积失效",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "awss32017",
+   "source": "https://aws.amazon.com/message/41926/",
+   "root_cause": "授权人员执行 playbook 时输错参数，误删大量 S3 服务器，拖垮索引与放置子系统",
+   "fix": "重启并恢复容量，增加命令参数校验与最小容量保护",
+   "cases": [
+    {
+     "store_query": "s3 command typo removed servers",
+     "eval_query": "s3 command typo removed servers",
+     "layer": "literal"
+    },
+    {
+     "store_query": "s3 index subsystem removed by command",
+     "eval_query": "s3 index subsystem removed by command",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an authorized operator entered a wrong input in a playbook command",
+     "eval_query": "a mistyped parameter removed far more s3 servers than intended",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "restarting the index and placement subsystems restored s3",
+     "eval_query": "the recovery brought back the removed index and placement capacity",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "S3 运维命令参数输错删掉过多服务器",
+     "eval_query": "执行既定脚本时输入错误，把索引子系统的大部分容量移除了",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "cf2020bgp",
+   "source": "https://blog.cloudflare.com/cloudflare-outage-on-july-17-2020/",
+   "root_cause": "亚特兰大路由器一行配置错误导致 BGP 路由泄漏，骨干与多个节点过载",
+   "fix": "回滚该配置项，增加路由策略变更的预检与灰度",
+   "cases": [
+    {
+     "store_query": "bgp route leak atlanta backbone",
+     "eval_query": "bgp route leak atlanta backbone",
+     "layer": "literal"
+    },
+    {
+     "store_query": "atlanta router route leak",
+     "eval_query": "atlanta router route leak",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a one line router change leaked all bgp routes into the backbone",
+     "eval_query": "traffic from many regions was redirected to the atlanta backbone and overwhelmed it",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "removing the leaked routes restored the affected locations",
+     "eval_query": "the rollback deleted the policy term that advertised the leaked prefixes",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "亚特兰大路由器配置错误导致 BGP 路由泄漏",
+     "eval_query": "亚特兰大路由器一行配置把全部 BGP 路由泄漏进骨干网，压垮单点",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "cf2022bgp",
+   "source": "https://blog.cloudflare.com/cloudflare-outage-on-june-21-2022/",
+   "root_cause": "BGP community 标准化变更导致路由异常，多个数据中心受影响",
+   "fix": "回滚变更，增加前缀策略的干跑与分阶段验证",
+   "cases": [
+    {
+     "store_query": "bgp community change route outage",
+     "eval_query": "bgp community change route outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "bgp community standardization outage",
+     "eval_query": "bgp community standardization outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a change to standardize bgp communities disrupted advertised prefixes",
+     "eval_query": "the bgp community standardization change disrupted advertised prefixes across many data centers",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "reverting the policy change restored the affected prefixes",
+     "eval_query": "the rollback removed the new community attributes from site local prefixes",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "BGP community 标准化变更导致路由中断",
+     "eval_query": "统一 BGP community 的改动让大量前缀无法正常通告",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "cf2022cache",
+   "source": "https://blog.cloudflare.com/partial-cloudflare-outage-on-october-25-2022/",
+   "root_cause": "Tiered Cache 变更导致部分请求 530，约 5% 请求峰值失败",
+   "fix": "回滚缓存变更，补充测试覆盖与灰度",
+   "cases": [
+    {
+     "store_query": "tiered cache change 530 errors",
+     "eval_query": "tiered cache change 530 errors",
+     "layer": "literal"
+    },
+    {
+     "store_query": "tiered cache 530",
+     "eval_query": "tiered cache 530",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a tiered cache change caused some requests to fail with status 530",
+     "eval_query": "the cache layer update produced 530 responses for a subset of users",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the cache configuration was reverted to stop the failures",
+     "eval_query": "rolling back the tiered cache change removed the 530 errors",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "分层缓存变更导致部分请求返回 530",
+     "eval_query": "Tiered Cache 改动后部分用户收到 530 错误",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "cf2023jan",
+   "source": "https://blog.cloudflare.com/cloudflare-incident-on-january-24th-2023/",
+   "root_cause": "服务令牌代码发布错误导致多产品控制面中断 121 分钟",
+   "fix": "回滚发布，增加发布校验与分阶段上线",
+   "cases": [
+    {
+     "store_query": "service token code release control plane outage",
+     "eval_query": "service token code release control plane outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "service token release 121 minutes",
+     "eval_query": "service token release 121 minutes",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an error releasing service token code degraded workers and zero trust",
+     "eval_query": "the service token deployment broke control plane functions for 121 minutes",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the release was rolled back and control plane recovered",
+     "eval_query": "the service token release was rolled back and the control plane recovered",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "服务令牌代码发布错误导致控制面中断",
+     "eval_query": "发布服务令牌管理代码时出错，Workers 与 Zero Trust 受影响",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "cf2023dns",
+   "source": "https://blog.cloudflare.com/1-1-1-1-lookup-failures-on-october-4th-2023/",
+   "root_cause": "1.1.1.1 内部软件错误导致有效查询返回 SERVFAIL 约 4 小时",
+   "fix": "修复解析器软件并加强发布验证",
+   "cases": [
+    {
+     "store_query": "1.1.1.1 servfail internal software error",
+     "eval_query": "1.1.1.1 servfail internal software error",
+     "layer": "literal"
+    },
+    {
+     "store_query": "dns resolver servfail four hours",
+     "eval_query": "dns resolver servfail four hours",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an internal software error made the public resolver return servfail",
+     "eval_query": "an internal software error made the public dns resolver return servfail to valid queries",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the resolver software was fixed and normal answers resumed",
+     "eval_query": "the remediation corrected the internal resolver defect",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "1.1.1.1 解析服务返回 SERVFAIL",
+     "eval_query": "1.1.1.1 公共 DNS 解析服务内部错误，有效查询返回 SERVFAIL",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "cf2024ratelimit",
+   "source": "https://blog.cloudflare.com/cloudflare-incident-on-june-20-2024/",
+   "root_cause": "新 DDoS 限流规则暴露 Cookie 校验缺陷，请求处理进程死循环占满 CPU",
+   "fix": "下线该规则，修复 Cookie 校验并增加循环保护",
+   "cases": [
+    {
+     "store_query": "rate limiting cookie validation infinite loop cpu",
+     "eval_query": "rate limiting cookie validation infinite loop cpu",
+     "layer": "literal"
+    },
+    {
+     "store_query": "cookie validation loop 100 cpu",
+     "eval_query": "cookie validation loop 100 cpu",
+     "layer": "literal"
+    },
+    {
+     "store_query": "flawed cookie validation sent request handlers into infinite loops",
+     "eval_query": "a new ddos rule exposed a bug that pinned request handler cpus at 100 percent",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "disabling the new rule stopped the loop across data centers",
+     "eval_query": "the mitigation removed the rule that triggered the handler bug",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "限流规则触发 Cookie 校验死循环导致 CPU 100%",
+     "eval_query": "新 DDoS 规则暴露 Cookie 校验缺陷，请求处理进程无限循环",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "cf2025r2",
+   "source": "https://blog.cloudflare.com/cloudflare-incident-march-21-2025/",
+   "root_cause": "R2 凭证轮换漏掉 --env production，部署到默认环境导致鉴权失败",
+   "fix": "重新以生产环境参数部署凭证，增加部署环境校验",
+   "cases": [
+    {
+     "store_query": "r2 credential rotation wrong environment",
+     "eval_query": "r2 credential rotation wrong environment",
+     "layer": "literal"
+    },
+    {
+     "store_query": "r2 credential rotation env flag",
+     "eval_query": "r2 credential rotation env flag",
+     "layer": "literal"
+    },
+    {
+     "store_query": "credentials were deployed to the default environment instead of production",
+     "eval_query": "omitting the production environment flag broke r2 gateway authentication",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "the correct production credentials were redeployed",
+     "eval_query": "redeploying with the production flag restored gateway access",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "R2 凭证轮换部署到错误环境导致鉴权失败",
+     "eval_query": "轮换存储凭证时漏了生产环境参数，网关无法通过鉴权",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "datadog2020",
+   "source": "https://www.datadoghq.com/blog/2020-09-25-infrastructure-connectivity-issue/",
+   "root_cause": "服务发现客户端配置错误，依赖客户端宕机后引发全局故障",
+   "fix": "修复客户端配置并隔离服务发现依赖",
+   "cases": [
+    {
+     "store_query": "service discovery config client cascade",
+     "eval_query": "service discovery config client cascade",
+     "layer": "literal"
+    },
+    {
+     "store_query": "service discovery bad config",
+     "eval_query": "service discovery bad config",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a bad service discovery configuration in one client broke discovery globally",
+     "eval_query": "one dependent client going down took the global discovery service with it",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "fixing the client configuration restored discovery",
+     "eval_query": "the remediation corrected the dependent client config",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "服务发现客户端配置错误导致全局服务发现问题",
+     "eval_query": "一个客户端的服务发现配置有误，依赖它宕机后拖垮全局发现",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "githubdns",
+   "source": "https://github.blog/news-insights/the-library/dns-outage-post-mortem/",
+   "root_cause": "Puppet 清单只重启权威域名服务器，恢复时又用依赖 DNS 的接口重建 zone，产生 NXDOMAIN",
+   "fix": "修复清单与 zone 重建流程，解除部署对 DNS 的循环依赖",
+   "cases": [
+    {
+     "store_query": "puppet manifest dns nameserver restart",
+     "eval_query": "puppet manifest dns nameserver restart",
+     "layer": "literal"
+    },
+    {
+     "store_query": "dns zone corrupt nxdomain",
+     "eval_query": "dns zone corrupt nxdomain",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a puppet manifest restarted only the authoritative nameserver",
+     "eval_query": "the deploy rebuilt a zone from an api that depended on dns and produced nxdomain",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "restoring the zone file and nameserver state recovered resolution",
+     "eval_query": "the remediation repaired the zone and restarted the correct services",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Puppet 清单只重启权威 DNS 导致解析超时",
+     "eval_query": "部署脚本依赖 DNS 重建 zone，结果生成大量 NXDOMAIN",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "github2024",
+   "source": "https://github.blog/news-insights/company-news/github-availability-report-august-2024/",
+   "root_cause": "数据库配置变更破坏路由服务健康检查，只读端点被标记不健康 36 分钟",
+   "fix": "回滚配置，修正健康检查并增加变更校验",
+   "cases": [
+    {
+     "store_query": "database routing health check read only outage",
+     "eval_query": "database routing health check read only outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "routing service health check database",
+     "eval_query": "routing service health check database",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a database configuration change broke routing service health checks",
+     "eval_query": "a database configuration change broke routing health checks and the read only endpoint",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "reverting the database change restored read traffic",
+     "eval_query": "reverting the database configuration change restored read traffic and health checks",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "数据库路由健康检查误判导致只读端点不可用",
+     "eval_query": "配置变更让健康检查失败，只读数据库被摘除，站点读操作中断",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "gcp2019storage",
+   "source": "https://status.cloud.google.com/incident/storage/19002",
+   "root_cause": "元数据存储配置变更导致 Blob 查询过载并级联失败",
+   "fix": "回滚配置，增加容量与级联保护",
+   "cases": [
+    {
+     "store_query": "blob storage metadata config overload",
+     "eval_query": "blob storage metadata config overload",
+     "layer": "literal"
+    },
+    {
+     "store_query": "blob lookup metadata config",
+     "eval_query": "blob lookup metadata config",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a metadata storage configuration change overloaded blob lookup",
+     "eval_query": "the config update caused a cascading failure across services that use blob storage",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "reverting the metadata change restored blob lookups",
+     "eval_query": "reverting the metadata configuration change restored blob storage lookups",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "元数据存储配置变更导致 Blob 查询级联失败",
+     "eval_query": "调整元数据存储配置后查询过载，依赖对象存储的服务一起失败",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "gcp2016",
+   "source": "https://status.cloud.google.com/incident/compute/16007",
+   "root_cause": "自动生成配置错误移除 GCE IP 段的 BGP 公告",
+   "fix": "回滚配置，增加生成配置的校验",
+   "cases": [
+    {
+     "store_query": "compute engine bgp announcement config",
+     "eval_query": "compute engine bgp announcement config",
+     "layer": "literal"
+    },
+    {
+     "store_query": "gce ip blocks withdrawn bgp",
+     "eval_query": "gce ip blocks withdrawn bgp",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an autogenerated configuration removed compute engine ip blocks from bgp",
+     "eval_query": "the bad config withdrew gce address announcements and broke reachability",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "restoring the announcements recovered compute engine connectivity",
+     "eval_query": "the rollback reinserted the removed ip blocks",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "自动生成配置撤回 GCE IP 段导致不可达",
+     "eval_query": "配置把计算引擎的地址段从 BGP 公告里删掉，外部无法访问",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "gcp2017",
+   "source": "https://status.cloud.google.com/incident/compute/17007",
+   "root_cause": "负载均衡配置发布缺陷导致错误率上升 22 分钟",
+   "fix": "回滚配置，增加发布前验证",
+   "cases": [
+    {
+     "store_query": "load balancer config rollout error rate",
+     "eval_query": "load balancer config rollout error rate",
+     "layer": "literal"
+    },
+    {
+     "store_query": "load balancer config 22 minutes",
+     "eval_query": "load balancer config 22 minutes",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a configuration rollout to the load balancer raised error rates",
+     "eval_query": "the load balancer configuration rollout caused 22 minutes of increased error rates",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "reverting the rollout restored normal error rates",
+     "eval_query": "reverting the load balancer configuration rollout restored normal error rates",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "负载均衡配置发布导致错误率上升",
+     "eval_query": "负载均衡器配置滚动发布出错，错误率升高约 22 分钟",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "heroku2017",
+   "source": "https://status.heroku.com/incidents/1091",
+   "root_cause": "自动远程配置变更未完整传播，Web Dyno 无法启动",
+   "fix": "重新下发配置并校验传播状态",
+   "cases": [
+    {
+     "store_query": "remote config change did not propagate",
+     "eval_query": "remote config change did not propagate",
+     "layer": "literal"
+    },
+    {
+     "store_query": "web dynos cannot start config",
+     "eval_query": "web dynos cannot start config",
+     "layer": "literal"
+    },
+    {
+     "store_query": "an automated remote configuration change did not fully propagate",
+     "eval_query": "web dynos failed to start because they did not receive the new configuration",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "reapplying the configuration allowed dynos to start",
+     "eval_query": "the remediation pushed the missing config to all dynos",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "远程配置未完整下发导致 Web Dyno 无法启动",
+     "eval_query": "自动配置变更只到了一部分实例，Web 进程启动失败",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "pagerduty2021",
+   "source": "https://status.pagerduty.com/incidents/vbp7ht2647l8",
+   "root_cause": "DNS 配置变更含缺陷，容器编排集群内服务无法解析域名",
+   "fix": "回滚 DNS 配置，补充测试环境覆盖",
+   "cases": [
+    {
+     "store_query": "dns config change broke container orchestration",
+     "eval_query": "dns config change broke container orchestration",
+     "layer": "literal"
+    },
+    {
+     "store_query": "dns config container cluster",
+     "eval_query": "dns config container cluster",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a dns configuration change broke resolution inside the container cluster",
+     "eval_query": "services in the orchestration cluster could not resolve names after the deploy",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "reverting the dns change restored service resolution",
+     "eval_query": "the dns configuration rollback removed the defective setting and restored resolution",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "DNS 配置变更导致容器编排集群无法解析",
+     "eval_query": "部署 DNS 配置后容器集群内服务全部解析失败",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "azurestorage",
+   "source": "https://azure.microsoft.com/en-us/blog/update-on-azure-storage-service-interruption/",
+   "root_cause": "Azure 存储配置变更错误导致服务中断",
+   "fix": "回滚配置，增加配置校验",
+   "cases": [
+    {
+     "store_query": "azure storage bad config outage",
+     "eval_query": "azure storage bad config outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "azure storage configuration outage",
+     "eval_query": "azure storage configuration outage",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a bad configuration change took down the storage service",
+     "eval_query": "storage requests failed after an invalid configuration was applied",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "reverting the configuration restored storage",
+     "eval_query": "reverting the invalid storage configuration restored the storage service",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "Azure 存储配置错误导致服务中断",
+     "eval_query": "Azure 存储配置错误导致存储服务请求大面积失败",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "aws2012power",
+   "source": "https://aws.amazon.com/message/67457/",
+   "root_cause": "美国东部断电，备用发电机在带载切换时失效",
+   "fix": "修复发电机与切换逻辑，增加带载测试",
+   "cases": [
+    {
+     "store_query": "us east power failure generator",
+     "eval_query": "us east power failure generator",
+     "layer": "literal"
+    },
+    {
+     "store_query": "generator failed backup power",
+     "eval_query": "generator failed backup power",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a power failure exposed a generator that could not carry the load",
+     "eval_query": "the backup generator failed when the site switched to generator power",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "manual power restoration and load shedding recovered the region",
+     "eval_query": "operators brought generators online and used load shedding to recover the region",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "美国东部断电后备用发电机失效",
+     "eval_query": "市电中断切换备用电源时发电机带载失败，机房大面积断电",
+     "layer": "semantic"
+    }
+   ]
+  },
+  {
+   "id": "aws2014tokyo",
+   "source": "https://aws.amazon.com/message/56489/",
+   "root_cause": "第三方机房控制软件缺陷导致制冷控制无响应，东京一个可用区过热断电",
+   "fix": "修复控制软件，增加制冷失效的独立保护",
+   "cases": [
+    {
+     "store_query": "tokyo cooling control system failure",
+     "eval_query": "tokyo cooling control system failure",
+     "layer": "literal"
+    },
+    {
+     "store_query": "cooling plc unresponsive tokyo",
+     "eval_query": "cooling plc unresponsive tokyo",
+     "layer": "literal"
+    },
+    {
+     "store_query": "a datacenter control system bug made the cooling control unresponsive",
+     "eval_query": "the cooling units shut down and ec2 hosts overheated in one tokyo zone",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "manual cooling restoration and host recovery followed",
+     "eval_query": "operators restored cooling and brought instances back",
+     "layer": "paraphrase"
+    },
+    {
+     "store_query": "东京机房制冷控制系统故障导致服务器过热",
+     "eval_query": "制冷控制程序在切换时无响应，部分机组停机，服务器过热断电",
+     "layer": "semantic"
+    }
+   ]
+  }
+ ]
+}

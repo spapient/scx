@@ -4,14 +4,13 @@ bin/scx.exe
 # 构建缓存（本机 cargo 直接构建时落在 rs/target）
 rs/target/
 
-# 评估生成的记忆库/临时目录：证据 CSV/JSON/verbose 单独提交，库目录不入库
-eval-real/*-mem/
-eval-real/*-mem-*/
-eval-real/tmp-*
-eval-real/archive-*/
-eval-real/*-ablate/
-eval-real/confirm5-ci*
-eval-real/*-replay*
+# 评估生成的记忆库/临时产物：输入与冻结标签入库，库目录与统计输出不入库
+eval/*-mem/
+eval/*-mem-*/
+eval/ci-*
+eval/tmp-*
+eval/*-ablate/
+eval/*-replay*
 
 # 本地环境、密钥与系统/编辑器杂项
 .env

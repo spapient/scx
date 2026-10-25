@@ -1,9 +1,0 @@
-4c1621d881d4f6e20ec36e86892cb0ab893d7df83e6d195179d62b4814654a3f  eval-real/confirm5-baseline-human.json
-2341014e3cdab4b72ffd9b4e351bdba051756c685f4aa6200c2265e906bfe4c7  eval-real/confirm5-human-gate-final-2026-10-24.txt
-092af92b79f69266a24b4bdc1628c2dda21489ca731eb3a3d943ace4c79ff11f  eval-real/confirm5-human-significance.csv
-092af92b79f69266a24b4bdc1628c2dda21489ca731eb3a3d943ace4c79ff11f  eval-real/confirm5-mechanical-final-significance.csv
-5d7cca95e80ca3f9d441b0f8be4d7c7e17d060701af54ce91163922c9d0b132c  eval-real/v2-human-significance.csv
-81948f838f4aee4fa899ee6af2b48bdf0d1ffdf420a3267a9fa3ece60ab60a8d  eval-real/v2-human-gate-final-2026-10-24.txt
-545100350dd9898060bb43047e70004d5b6cc3ffdeb0fd8dea0da39444a5e9bf  eval-real/real-human-gate-final-2026-10-24.txt
-51919db2e56a052e92b0aef9db43005f9453f776b870eb8ebdf9ba340d8701d4  eval-real/baseline-final-human-gate-2026-10-24.txt
-d4910c5ea728995e2924ace14ae596d5a686b463ca28764c72043791edfa8e04  eval-real/significance.py

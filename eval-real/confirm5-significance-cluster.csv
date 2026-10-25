@@ -1,2 +1,0 @@
-﻿"group","n_cases","n_clusters","A_mrr","B_mrr","delta","ci_lo","ci_hi","perm_p","mde","advantage"
-"tier:hard:cluster","69","30","0.3425","0.2757","0.0669","0.0273","0.1138","0.0038","0.05","True"

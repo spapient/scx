@@ -6,10 +6,19 @@
 use crate::classify::{
     error_flags, is_diffline, is_diffmeta, is_frame, is_heading, is_incident_marker, is_lineref,
 };
-use crate::norm::{norm_into, push_analysis_lower};
+use crate::normalize::{norm_into, push_analysis_lower};
 use crate::terms::{build_terms, token_est};
 use crate::{push_lineno, Config, Outcome};
 use std::collections::HashMap;
+
+/// 字符数用于报告与压缩比；日志常见纯 ASCII，可跳过逐字符迭代。
+fn char_count(text: &str) -> usize {
+    if text.is_ascii() {
+        text.len()
+    } else {
+        text.chars().count()
+    }
+}
 
 /// 对 `text` 按 `query` 做证据筛选压缩。纯函数：无文件、环境与进程 I/O。
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
@@ -57,7 +66,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     } else {
         0.0
     };
-    let chars_a = original.chars().count();
+    let chars_a = char_count(original);
 
     let mk = |text_owned: String,
               kept: usize,
@@ -107,7 +116,12 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             "passthrough:small",
         );
     }
-    if lines.iter().any(|s| s.chars().count() > 100000) {
+    // 100k 字符的行必然至少 100k 字节；先做 O(1) 字节检查，只有超长行才
+    // 付 Unicode 字符计数成本（避免对每行都扫描一遍 chars）。
+    if lines
+        .iter()
+        .any(|s| s.len() > 100_000 && s.chars().count() > 100_000)
+    {
         return mk(
             original.to_string(),
             total,
@@ -314,6 +328,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         scores[i] = sc;
     }
     // 邻域权重：±window 范围内的高分给排序加权（不授予独立入选资格）。
+    // 合成最终排序分，后续比较只读一次，避免 O(n log n) 次重复浮点加法。
     let mut boost = vec![0.0f64; total];
     for (i, b) in boost.iter_mut().enumerate() {
         let mut m = 0.0f64;
@@ -325,7 +340,6 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         }
         *b = (m / 4.0).min(3.0);
     }
-
     // 先落种子与最小可读邻域；预算只约束其后的可选内容。
     let mut keep = vec![false; total];
     let mut keep_count = 0usize;
@@ -346,21 +360,23 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
     if context != 0 {
         let budget = (total_tok * ratio).max(200.0);
-        let mut order: Vec<usize> = (0..total).filter(|&i| !dup[i] && !keep[i]).collect();
-        order.sort_by(|&a, &b| {
-            let ka = scores[a] + boost[a];
-            let kb = scores[b] + boost[b];
-            if kb != ka {
-                kb.partial_cmp(&ka).unwrap_or(std::cmp::Ordering::Equal)
+        // 只排序具备独立入选资格的候选；区域外/零分行无论排序位置都不会
+        // 进入预算，过滤后再排序可显著缩小默认配置下的比较规模。
+        let mut order: Vec<(usize, f64)> = (0..total)
+            .filter(|&i| {
+                !dup[i] && !keep[i] && scores[i] > 0.0 && (!region_gate || in_region[i] || i < 2)
+            })
+            .map(|i| (i, scores[i] + boost[i]))
+            .collect();
+        order.sort_unstable_by(|&(a, sa), &(b, sb)| {
+            if sb != sa {
+                sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
             } else {
                 a.cmp(&b)
             }
         });
         let mut used = 0.0f64;
-        for &i in &order {
-            if (region_gate && !in_region[i] && i >= 2) || scores[i] <= 0.0 {
-                continue;
-            }
+        for &(i, _) in &order {
             let t = token_est(lines[i]);
             if used + t > budget {
                 continue;
@@ -450,9 +466,9 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         out_text.push_str("...\n");
     }
     let chars_b = if out_text.ends_with('\n') {
-        out_text.chars().count().saturating_sub(1)
+        char_count(&out_text).saturating_sub(1)
     } else {
-        out_text.chars().count()
+        char_count(&out_text)
     };
     let cut_pct = if chars_a > 0 {
         100.0 * (1.0 - chars_b as f64 / chars_a as f64)
