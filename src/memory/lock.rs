@@ -112,6 +112,18 @@ pub(crate) fn acquire(root: &str, name: &str) -> io::Result<FileLock> {
     }
 }
 
+/// 按固定序一次性获取多把锁（锁序契约见 `docs/locking.md`）。
+///
+/// 任一锁获取失败时，已持有的锁随守卫 `Drop` 逆序自动释放——绝不半持锁返回。
+/// 调用方必须按契约顺序传 `names`（细粒度在前、粗粒度在后），禁止自行穿插。
+pub(crate) fn acquire_all(root: &str, names: &[&str]) -> io::Result<Vec<FileLock>> {
+    let mut guards = Vec::with_capacity(names.len());
+    for name in names {
+        guards.push(acquire(root, name)?);
+    }
+    Ok(guards)
+}
+
 fn is_stale(path: &Path) -> bool {
     fs::metadata(path)
         .and_then(|m| m.modified())
@@ -226,5 +238,28 @@ mod tests {
         }
         assert!(!Path::new(root.as_str()).join("test.lock").exists());
         let _ = fs::remove_dir_all(root.as_str());
+    }
+
+    #[test]
+    fn acquire_all_fixed_order_and_failure_releases() {
+        let root = tmp_root("lock_all");
+        fs::create_dir_all(&root).unwrap();
+        // 固定序获取成功，Drop 逆序释放后锁文件全部消失。
+        {
+            let _g = acquire_all(&root, &["a.lock", "b.lock", "c.lock"]).unwrap();
+            assert!(Path::new(&root).join("a.lock").exists());
+            assert!(Path::new(&root).join("b.lock").exists());
+            assert!(Path::new(&root).join("c.lock").exists());
+        }
+        assert!(!Path::new(&root).join("a.lock").exists());
+        // 中途失败：已持锁逆序释放，不留半持状态。
+        let _held = acquire(&root, "b.lock").unwrap();
+        let err = match acquire_all(&root, &["a.lock", "b.lock"]) {
+            Ok(_) => panic!("acquire_all 必须失败"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+        assert!(!Path::new(&root).join("a.lock").exists(), "a 必须已释放");
+        let _ = fs::remove_dir_all(&root);
     }
 }

@@ -61,22 +61,28 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
 /// id 先过白名单校验，禁止 `..` 与路径分隔符逃逸。
 /// 返回是否存在。
 pub(crate) fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
-    // case 锁串行化 rate/去重更新；index 锁覆盖“删资产 → 作废索引 → bump gen”，
-    // 防止并发 rebuild 在失效后把已删除 case 写回。
-    let _case_lock = store::lock_case(root, id)?;
-    let _index_lock = index::lock(root)?;
+    // 锁序契约（docs/locking.md）：case → index → meta → qmap，细粒度在前。
+    // acquire_all 按固定序一次性取齐，任一把失败即整体放弃（已持锁逆序释放），
+    // 绝不半持锁返回；meta 的写入用 *_locked 变体避免自死锁。
+    let _guards = crate::memory::lock::acquire_all(
+        root,
+        &[
+            &format!("cases/{id}.lock"),
+            "index.lock",
+            "meta.lock",
+            "qmap.lock",
+        ],
+    )?;
     let dir = Path::new(root).join("cases").join(id);
     if !dir.exists() {
         return Ok(false);
     }
     fs::remove_dir_all(dir)?;
     index::invalidate_locked(root);
-    store::bump_case_count(root)?;
+    store::bump_case_count_locked(root)?;
     crate::memory::ingest::invalidate_fp_index(root);
-    crate::memory::meta::bump_gen(root)?;
-    if let Ok(_g) = crate::memory::lock::acquire(root, "qmap.lock") {
-        let _ = fs::remove_file(query_cache::qmap_path(root));
-    }
+    crate::memory::meta::bump_gen_locked(root)?;
+    let _ = fs::remove_file(query_cache::qmap_path(root));
     Ok(true)
 }
 

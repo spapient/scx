@@ -172,8 +172,8 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
 
 /// 库代际 +1 并原子写回（case 写入/删除的兜底失效信号；失败返回 Err，
 /// 由调用方决定是否致命——case 已写盘，gen 落后只会多一次重算，不丢数据）。
-pub(crate) fn bump_gen(root: &str) -> std::io::Result<()> {
-    let _g = lock::acquire(root, "meta.lock")?;
+/// 已持 `meta.lock` 时调用（delete 等多锁路径用 `acquire_all` 一次取齐后调此变体）。
+pub(crate) fn bump_gen_locked(root: &str) -> std::io::Result<()> {
     let p = Path::new(root).join("meta.toml");
     let txt = fs::read_to_string(&p)?;
     let mut next: Option<u64> = None;
@@ -205,6 +205,12 @@ pub(crate) fn bump_gen(root: &str) -> std::io::Result<()> {
     let mut body = out.join("\n");
     body.push('\n');
     lock::atomic_write(&p, body.as_bytes())
+}
+
+/// 代际递增（包装 `bump_gen_locked`：取 `meta.lock` 后执行）。
+pub(crate) fn bump_gen(root: &str) -> std::io::Result<()> {
+    let _g = lock::acquire(root, "meta.lock")?;
+    bump_gen_locked(root)
 }
 
 /// 追加一条 top1_sim 到 L1 历史并重写 meta.toml。

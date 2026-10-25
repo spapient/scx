@@ -442,10 +442,10 @@ pub(crate) fn dir_bytes(dir: &Path) -> std::io::Result<u64> {
 }
 
 /// case_count 递增（新 case 写入后调用）；同时持久化回 meta.toml。
-pub(crate) fn bump_case_count(root: &str) -> std::io::Result<()> {
+/// 已持 `meta.lock` 时调用（多锁路径用 `acquire_all` 一次取齐后调此变体）。
+pub(crate) fn bump_case_count_locked(root: &str) -> std::io::Result<()> {
     // 与 bump_gen 共用 meta 锁：case_count 是从目录重算的，但写回必须串行，
     // 否则并发的 rename 会互相覆盖/报错。
-    let _g = crate::memory::lock::acquire(root, "meta.lock")?;
     let n = list_ids(root)?.len();
     let mut meta = load_meta(root)?;
     meta.case_count = n;
@@ -470,6 +470,12 @@ pub(crate) fn bump_case_count(root: &str) -> std::io::Result<()> {
     body.push('\n');
     atomic_write(&p, body.as_bytes())?;
     Ok(())
+}
+
+/// case_count 递增（包装 `bump_case_count_locked`：取 `meta.lock` 后执行）。
+pub(crate) fn bump_case_count(root: &str) -> std::io::Result<()> {
+    let _g = crate::memory::lock::acquire(root, "meta.lock")?;
+    bump_case_count_locked(root)
 }
 
 #[cfg(test)]
