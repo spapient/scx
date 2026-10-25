@@ -87,6 +87,12 @@ impl Plan {
         if meta.param("synonyms_enable") > 0.0 {
             terms = crate::terms::expand(&terms);
         }
+        // 英文屈折词干补召回：feature=semantic 编译期排除；运行期需显式
+        // stem_enable=1（默认缺省=0 关）。加性追加，原词仍居前缀，半权生效。
+        #[cfg(feature = "semantic")]
+        if meta.param("stem_enable") > 0.0 {
+            terms = crate::semantic::stem_expand(&terms);
+        }
         let fields = classify::extract(query);
         let entities = [
             &fields.error_code,

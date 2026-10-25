@@ -1,0 +1,98 @@
+{
+  "name": "stem-probe",
+  "description": "Tiny deterministic probe corpus for the optional English inflectional stemmer (feature=semantic, stem_enable=1). Each probe eval_query shares NO literal content token with its target store_query; the only bridges are regular-plural stems (restarts->restart, timeouts->timeout, dependencies->dependency, rollbacks->rollback, configs->config). root_cause/fix use neutral words so they create no accidental literal overlap. Not a confirm5 gate replacement; zero-signal recall probe only.",
+  "expected_incidents": 5,
+  "expected_cases": 10,
+  "incidents": [
+    {
+      "id": "oom-restart",
+      "source": "https://example.invalid/postmortem-a",
+      "root_cause": "resource exhaustion",
+      "fix": "raise headroom",
+      "cases": [
+        {
+          "store_query": "oom kill and restart loop after memory pressure",
+          "eval_query": "oom kill restart loop memory pressure",
+          "layer": "literal"
+        },
+        {
+          "store_query": "memory pressure triggered an oom kill and a restart loop",
+          "eval_query": "why did restarts cause repeated kills following the deploy",
+          "layer": "paraphrase"
+        }
+      ]
+    },
+    {
+      "id": "conn-timeout",
+      "source": "https://example.invalid/postmortem-b",
+      "root_cause": "upstream latency",
+      "fix": "raise budget",
+      "cases": [
+        {
+          "store_query": "gateway returned connection reset when upstream timeout exceeded",
+          "eval_query": "gateway connection reset upstream timeout",
+          "layer": "literal"
+        },
+        {
+          "store_query": "the gateway returned a connection reset when upstream timeout exceeded threshold",
+          "eval_query": "clients observed repeated resets after pools reached timeouts",
+          "layer": "paraphrase"
+        }
+      ]
+    },
+    {
+      "id": "build-dep",
+      "source": "https://example.invalid/postmortem-c",
+      "root_cause": "resolution drift",
+      "fix": "pin versions",
+      "cases": [
+        {
+          "store_query": "build failed after a new dependency introduced breaking change",
+          "eval_query": "build failed dependency breaking change",
+          "layer": "literal"
+        },
+        {
+          "store_query": "the build failed after a new dependency introduced a breaking change",
+          "eval_query": "multiple builds broke when dependencies pulled incompatible updates",
+          "layer": "paraphrase"
+        }
+      ]
+    },
+    {
+      "id": "node-rollback",
+      "source": "https://example.invalid/postmortem-d",
+      "root_cause": "process instability",
+      "fix": "roll forward",
+      "cases": [
+        {
+          "store_query": "node crashed repeatedly until rollback recovered the pod",
+          "eval_query": "node crashed rollback recovered pod",
+          "layer": "literal"
+        },
+        {
+          "store_query": "the node crashed repeatedly until a rollback recovered the pod",
+          "eval_query": "nodes kept crashing after rollbacks restored pods",
+          "layer": "paraphrase"
+        }
+      ]
+    },
+    {
+      "id": "config-error",
+      "source": "https://example.invalid/postmortem-e",
+      "root_cause": "misconfiguration",
+      "fix": "correct settings",
+      "cases": [
+        {
+          "store_query": "deploy emitted new errors after the config change",
+          "eval_query": "deploy errors config change",
+          "layer": "literal"
+        },
+        {
+          "store_query": "the deploy emitted new errors after the config change",
+          "eval_query": "releases surfaced fresh exceptions after configs drifted",
+          "layer": "paraphrase"
+        }
+      ]
+    }
+  ]
+}

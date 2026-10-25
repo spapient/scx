@@ -262,6 +262,56 @@ fn shape(line: &str) -> f64 {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 英文屈折词干扩展（recall 侧加性补召回）。
+//
+// 与 `terms::expand`（手写领域同义对）同机制：只追加词根形式、不替换原词，
+// 原词仍居 Plan 词表前缀，因此打分时追加项自动按 synonym_weight 半权
+// （见 recall::Plan::original）。纯 std、确定性；错误词根最坏不命中任何 doc。
+// 仅在 feature=semantic 编译、且 meta [params] stem_enable=1 时生效。
+
+/// 对每个 token 追加其规则词根并去重保序（加性，原词全部保留）。
+pub fn stem_expand(terms: &[String]) -> Vec<String> {
+    let mut out = terms.to_vec();
+    for t in terms {
+        if let Some(s) = stem(t) {
+            if !out.iter().any(|x| x == &s) {
+                out.push(s);
+            }
+        }
+    }
+    out
+}
+
+/// 单个 token 的规则词根；非纯小写字母或太短（<4 字节）返回 None。
+fn stem(w: &str) -> Option<String> {
+    if w.len() < 4 || !w.bytes().all(|b| b.is_ascii_lowercase()) {
+        return None;
+    }
+    strip_affix(w).filter(|s| s.len() >= 3)
+}
+
+/// 最长后缀优先：ies→y；咝音后 es 脱落；其余尾 s 脱落。
+fn strip_affix(w: &str) -> Option<String> {
+    if let Some(r) = w.strip_suffix("ies") {
+        return Some(format!("{r}y"));
+    }
+    if w.ends_with("es") && sibilant(&w[..w.len() - 2]) {
+        return Some(w[..w.len() - 2].to_string());
+    }
+    let r = w.strip_suffix('s')?;
+    (!w.ends_with("ss") && r.len() >= 3).then(|| r.to_string())
+}
+
+/// 去 es 后词根须以咝音结尾（ch/sh/s/x/z），避免 issues→issu、dishes→dish。
+fn sibilant(stem: &str) -> bool {
+    stem.ends_with("ch")
+        || stem.ends_with("sh")
+        || stem.ends_with('s')
+        || stem.ends_with('x')
+        || stem.ends_with('z')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,5 +401,55 @@ mod tests {
         assert_eq!(f8.len(), 8);
         assert_eq!(f8[6], 0.0);
         assert_eq!(f8[7], 0.0);
+    }
+
+    #[test]
+    fn stem_plurals_and_ies() {
+        // 规则复数 / ies→y：高精度技术词形桥接。
+        for (word, want) in [
+            ("errors", "error"),
+            ("timeouts", "timeout"),
+            ("connections", "connection"),
+            ("failures", "failure"),
+            ("restarts", "restart"),
+            ("retries", "retry"),
+            ("dependencies", "dependency"),
+            ("crashes", "crash"),
+            ("boxes", "box"),
+            ("passes", "pass"),
+            ("issues", "issue"),
+            ("datasets", "dataset"),
+        ] {
+            assert_eq!(stem(word).as_deref(), Some(want), "{word}");
+        }
+    }
+
+    #[test]
+    fn stem_skips_short_nonalpha_ambiguous() {
+        // 短词 / 数字符 / CJK / 含标点 token 不触发，避免垃圾词根。
+        for w in [
+            "err",
+            "oom",
+            "gc",
+            "as",
+            "8080",
+            "conn_id",
+            "数据库连接",
+            "us",
+        ] {
+            assert_eq!(stem(w), None, "{w} must not stem");
+        }
+        // issues 经咝音判定后回退尾 s 规则，得到 issue 而非 issu。
+        assert_eq!(stem("issues").as_deref(), Some("issue"));
+    }
+
+    #[test]
+    fn stem_expand_is_additive_dedup_preserves_order() {
+        let got = stem_expand(&["errors".into(), "spike".into(), "error".into()]);
+        // 原词全保留且居前缀；追加词根去重（error 已在原词中）。
+        assert_eq!(&got[..3], &["errors", "spike", "error"]);
+        assert_eq!(got.iter().filter(|t| t.as_str() == "error").count(), 1);
+        // 无词形可追的 token 原样透传。
+        assert_eq!(stem_expand(&["zzz".into()]), vec!["zzz".to_string()]);
     }
 }

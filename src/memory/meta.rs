@@ -109,6 +109,9 @@ pub(crate) const DEFAULT_PARAMS: &[(&str, f64)] = &[
     ("sibling_min_sim", 0.30),
     ("synonyms_enable", 1.0),
     ("synonym_weight", 0.5),
+    // 英文屈折词干补召回：默认关（0），需显式 stem_enable=1 开启；
+    // 仅 feature=semantic 编译期参与，默认构建路径不变。
+    ("stem_enable", 0.0),
 ];
 
 pub(crate) const L1_HIST_CAP: usize = 64;
