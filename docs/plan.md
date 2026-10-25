@@ -300,6 +300,15 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   doc/release 通过。版本 bump `0a7bdf4` + lock 同步 `7dc0f91`，`cargo publish --locked` 成功
   （196 文件），crates.io max_version=0.5.1、num_versions=2。main 已同步 origin/main=7dc0f91。
 
+- **0.6.0 发布（2026-10-26）**：三件优化经人工验收后发布——① MCP 并入主二进制
+  （serverInfo.name=`scx`）+ `scx setup` 一键注册 Codex/Cursor/Claude（幂等+备份+握手自检，
+  隔离 HOME 实测三路径）；② contain 同场对照 `docs/containcmp.md`（scx 70/70=100% vs 头截断
+  0/70 vs 随机 8/70，三指标+种子可复现，明确"自测非第三方"）；③ feature-gate 词干化
+  （默认轨 228/0 逐位不变、semantic 239/0、confirm5 hard 层 Δ+0.0608 零退化、zero-signal
+  4/5→0/5）。门禁双轨全绿、golden 37 零漂移；commit 链 634fcc7→…→ee5ce4c + `f725515`
+  （.gitignore 草稿留本地）；`cargo publish --locked` 成功（201 文件），crates.io
+  max_version=0.6.0、num_versions=3。main 已同步 origin/main=f725515。
+
 ### 遗留 / 发布后检查单
 
 1. **merge / push / crates.io 发布均已执行**：main = origin/main = `1b89398`；
