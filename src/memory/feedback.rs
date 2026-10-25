@@ -38,7 +38,29 @@ fn adapt_l1_base(root: &str) {
 pub(crate) fn rate(root: &str, id: &str, good: bool) -> std::io::Result<Case> {
     let _case_lock = store::lock_case(root, id)?;
     let mut c = store::read_case(root, id)?;
-    let fb = if good {
+    let fb = next_feedback(&c, good);
+    c.feedback = fb.clone();
+    c.quality = if fb.good + fb.bad == 0 {
+        0.0
+    } else {
+        fb.good as f64 / (fb.good + fb.bad) as f64
+    };
+    c.status = next_status(&c.status, good, c.quality);
+    c.updated_at = utc_now();
+    // 词环：该 case 词表 ±Δ（仅质量≥0.5 的 good / bad 参与，防误标污染）。
+    let terms = merged_terms(&c);
+    if good || c.status == "regressed" {
+        meta::bump_word_w(root, &terms, good);
+    }
+    // 写回 case（原子写；write_case 内部 bump gen，qmap/缓存随之失效）。
+    store::write_case(root, &c)?;
+    // L1 自适应：基于 [l1] 历史重算 l1_base。
+    adapt_l1_base(root);
+    Ok(c)
+}
+
+fn next_feedback(c: &Case, good: bool) -> Feedback {
+    if good {
         Feedback {
             good: c.feedback.good + 1,
             bad: c.feedback.bad,
@@ -48,36 +70,28 @@ pub(crate) fn rate(root: &str, id: &str, good: bool) -> std::io::Result<Case> {
             good: c.feedback.good,
             bad: c.feedback.bad + 1,
         }
-    };
-    c.feedback = fb.clone();
-    c.quality = if fb.good + fb.bad == 0 {
-        0.0
-    } else {
-        fb.good as f64 / (fb.good + fb.bad) as f64
-    };
-    // 状态机（§4.1）：open → solved（good 且 quality≥0.5）→ regressed（bad 且曾 solved）。
-    c.status = match (c.status.as_str(), good, c.quality) {
+    }
+}
+
+/// 状态机（§4.1）：open → solved（good 且 quality≥0.5）→ regressed（bad 且曾 solved）。
+fn next_status(prev: &str, good: bool, quality: f64) -> String {
+    match (prev, good, quality) {
         (_, true, q) if q >= 0.5 => "solved".to_string(),
         ("solved", false, _) => "regressed".to_string(),
         (s, false, _) if s != "solved" => s.to_string(), // 直接 bad 标 open：无效经验，不改态
         (s, _, _) => s.to_string(),
-    };
-    c.updated_at = utc_now();
-    // 词环：该 case 词表 ±Δ（仅质量≥0.5 的 good / bad 参与，防误标污染）。
+    }
+}
+
+/// case 词表并入 query 切词结果（保序去重）。
+fn merged_terms(c: &Case) -> Vec<String> {
     let mut terms = c.terms.clone();
     for t in crate::terms::build_mem_terms(&c.query) {
         if !terms.contains(&t) {
             terms.push(t);
         }
     }
-    if good || c.status == "regressed" {
-        meta::bump_word_w(root, &terms, good);
-    }
-    // 写回 case（原子写；write_case 内部 bump gen，qmap/缓存随之失效）。
-    store::write_case(root, &c)?;
-    // L1 自适应：基于 [l1] 历史重算 l1_base。
-    adapt_l1_base(root);
-    Ok(c)
+    terms
 }
 
 /// L1 自适应置信判据（§5.1）：sim_top1 ≥ l1_base 且 (top1−top2) ≥ margin。

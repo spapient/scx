@@ -27,7 +27,7 @@ const FP_LOCK: &str = "index/fingerprints.lock";
 ///
 /// 身份口径：query 保留数字（8080/9090、errno=28/29 是不同事故），text 仍按
 /// `norm_into` 折叠数字（日志里的 PID/时间戳/行号不应制造重复 case）。
-/// 这修复了旧实现“query 数字也被折叠 → 不同端口事故互相去重”的问题。
+/// 这修复了旧实现"query 数字也被折叠 → 不同端口事故互相去重"的问题。
 pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut q = String::new();
     crate::analysis::norm_identity_into(query, &mut q);
@@ -155,6 +155,55 @@ pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)>
         max_bytes,
     } = input;
     store::ensure_root(root)?;
+    validate(root, max_bytes, text, fix, evidence_lno, evidence)?;
+    let fp = fingerprint(query, text);
+    // 同一指纹的"查重 + 写入"必须串行：两个并发 store 若都在 find 前进入，
+    // 会跨秒生成两个 id，或在去重更新时用旧快照覆盖刚写入的反馈。
+    let _ingest_lock = crate::memory::lock::acquire(root, &format!("cases/.ingest-{fp}.lock"))?;
+    if let Some(existing) = find_by_fp(root, &fp)? {
+        let _case_lock = store::lock_case(root, &existing)?;
+        let mut c = store::read_case(root, &existing)?;
+        let now = store::utc_now();
+        c.updated_at = now;
+        // 反馈/状态等历史字段保留；空修复结论/空证据可由后续 --store 补录，
+        // 已有结论绝不覆盖（同指纹重复摄取以首条有效结论为准）。
+        backfill(&mut c, fix, evidence_lno, evidence);
+        store::write_case(root, &c)?;
+        return Ok((false, existing));
+    }
+    let now = store::utc_now();
+    let id = store::case_id(&now, query, text);
+    let _case_lock = store::lock_case(root, &id)?;
+    let mut c = Case::new(id.clone(), query.to_string(), terms, text.to_string());
+    c.fp = fp.clone();
+    c.fix = fix.to_string();
+    c.evidence_lno = evidence_lno.to_vec();
+    c.evidence = evidence.to_vec();
+    c.source = source.to_vec();
+    c.stats = stats.clone();
+    c.forces = forces.to_vec();
+    // 摄取即抽取：判别字段随 case 写入，召回时无需重扫正文。
+    c.fields = crate::memory::classify::extract(text);
+    // 摄取即分桶：先用 case query 判家族，query 无证据再回退正文，
+    // 避免根因里的宽域词把 query 已明确的场景带偏。
+    let fvec = c.fields.error_code.clone();
+    let qterms = crate::terms::build_mem_terms(&c.query);
+    c.bucket = crate::memory::classify::bucket_of_query(&fvec, &qterms, text);
+    store::write_case(root, &c)?;
+    store::bump_case_count(root)?;
+    remember_fp(root, &fp, &id)?;
+    Ok((true, id))
+}
+
+/// 入库前校验：配额 / 文本上限 / fix 上限 / 证据数组长度一致。
+fn validate(
+    root: &str,
+    max_bytes: Option<u64>,
+    text: &str,
+    fix: &str,
+    evidence_lno: &[usize],
+    evidence: &[String],
+) -> std::io::Result<()> {
     if let Some(max) = max_bytes {
         let total = store::bytes_total(root)?;
         if total > max {
@@ -189,49 +238,18 @@ pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)>
             "evidence_lno/evidence length mismatch",
         ));
     }
-    let fp = fingerprint(query, text);
-    // 同一指纹的“查重 + 写入”必须串行：两个并发 store 若都在 find 前进入，
-    // 会跨秒生成两个 id，或在去重更新时用旧快照覆盖刚写入的反馈。
-    let _ingest_lock = crate::memory::lock::acquire(root, &format!("cases/.ingest-{fp}.lock"))?;
-    if let Some(existing) = find_by_fp(root, &fp)? {
-        let _case_lock = store::lock_case(root, &existing)?;
-        let mut c = store::read_case(root, &existing)?;
-        let now = store::utc_now();
-        c.updated_at = now;
-        // 反馈/状态等历史字段保留；空修复结论/空证据可由后续 --store 补录，
-        // 已有结论绝不覆盖（同指纹重复摄取以首条有效结论为准）。
-        if c.fix.is_empty() && !fix.is_empty() {
-            c.fix = fix.to_string();
-        }
-        if c.evidence.is_empty() && !evidence.is_empty() {
-            c.evidence_lno = evidence_lno.to_vec();
-            c.evidence = evidence.to_vec();
-        }
-        store::write_case(root, &c)?;
-        return Ok((false, existing));
+    Ok(())
+}
+
+/// 同指纹重复摄取：只补录空的 fix / evidence，已有结论绝不覆盖。
+fn backfill(c: &mut Case, fix: &str, evidence_lno: &[usize], evidence: &[String]) {
+    if c.fix.is_empty() && !fix.is_empty() {
+        c.fix = fix.to_string();
     }
-    let now = store::utc_now();
-    let id = store::case_id(&now, query, text);
-    let _case_lock = store::lock_case(root, &id)?;
-    let mut c = Case::new(id.clone(), query.to_string(), terms, text.to_string());
-    c.fp = fp.clone();
-    c.fix = fix.to_string();
-    c.evidence_lno = evidence_lno.to_vec();
-    c.evidence = evidence.to_vec();
-    c.source = source.to_vec();
-    c.stats = stats.clone();
-    c.forces = forces.to_vec();
-    // 摄取即抽取：判别字段随 case 写入，召回时无需重扫正文。
-    c.fields = crate::memory::classify::extract(text);
-    // 摄取即分桶：先用 case query 判家族，query 无证据再回退正文，
-    // 避免根因里的宽域词把 query 已明确的场景带偏。
-    let fvec = c.fields.error_code.clone();
-    let qterms = crate::terms::build_mem_terms(&c.query);
-    c.bucket = crate::memory::classify::bucket_of_query(&fvec, &qterms, text);
-    store::write_case(root, &c)?;
-    store::bump_case_count(root)?;
-    remember_fp(root, &fp, &id)?;
-    Ok((true, id))
+    if c.evidence.is_empty() && !evidence.is_empty() {
+        c.evidence_lno = evidence_lno.to_vec();
+        c.evidence = evidence.to_vec();
+    }
 }
 
 /// 测试便捷入口：直接构造已切词字段，覆盖不带 fix/evidence 的旧调用形态。
@@ -659,7 +677,7 @@ mod tests {
         assert!(a.0 && b.0, "不同端口必须各自落库");
         assert_eq!(store::list_ids(&root).unwrap().len(), 2);
 
-        // 模拟旧库：fp 是旧“数字折叠”口径；动态重算仍应识别同一条记忆。
+        // 模拟旧库：fp 是旧"数字折叠"口径；动态重算仍应识别同一条记忆。
         let mut c = store::read_case(&root, &a.1).unwrap();
         c.fp = "0000000000000000".to_string();
         store::write_case(&root, &c).unwrap();

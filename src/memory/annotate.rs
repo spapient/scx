@@ -34,8 +34,8 @@ pub(crate) struct AnnotatedCase {
 
 /// 标注结果 + 自检丢弃统计。
 ///
-/// `dropped` 必须随报告输出：只报“生成了多少组”而不报“筛掉了多少 A 的失败
-/// 变体”，会让自检变成看不见的选择偏差。`--annotate` 现在打印
+/// `dropped` 必须随报告输出：只报"生成了多少组"而不报"筛掉了多少 A 的失败
+/// 变体"，会让自检变成看不见的选择偏差。`--annotate` 现在打印
 /// `dropped: paraphrase=.. semantic=..`。
 pub(crate) struct AnnotateReport {
     pub cases: Vec<AnnotatedCase>,
@@ -101,78 +101,17 @@ pub(crate) fn annotate_report(
             evidence: vec!["fingerprint".to_string()],
             note: String::new(),
         });
-        // paraphrase：同义词改写 + 自检（强相关门槛 top-5）；raw 模式不过自检。
-        // 注意：本分支不得 continue 跳过 semantic 生成（golden 回归实证）。
-        if let Some(q) = rewrite(&c, seed) {
-            if !raw {
-                match self_check(root, &q, &c, 5, ann_now_s, &meta) {
-                    Some(s) => out.push(AnnotatedCase {
-                        query: q,
-                        layer: "paraphrase".to_string(),
-                        expected: vec![hash16_of(&c)],
-                        rel: if s.sim >= 0.5 { 2.0 } else { 1.0 },
-                        judged: true,
-                        evidence: vec![
-                            "synonym".to_string(),
-                            format!(
-                                "recall sim={:.2} score={:.2} rank={}",
-                                s.sim, s.score, s.rank
-                            ),
-                        ],
-                        note: String::new(),
-                    }),
-                    None => dropped.push(("paraphrase", q)),
-                }
-            } else {
-                out.push(AnnotatedCase {
-                    query: q,
-                    layer: "paraphrase".to_string(),
-                    expected: vec![hash16_of(&c)],
-                    rel: 2.0,
-                    judged: false,
-                    evidence: vec!["synonym".to_string(), "raw".to_string()],
-                    note: target_hint(&c),
-                });
-            }
-        } else {
-            paraphrase_no_synonym += 1;
-        }
-        // semantic：根因行词构造 + 自检（弱相关 rel=1，门槛放宽 top-10）；raw 模式不过自检。
-        let sq = semantic_query(&c);
-        if !sq.is_empty() {
-            if !raw {
-                match self_check(root, &sq, &c, 10, ann_now_s, &meta) {
-                    Some(s) => out.push(AnnotatedCase {
-                        query: sq,
-                        layer: "semantic".to_string(),
-                        expected: vec![hash16_of(&c)],
-                        rel: 1.0,
-                        judged: true,
-                        evidence: vec![
-                            "root-cause".to_string(),
-                            format!(
-                                "recall sim={:.2} score={:.2} rank={}",
-                                s.sim, s.score, s.rank
-                            ),
-                        ],
-                        note: String::new(),
-                    }),
-                    None => dropped.push(("semantic", sq)),
-                }
-            } else {
-                out.push(AnnotatedCase {
-                    query: sq,
-                    layer: "semantic".to_string(),
-                    expected: vec![hash16_of(&c)],
-                    rel: 1.0,
-                    judged: false,
-                    evidence: vec!["root-cause".to_string(), "raw".to_string()],
-                    note: target_hint(&c),
-                });
-            }
-        } else {
-            semantic_no_root += 1;
-        }
+        // paraphrase 与 semantic 顺序固定：paraphrase 先改写并自检，
+        // 不得因 paraphrase 分支跳过 semantic 生成（golden 回归实证）。
+        let mut ctx = AnnotateCtx {
+            root,
+            ann_now_s,
+            meta: &meta,
+            out: &mut out,
+            dropped: &mut dropped,
+        };
+        push_paraphrase(&mut ctx, &c, seed, raw, &mut paraphrase_no_synonym);
+        push_semantic(&mut ctx, &c, raw, &mut semantic_no_root);
     }
     // 总组数收敛到 30–50：cap 内每 case 最多 3 组；不足 30 时如实（宁缺毋滥，不编造）。
     Ok(AnnotateReport {
@@ -181,6 +120,97 @@ pub(crate) fn annotate_report(
         paraphrase_no_synonym,
         semantic_no_root,
     })
+}
+
+/// paraphrase 层：同义词改写 + 自检（强相关门槛 top-5）；raw 模式不过自检。
+struct AnnotateCtx<'a> {
+    root: &'a str,
+    ann_now_s: u64,
+    meta: &'a crate::memory::store::Meta,
+    out: &'a mut Vec<AnnotatedCase>,
+    dropped: &'a mut Vec<(&'static str, String)>,
+}
+
+fn push_paraphrase(
+    ctx: &mut AnnotateCtx<'_>,
+    c: &Case,
+    seed: u64,
+    raw: bool,
+    no_synonym: &mut usize,
+) {
+    let Some(q) = rewrite(c, seed) else {
+        *no_synonym += 1;
+        return;
+    };
+    if !raw {
+        match self_check(ctx.root, &q, c, 5, ctx.ann_now_s, ctx.meta) {
+            Some(s) => ctx.out.push(AnnotatedCase {
+                query: q,
+                layer: "paraphrase".to_string(),
+                expected: vec![hash16_of(c)],
+                rel: if s.sim >= 0.5 { 2.0 } else { 1.0 },
+                judged: true,
+                evidence: vec![
+                    "synonym".to_string(),
+                    format!(
+                        "recall sim={:.2} score={:.2} rank={}",
+                        s.sim, s.score, s.rank
+                    ),
+                ],
+                note: String::new(),
+            }),
+            None => ctx.dropped.push(("paraphrase", q)),
+        }
+    } else {
+        ctx.out.push(AnnotatedCase {
+            query: q,
+            layer: "paraphrase".to_string(),
+            expected: vec![hash16_of(c)],
+            rel: 2.0,
+            judged: false,
+            evidence: vec!["synonym".to_string(), "raw".to_string()],
+            note: target_hint(c),
+        });
+    }
+}
+
+/// semantic 层：根因行词构造 + 自检（弱相关 rel=1，门槛放宽 top-10）；raw 模式不过自检。
+fn push_semantic(ctx: &mut AnnotateCtx<'_>, c: &Case, raw: bool, no_root: &mut usize) {
+    let sq = semantic_query(c);
+    if sq.is_empty() {
+        *no_root += 1;
+        return;
+    }
+    if !raw {
+        match self_check(ctx.root, &sq, c, 10, ctx.ann_now_s, ctx.meta) {
+            Some(s) => ctx.out.push(AnnotatedCase {
+                query: sq,
+                layer: "semantic".to_string(),
+                expected: vec![hash16_of(c)],
+                rel: 1.0,
+                judged: true,
+                evidence: vec![
+                    "root-cause".to_string(),
+                    format!(
+                        "recall sim={:.2} score={:.2} rank={}",
+                        s.sim, s.score, s.rank
+                    ),
+                ],
+                note: String::new(),
+            }),
+            None => ctx.dropped.push(("semantic", sq)),
+        }
+    } else {
+        ctx.out.push(AnnotatedCase {
+            query: sq,
+            layer: "semantic".to_string(),
+            expected: vec![hash16_of(c)],
+            rel: 1.0,
+            judged: false,
+            evidence: vec!["root-cause".to_string(), "raw".to_string()],
+            note: target_hint(c),
+        });
+    }
 }
 
 /// 盲测辅助信息：目标 case 摘要（query / fix / 原文首行），标注者据此裁决相关性。
@@ -441,18 +471,12 @@ pub(crate) fn stats_report(report: &AnnotateReport) -> Vec<String> {
 /// 盲测裁决（`--judge <baseline.json>`）：逐条显示 query 与目标摘要，从 stdin
 /// 录入相关度（2=强 / 1=弱 / 0=无关 / s=跳过），原子写回 rel 与 judge 元数据。
 ///
-/// 裁决视图不显示任何 A/B 分数或自动放行结果，避免“接受预填 rel”的自证偏差；
+/// 裁决视图不显示任何 A/B 分数或自动放行结果，避免"接受预填 rel"的自证偏差；
 /// 跳过条目保持 `judge:null`，`--eval` 继续拒绝，报告必须声明漏裁未纳入。
 pub(crate) fn judge(path: &str, by: &str) -> io::Result<Vec<String>> {
     let txt = std::fs::read_to_string(path)?;
     let mut v = json::parse(&txt).map_err(io::Error::other)?;
-    let cases = match &mut v {
-        Val::Obj(kvs) => match kvs.iter_mut().find(|(k, _)| k == "cases") {
-            Some((_, Val::Arr(items))) => items,
-            _ => return Err(io::Error::other("judge: baseline missing \"cases\" array")),
-        },
-        _ => return Err(io::Error::other("judge: baseline must be an object")),
-    };
+    let cases = cases_of(&mut v)?;
     if cases.is_empty() {
         return Err(io::Error::other("judge: no cases to adjudicate"));
     }
@@ -467,12 +491,7 @@ pub(crate) fn judge(path: &str, by: &str) -> io::Result<Vec<String>> {
             Val::Obj(kvs) => kvs,
             _ => return Err(io::Error::other(format!("judge: cases[{i}] not an object"))),
         };
-        let already = kvs.iter().any(|(k, val)| match k.as_str() {
-            "rel" => matches!(val, Val::Obj(_)),
-            "judge" => matches!(val, Val::Obj(_)),
-            _ => false,
-        });
-        if already {
+        if already_judged(kvs) {
             skipped += 1;
             continue;
         }
@@ -484,46 +503,12 @@ pub(crate) fn judge(path: &str, by: &str) -> io::Result<Vec<String>> {
         if !note.is_empty() {
             println!("  hint: {note}");
         }
-        let rel = loop {
-            print!("  rel? [2=strong 1=weak 0=unrelated s=skip] > ");
-            io::stdout().flush()?;
-            let buf =
-                match lines.next() {
-                    Some(Ok(l)) => l,
-                    Some(Err(e)) => return Err(e),
-                    None => return Err(io::Error::other(
-                        "judge: EOF - nothing written; rerun to resume (unjudged stay judge:null)",
-                    )),
-                };
-            match buf.trim() {
-                "2" => break Some(2.0),
-                "1" => break Some(1.0),
-                "0" => break Some(0.0),
-                "s" | "S" | "" => break None,
-                _ => println!("  (input: 2/1/0/s)"),
-            }
-        };
-        match rel {
-            Some(r) => {
-                upsert(kvs, "rel", Val::Obj(vec![(target, Val::Num(r))]));
-                let date = crate::memory::util::utc_now();
-                upsert(
-                    kvs,
-                    "judge",
-                    Val::Obj(vec![
-                        ("by".to_string(), Val::Str(by.to_string())),
-                        ("date".to_string(), Val::Str(date)),
-                    ]),
-                );
-                judged += 1;
-                judged_rows.push(format!(
-                    "  judged[{}] {} query=\"{}\"",
-                    fmt_rel(r),
-                    layer,
-                    query
-                ));
-            }
-            None => skipped += 1,
+        let rel = read_rel(&mut lines)?;
+        if let Some(row) = record_judgment(kvs, by, &target, rel, &layer, &query) {
+            judged += 1;
+            judged_rows.push(row);
+        } else {
+            skipped += 1;
         }
     }
     std::fs::write(path, json::write(&v))?;
@@ -534,6 +519,90 @@ pub(crate) fn judge(path: &str, by: &str) -> io::Result<Vec<String>> {
     ];
     out.extend(judged_rows);
     Ok(out)
+}
+
+/// 从 baseline JSON 取出 cases 数组（借用至写回）；结构不符的报错文案逐字保持。
+fn cases_of(v: &mut Val) -> io::Result<&mut Vec<Val>> {
+    match v {
+        Val::Obj(kvs) => match kvs.iter_mut().find(|(k, _)| k == "cases") {
+            Some((_, Val::Arr(items))) => Ok(items),
+            _ => Err(io::Error::other("judge: baseline missing \"cases\" array")),
+        },
+        _ => Err(io::Error::other("judge: baseline must be an object")),
+    }
+}
+
+/// 已裁决条目：rel 或 judge 已落成对象即跳过（断点续裁口径）。
+fn already_judged(kvs: &[(String, Val)]) -> bool {
+    kvs.iter().any(|(k, val)| match k.as_str() {
+        "rel" => matches!(val, Val::Obj(_)),
+        "judge" => matches!(val, Val::Obj(_)),
+        _ => false,
+    })
+}
+
+/// 读一条 rel 输入：2/1/0 接受，s/S/空 跳过，其余提示重输；EOF 报错文案逐字保持。
+fn read_rel(lines: &mut io::Lines<io::StdinLock<'_>>) -> io::Result<Option<f64>> {
+    loop {
+        print!("  rel? [2=strong 1=weak 0=unrelated s=skip] > ");
+        io::stdout().flush()?;
+        let buf = match lines.next() {
+            Some(Ok(l)) => l,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(io::Error::other(
+                    "judge: EOF - nothing written; rerun to resume (unjudged stay judge:null)",
+                ))
+            }
+        };
+        match parse_rel_input(&buf) {
+            Some(rel) => return Ok(rel),
+            None => println!("  (input: 2/1/0/s)"),
+        }
+    }
+}
+
+/// 单行 rel 输入解析：`Some(Some(r))` 接受，`Some(None)` 跳过，`None` 提示重输。
+fn parse_rel_input(buf: &str) -> Option<Option<f64>> {
+    match buf.trim() {
+        "2" => Some(Some(2.0)),
+        "1" => Some(Some(1.0)),
+        "0" => Some(Some(0.0)),
+        "s" | "S" | "" => Some(None),
+        _ => None,
+    }
+}
+
+/// 落盘一条裁决：写 rel/judge 元数据并返回报告行；跳过返回 None。
+fn record_judgment(
+    kvs: &mut Vec<(String, Val)>,
+    by: &str,
+    target: &str,
+    rel: Option<f64>,
+    layer: &str,
+    query: &str,
+) -> Option<String> {
+    let r = rel?;
+    upsert(
+        kvs,
+        "rel",
+        Val::Obj(vec![(target.to_string(), Val::Num(r))]),
+    );
+    let date = crate::memory::util::utc_now();
+    upsert(
+        kvs,
+        "judge",
+        Val::Obj(vec![
+            ("by".to_string(), Val::Str(by.to_string())),
+            ("date".to_string(), Val::Str(date)),
+        ]),
+    );
+    Some(format!(
+        "  judged[{}] {} query=\"{}\"",
+        fmt_rel(r),
+        layer,
+        query
+    ))
 }
 
 /// 原地插入或替换键（替换保位、新增追加，保持 JSON 键序稳定）。

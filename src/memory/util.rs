@@ -286,26 +286,16 @@ fn civil_from_days(z: u64) -> (u64, u64, u64) {
 pub(crate) fn parse_utc_secs(s: &str) -> u64 {
     let s = s.trim();
     let s = s.strip_suffix('Z').unwrap_or(s);
-    let (date, time) = match s.split_once('T') {
-        Some((d, t)) => (d, t),
-        None => return 0,
+    let Some((date, time)) = s.split_once('T') else {
+        return 0;
     };
-    let p = |v: &str| v.parse::<u64>().ok();
-    let (y, mo, d) = match (date.get(0..4), date.get(5..7), date.get(8..10)) {
-        (Some(y), Some(m), Some(d)) => match (p(y), p(m), p(d)) {
-            (Some(y), Some(m), Some(d)) => (y, m, d),
-            _ => return 0,
-        },
-        _ => return 0,
+    let Some((y, mo, d)) = parse_ymd(date) else {
+        return 0;
     };
-    let (hh, mi, ss) = match (time.get(0..2), time.get(3..5), time.get(6..8)) {
-        (Some(h), Some(m), Some(s)) => match (p(h), p(m), p(s)) {
-            (Some(h), Some(m), Some(s)) => (h, m, s),
-            _ => return 0,
-        },
-        _ => return 0,
+    let Some((hh, mi, ss)) = parse_hms(time) else {
+        return 0;
     };
-    if mo == 0 || mo > 12 || d == 0 || d > 31 || hh > 23 || mi > 59 || ss > 60 {
+    if out_of_range(mo, d, hh, mi, ss) {
         return 0;
     }
     // days_since_epoch = civil_to_days(y,m,d)，逆算法。
@@ -317,6 +307,27 @@ pub(crate) fn parse_utc_secs(s: &str) -> u64 {
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let days = era * 146_097 + doe - 719_468;
     days * 86_400 + hh * 3600 + mi * 60 + ss
+}
+
+/// 截取并解析 YYYY-MM-DD 三段；任一段字节越界或非数字返回 None。
+fn parse_ymd(date: &str) -> Option<(u64, u64, u64)> {
+    let y = date.get(0..4)?;
+    let m = date.get(5..7)?;
+    let d = date.get(8..10)?;
+    Some((y.parse().ok()?, m.parse().ok()?, d.parse().ok()?))
+}
+
+/// 截取并解析 HH:MM:SS 三段；任一段字节越界或非数字返回 None。
+fn parse_hms(time: &str) -> Option<(u64, u64, u64)> {
+    let h = time.get(0..2)?;
+    let m = time.get(3..5)?;
+    let s = time.get(6..8)?;
+    Some((h.parse().ok()?, m.parse().ok()?, s.parse().ok()?))
+}
+
+/// 自产 UTC 串的粗略值域校验（历法细节由 civil 逆算法自洽兜底）。
+fn out_of_range(mo: u64, d: u64, hh: u64, mi: u64, ss: u64) -> bool {
+    mo == 0 || mo > 12 || d == 0 || d > 31 || hh > 23 || mi > 59 || ss > 60
 }
 
 /// 测试用独立临时库根：进程号 + 单调序号保证并行测试不共享目录。

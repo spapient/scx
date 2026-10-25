@@ -41,42 +41,49 @@ fn write_into(v: &Val, out: &mut String) {
         Val::Null => out.push_str("null"),
         Val::Bool(true) => out.push_str("true"),
         Val::Bool(false) => out.push_str("false"),
-        Val::Num(n) => {
-            if n.fract() == 0.0 && n.is_finite() && n.abs() < 1e15 {
-                out.push_str(&format!("{}", *n as i64));
-            } else {
-                out.push_str(&format!("{}", n));
-            }
-        }
+        Val::Num(n) => write_num(*n, out),
         Val::Str(s) => {
             out.push('"');
             escape_str(s, out);
             out.push('"');
         }
-        Val::Arr(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write_into(item, out);
-            }
-            out.push(']');
-        }
-        Val::Obj(kvs) => {
-            out.push('{');
-            for (i, (k, item)) in kvs.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                out.push('"');
-                escape_str(k, out);
-                out.push_str("\":");
-                write_into(item, out);
-            }
-            out.push('}');
-        }
+        Val::Arr(items) => write_arr(items, out),
+        Val::Obj(kvs) => write_obj(kvs, out),
     }
+}
+
+/// 数值序列化：整数域内的 f64 写成整数形态（与解析容错口径一致）。
+fn write_num(n: f64, out: &mut String) {
+    if n.fract() == 0.0 && n.is_finite() && n.abs() < 1e15 {
+        out.push_str(&format!("{}", n as i64));
+    } else {
+        out.push_str(&format!("{}", n));
+    }
+}
+
+fn write_arr(items: &[Val], out: &mut String) {
+    out.push('[');
+    for (i, item) in items.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        write_into(item, out);
+    }
+    out.push(']');
+}
+
+fn write_obj(kvs: &[(String, Val)], out: &mut String) {
+    out.push('{');
+    for (i, (k, item)) in kvs.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push('"');
+        escape_str(k, out);
+        out.push_str("\":");
+        write_into(item, out);
+    }
+    out.push('}');
 }
 
 /// 从字符串解析 JSON，返回 Val。递归下降，O(n)。

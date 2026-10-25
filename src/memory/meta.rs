@@ -116,58 +116,60 @@ pub(crate) const L1_HIST_CAP: usize = 64;
 pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
     let p = Path::new(root).join("meta.toml");
     let txt = fs::read_to_string(p)?;
-    let mut created_at = String::new();
-    let mut case_count = 0usize;
-    let mut gen = 0u64;
-    let mut df = Vec::new();
-    let mut params = Vec::new();
-    let mut word_w = Vec::new();
-    let mut l1_hist = Vec::new();
+    let mut meta = Meta {
+        created_at: String::new(),
+        case_count: 0,
+        gen: 0,
+        df: Vec::new(),
+        params: Vec::new(),
+        word_w: Vec::new(),
+        l1_hist: Vec::new(),
+    };
     // 行式解析统一由 scx::conf 提供（节感知 TOML 子集），语义与历史实现一致。
     for e in crate::conf::parse(txt.lines()) {
         match e.section {
-            "" => match e.key {
-                "created_at" => created_at = crate::conf::unquote(e.value).to_string(),
-                "case_count" => case_count = crate::conf::parse_usize(e.value).unwrap_or(0),
-                "gen" => gen = crate::conf::parse_u64(e.value).unwrap_or(0),
-                _ => {}
-            },
-            "df" => {
-                if let Some(n) = crate::conf::parse_usize(e.value) {
-                    df.push((e.key.to_string(), n));
-                }
-            }
-            "params" => {
-                if let Some(f) = crate::conf::parse_f64(e.value) {
-                    params.push((e.key.to_string(), f));
-                }
-            }
-            "word_w" => {
-                if let Some(f) = crate::conf::parse_f64(e.value) {
-                    word_w.push((e.key.to_string(), f));
-                }
-            }
-            "l1" if e.key == "hist" => {
-                let body = crate::conf::unquote(e.value);
-                for tok in body.split(',') {
-                    if let Some(f) = crate::conf::parse_f64(tok.trim()) {
-                        l1_hist.push(f);
-                    }
-                }
-                l1_hist.truncate(L1_HIST_CAP);
-            }
+            "" => apply_scalar(e.key, e.value, &mut meta),
+            "df" => push_usize(&mut meta.df, e.key, e.value),
+            "params" => push_f64(&mut meta.params, e.key, e.value),
+            "word_w" => push_f64(&mut meta.word_w, e.key, e.value),
+            "l1" if e.key == "hist" => push_hist(e.value, &mut meta.l1_hist),
             _ => {}
         }
     }
-    Ok(Meta {
-        created_at,
-        case_count,
-        gen,
-        df,
-        params,
-        word_w,
-        l1_hist,
-    })
+    Ok(meta)
+}
+
+/// 无节标量（created_at / case_count / gen）：未知键忽略（老库缺字段按默认）。
+fn apply_scalar(key: &str, value: &str, meta: &mut Meta) {
+    match key {
+        "created_at" => meta.created_at = crate::conf::unquote(value).to_string(),
+        "case_count" => meta.case_count = crate::conf::parse_usize(value).unwrap_or(0),
+        "gen" => meta.gen = crate::conf::parse_u64(value).unwrap_or(0),
+        _ => {}
+    }
+}
+
+fn push_usize(out: &mut Vec<(String, usize)>, key: &str, value: &str) {
+    if let Some(n) = crate::conf::parse_usize(value) {
+        out.push((key.to_string(), n));
+    }
+}
+
+fn push_f64(out: &mut Vec<(String, f64)>, key: &str, value: &str) {
+    if let Some(f) = crate::conf::parse_f64(value) {
+        out.push((key.to_string(), f));
+    }
+}
+
+/// 逗号分隔的 L1 历史串；每条 hist 行解析后截断到上限（保持逐行截断口径）。
+fn push_hist(value: &str, hist: &mut Vec<f64>) {
+    let body = crate::conf::unquote(value);
+    for tok in body.split(',') {
+        if let Some(f) = crate::conf::parse_f64(tok.trim()) {
+            hist.push(f);
+        }
+    }
+    hist.truncate(L1_HIST_CAP);
 }
 
 /// 库代际 +1 并原子写回（case 写入/删除的兜底失效信号；失败返回 Err，
@@ -276,6 +278,19 @@ pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
         -meta.param("feedback_step_bad")
     };
     let limit = meta.param("word_w_limit").max(0.0);
+    apply_steps(&mut meta, terms, step, limit);
+    let p = Path::new(root).join("meta.toml");
+    let Ok(txt) = fs::read_to_string(&p) else {
+        return;
+    };
+    let out = rewrite_word_w(&txt, &meta.word_w);
+    let mut body = out.join("\n");
+    body.push('\n');
+    let _ = lock::atomic_write(&p, body.as_bytes());
+}
+
+/// 逐词应用调权：跳过单字符词；在表中则原位 clamp，否则追加。
+fn apply_steps(meta: &mut Meta, terms: &[String], step: f64, limit: f64) {
     for t in terms {
         if t.len() < 2 {
             continue;
@@ -293,10 +308,11 @@ pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
             meta.word_w.push((t.clone(), next));
         }
     }
-    let p = Path::new(root).join("meta.toml");
-    let Ok(txt) = fs::read_to_string(&p) else {
-        return;
-    };
+}
+
+/// [word_w] 节重写：旧节整体跳过，在其后第一个节头前插入新节；
+/// 文件无节头时在末尾追加。
+fn rewrite_word_w(txt: &str, word_w: &[(String, f64)]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut wrote_w = false;
     for line in txt.lines() {
@@ -307,11 +323,8 @@ pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
                 wrote_w = true;
                 continue;
             }
-            if !wrote_w && !meta.word_w.is_empty() {
-                out.push("[word_w]".to_string());
-                for (k, v) in &meta.word_w {
-                    out.push(format!("{k} = {v:.3}"));
-                }
+            if !wrote_w && !word_w.is_empty() {
+                out.extend(word_w_block(word_w));
                 out.push("".to_string());
                 wrote_w = true;
             }
@@ -319,14 +332,17 @@ pub(crate) fn bump_word_w(root: &str, terms: &[String], good: bool) {
         out.push(line.to_string());
     }
     if !wrote_w {
-        out.push("[word_w]".to_string());
-        for (k, v) in &meta.word_w {
-            out.push(format!("{k} = {v:.3}"));
-        }
+        out.extend(word_w_block(word_w));
     }
-    let mut body = out.join("\n");
-    body.push('\n');
-    let _ = lock::atomic_write(&p, body.as_bytes());
+    out
+}
+
+fn word_w_block(word_w: &[(String, f64)]) -> Vec<String> {
+    let mut out = vec!["[word_w]".to_string()];
+    for (k, v) in word_w {
+        out.push(format!("{k} = {v:.3}"));
+    }
+    out
 }
 
 /// 写/更新 [params] 单个参数：节内有 key 原位替换，无则节内末尾插入，无节则文件尾建节。
