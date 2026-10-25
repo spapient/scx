@@ -16,21 +16,21 @@ pub enum Json {
 }
 
 impl Json {
-    pub(crate) fn get(&self, key: &str) -> Option<&Json> {
+    pub fn get(&self, key: &str) -> Option<&Json> {
         match self {
             Json::Obj(kv) => kv.iter().find(|(k, _)| k == key).map(|(_, v)| v),
             _ => None,
         }
     }
 
-    pub(crate) fn str(&self) -> Option<&str> {
+    pub fn str(&self) -> Option<&str> {
         match self {
             Json::Str(s) => Some(s),
             _ => None,
         }
     }
 
-    pub(crate) fn num(&self) -> Option<f64> {
+    pub fn num(&self) -> Option<f64> {
         match self {
             Json::Num(n) => Some(*n),
             _ => None,

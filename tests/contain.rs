@@ -1,8 +1,8 @@
 //! contain 协议红黄蓝断言批（integration test）。
 //!
-//! 数据子集：冻结语料 eval/contain5.corpus.json 的 5 类代表切片
+//! 数据子集：冻结语料 config/contain5.corpus.json 的 5 类代表切片
 //! （build/stack/diff/log/test 各 1），与其逐字一致；全量 25 片编排由
-//! `bin/scx-eval contain`（Python，只做编排/统计）承担，本文件是判定语义的
+//! `tools/scx.py contain`（Python，只做编排/统计）承担，本文件是判定语义的
 //! 可执行规格（Rust 侧协议实现，见 scx::contain）。
 //! 口径：evidence containment（证据行原文逐字节存活），作者侧自测，非第三方独立评测。
 

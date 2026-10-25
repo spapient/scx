@@ -1,9 +1,9 @@
 //! 内核评测协议：evidence containment（证据保留率）判定。
 //!
 //! 纯函数：给定压缩输出与语料证据行，判定证据行原文是否逐字节存活于输出。
-//! 语料编排与统计由 `bin/scx-eval contain`（Python）承担；本模块是判定/计分
+//! 语料编排与统计由 `tools/scx.py contain`（Python）承担；本模块是判定/计分
 //! 的唯一事实源，两者不得复刻彼此的语义。
-//! 口径与 `eval/CONTAINMENT.md` 一致；结果属作者侧自测，非第三方独立评测。
+//! 口径与 `docs/containment.md` 一致；结果属作者侧自测，非第三方独立评测。
 
 use crate::compress;
 use crate::{Config, Mode, Outcome};

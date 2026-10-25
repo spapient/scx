@@ -23,7 +23,7 @@ semantic = []
 
 [[bin]]
 name = "scx-mcp"
-path = "src/bin/scx-mcp.rs"
+path = "src/mcp.rs"
 required-features = ["mcp"]
 
 [profile.release]

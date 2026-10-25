@@ -22,7 +22,7 @@ cargo clippy --locked --all-targets -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo test --locked
 cargo build --release --locked
-./bin/scx-eval selftest
+./tools/scx.py selftest
 ```
 
 Windows PowerShell：
@@ -35,7 +35,7 @@ $env:RUSTDOCFLAGS = "-D warnings"
 cargo doc --locked --no-deps
 cargo test --locked
 cargo build --release --locked
-python bin/scx-eval selftest
+python tools/scx.py selftest
 ```
 
 PR 描述中请粘贴实际执行的命令与结果；未执行的检查不要写成已通过。

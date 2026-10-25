@@ -13,7 +13,7 @@ fn scx() -> &'static str {
 
 fn sample_weights() -> String {
     format!(
-        "{}/eval/semantic/sample-weights.json",
+        "{}/config/semantic/sample-weights.json",
         env!("CARGO_MANIFEST_DIR")
     )
 }

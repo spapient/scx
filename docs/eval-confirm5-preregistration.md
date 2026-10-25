@@ -6,10 +6,10 @@ Date: 2026-10-23.
 > **Refactor note (2026-10-25).** The decision rule and corpus protocol in this
 > frozen preregistration are unchanged; only artifact paths/commands were
 > updated. Historical `eval-real/` files remain recoverable from git commit
-> `5ada90d`. Current equivalents: corpus `eval/confirm5.corpus.json`, seed command
-> `./bin/scx-eval seed ...`, baseline
-> `./bin/scx-eval baseline ...`, and statistics
-> `./bin/scx-eval stats ...`. The frozen input hashes below are
+> `5ada90d`. Current equivalents: corpus `config/confirm5.corpus.json`, seed command
+> `./tools/scx.py seed ...`, baseline
+> `./tools/scx.py baseline ...`, and statistics
+> `./tools/scx.py stats ...`. The frozen input hashes below are
 > historical; current hashes are in `docs/evaluation-results.md`.
 
 ## Question
@@ -66,9 +66,9 @@ Pre-build integrity audit:
 
 Corpus files:
 
-- `eval/confirm5.corpus.json` (current normalized corpus; historical incident JSON
+- `config/confirm5.corpus.json` (current normalized corpus; historical incident JSON
   SHA256 `E12FDD3C62E6E5C4B192BE423DC6F3070097DE033D41D0426E95E6E543765704`)
-- Seed via `./bin/scx-eval seed eval/confirm5.corpus.json ...`
+- Seed via `./tools/scx.py seed config/confirm5.corpus.json ...`
   (historical `seed-confirm5.ps1` SHA256
   `AA7D90BDA0251E8E1D34AE8E7B8834310481785690E3297B64F16DE830792BDC`)
 
@@ -118,7 +118,7 @@ Pre-freeze verification evidence:
 
 ## Pre-registered decision rule
 
-- Primary stratum: `tier:hard` as computed by `bin/scx-eval stats`
+- Primary stratum: `tier:hard` as computed by `tools/scx.py stats`
   (token Jaccard of evaluation query vs target case-query less than 0.2).
 - Primary metric: paired MRR@10 difference `Delta = MRR_A - MRR_B`.
 - `MDE=0.05`.
@@ -140,18 +140,18 @@ Pre-freeze verification evidence:
 3. Run A/B with:
 
    ```bash
-   ./bin/scx-eval seed eval/confirm5.corpus.json \
+   ./tools/scx.py seed config/confirm5.corpus.json \
      --mem-dir /tmp/scx-confirm5 --csv /tmp/scx-confirm5.csv --force
-   ./bin/scx-eval baseline --csv /tmp/scx-confirm5.csv \
+   ./tools/scx.py baseline --csv /tmp/scx-confirm5.csv \
      --out /tmp/scx-confirm5-mechanical.json \
      --judge-by mechanical-target-confirm5-v1 \
      --judge-date 2026-10-23T00:00:00Z
-   ./bin/run --eval /tmp/scx-confirm5-mechanical.json --gate --eval-verbose \
+   ./tools/scx --eval /tmp/scx-confirm5-mechanical.json --gate --eval-verbose \
      --mem-dir /tmp/scx-confirm5
    ```
 
 4. Derive rank-diff and strata from that single verbose run.
-5. Run `./bin/scx-eval stats` with 10,000 bootstrap and permutation
+5. Run `./tools/scx.py stats` with 10,000 bootstrap and permutation
    samples and `--cluster-size 5`.
 6. Archive gate output, significance CSV, rank-diff CSV, strata CSV, and verbose
    output. Do not rerun after changing any frozen input.

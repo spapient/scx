@@ -12,13 +12,13 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 
 ## 怎么用（两步）
 1. 大输出先落盘，不要让整段进入上下文：`<命令> > /tmp/out.txt 2>&1`
-2. 按当前问题关键词压缩，只把压缩结果读进来。入口为技能目录 `bin/run`（Windows 为 `bin/run.cmd`）；首次调用自动识别本机并构建，权限不足时用 `sh <技能目录>/bin/run`。路径按安装位置替换：Claude 时为 `~/.claude/skills/scx`。
+2. 按当前问题关键词压缩，只把压缩结果读进来。入口为技能目录 `tools/scx`（Windows 为 `tools/scx.cmd`）；首次调用自动识别本机并构建，权限不足时用 `sh <技能目录>/tools/scx`。路径按安装位置替换：Claude 时为 `~/.claude/skills/scx`。
 
 ```bash
-bin/run --query "问题关键词" --ratio 0.35 /tmp/out.txt
+tools/scx --query "问题关键词" --ratio 0.35 /tmp/out.txt
 ```
 
-高频参数（完整参数与默认值以 README「CLI 参考」与 `bin/run --help` 为准，不在本文档重复定义）：
+高频参数（完整参数与默认值以 README「CLI 参考」与 `tools/scx --help` 为准，不在本文档重复定义）：
 - `--ratio`：可选内容预算（默认 0.35，范围 0.02..=1.0）；证据行与最小邻域不受预算限制。
 - `--context 0`：针尖模式，完全跳过可选填充，只保留证据行与省略标记；token 极紧时使用，日常默认 1。
 - `--force "子串A|子串B"`：强制保留匹配行（视为证据行），大小写不敏感，可重复；`re:` 前缀进入有限正则子集（交替/字符类/量词），例如 `--force "re:ERROR|FATAL"`。
@@ -42,7 +42,7 @@ bin/run --query "问题关键词" --ratio 0.35 /tmp/out.txt
 - 沉淀：`--store 1 --fix "修复结论"` 把证据块与修复结论入库（入库前统一脱敏已知敏感模式，非通用 DLP）；不带 `--fix` 会警告。库目录 `--mem-dir DIR`（默认 `$SCX_MEM_DIR` 或 `~/.scx-memory`）；case id 形如 `<日期>_<16位hex>`。
 - 召回：`--recall K` 旁路输出 `mem:` 段；`--recall-detail` 附 `summary:`/`evidence:`/`fix:`；`--recall-only` 为只读模式，不写 qmap、会话缓存、索引或 L1 历史，也不改 case/meta。`fix:` 行是**候选答案**（`candidate, sim=..`）——相似症状不同根因时不得无条件直答。
 - 反馈与维护：`--rate good|bad <case-id>`；`--stats` / `--gc` / `--delete` / `--rebuild`。多进程共享同一 `--mem-dir` 受支持（写入有互斥与自愈；`acquire_all` 固定锁序契约见 `docs/locking.md`）。
-- 评估：`--eval <baseline.json>`、`--gate`、`--gate-human`、`--annotate`、`--judge` 等协议见 README「评估与维护」与 `eval/README.md`；召回路线、中文词表、存储格式与实现记录见 `docs/memory.md`。
+- 评估：`--eval <baseline.json>`、`--gate`、`--gate-human`、`--annotate`、`--judge` 等协议见 README「评估与维护」与 `docs/eval.md`；召回路线、中文词表、存储格式与实现记录见 `docs/memory.md`。
 
 ## 纪律（HARD）
 - 只读压缩结果；需要更多细节时提高 `--ratio` 或用 `--force` 重跑，不要为确认把原文再全量读一遍。

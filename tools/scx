@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# scx 统一入口（macOS / Linux / WSL）：run / install / setup / doctor 四合一。
+#
+# - run（默认）：自举构建后原样转发参数；构建产物只落 target-dir，绝不向源码树
+#   拷贝二进制。无显式子命令时首参即视为 CLI 参数（等价 `scx run ...`）。
+# - install：release 构建 + 软链到 ~/.local/bin/scx（SCX_BIN_DIR 可覆盖）。
+# - setup：构建 feature=mcp 二进制并打印客户端接入片段（只输出，不写配置）。
+# - doctor：scx-mcp stdio 握手自检。
+#
+# 零第三方依赖；仅用 bash 内建与 cargo。本机有 Rust 即可（无 cargo 时给出指引）。
+set -euo pipefail
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(dirname "$DIR")"
+MANIFEST="$ROOT/Cargo.toml"
+LOCK="$ROOT/Cargo.lock"
+TD="${SCX_TARGET_DIR:-${TMPDIR:-/tmp}/scx-cargo-target}"
+SCX_BIN="$TD/release/scx"
+MCP_BIN="$ROOT/target/release/scx-mcp"
+BIN_DIR="${SCX_BIN_DIR:-$HOME/.local/bin}"
+
+cmd="${1:-}"
+case "$cmd" in
+  run) shift ;;
+  install) shift ;;
+  setup) shift ;;
+  doctor) shift ;;
+  "") ;;             # 无参 = run（scx 自身打印帮助）
+  *) cmd="run" ;;    # 非子命令视为 scx CLI 参数
+esac
+
+require_cargo() {
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "scx: 未找到 cargo。请先安装 Rust（macOS: brew install rust 或 https://rustup.rs），再重试。" >&2
+    exit 3
+  fi
+}
+
+case "$cmd" in
+  run)
+    stale=0
+    if [ ! -f "$SCX_BIN" ] || [ ! -x "$SCX_BIN" ]; then
+      stale=1
+    elif find "$ROOT/src" "$MANIFEST" "$LOCK" -newer "$SCX_BIN" -print -quit 2>/dev/null | grep -q .; then
+      stale=1
+    fi
+    if [ "$stale" -eq 1 ]; then
+      require_cargo
+      cargo build --release --quiet --locked --manifest-path "$MANIFEST" --target-dir "$TD" >&2
+    fi
+    exec "$SCX_BIN" "$@"
+    ;;
+  install)
+    require_cargo
+    echo "[scx] release build (--locked) ..."
+    (cd "$ROOT" && cargo build --release --locked)
+    mkdir -p "$BIN_DIR"
+    ln -sf "$ROOT/target/release/scx" "$BIN_DIR/scx"
+    "$BIN_DIR/scx" --version
+    echo "installed: $BIN_DIR/scx"
+    echo "提示：若 $BIN_DIR 不在 PATH，可追加：export PATH=\"$BIN_DIR:\$PATH\""
+    ;;
+  setup)
+    echo "[scx-mcp] building release binary (features=mcp) ..."
+    (cd "$ROOT" && cargo build --release --features mcp >/dev/null)
+    if [ -x "$MCP_BIN" ]; then
+      echo "ok: $MCP_BIN"
+    else
+      echo "fail: build did not produce $MCP_BIN" >&2
+      exit 1
+    fi
+    echo
+    echo "接入片段（stdout 输出，不写你的配置文件）："
+    echo
+    cat <<'SNIP'
+# Claude Code（~/.claude.json 的 mcpServers 段追加）
+"scx": {
+  "command": "PATH_TO_REPO/target/release/scx-mcp",
+  "type": "stdio"
+}
+
+# Cursor（~/.cursor/mcp.json 的 mcpServers 段追加）
+{
+  "mcpServers": {
+    "scx": {
+      "command": "PATH_TO_REPO/target/release/scx-mcp",
+      "type": "stdio"
+    }
+  }
+}
+SNIP
+    echo
+    echo "路径中的 PATH_TO_REPO 替换为: $ROOT"
+    echo "验证：$0 doctor"
+    ;;
+  doctor)
+    if [ ! -x "$MCP_BIN" ]; then
+      echo "fail: $MCP_BIN 不存在（先运行 tools/scx setup）" >&2
+      exit 1
+    fi
+    if printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+      | "$MCP_BIN" | grep -q '"serverInfo"'; then
+      echo "ok: initialize handshake"
+    else
+      echo "fail: initialize 握手失败" >&2
+      exit 1
+    fi
+    if printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+      | "$MCP_BIN" | grep -q 'compress_context'; then
+      echo "ok: tools/list 包含 compress_context"
+    else
+      echo "fail: tools/list 异常" >&2
+      exit 1
+    fi
+    echo "ok: scx-mcp ready (stdio)"
+    ;;
+  *)
+    echo "usage: tools/scx [run] [ARGS...] | install | setup | doctor" >&2
+    exit 2
+    ;;
+esac

@@ -48,7 +48,7 @@ pub fn usage() -> String {
     s.push_str("  --recall K           side-channel recall from memory (mem: section)\n");
     s.push_str("  --json               structured JSON stats (outcome + dropped ledger)\n");
     s.push_str(
-        "  --eval/--gate        replay frozen baseline / mechanical evidence gate (see eval/)\n",
+        "  --eval/--gate        replay frozen baseline / mechanical evidence gate (see config/)\n",
     );
     s.push_str("  file...              input file(s); stdin when none\n");
     s

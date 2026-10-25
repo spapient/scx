@@ -42,17 +42,17 @@
 ```bash
 git clone https://github.com/spapient/scx.git
 cd scx
-./bin/run --version
+./tools/scx --version
 ```
 
-Unix 入口会在二进制缺失或源码更新时自动执行 release 构建，然后转发参数。若文件系统丢失了执行位，使用 `sh bin/run --version`。
+Unix 入口会在二进制缺失或源码更新时自动执行 release 构建，然后转发参数。若文件系统丢失了执行位，使用 `sh tools/scx --version`。
 
 Windows PowerShell：
 
 ```powershell
 git clone https://github.com/spapient/scx.git
 Set-Location scx
-.\bin\run.cmd --version
+.\tools\scx.cmd --version
 ```
 
 也可以直接构建独立二进制：
@@ -80,12 +80,12 @@ git clone https://github.com/spapient/scx.git \
 
 ### 一键安装
 
-`bin/install` 构建 release 二进制并软链到 `~/.local/bin/scx`（零第三方 crate，
+`tools/scx install` 构建 release 二进制并软链到 `~/.local/bin/scx`（零第三方 crate，
 `--locked` 离线可构建；目标目录可用 `SCX_BIN_DIR` 覆盖）：
 
 ```bash
 # macOS / Linux / WSL
-sh bin/install                 # 构建 + 安装到 ~/.local/bin/scx
+sh tools/scx install                 # 构建 + 安装到 ~/.local/bin/scx
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
@@ -99,7 +99,7 @@ $env:Path = "$HOME\bin;" + $env:Path
 或直接使用自举入口（无需安装，按需自动构建）：
 
 ```bash
-./bin/run --version            # macOS / Linux / WSL
+./tools/scx --version            # macOS / Linux / WSL
 .inun.cmd --version        # Windows
 ```
 
@@ -108,8 +108,8 @@ $env:Path = "$HOME\bin;" + $env:Path
 Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技能存在但实际不可用”的常见原因：
 
 ```bash
-"${CODEX_HOME:-$HOME/.codex}/skills/scx/bin/run" --version
-"$HOME/.claude/skills/scx/bin/run" --version   # 安装到 Claude Code 时
+"${CODEX_HOME:-$HOME/.codex}/skills/scx/tools/scx" --version
+"$HOME/.claude/skills/scx/tools/scx" --version   # 安装到 Claude Code 时
 scx --version                                  # 已将入口加入 PATH 时
 ```
 
@@ -121,7 +121,7 @@ scx --version                                  # 已将入口加入 PATH 时
 
 ```bash
 some-noisy-command > /tmp/scx-input.log 2>&1
-./bin/run \
+./tools/scx \
   --query "database timeout connection pool" \
   --ratio 0.35 \
   --lineno 1 \
@@ -146,25 +146,25 @@ compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence
 
 ```bash
 # 更紧的可选预算；证据及其 ±1 行邻域仍不会被挤掉
-./bin/run --query "panic overflow index" --ratio 0.15 app.log
+./tools/scx --query "panic overflow index" --ratio 0.15 app.log
 
 # 针尖模式：不填充可选内容
-./bin/run --query "panic overflow index" --context 0 app.log
+./tools/scx --query "panic overflow index" --context 0 app.log
 
 # 强制保留指定子串（可重复或使用 | 分隔；大小写不敏感）
-./bin/run --query "deploy failed" --force "rollback" --force "Region=eu-west-1" app.log
+./tools/scx --query "deploy failed" --force "rollback" --force "Region=eu-west-1" app.log
 
 # 正则子集：re: 前缀进入有限正则（交替/字符类/量词，Thompson NFA，无回溯灾难）
-./bin/run --query "oom crash" --force "re:ERROR|FATAL" --force "re:(panic|assert) in" app.log
+./tools/scx --query "oom crash" --force "re:ERROR|FATAL" --force "re:(panic|assert) in" app.log
 
 # 硬 token 上限：证据地板优先，超限如实报告 overflow:evidence/fill，绝不静默丢证据
-./bin/run --query "db timeout" --max-tokens 2000 app.log
+./tools/scx --query "db timeout" --max-tokens 2000 app.log
 
 # 结构感知邻域：fence 代码块 / import/use 块 / 堆栈 at 链整体并入（默认关，显式开启）
-./bin/run --query "conn broken" --structure 1 app.log
+./tools/scx --query "conn broken" --structure 1 app.log
 
 # 策略文件覆盖默认值：CLI 显式参数 > 文件 > DEFAULT
-./bin/run --query "oom crash" --policy-file policy.toml app.log
+./tools/scx --query "oom crash" --policy-file policy.toml app.log
 ```
 
 ## 工作原理
@@ -270,7 +270,7 @@ scx --query "..." [OPTIONS] [file...]
 | `--judge <BASELINE.json>` | 交互式逐候选裁决 |
 | `--l1-hist` | 查看本地直答命中分布 |
 
-运行 `./bin/run --help` 可查看当前构建支持的完整参数。
+运行 `./tools/scx --help` 可查看当前构建支持的完整参数。
 
 ## 本地记忆库
 
@@ -278,7 +278,7 @@ scx --query "..." [OPTIONS] [file...]
 
 ```bash
 # 1. 在问题解决后沉淀证据与修复结论
-./bin/run \
+./tools/scx \
   --query "db timeout connection pool" \
   --store 1 \
   --fix "increase pool size and restart the service" \
@@ -286,13 +286,13 @@ scx --query "..." [OPTIONS] [file...]
   app.log
 
 # 2. 再次遇到相似问题时只读召回
-./bin/run \
+./tools/scx \
   --query "database connection pool exhausted" \
   --recall-only --recall 3 --recall-detail \
   --mem-dir .scx-memory
 
 # 3. 查看库状态
-./bin/run --stats --mem-dir .scx-memory
+./tools/scx --stats --mem-dir .scx-memory
 ```
 
 默认工作流会在召回结果前加 `mem:` 前缀，使记忆内容与当前输入明确分离。每条 case 包含查询、证据行区间、原始证据和可选修复结论；`--fix` 内容是**候选答案**，相似症状不代表同一根因，使用前仍需验证。
@@ -359,12 +359,12 @@ fn main() {
 | `src/contain.rs` | 证据保留（Containment）评测协议实现 |
 | `src/memory/` | 本地 case 存储、召回、反馈、索引与评估（`acquire_all` 固定锁序） |
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
-| `src/mcp.rs` | stdio MCP server（cargo feature=mcp，零第三方 crate）；`bin/scx-mcp` 独立入口 |
-| `bin/run`, `bin/run.cmd` | Unix / Windows 自举构建入口 |
-| `bin/scx-eval` | 评测语料回放、盲审与配对统计（仅标准库；含 `contain` 证据保留子命令） |
+| `src/mcp.rs`, `src/mcp.rs` | stdio MCP server（cargo feature=mcp，零第三方 crate）；`tools/scx setup` 构建入口 |
+| `tools/scx`, `tools/scx.cmd` | Unix / Windows 自举构建入口 |
+| `tools/scx.py` | 评测语料回放、盲审与配对统计（仅标准库；含 `contain` 证据保留子命令） |
 | `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
 | `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门（37 例） |
-| `eval/` | 可重建语料、冻结标签、盲审包与统一评估工具（`confirm5.*`/`contain5.*`） |
+| `config/` | 可重建语料、冻结标签、盲审包与语义权重（`confirm5.*`/`contain5.*`/`real.*`/`v2.*`） |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
 
 `src/memory/` 保持扁平、单一职责的布局：`mod.rs` 是唯一公开门面，存储
@@ -395,7 +395,7 @@ cargo test \
 - 10k case 倒排召回 p50 < 5 ms 性能门
 - Ubuntu、macOS、Windows 三平台 CI
 - confirm5 冻结语料上的质量回归门，以及“policy/AI 标签不得冒充人工闭环”的负向测试
-- `contain5` 证据保留协议（自测、非第三方独立评测；见 [证据保留报告](eval/CONTAINMENT.md)）
+- `contain5` 证据保留协议（自测、非第三方独立评测；见 [证据保留报告](docs/containment.md)）
 
 ### 压缩质量
 
@@ -410,14 +410,14 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 **scx 证据保留率 70/70 = 100%**（truncation 头部截断基线 0/70），平均字符压减
 **82.01%**、token 估算压减 79.93%。这是作者侧合成语料**自测，非第三方独立评测**，
 口径仿 SuperCompress evidence-containment；冻结语料 SHA256 见
-[eval/CONTAINMENT.md](eval/CONTAINMENT.md)。
+[docs/containment.md](docs/containment.md)。
 
 完整协议、结果与限制见：
 
 - [评估结果与证据边界](docs/evaluation-results.md)
 - [盲审预注册](docs/eval-blind40-preregistration.md)
-- [证据保留协议](eval/CONTAINMENT.md)
-- [评估工具与复现命令](eval/README.md)
+- [证据保留协议](docs/containment.md)
+- [评估工具与复现命令](docs/eval.md)
 
 ### 性能快照
 

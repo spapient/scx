@@ -15,6 +15,77 @@ use crate::policy::{RiskTable, ScoreTable, DEFAULT_RISK, DEFAULT_SCORES};
 use crate::terms::{build_terms, token_est};
 use crate::{push_lineno, Config, Mode, Outcome, Risk};
 
+/// 确定性快速哈希（FxHash 风格）：压缩内核的查找/计数型 map 统一使用，
+/// 避免 std SipHash 的随机种子破坏“同输入同输出”的确定性承诺，同时更快。
+/// 使用方均为“先查表计数、按键引用或排序输出”，不依赖裸迭代顺序。
+mod fx {
+    use std::hash::{BuildHasherDefault, Hasher};
+
+    /// rustc 内部 FxHasher 的等价实现（乘法散列，零依赖）。
+    #[derive(Default)]
+    pub(crate) struct FxHasher {
+        hash: u64,
+    }
+
+    const SEED: u64 = 0x517c_c1b7_2722_0a95;
+
+    impl FxHasher {
+        #[inline]
+        fn add(&mut self, word: u64) {
+            self.hash = (self.hash.rotate_left(5) ^ word).wrapping_mul(SEED);
+        }
+    }
+
+    impl Hasher for FxHasher {
+        #[inline]
+        fn finish(&self) -> u64 {
+            self.hash
+        }
+
+        #[inline]
+        fn write(&mut self, bytes: &[u8]) {
+            let mut chunks = bytes.chunks_exact(8);
+            for c in &mut chunks {
+                self.add(u64::from_ne_bytes(c.try_into().unwrap()));
+            }
+            let rest = chunks.remainder();
+            if !rest.is_empty() {
+                let mut last = [0u8; 8];
+                last[..rest.len()].copy_from_slice(rest);
+                self.add(u64::from_ne_bytes(last));
+            }
+        }
+
+        #[inline]
+        fn write_u8(&mut self, i: u8) {
+            self.add(i as u64);
+        }
+
+        #[inline]
+        fn write_u16(&mut self, i: u16) {
+            self.add(i as u64);
+        }
+
+        #[inline]
+        fn write_u32(&mut self, i: u32) {
+            self.add(i as u64);
+        }
+
+        #[inline]
+        fn write_u64(&mut self, i: u64) {
+            self.add(i);
+        }
+
+        #[inline]
+        fn write_usize(&mut self, i: usize) {
+            self.add(i as u64);
+        }
+    }
+
+    pub(crate) type FxBuildHasher = BuildHasherDefault<FxHasher>;
+    pub(crate) type FxHashMap<K, V> = std::collections::HashMap<K, V, FxBuildHasher>;
+}
+
 /// 字符数用于报告与压缩比；日志常见纯 ASCII，可跳过逐字符迭代。
 fn char_count(text: &str) -> usize {
     if text.is_ascii() {
@@ -148,7 +219,8 @@ fn fold_dups(
 ) -> (Vec<bool>, usize) {
     let total = lines.len();
     let has_hit = |i: usize| (0..words).any(|w| mask[i * words + w] != 0);
-    let mut seen_count: crate::fx::FxHashMap<String, usize> = crate::fx::FxHashMap::default();
+    let mut seen_count: fx::FxHashMap<String, usize> =
+        fx::FxHashMap::with_capacity_and_hasher(total, Default::default());
     let mut dup = vec![false; total];
     let mut dup_n = 0usize;
     let mut key = String::new();
@@ -184,9 +256,15 @@ struct TermStat {
     rare_thr: usize,
 }
 
-fn term_weights(mask: &[u64], words: usize, dup: &[bool], n_terms: usize) -> TermStat {
+fn term_weights(
+    mask: &[u64],
+    words: usize,
+    dup: &[bool],
+    n_terms: usize,
+    dup_n: usize,
+) -> TermStat {
     let total = dup.len();
-    let live: usize = (0..total).filter(|&i| !dup[i]).count();
+    let live: usize = total - dup_n;
     let n_live = live.max(1) as f64;
     let mut df = vec![0usize; n_terms];
     for (i, &is_dup) in dup.iter().enumerate() {
@@ -815,7 +893,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         &masks.err_v,
         &masks.force_v,
     );
-    let stat = term_weights(&masks.mask_v, masks.words, &dup, uniq_terms.len());
+    let stat = term_weights(&masks.mask_v, masks.words, &dup, uniq_terms.len(), dup_n);
     let seeds = seed_marks(
         &masks.mask_v,
         masks.words,

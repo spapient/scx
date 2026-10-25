@@ -3,7 +3,7 @@
 //! top-k），证据链（指纹 / 同义词改写 / 结构化字段 / 自检 sim-score-rank）随标注落盘，
 //! 自检失败的变体显式丢弃并计入报告。零依赖、确定性（`--seed` 固定可重放）。
 //!
-//! 三层生成规则（与 eval/README.md 的 labeling contract 对齐）：
+//! 三层生成规则（与 docs/eval.md 的 labeling contract 对齐）：
 //! - literal：query = case.query 原样（同指纹，rel=2，证据 `fingerprint`）；
 //! - paraphrase：确定性同义词改写（seed 驱动的 SYN 表字面替换，替换后 ≠ 原 query），
 //!   自检放行 → rel=2，证据 `synonym` + `recall sim/score/rank`；

@@ -9,7 +9,7 @@
 | 阶段 | 主题 | 内容 | 状态 |
 |---|---|---|---|
 | P1 | 内核重构 + 评测协议 | compress 阶段拆分、Outcome 枚举化、args 声明式、conf 提取、--max-tokens、Containment 协议与基准资产 | ✅ 完成（见下） |
-| P2 | 结构感知与 MCP 集成层 | fence/import/at 链邻域、bin/scx-mcp（可选层，不破坏纯内核）、conf 策略文件接线 | ✅ 完成（见下） |
+| P2 | 结构感知与 MCP 集成层 | fence/import/at 链邻域、src/mcp.rs（可选层，不破坏纯内核）、conf 策略文件接线 | ✅ 完成（见下） |
 | P3 | 配置化驱动深化 | policy 表文件化（--policy-file）、语义增强 feature-gate 可选路径、词面召回增强、--force 正则子集 | ✅ 完成（见下） |
 | P4 | 记忆库协议演进 | 多进程写实测、L1 直答评测协议、与压缩内核解耦收尾 | 未开始 |
 
@@ -27,8 +27,8 @@ confirm5 不退化；每函数圈复杂度 < 10；`#![forbid(unsafe_code)]` 与�
 | 1.3 args 声明式参数表 | ✅ | 全绿（golden 零漂移） | `src/args.rs` | cli 8 例（继承） |
 | 1.4 conf 提取 | ✅ | 全绿（golden 零漂移） | `src/conf.rs`（新）、`src/memory/meta.rs`、`src/lib.rs` | +2 |
 | 1.5 --max-tokens 硬上限 | ✅ | 全绿（golden 32 例零漂移） | `src/lib.rs`、`src/compress.rs`、`src/args.rs`、`src/main.rs`、`src/policy.rs`、`tests/golden.rs` + 3 基线 | +4 单测 +3 golden 例 |
-| 1.6 内核评测协议 Containment | ✅ | 全绿（golden 零漂移） | `src/contain.rs`（新）、`src/lib.rs`、`tests/contain.rs`（新）、`bin/scx-eval` | +2 单测 +4 integration |
-| 1.7 公开基准资产 | ✅ | 全绿（golden 零漂移） | `eval/contain5.corpus.json`（新）、`eval/CONTAINMENT.md`（新）、`eval/README.md`、`docs/plan.md`（新） | — |
+| 1.6 内核评测协议 Containment | ✅ | 全绿（golden 零漂移） | `src/contain.rs`（新）、`src/lib.rs`、`tests/contain.rs`（新）、`tools/scx.py` | +2 单测 +4 integration |
+| 1.7 公开基准资产 | ✅ | 全绿（golden 零漂移） | `config/contain5.corpus.json`（新）、`docs/containment.md`（新）、`docs/eval.md`、`docs/plan.md`（新） | — |
 
 测试计数基线 → P1 末：lib **166** / integration **13** / cli **11** / contain **4** /
 golden **2 passed / 1 ignored（32 用例）** / doc 0；全部 `cargo test --locked` 全绿。
@@ -71,24 +71,24 @@ golden **2 passed / 1 ignored（32 用例）** / doc 0；全部 `cargo test --lo
 
 ### 评测资产（contain5，自测性质）
 
-- 语料 `eval/contain5.corpus.json`：25 切片 × 5 类（全 synthetic），1787 行、
+- 语料 `config/contain5.corpus.json`：25 切片 × 5 类（全 synthetic），1787 行、
   70 证据行、92298 字符；SHA256 `a077c35e…b681`。
-- 入口 `bin/scx-eval contain`（Python 编排 + 统计，不复刻排序）；
+- 入口 `tools/scx.py contain`（Python 编排 + 统计，不复刻排序）；
   Rust 侧 `scx::contain` 为判定唯一事实源（整行等值），`tests/contain.rs`
   红黄蓝断言批为可执行规格。
 - 实测（当前 HEAD，ratio=0.35, context=1）：**证据保留 70/70 = 100%**、
   truncation 基线 0/70、平均字符压减 82.01%、token 估算压减 79.93%。
 - **性质**：作者侧合成语料自测，**非第三方独立评测**；口径差异与复现命令
-  见 `eval/CONTAINMENT.md`。
+  见 `docs/containment.md`。
 
 ### 遗留 / 待 P2
 
-1. MCP server 集成层（`bin/scx-mcp`）未实施——设计见架构方案 §2.4，属 P2。
+1. MCP server 集成层（`src/mcp.rs`，二进制名 `scx-mcp`）未实施——设计见架构方案 §2.4，属 P2。
 2. 结构感知邻域（fence/import/at 链）未实施——属 P2，与既有
    `frame_bonus`/`diffmeta_bonus` 评分表正交，改默认表须过 golden + confirm5。
 3. 语义增强 feature-gate 可选路径未实施——属 P3；默认路径承诺逐字节不变。
 4. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审）。
-5. `bin/scx-eval` 的 `contain` 输出 token 压减为确定性正则估算，非真实
+5. `tools/scx.py` 的 `contain` 输出 token 压减为确定性正则估算，非真实
    LLM tokenizer（文档已标注）。
 
 ## P2 交付状态（2026-10-25）
@@ -98,7 +98,7 @@ golden **2 passed / 1 ignored（32 用例）** / doc 0；全部 `cargo test --lo
 | 2.1 scx::ops 编排层 | ✅ | 全绿（golden 32 例零漂移） | `src/ops.rs`（新）、`src/main.rs`（薄壳）、`src/lib.rs`、`src/args.rs`、`src/input.rs` | lib +14（原 main 单体测试移入） |
 | 2.2 结构感知邻域 | ✅ | 全绿（golden 35 例零漂移） | `src/analysis.rs`、`src/compress.rs`、`src/policy.rs`（RegionCfg 数据表）、`src/lib.rs`（Config.structure）、`src/args.rs`（--structure）、`tests/golden.rs` + 3 基线 | +7 单测 +3 golden 例 |
 | 2.3 统计/JSON 升级 | ✅ | 全绿（golden 37 例零漂移） | `src/lib.rs`（Dropped/DropReason）、`src/compress.rs`（drop_runs）、`src/ops.rs`（render_json dropped）、`tests/golden.rs` + 2 基线 | +4 单测 +2 golden 例 |
-| 2.4 MCP 雏形 | ✅ | 全绿（feature 开/关双轨） | `Cargo.toml`（feature=mcp + bin）、`src/mcp.rs`（新）、`src/bin/scx-mcp.rs`（新）、`bin/setup`、`bin/doctor`、`tests/mcp_smoke.rs` | +1 集成（stdio 往返） |
+| 2.4 MCP 雏形 | ✅ | 全绿（feature 开/关双轨） | `Cargo.toml`（feature=mcp + bin）、`src/mcp.rs`（新）、`src/mcp.rs`（新）、`tools/scx setup`、`tools/scx doctor`、`tests/mcp_smoke.rs` | +1 集成（stdio 往返） |
 | 2.5 锁序契约 | ✅ | 全绿（golden 37 例零漂移） | `src/memory/lock.rs`（acquire_all）、`src/memory/meta.rs`、`src/memory/store.rs`（*_locked 变体）、`src/memory/maintenance.rs`（delete_case 重构）、`docs/locking.md`（新）、`tests/memory_concurrency.rs`（新） | +2 单测 +1 集成（多进程压力） |
 
 测试计数基线 → P2 末：lib **192** / integration **13** / cli **11** / contain **4** /
@@ -137,7 +137,7 @@ golden **2 passed / 1 ignored（37 用例）** / mcp **1** / concurrency **1** /
    feature-gate 可选路径（默认路径承诺逐字节不变）——架构方案 §2.5/§3.4。
 2. `--help/usage()` 未加 `[--max-tokens N]` / `[--structure 1]`（保 golden
    字节的取舍，文档待补，P3 随 usage 重构处理）。
-3. `bin/scx-eval contain` 的 token 压减为确定性正则估算，非真实 LLM
+3. `tools/scx.py contain` 的 token 压减为确定性正则估算，非真实 LLM
    tokenizer（P1 结转，已标注）。
 4. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审，
    P1 结转）。
@@ -224,7 +224,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 ### 遗留 / 待 P4（收尾后现状）
 
 1. P4「记忆库协议演进」：多进程写实测、L1 直答评测协议、与压缩内核解耦收尾。
-2. `bin/scx-eval contain` 的 token 压减为确定性正则估算，非真实 LLM tokenizer。
+2. `tools/scx.py contain` 的 token 压减为确定性正则估算，非真实 LLM tokenizer。
 3. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审）。
 4. 既有 `memory/*` 函数圈复杂度 > 10 未拆（用户既有代码，P4 统一处理）。
 
@@ -249,7 +249,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 | 子项 | 状态 | 证据 |
 |---|---|---|
-| 4.1 发布基建 | 完成 | `cargo package --locked` dry-run 196 文件 1.9MiB（压缩 350.5KiB）verify 通过；`bin/install` 实测 RC=0；`docs/release-checklist.md` |
+| 4.1 发布基建 | 完成 | `cargo package --locked` dry-run 196 文件 1.9MiB（压缩 350.5KiB）verify 通过；`tools/scx install` 实测 RC=0；`docs/release-checklist.md` |
 | 4.2 性能矩阵 | 完成 | `examples/bench.rs` 四路径（默认 / structure off+on / max-tokens / policy）+ `docs/benchmarks.md` 跨机基准表；structure 开 +12~13%、max-tokens 12029–12449µs overflow:evidence、policy parse 13.3–13.5ms 一次性 |
 | 4.3 RFC 多租户 | 完成 | `docs/rfc-multi-tenant.md`（设计 only，未实现；禁 publish/push/merge 纪律内） |
 | 4.4 存量复杂度清理 | 完成 | `memory/*` 18 个 lizard 候选全部人工核算；**recall_inner 19→8、score_pass 42→9**、index build 12→1 / parse 23→4、ranking expand 21→6、query_cache append 13→3 / merge 11→4、gate check_mode 23→4 / adjudication_checks 26→4、eval parse_baseline 35→8、annotate judge 25→8 / annotate_report 13→4、meta load_meta 18→9 / bump_word_w 18→5、feedback rate 13→4、json write_into 15→8、util parse_utc_secs 20→7、ingest persist 11→2；辅助函数全部 <10 |

@@ -1,15 +1,18 @@
-//! MCP stdio 服务器（`cargo feature="mcp"`，零第三方 crate）。
+//! scx-mcp：MCP stdio 服务器（零第三方 crate）。
 //!
 //! - 传输：stdio（逐行 JSON-RPC 2.0，符合 MCP stdio transport）。
 //! - 工具：`compress_context` / `connect_account` / `usage_summary`。
-//! - 压缩走 `crate::compress::compress`（纯内核）+ `crate::ops::render_json`
-//!   （json renderer），**绝不触碰 CLI 渲染**（正文写 stdout / 统计行 /
-//!   `scxjson:` 前缀），stdio 通道不被污染。
+//! - 压缩走 `scx::compress`（纯内核）+ `scx::ops::render_json`（json renderer），
+//!   **绝不触碰 CLI 渲染**（正文写 stdout / 统计行 / `scxjson:` 前缀），
+//!   stdio 通道不被污染。
 //!
-//! 仅随 `--features mcp` 编译；feature 关闭时本模块与 `scx-mcp` 二进制
-//! 不参与构建，默认路径与 v0.4.1 逐字节一致。
+//! 本文件既是 MCP 服务器实现，也是 `scx-mcp` 二进制的入口（`main` 在文末）。
+//! 二进制仅在 `--features mcp` 下构建（Cargo.toml `required-features`）；
+//! 默认构建不含 MCP 代码，压缩主路径与 v0.4.1 逐字节一致。
 
-use crate::json::{parse_json, Json};
+#![forbid(unsafe_code)]
+
+use scx::json::{parse_json, Json};
 
 /// 进程内用量记账（单线程 stdio 循环，无需原子）。
 #[derive(Default)]
@@ -147,25 +150,25 @@ fn call_compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> St
         Some(t) => t.to_string(),
         _ => return error_frame(id, -32602, "compress_context: missing text"),
     };
-    let mut cfg = crate::Config::default();
+    let mut cfg = scx::Config::default();
     if let Some(r) = num_arg(args, "ratio") {
         cfg.ratio = r.min(1000) as f64 / 1000.0;
     }
     if let Some(c) = num_arg(args, "context") {
-        cfg.context = c.min(crate::Config::MAX_CONTEXT as usize) as i64;
+        cfg.context = c.min(scx::Config::MAX_CONTEXT as usize) as i64;
     }
     if let Some(w) = num_arg(args, "window") {
-        cfg.window = w.min(crate::Config::MAX_WINDOW as usize) as i64;
+        cfg.window = w.min(scx::Config::MAX_WINDOW as usize) as i64;
     }
     if let Some(m) = num_arg(args, "max_tokens") {
         cfg.max_tokens = Some(m);
     }
     cfg.structure = bool_arg(args, "structure");
-    let outcome = crate::compress::compress(&text, &query, &cfg);
+    let outcome = scx::compress(&text, &query, &cfg);
     usage.compressed += 1;
     usage.chars_in += text.len() as u64;
     usage.chars_out += outcome.text.len() as u64;
-    tool_result_frame(id, &crate::ops::render_json(&outcome))
+    tool_result_frame(id, &scx::ops::render_json(&outcome))
 }
 
 fn call_account(id: Option<Json>) -> String {
@@ -217,3 +220,8 @@ pub fn serve() -> i32 {
 }
 
 use std::io::{self, BufRead, Write};
+
+/// 二进制入口：stdio 服务循环，退出码 0 = 正常。
+fn main() {
+    std::process::exit(serve());
+}

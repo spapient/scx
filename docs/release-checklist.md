@@ -8,7 +8,7 @@
 
 | 检查项 | 结果 | 证据 |
 |---|---|---|
-| `cargo package --list` | ✅ | 196 文件（1.9MiB，压缩 350.5KiB），含 README/LICENSE/SKILL.md/docs/eval/bin/Cargo.toml |
+| `cargo package --list` | ✅ | 196 文件（1.9MiB，压缩 350.5KiB），含 README/LICENSE/SKILL.md/docs/config/tools/bin/Cargo.toml |
 | `cargo package --locked`（dry-run verify） | ✅ | `Packaged 196 files, 1.9MiB`；`Verifying scx v0.5.0` dev profile 编译通过 |
 | `[package]` 元数据 | ✅ | name/version(0.5.0)/edition(2021)/rust-version(1.82)/license(MIT)/description/repository/homepage/keywords/categories 齐全 |
 | LICENSE 文件 | ✅ | 仓库根 LICENSE（MIT），已入包 |
@@ -20,24 +20,24 @@
 
 - [ ] **用户授权**：`cargo publish` 需用户明确指示；默认**不执行**。
 - [ ] 包内容体积（1.9MiB / 196 文件）在 crates.io 10MiB 上限内，但若希望收紧，
-      可在 `[package]` 增加 `include` 白名单（排除 `.github/`、`eval/` 大语料等），
+      可在 `[package]` 增加 `include` 白名单（排除 `.github/`、`config/` 大语料等），
       会改变包内容——需重新 dry-run 验证。
 - [ ] 三平台 CI（`ci.yml`）在 `main` 上通过（当前 `codex/readme-polish` 未 merge）。
 - [ ] `cargo test --locked`、`cargo clippy --all-targets --locked -- -D warnings`
       （默认 + semantic + mcp 三轨）、`cargo doc`、`cargo build --release --locked`
       全绿（本轮已完成，见 P4 门禁证据）。
 - [ ] 版本号与发布 tag 一致（当前 `0.5.0`）；发布后同步 README/SKILL 版本引用（如 bump）。
-- [ ] `bin/run` / `bin/install` / `bin/run.cmd` 入口在当前 HEAD 实测可构建可运行
-      （`bin/install` 本轮新增，已实测 `--version` 输出）。
+- [ ] `tools/scx` / `tools/scx install` / `tools/scx.cmd` 入口在当前 HEAD 实测可构建可运行
+      （`tools/scx install` 本轮新增，已实测 `--version` 输出）。
 - [ ] 名称可用性：`scx` 在 crates.io 上未占用（发布前用 `cargo search scx` 确认；
       若占用需与用户协商更名或接受不同 crate 名）。
 
 ## 一键安装命令（三平台）
 
-- macOS / Linux / WSL：`sh bin/install`（release 构建 + 软链 `~/.local/bin/scx`，
+- macOS / Linux / WSL：`sh tools/scx install`（release 构建 + 软链 `~/.local/bin/scx`，
   目标目录可用 `SCX_BIN_DIR` 覆盖）
 - Windows PowerShell：复制 `target\release\scx.exe` 到 `$HOME\bin`（README「一键安装」）
-- 任何平台：`bin/run`（Unix）/ `bin/run.cmd`（Windows）自举入口，按需自动构建
+- 任何平台：`tools/scx`（Unix）/ `tools/scx.cmd`（Windows）自举入口，按需自动构建
 
 ## 发布后事项（不在本轮范围）
 

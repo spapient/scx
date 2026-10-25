@@ -135,7 +135,7 @@ postings/df，不承诺清除 qmap。
 | `--annotate` / `--annotate-raw` | 回归标注 / 盲测材料 |
 | `--judge` | 逐候选交互裁决 |
 
-评估语料、冻结标签与复现命令见 [`eval/README.md`](../eval/README.md)，结果边界见
+评估语料、冻结标签与复现命令见 [`eval.md`](eval.md)，结果边界见
 [`evaluation-results.md`](evaluation-results.md)。自动标注只能作为回归集；不能替代
 独立人工盲审。`--gate-human` 失败是证据边界，不是可绕过的质量噪声。
 
@@ -204,8 +204,8 @@ cargo run --release --locked --example bench -- memory
   （同一份“文本 → 稳定检索标签”口径）；标注与裁决、CLI 记忆输出归并到单一
   所有者，公开模块数与重复逻辑继续收敛；词表去重改为单趟完成并复用
   `build_doc_terms`。
-- 移除历史 `eval-real/` 中间产物；可重建语料与冻结标签迁入 `eval/`。
-- `scx-eval seed` 改为 stdin 字节输入 + 可配置并行 store，消除逐 case 临时文件；
+- 移除历史 `eval-real/` 中间产物；可重建语料与冻结标签迁入 `config/`。
+- `scx.py seed` 改为 stdin 字节输入 + 可配置并行 store，消除逐 case 临时文件；
   CI 对比串行/并行 CSV，语料与 `--eval-verbose` 解析增加单行、重复与覆盖校验。
 
 ## L1 直答评测协议（fix 覆盖率 / 命中率口径）
@@ -230,15 +230,15 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
 - **MRR 回归下界**：confirm5 机械 hard 层 ΔMRR ≥ 0（相对基线不为负），
   CI 下界不为负——L1 直答不得让词面召回退化（直答只删弱候选，不改排序）。
 
-### 复现（命令与 eval/README.md 同构）
+### 复现（命令与 eval.md 同构）
 
 ```bash
 # 1) 建库并灌入 confirm5 语料（fix 标签在 corpus 内，随 case 入库）
-./bin/scx-eval seed eval/confirm5.corpus.json --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
-# 2) 机械 hard 层目标基线（judge-by 由确认轮次决定，照抄 eval/README.md 写法）
-./bin/scx-eval baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-confirm5-v1
+./tools/scx.py seed config/confirm5.corpus.json --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
+# 2) 机械 hard 层目标基线（judge-by 由确认轮次决定，照抄 eval.md 写法）
+./tools/scx.py baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-confirm5-v1
 # 3) 显著性统计（mrr 为主指标；--mem-dir 用于分层）
-./bin/scx-eval stats --baseline /tmp/l1-mechanical.json   --verbose /tmp/l1-verbose.csv --out /tmp/l1-stats.csv
+./tools/scx.py stats --baseline /tmp/l1-mechanical.json   --verbose /tmp/l1-verbose.csv --out /tmp/l1-stats.csv
 # 4) fix 覆盖率：库内 fix 非空 case 占比（scx --stats 或直接统计 mem-dir）
 # 5) 直答触发/命中：对 confirm5 查询逐条跑 --recall 并核对 top1 tail16
 ```

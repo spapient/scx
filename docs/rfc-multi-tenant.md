@@ -71,7 +71,7 @@
 - 补充设计：租户配置文件可叠加 `quota = { max_bytes, max_cases }`；写入前双重
   检查（目录字节数 + case 计数），超限报 `tenant-quota` 错误（与 `overflow` 家族
   同构：**明确报错，不静默**）。
-- 逐租户审计：`bin/scx-eval stats` 扩展租户维度（本轮不实现）。
+- 逐租户审计：`tools/scx.py stats` 扩展租户维度（本轮不实现）。
 
 ### 隔离
 

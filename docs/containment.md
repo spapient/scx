@@ -11,7 +11,7 @@
 cargo build --release --locked
 
 # 1. 跑 containment 评测（stdout 表格 + 聚合；--out 写逐片 detail JSON）
-./bin/scx-eval contain eval/contain5.corpus.json --out /tmp/contain5-detail.json
+./tools/scx.py contain config/contain5.corpus.json --out /tmp/contain5-detail.json
 
 # 可选参数（默认即本次实测口径）：
 #   --ratio 0.35 --context 1 --binary target/release/scx
@@ -19,7 +19,7 @@ cargo build --release --locked
 
 评测器只用 Python 标准库，无随机源；对同一语料连跑两次输出逐字节一致。
 Python 侧不复刻 scx 排序——压缩由 `target/release/scx`（Rust 唯一实现）完成，
-`scx-eval contain` 只负责写临时输入、调用二进制、解析 `scxjson:` 统计行并核对证据。
+`scx.py contain` 只负责写临时输入、调用二进制、解析 `scxjson:` 统计行并核对证据。
 
 ## 口径定义
 
@@ -48,7 +48,7 @@ Python 侧不复刻 scx 排序——压缩由 `target/release/scx`（Rust 唯一
 
 | 项 | 值 |
 |---|---|
-| 文件 | `eval/contain5.corpus.json` |
+| 文件 | `config/contain5.corpus.json` |
 | 切片数 | 25（build 5 / stack 5 / diff 5 / log 5 / test 5） |
 | 总行数 | 1787 |
 | 必需证据行 | 70 |
@@ -107,7 +107,7 @@ Python 侧不复刻 scx 排序——压缩由 `target/release/scx`（Rust 唯一
 
 ## 判定实现双轨（工具侧 / Rust 协议侧）
 
-- **工具侧（`bin/scx-eval contain`）**：把证据行原文与压缩正文做 **substring
+- **工具侧（`tools/scx.py contain`）**：把证据行原文与压缩正文做 **substring
   包含**判定（`ev in body_text`）。宽松、快，适合编排统计。
 - **协议侧（`scx::contain` + `tests/contain.rs`）**：做 **整行逐字节等值**
   判定（证据行原文必须作为一行存活于输出行集），更严格；红黄蓝断言批

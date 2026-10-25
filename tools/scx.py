@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-EVAL_DIR = ROOT / "eval"
+CONFIG_DIR = ROOT / "config"
 LAYERS = ("literal", "paraphrase", "semantic")
 GRADE_HELP = "2=同事故/同根因或直接修复  1=同故障族/部分有用  0=无关"
 PACKET_HEAD = ("row", "case_index", "layer", "query", "candidate", "hint", "grade")
@@ -157,9 +157,8 @@ def clean(text, limit=220):
 
 def default_binary():
     names = ("scx.exe", "scx")
-    # Cargo's release output is the canonical artifact for this checkout. The
-    # bootstrap copy under bin/ is a fallback for binary-only installs.
-    for base in (ROOT / "target" / "release", ROOT / "bin"):
+    # Cargo 的 release 产物是本 checkout 唯一规范产物；源码树内不再拷贝二进制。
+    for base in (ROOT / "target" / "release",):
         for name in names:
             path = base / name
             if path.is_file():
@@ -320,7 +319,7 @@ def seed_corpus(corpus, mem_dir, binary, force, jobs=1):
     layers = validate_corpus(corpus)
     binary = binary or default_binary()
     if not binary or not Path(binary).is_file():
-        sys.exit("seed: missing release binary; run `./bin/run --version` first")
+        sys.exit("seed: missing release binary; run `./tools/scx --version` first")
     mem_dir = prepare_mem_dir(mem_dir, force)
     jobs = int(jobs)
     items = list(corpus_cases(corpus))
@@ -1147,7 +1146,7 @@ def run_contain_slice(binary, slc, ratio, context, work):
     query = slc["query"]
     text = slc["full_text"]
     path = work / f"{ident}.txt"
-    path.write_text(text, encoding="utf-8", newline="\n")
+    write_text(path, text)
     proc = subprocess.run(
         [binary, "--query", query, "--ratio", str(ratio),
          "--context", str(context), "--json", str(path)],
@@ -1363,15 +1362,15 @@ def selftest():
     )
     assert cluster["A_ndcg"] == 0.5 and "A_mrr" not in cluster
     for name, cases in (("confirm5", 150), ("v2", 150), ("real", 40)):
-        corpus = load_json(EVAL_DIR / f"{name}.corpus.json")
+        corpus = load_json(CONFIG_DIR / f"{name}.corpus.json")
         layers = validate_corpus(corpus)
         assert sum(layers.values()) == cases
     for judge, expected in (
         ("ai", "6a5319c546fe68c20f3d4d7ffd38437b3736ea301e1319afb3c374eca9ac9b18"),
         ("human", "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5"),
     ):
-        head, rows = read_tsv(EVAL_DIR / "confirm5.blind40.packet.tsv")
-        labels = load_json(EVAL_DIR / f"confirm5.{judge}.labels.json")
+        head, rows = read_tsv(CONFIG_DIR / "confirm5.blind40.packet.tsv")
+        labels = load_json(CONFIG_DIR / f"confirm5.{judge}.labels.json")
         assert sha256_text(filled_packet(head, rows, labels["cases"])) == expected
     print("selftest: PASS")
 

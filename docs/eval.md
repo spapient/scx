@@ -1,13 +1,14 @@
 # scx 评测工具
 
-本目录保存可重建的评测语料、冻结标签、盲审包和唯一评测入口。记忆库目录、
-verbose 日志、配对统计 CSV 等均为**生成物**，不进入版本库。
+可重建的评测语料、冻结标签、盲审包与语义权重位于 `config/`（纯数据目录）；评测
+入口为仓库根的 `tools/scx.py`。记忆库目录、verbose 日志、配对统计 CSV 等均为
+**生成物**，不进入版本库。
 
 在仓库根目录运行：
 
 ```bash
-./bin/scx-eval --help          # macOS / Linux
-python bin/scx-eval --help     # Windows
+./tools/scx.py --help          # macOS / Linux
+python tools/scx.py --help     # Windows
 ```
 
 评测器只使用 Python 标准库，负责语料播种、基线构造、盲审编排与统计；检索和
@@ -17,16 +18,16 @@ python bin/scx-eval --help     # Windows
 
 | 路径 | 用途 |
 |---|---|
-| `../bin/scx-eval` | 语料播种、基线构造、盲审、配对统计、包校验 |
-| `confirm5.corpus.json` | confirm5：30 起公开事故，150 条存储 case |
-| `v2.corpus.json` | v2 开发集：30 起公开事故，150 条存储 case |
-| `real.corpus.json` | 真实事故集：11 起公开复盘，40 条 case |
-| `confirm5.policy.labels.json` | 规则物化控制集，**不是人工标签** |
-| `confirm5.ai.labels.json` | 384/384 AI 逐候选标签（`per-item-ai-v1`） |
-| `confirm5.human.labels.json` | 384/384 人工逐候选标签（`per-item-human-v1`） |
-| `v2.labels.json` | v2 案例级标签，AI 预填后由两位审核者采纳 |
-| `real.labels.json` | real 案例级标签（`judge.by=fei+hao`） |
-| `confirm5.blind40.packet.tsv` | 冻结盲审包：40 case / 384 候选 |
+| `../tools/scx.py` | 语料播种、基线构造、盲审、配对统计、包校验 |
+| `config/confirm5.corpus.json` | confirm5：30 起公开事故，150 条存储 case |
+| `config/v2.corpus.json` | v2 开发集：30 起公开事故，150 条存储 case |
+| `config/real.corpus.json` | 真实事故集：11 起公开复盘，40 条 case |
+| `config/confirm5.policy.labels.json` | 规则物化控制集，**不是人工标签** |
+| `config/confirm5.ai.labels.json` | 384/384 AI 逐候选标签（`per-item-ai-v1`） |
+| `config/confirm5.human.labels.json` | 384/384 人工逐候选标签（`per-item-human-v1`） |
+| `config/v2.labels.json` | v2 案例级标签，AI 预填后由两位审核者采纳 |
+| `config/real.labels.json` | real 案例级标签（`judge.by=fei+hao`） |
+| `config/confirm5.blind40.packet.tsv` | 冻结盲审包：40 case / 384 候选 |
 
 AI/人工 reviewer 填写后的 TSV 是 `packet + labels` 的派生视图，不再单独入库；
 `blind check --packet ... --out ...` 可无损重建并校验历史 SHA256。
@@ -93,13 +94,13 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 ## 复现 confirm5
 
 ```bash
-./bin/scx-eval seed eval/confirm5.corpus.json \
+./tools/scx.py seed config/confirm5.corpus.json \
   --mem-dir /tmp/scx-confirm5 --csv /tmp/scx-confirm5.csv --force
-./bin/scx-eval baseline --csv /tmp/scx-confirm5.csv \
+./tools/scx.py baseline --csv /tmp/scx-confirm5.csv \
   --out /tmp/scx-confirm5-mechanical.json \
   --judge-by mechanical-target-confirm5-v1 \
   --judge-date 2026-10-23T00:00:00Z
-./bin/run --eval /tmp/scx-confirm5-mechanical.json --gate --eval-verbose \
+./tools/scx --eval /tmp/scx-confirm5-mechanical.json --gate --eval-verbose \
   --mem-dir /tmp/scx-confirm5
 ```
 
@@ -122,10 +123,10 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 人工、AI 与 policy 门禁复用同一记忆库：
 
 ```bash
-./bin/run --eval eval/confirm5.human.labels.json --gate-human --eval-verbose \
+./tools/scx --eval config/confirm5.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-confirm5
-./bin/run --eval eval/confirm5.ai.labels.json --gate-items --mem-dir /tmp/scx-confirm5
-./bin/run --eval eval/confirm5.policy.labels.json --gate-human --mem-dir /tmp/scx-confirm5
+./tools/scx --eval config/confirm5.ai.labels.json --gate-items --mem-dir /tmp/scx-confirm5
+./tools/scx --eval config/confirm5.policy.labels.json --gate-human --mem-dir /tmp/scx-confirm5
 ```
 
 预期：human `PASS / exit 0`；AI 只通过 `--gate-items`，`--gate-human` 必须
@@ -139,10 +140,10 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 都会被拒绝，避免静默漏算 hard 层。
 
 ```bash
-./bin/run --eval eval/confirm5.human.labels.json --gate-human --eval-verbose \
+./tools/scx --eval config/confirm5.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-confirm5 > /tmp/scx-confirm5-hao.txt
-./bin/scx-eval stats \
-  --baseline eval/confirm5.human.labels.json \
+./tools/scx.py stats \
+  --baseline config/confirm5.human.labels.json \
   --verbose /tmp/scx-confirm5-hao.txt \
   --mem-dir /tmp/scx-confirm5 \
   --cluster-size 5 \
@@ -154,17 +155,17 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 ## 盲审
 
 ```bash
-./bin/scx-eval blind make \
-  --baseline eval/confirm5.policy.labels.json --mem-dir /tmp/scx-confirm5 \
+./tools/scx.py blind make \
+  --baseline config/confirm5.policy.labels.json --mem-dir /tmp/scx-confirm5 \
   --out /tmp/packet.tsv --manifest /tmp/manifest.json
-./bin/scx-eval blind progress --packet /tmp/packet.tsv
-./bin/scx-eval blind import \
-  --baseline eval/confirm5.policy.labels.json --packet /tmp/packet.tsv \
+./tools/scx.py blind progress --packet /tmp/packet.tsv
+./tools/scx.py blind import \
+  --baseline config/confirm5.policy.labels.json --packet /tmp/packet.tsv \
   --out /tmp/human.json --judge <name> --date 2026-10-25T00:00:00Z
-./bin/scx-eval blind check --baseline /tmp/human.json
-./bin/scx-eval blind check --baseline /tmp/human.json \
+./tools/scx.py blind check --baseline /tmp/human.json
+./tools/scx.py blind check --baseline /tmp/human.json \
   --packet /tmp/packet.tsv --out /tmp/human-filled.tsv
-./bin/scx-eval blind agree \
+./tools/scx.py blind agree \
   --a /tmp/first-reviewer.json --b /tmp/second-reviewer.json
 ```
 
@@ -184,13 +185,13 @@ CRLF 文件与 LF 文件等价；`verify` 仍校验冻结文件的原始字节�
 ## v2 与 real
 
 ```bash
-./bin/scx-eval seed eval/v2.corpus.json \
+./tools/scx.py seed config/v2.corpus.json \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
-./bin/run --eval eval/v2.labels.json --gate --mem-dir /tmp/scx-v2
+./tools/scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
 
-./bin/scx-eval seed eval/real.corpus.json \
+./tools/scx.py seed config/real.corpus.json \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
-./bin/run --eval eval/real.labels.json --gate-human --mem-dir /tmp/scx-real
+./tools/scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
 ```
 
 v2 参与调参，且标签由 AI 预填后人工采纳，因此不是独立 holdout。`real` 只有案例级
@@ -212,10 +213,10 @@ v2 参与调参，且标签由 AI 预填后人工采纳，因此不是独立 hol
 
 ```bash
 cargo build --release --locked
-./bin/scx-eval contain eval/contain5.corpus.json --out /tmp/contain5-detail.json
+./tools/scx.py contain config/contain5.corpus.json --out /tmp/contain5-detail.json
 ```
 
 - 语料：`contain5.corpus.json`（25 切片，build/stack/diff/log/test 各 5，全 synthetic）。
-- 入口：`bin/scx-eval contain`（新增 subcommand，标准库、无随机源）。
-- 口径、复现命令、实测数字与 SHA256 见 [`CONTAINMENT.md`](CONTAINMENT.md)。
+- 入口：`tools/scx.py contain`（新增 subcommand，标准库、无随机源）。
+- 口径、复现命令、实测数字与 SHA256 见 [`containment.md`](containment.md)。
 - **自测性质**：作者侧合成语料自测，非第三方独立评测。

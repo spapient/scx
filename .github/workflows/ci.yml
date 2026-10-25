@@ -39,10 +39,10 @@ jobs:
         run: cargo build --release --locked
       - name: Evaluator selftest (Unix)
         if: runner.os != 'Windows'
-        run: ./bin/scx-eval selftest
+        run: ./tools/scx.py selftest
       - name: Evaluator selftest (Windows)
         if: runner.os == 'Windows'
-        run: python bin/scx-eval selftest
+        run: python tools/scx.py selftest
       - name: Bench (compress 50k lines)
         run: cargo run --release --locked --example bench
       - name: Bench gate (10k memory recall)
@@ -50,11 +50,11 @@ jobs:
         run: cargo run --release --locked --example bench -- memory
       - name: CLI smoke (Unix)
         if: runner.os != 'Windows'
-        run: sh bin/run --version
+        run: sh tools/scx --version
       - name: CLI smoke (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: bin\run.cmd --version
+        run: tools\scx.cmd --version
 
   quality:
     # Rebuild the confirm5 corpus from the tracked incident JSON, then enforce
@@ -76,92 +76,92 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --locked --no-deps
       - name: Tool selftest
-        run: python bin/scx-eval selftest
+        run: python tools/scx.py selftest
       - name: Rebuild confirm5 corpus
         run: >-
-          python bin/scx-eval seed eval/confirm5.corpus.json
-          --mem-dir eval/ci-mem --csv eval/ci-cases.csv
+          python tools/scx.py seed config/confirm5.corpus.json
+          --mem-dir config/ci-mem --csv config/ci-cases.csv
           --binary target/release/scx.exe --force
       - name: Rebuild confirm5 corpus serially
         run: >-
-          python bin/scx-eval seed eval/confirm5.corpus.json
-          --mem-dir eval/ci-mem-serial --csv eval/ci-cases-serial.csv
+          python tools/scx.py seed config/confirm5.corpus.json
+          --mem-dir config/ci-mem-serial --csv config/ci-cases-serial.csv
           --binary target/release/scx.exe --force --jobs 1
       - name: Compare parallel and serial seed output
         shell: pwsh
         run: |
-          $parallel = (Get-Content .\eval\ci-cases.csv -Raw) -replace '\d{4}-\d{2}-\d{2}_', '<date>_'
-          $serial = (Get-Content .\eval\ci-cases-serial.csv -Raw) -replace '\d{4}-\d{2}-\d{2}_', '<date>_'
+          $parallel = (Get-Content .\config\ci-cases.csv -Raw) -replace '\d{4}-\d{2}-\d{2}_', '<date>_'
+          $serial = (Get-Content .\config\ci-cases-serial.csv -Raw) -replace '\d{4}-\d{2}-\d{2}_', '<date>_'
           if ($parallel -ne $serial) {
             throw "parallel seed output differs from serial seed output"
           }
       - name: Build mechanical baseline
         run: >-
-          python bin/scx-eval baseline
-          --csv eval/ci-cases.csv --out eval/ci-baseline.json
+          python tools/scx.py baseline
+          --csv config/ci-cases.csv --out config/ci-baseline.json
           --judge-by mechanical-target-confirm5-v1
           --judge-date 2026-10-23T00:00:00Z
       - name: Confirm5 mechanical gate and verbose replay
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\ci-baseline.json --gate --eval-verbose --mem-dir .\eval\ci-mem 1> .\eval\ci-verbose.txt 2> .\eval\ci-verbose.err
+          .\target\release\scx.exe --eval .\config\ci-baseline.json --gate --eval-verbose --mem-dir .\config\ci-mem 1> .\config\ci-verbose.txt 2> .\config\ci-verbose.err
           if ($LASTEXITCODE -ne 0) {
-            Get-Content .\eval\ci-verbose.txt -Tail 40
-            Get-Content .\eval\ci-verbose.err -Tail 40
+            Get-Content .\config\ci-verbose.txt -Tail 40
+            Get-Content .\config\ci-verbose.err -Tail 40
             throw "confirm5 gate failed with exit $LASTEXITCODE"
           }
       - name: Reject policy labels as human closure
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\confirm5.policy.labels.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-policy-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\config\confirm5.policy.labels.json --gate-human --mem-dir .\config\ci-mem 1> .\config\ci-policy-gate.txt 2> $null
           if ($LASTEXITCODE -ne 2) {
-            Get-Content .\eval\ci-policy-gate.txt -Tail 40
+            Get-Content .\config\ci-policy-gate.txt -Tail 40
             throw "policy labels must not pass --gate-human (exit $LASTEXITCODE)"
           }
           $global:LASTEXITCODE = 0
       - name: Frozen blind packet
         run: >-
-          python bin/scx-eval verify
-          --packet eval/confirm5.blind40.packet.tsv
+          python tools/scx.py verify
+          --packet config/confirm5.blind40.packet.tsv
           --sha256 b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f
       - name: AI labels pass items gate, fail human gate
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\confirm5.ai.labels.json --gate-items --mem-dir .\eval\ci-mem 1> .\eval\ci-ai-items.txt 2> $null
+          .\target\release\scx.exe --eval .\config\confirm5.ai.labels.json --gate-items --mem-dir .\config\ci-mem 1> .\config\ci-ai-items.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
-            Get-Content .\eval\ci-ai-items.txt -Tail 30
+            Get-Content .\config\ci-ai-items.txt -Tail 30
             throw "AI per-item gate failed with exit $LASTEXITCODE"
           }
-          if ((Get-Content .\eval\ci-ai-items.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
+          if ((Get-Content .\config\ci-ai-items.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
             throw "AI gate must declare non-human adjudication"
           }
-          .\target\release\scx.exe --eval .\eval\confirm5.ai.labels.json --gate-human --mem-dir .\eval\ci-mem 1> $null 2> $null
+          .\target\release\scx.exe --eval .\config\confirm5.ai.labels.json --gate-human --mem-dir .\config\ci-mem 1> $null 2> $null
           if ($LASTEXITCODE -ne 2) { throw "AI labels must not pass --gate-human (exit $LASTEXITCODE)" }
           $global:LASTEXITCODE = 0
       - name: Human per-item gate
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\eval\confirm5.human.labels.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-hao-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\config\confirm5.human.labels.json --gate-human --mem-dir .\config\ci-mem 1> .\config\ci-hao-gate.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
-            Get-Content .\eval\ci-hao-gate.txt -Tail 40
+            Get-Content .\config\ci-hao-gate.txt -Tail 40
             throw "human per-item gate failed with exit $LASTEXITCODE"
           }
-          if ((Get-Content .\eval\ci-hao-gate.txt -Raw) -notmatch 'gate: PASS') {
+          if ((Get-Content .\config\ci-hao-gate.txt -Raw) -notmatch 'gate: PASS') {
             throw "human per-item gate did not print PASS"
           }
       - name: Confirm5 paired statistics
         run: >-
-          python bin/scx-eval stats
-          --baseline eval/ci-baseline.json
-          --verbose eval/ci-verbose.txt
-          --mem-dir eval/ci-mem
-          --out eval/ci-stats.csv
+          python tools/scx.py stats
+          --baseline config/ci-baseline.json
+          --verbose config/ci-verbose.txt
+          --mem-dir config/ci-mem
+          --out config/ci-stats.csv
           --cluster-size 5
           --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
       - name: Enforce pre-registered advantage
         shell: pwsh
         run: |
-          $rows = @(Import-Csv .\eval\ci-stats.csv)
+          $rows = @(Import-Csv .\config\ci-stats.csv)
           $hard = @($rows | Where-Object { $_.group -eq 'tier:hard' })
           if ($hard.Count -ne 1) { throw "confirm5 hard result missing" }
           if ([double]$hard[0].delta -lt 0.05 -or [double]$hard[0].ci_lo -le 0 -or [double]$hard[0].perm_p -ge 0.05) {
