@@ -39,7 +39,7 @@ pub fn parse<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Entry<'a>> {
 }
 
 /// 带行号的解析结果（P3 `--policy-file` 报错定位用）。
-pub struct LEntry<'a> {
+pub struct Line<'a> {
     /// 与 `parse` 相同的解析结果。
     pub entry: Entry<'a>,
     /// 原文 1-based 行号。
@@ -47,7 +47,7 @@ pub struct LEntry<'a> {
 }
 
 /// 逐行解析并保留行号（语义与 `parse` 完全一致）。
-pub fn parse_with_lineno<'a>(lines: impl Iterator<Item = (usize, &'a str)>) -> Vec<LEntry<'a>> {
+pub fn numbered<'a>(lines: impl Iterator<Item = (usize, &'a str)>) -> Vec<Line<'a>> {
     let mut out = Vec::new();
     let mut section = "";
     for (line_no, raw) in lines {
@@ -64,7 +64,7 @@ pub fn parse_with_lineno<'a>(lines: impl Iterator<Item = (usize, &'a str)>) -> V
         };
         let key = line[..eq].trim();
         let value = line[eq + 1..].trim();
-        out.push(LEntry {
+        out.push(Line {
             entry: Entry {
                 section,
                 key,
@@ -77,22 +77,22 @@ pub fn parse_with_lineno<'a>(lines: impl Iterator<Item = (usize, &'a str)>) -> V
 }
 
 /// f64 读取：必须可解析且有限（NaN/inf 拒绝）。
-pub fn parse_f64(v: &str) -> Option<f64> {
+pub fn float(v: &str) -> Option<f64> {
     v.parse::<f64>().ok().filter(|f| f.is_finite())
 }
 
 /// usize 读取（df 快照等）。
-pub fn parse_usize(v: &str) -> Option<usize> {
+pub fn size(v: &str) -> Option<usize> {
     v.parse().ok()
 }
 
 /// u64 读取（gen 代际等）。
-pub fn parse_u64(v: &str) -> Option<u64> {
+pub fn integer(v: &str) -> Option<u64> {
     v.parse().ok()
 }
 
 /// 去掉首尾空白与一对双引号（TOML 字符串值的朴素处理）。
-pub fn unquote(v: &str) -> &str {
+pub fn strip(v: &str) -> &str {
     v.trim().trim_matches('"')
 }
 
@@ -111,17 +111,17 @@ mod tests {
         assert_eq!(entries[0].value, "2");
         assert_eq!(entries[1].section, "params");
         assert_eq!(entries[1].key, "bm25_k1");
-        assert_eq!(parse_f64(entries[1].value), Some(1.2));
-        assert!(parse_f64(entries[2].value).is_none(), "nan 必须拒绝");
+        assert_eq!(float(entries[1].value), Some(1.2));
+        assert!(float(entries[2].value).is_none(), "nan 必须拒绝");
         assert_eq!(entries[3].section, "word_w");
     }
 
     #[test]
     fn unquotes_and_typed_reads() {
-        assert_eq!(unquote("  \"abc\"  "), "abc");
-        assert_eq!(parse_usize("42"), Some(42));
-        assert_eq!(parse_u64("7"), Some(7));
-        assert_eq!(parse_usize("x"), None);
-        assert_eq!(parse_u64("-1"), None);
+        assert_eq!(strip("  \"abc\"  "), "abc");
+        assert_eq!(size("42"), Some(42));
+        assert_eq!(integer("7"), Some(7));
+        assert_eq!(size("x"), None);
+        assert_eq!(integer("-1"), None);
     }
 }

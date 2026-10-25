@@ -1,6 +1,6 @@
 //! 词面层：停用词表、CJK 判定、查询切词与 token 估算（纯函数、零分配复用缓冲）。
 //!
-//! 与引擎解耦：压缩与记忆库都直接复用 `build_terms`、`build_mem_terms` 与 `token_est`，
+//! 与引擎解耦：压缩与记忆库都直接复用 `terms`、`memory` 与 `estimate`，
 //! 保证"同一查询词面 → 同一词表"的确定性。
 
 use std::collections::HashSet;
@@ -16,7 +16,7 @@ pub(crate) const STOP: &[&str] = &[
     "帮", "一下", "一个", "这个", "那个", "怎么", "如何", "什么",
 ];
 
-pub(crate) fn is_cjk(c: char) -> bool {
+pub(crate) fn ideograph(c: char) -> bool {
     let u = c as u32;
     (0x3400..=0x4DBF).contains(&u)
         || (0x4E00..=0x9FFF).contains(&u)
@@ -24,54 +24,54 @@ pub(crate) fn is_cjk(c: char) -> bool {
         || (0xAC00..=0xD7AF).contains(&u)
         || (0x20000..=0x2FA1F).contains(&u)
 }
-pub(crate) fn is_cjk_or_fullwidth(c: char) -> bool {
+pub(crate) fn full(c: char) -> bool {
     let u = c as u32;
-    is_cjk(c) || (0x3000..=0x303F).contains(&u) || (0xFF00..=0xFFEF).contains(&u)
+    ideograph(c) || (0x3000..=0x303F).contains(&u) || (0xFF00..=0xFFEF).contains(&u)
 }
 
 /// 压缩与记忆库共享的词法扫描；两种口径只在 CJK 子词展开策略上不同。
-fn build_terms_mode(query: &str, memory: bool) -> Vec<String> {
+fn scan(query: &str, memory: bool) -> Vec<String> {
     let mut terms: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     let lower = query.to_lowercase();
-    scan_ascii_terms(&lower, &mut terms, &mut seen);
+    ascii(&lower, &mut terms, &mut seen);
     if terms.len() < MAX_QUERY_TERMS {
-        scan_cjk_terms(query, &mut terms, &mut seen, memory);
+        cjk(query, &mut terms, &mut seen, memory);
     }
     terms
 }
 
 /// ASCII/标点词法扫描：按分隔符切词，停用词与超长 token 不入词表。
-fn scan_ascii_terms(lower: &str, terms: &mut Vec<String>, seen: &mut HashSet<String>) {
+fn ascii(lower: &str, terms: &mut Vec<String>, seen: &mut HashSet<String>) {
     let mut cur = String::new();
     for c in lower.chars() {
-        if is_tok_char(c) {
+        if token(c) {
             cur.push(c);
             continue;
         }
-        if valid_ascii_term(&cur) {
-            push_unique(terms, seen, cur.clone());
+        if valid(&cur) {
+            push(terms, seen, cur.clone());
             if terms.len() >= MAX_QUERY_TERMS {
                 return;
             }
         }
         cur.clear();
     }
-    if valid_ascii_term(&cur) {
-        push_unique(terms, seen, cur);
+    if valid(&cur) {
+        push(terms, seen, cur);
     }
 }
 
 /// CJK 词法扫描：连续 CJK 字符成段，段长 >=2 进入词表。
-fn scan_cjk_terms(query: &str, terms: &mut Vec<String>, seen: &mut HashSet<String>, memory: bool) {
+fn cjk(query: &str, terms: &mut Vec<String>, seen: &mut HashSet<String>, memory: bool) {
     let mut run = String::new();
     for c in query.chars() {
-        if is_cjk(c) {
+        if ideograph(c) {
             run.push(c);
             continue;
         }
         if run.chars().count() >= 2 {
-            push_cjk(terms, seen, &run, memory);
+            segment(terms, seen, &run, memory);
             if terms.len() >= MAX_QUERY_TERMS {
                 return;
             }
@@ -79,19 +79,19 @@ fn scan_cjk_terms(query: &str, terms: &mut Vec<String>, seen: &mut HashSet<Strin
         run.clear();
     }
     if run.chars().count() >= 2 {
-        push_cjk(terms, seen, &run, memory);
+        segment(terms, seen, &run, memory);
     }
 }
 
-fn is_tok_char(c: char) -> bool {
+fn token(c: char) -> bool {
     c.is_ascii_lowercase() || c.is_ascii_digit() || "_./\\:@-".contains(c)
 }
 
-fn valid_ascii_term(cur: &str) -> bool {
+fn valid(cur: &str) -> bool {
     cur.len() >= 2 && cur.len() <= MAX_TERM_BYTES && !STOP.contains(&cur)
 }
 
-fn push_unique(terms: &mut Vec<String>, seen: &mut HashSet<String>, term: String) {
+fn push(terms: &mut Vec<String>, seen: &mut HashSet<String>, term: String) {
     if terms.len() >= MAX_QUERY_TERMS {
         return;
     }
@@ -102,7 +102,7 @@ fn push_unique(terms: &mut Vec<String>, seen: &mut HashSet<String>, term: String
 
 /// CJK 没有空格分词：≤6 字整段成词；长段按 6 字块切分，尾部单字用最后两字
 /// 补齐。记忆库在块内追加重叠 bigram/trigram 以桥接释义变体。
-fn push_cjk(terms: &mut Vec<String>, seen: &mut HashSet<String>, run: &str, memory: bool) {
+fn segment(terms: &mut Vec<String>, seen: &mut HashSet<String>, run: &str, memory: bool) {
     if STOP.contains(&run) {
         return;
     }
@@ -111,42 +111,37 @@ fn push_cjk(terms: &mut Vec<String>, seen: &mut HashSet<String>, run: &str, memo
         return;
     }
     if !memory && chars.len() <= 6 {
-        push_unique(terms, seen, run.to_string());
+        push(terms, seen, run.to_string());
         return;
     }
     let mut start = 0;
     while start < chars.len() {
         let end = (start + 6).min(chars.len());
         if end - start >= 2 {
-            push_cjk_segment(terms, seen, &chars[start..end], memory);
+            part(terms, seen, &chars[start..end], memory);
         }
         start += 6;
     }
     if chars.len() % 6 == 1 {
         let tail = &chars[chars.len() - 2..];
-        push_cjk_segment(terms, seen, tail, memory);
+        part(terms, seen, tail, memory);
     }
 }
 
-fn push_cjk_segment(
-    terms: &mut Vec<String>,
-    seen: &mut HashSet<String>,
-    segment: &[char],
-    memory: bool,
-) {
+fn part(terms: &mut Vec<String>, seen: &mut HashSet<String>, segment: &[char], memory: bool) {
     if memory {
-        push_zh(terms, seen, segment);
+        grams(terms, seen, segment);
     } else {
-        push_unique(terms, seen, segment.iter().collect());
+        push(terms, seen, segment.iter().collect());
     }
 }
 
 /// 压缩引擎词表（CJK 整段/6 字块，不展开滑动 n-gram）。
-pub(crate) fn build_terms(query: &str) -> Vec<String> {
-    build_terms_mode(query, false)
+pub(crate) fn terms(query: &str) -> Vec<String> {
+    scan(query, false)
 }
 
-/// 记忆库召回用词表——在 build_terms 基础上对 **CJK 段/块
+/// 记忆库召回用词表——在 `terms` 基础上对 **CJK 段/块
 /// （≤6 字）** 追加重叠 bigram/trigram（相邻 2/3 字），保留整段用于精确匹配。
 ///
 /// 动机：整段/6 字块对中文释义层几乎不重叠（"数据库连接池耗尽" vs "连接池满了"
@@ -155,16 +150,16 @@ pub(crate) fn build_terms(query: &str) -> Vec<String> {
 /// 长证据 doc 词表约 170 tokens/百字中文段）。尾部 1 字按现有补齐。
 ///
 /// 记忆库 query 与 doc（index/edge/eval-B/feedback/annotate）统一走本函数，
-/// A/B 对拍保持同词表口径。compress 引擎维持 build_terms 不动（压缩语义不变）。
-pub(crate) fn build_mem_terms(query: &str) -> Vec<String> {
-    build_terms_mode(query, true)
+/// A/B 对拍保持同词表口径。compress 引擎维持 `terms` 不动（压缩语义不变）。
+pub(crate) fn memory(query: &str) -> Vec<String> {
+    scan(query, true)
 }
 
 /// case 的 query 词表与 query∪text 去重词表（索引/线性/实体桥共用同一口径）。
-pub(crate) fn build_doc_terms(query: &str, text: &str) -> (Vec<String>, Vec<String>) {
-    let query_terms = build_mem_terms(query);
+pub(crate) fn document(query: &str, text: &str) -> (Vec<String>, Vec<String>) {
+    let query_terms = memory(query);
     let mut terms = query_terms.clone();
-    terms.extend(build_mem_terms(text));
+    terms.extend(memory(text));
     terms.sort_unstable();
     terms.dedup();
     (query_terms, terms)
@@ -297,7 +292,7 @@ const RECALL_PAIRS: &[(&str, &str)] = &[
 ];
 
 /// 对每个精确命中的 token 追加召回用同义 token，并去重保序。
-pub(crate) fn expand_recall_terms(terms: &[String]) -> Vec<String> {
+pub(crate) fn expand(terms: &[String]) -> Vec<String> {
     let mut out = terms.to_vec();
     for t in terms {
         for (from, to) in RECALL_PAIRS {
@@ -310,19 +305,19 @@ pub(crate) fn expand_recall_terms(terms: &[String]) -> Vec<String> {
 }
 
 /// 一个 ≤6 字 CJK 块：整段（精确）+ 重叠 bigram + 重叠 trigram（模糊桥接）。
-fn push_zh(terms: &mut Vec<String>, seen: &mut HashSet<String>, chars: &[char]) {
-    push_unique(terms, seen, chars.iter().collect());
+fn grams(terms: &mut Vec<String>, seen: &mut HashSet<String>, chars: &[char]) {
+    push(terms, seen, chars.iter().collect());
     for w in chars.windows(2) {
-        push_unique(terms, seen, w.iter().collect());
+        push(terms, seen, w.iter().collect());
     }
     if chars.len() >= 3 {
         for w in chars.windows(3) {
-            push_unique(terms, seen, w.iter().collect());
+            push(terms, seen, w.iter().collect());
         }
     }
 }
 
-pub(crate) fn token_est(s: &str) -> f64 {
+pub(crate) fn estimate(s: &str) -> f64 {
     if s.is_ascii() {
         return s.len() as f64 / 4.0 + 1.0;
     }
@@ -330,7 +325,7 @@ pub(crate) fn token_est(s: &str) -> f64 {
     let mut len = 0usize;
     for c in s.chars() {
         len += 1;
-        if is_cjk_or_fullwidth(c) {
+        if full(c) {
             cjk += 1;
         }
     }
@@ -361,8 +356,8 @@ mod tests {
         ];
         let mut strong = 0usize;
         for (q, d) in pairs {
-            let qt = build_mem_terms(q);
-            let dt = build_mem_terms(d);
+            let qt = memory(q);
+            let dt = memory(d);
             let common: Vec<&String> = qt.iter().filter(|t| dt.contains(t)).collect();
             assert!(!common.is_empty(), "{} vs {}: no shared term", q, d);
             if common.iter().any(|t| t.chars().count() >= 3) {
@@ -372,15 +367,15 @@ mod tests {
         assert!(strong >= 4, "strong bridges: {strong}/10");
     }
 
-    /// build_terms（compress 侧）语义不变：6 字块切 + 尾部补齐，无滑动 n-gram。
+    /// `terms`（compress 侧）语义不变：6 字块切 + 尾部补齐，无滑动 n-gram。
     #[test]
-    fn build_terms_keeps_compress_semantics() {
-        let t = build_terms("数据库连接池耗尽");
+    fn terms_keeps_compress_semantics() {
+        let t = terms("数据库连接池耗尽");
         assert!(t.contains(&"数据库连接池".to_string()), "{t:?}");
         assert!(t.contains(&"耗尽".to_string()), "{t:?}");
         // 无滑动 n-gram（"据库连"等 3 字滑动产物必须不存在）。
         assert!(!t.iter().any(|x| x == "据库连" || x == "连接池耗"), "{t:?}");
-        let t2 = build_terms("数据库连接池耗尽磁盘空间不足");
+        let t2 = terms("数据库连接池耗尽磁盘空间不足");
         assert!(t2.iter().any(|x| x == "数据库连接池"), "{t2:?}");
         assert!(t2.iter().any(|x| x == "耗尽磁盘空间"), "{t2:?}");
         assert!(t2.iter().any(|x| x == "不足"), "{t2:?}");
@@ -389,7 +384,7 @@ mod tests {
     #[test]
     fn term_cap_keeps_first_occurrence_order() {
         let q: Vec<String> = (0..300).map(|i| format!("w{i}")).collect();
-        let terms = build_terms(&q.join(" "));
+        let terms = terms(&q.join(" "));
         assert_eq!(terms.len(), MAX_QUERY_TERMS);
         assert_eq!(terms.first().map(String::as_str), Some("w0"));
         assert_eq!(
@@ -401,14 +396,14 @@ mod tests {
 
     #[test]
     fn doc_terms_are_sorted_unique_with_query_order_preserved() {
-        let (query_terms, terms) = build_doc_terms("Beta alpha beta", "alpha gamma alpha");
+        let (query_terms, terms) = document("Beta alpha beta", "alpha gamma alpha");
         assert_eq!(query_terms, ["beta", "alpha"]);
         assert_eq!(terms, ["alpha", "beta", "gamma"]);
     }
 
     #[test]
     fn expands_only_exact_known_tokens() {
-        let got = expand_recall_terms(&["replication".into(), "delay".into(), "x".into()]);
+        let got = expand(&["replication".into(), "delay".into(), "x".into()]);
         assert!(got.contains(&"replica".to_string()));
         assert!(got.contains(&"lag".to_string()));
         assert!(!got.contains(&"y".to_string()));
@@ -416,32 +411,29 @@ mod tests {
 
     #[test]
     fn does_not_expand_broad_db_alias_in_recall() {
-        assert_eq!(expand_recall_terms(&["db".into()]), vec!["db".to_string()]);
+        assert_eq!(expand(&["db".into()]), vec!["db".to_string()]);
     }
 
     #[test]
     fn expands_high_precision_abbrev_pairs() {
         // P3.2 保守补充：标准技术缩写 ↔ 全称（双向、去重）。
-        let got = expand_recall_terms(&["fmt".into()]);
+        let got = expand(&["fmt".into()]);
         assert!(got.contains(&"format".to_string()));
-        let got2 = expand_recall_terms(&["message".into()]);
+        let got2 = expand(&["message".into()]);
         assert!(got2.contains(&"msg".to_string()));
-        let got3 = expand_recall_terms(&["format".into(), "fmt".into()]);
+        let got3 = expand(&["format".into(), "fmt".into()]);
         assert_eq!(
             got3.iter().filter(|t| *t == "fmt").count(),
             1,
             "双向扩展必须去重"
         );
         // 字面前缀交集对（param/parameter）不加入词表。
-        assert_eq!(
-            expand_recall_terms(&["param".into()]),
-            vec!["param".to_string()]
-        );
+        assert_eq!(expand(&["param".into()]), vec!["param".to_string()]);
     }
 
     #[test]
     fn expansion_is_bidirectional_and_deduplicated() {
-        let got = expand_recall_terms(&["memory".into(), "heap".into()]);
+        let got = expand(&["memory".into(), "heap".into()]);
         assert_eq!(got.iter().filter(|t| *t == "memory").count(), 1);
         assert_eq!(got.iter().filter(|t| *t == "heap").count(), 1);
         assert!(got.contains(&"oom".to_string()));
@@ -449,17 +441,17 @@ mod tests {
 
     #[test]
     fn expands_cjk_domain_terms_to_english() {
-        let got = expand_recall_terms(&["内存".into(), "存储".into()]);
+        let got = expand(&["内存".into(), "存储".into()]);
         assert!(got.contains(&"memory".to_string()));
         assert!(got.contains(&"storage".to_string()));
     }
 
     #[test]
     fn broad_terms_expand_one_way_only() {
-        let broad = expand_recall_terms(&["memory".into(), "disk".into()]);
+        let broad = expand(&["memory".into(), "disk".into()]);
         assert!(broad.contains(&"gc".to_string()));
         assert!(broad.contains(&"filesystem".to_string()));
-        let specific = expand_recall_terms(&["gc".into(), "filesystem".into()]);
+        let specific = expand(&["gc".into(), "filesystem".into()]);
         assert!(!specific.contains(&"memory".to_string()));
         assert!(!specific.contains(&"disk".to_string()));
     }

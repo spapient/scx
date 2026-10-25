@@ -46,9 +46,9 @@ pub(crate) const INCIDENT_MARKERS: &[&str] = &[
 ];
 /// 一次扫描同时得到“是否错误行”和“是否失败级（可受风险守卫）”。
 /// warn/警告只参与错误判定，不成批进入守卫；遇到失败级词即可提前返回。
-pub(crate) fn error_flags(ll: &str) -> (bool, bool) {
+pub(crate) fn flags(ll: &str) -> (bool, bool) {
     if ll.is_ascii() {
-        return error_flags_ascii(ll);
+        return fast(ll);
     }
     let mut err = false;
     for n in ERR_NEEDLES {
@@ -66,7 +66,7 @@ pub(crate) fn error_flags(ll: &str) -> (bool, bool) {
 ///
 /// 每个 ASCII 词必须在这里有对应分支；`ascii_fast_path_covers_all_needles`
 /// 测试会在新增词表项而忘记接线时失败。
-fn error_flags_ascii(ll: &str) -> (bool, bool) {
+fn fast(ll: &str) -> (bool, bool) {
     let bytes = ll.as_bytes();
     let mut err = false;
     for i in 0..bytes.len() {
@@ -82,7 +82,7 @@ fn error_flags_ascii(ll: &str) -> (bool, bool) {
     (err, false)
 }
 
-/// 首字节 → 该字节可能命中的 ASCII 错误词表；`error_flags_ascii` 的单趟分派表。
+/// 首字节 → 该字节可能命中的 ASCII 错误词表；`fast` 的单趟分派表。
 /// 词序与原 match 分支一致，保证 `warn` 仅置 err、其余命中即失败级返回。
 const ERR_EMPTY: &[(&[u8], bool)] = &[];
 const ERR_E: &[(&[u8], bool)] = &[(b"error", true), (b"exception", true)];
@@ -118,15 +118,15 @@ const ERR_NEEDLES_BY_FIRST: [&[(&[u8], bool)]; 256] = {
     table
 };
 
-pub(crate) fn is_err(ll: &str) -> bool {
-    error_flags(ll).0
+pub(crate) fn fails(ll: &str) -> bool {
+    flags(ll).0
 }
-// 事故诊断标记行(行首、大小写不敏感):risk HIGH 且 risk_gate 时与错误行一同受守卫;不参与种子判定。
-pub(crate) fn is_incident_marker(ll: &str) -> bool {
+// 事故诊断标记行(行首、大小写不敏感):risk HIGH 且 gate 时与错误行一同受守卫;不参与种子判定。
+pub(crate) fn marker(ll: &str) -> bool {
     let t = ll.trim_start();
     INCIDENT_MARKERS.iter().any(|m| t.starts_with(m))
 }
-pub(crate) fn is_heading(s: &str) -> bool {
+pub(crate) fn heading(s: &str) -> bool {
     let t = s.trim_start();
     if t.is_empty() {
         return false;
@@ -140,35 +140,35 @@ pub(crate) fn is_heading(s: &str) -> bool {
     }
     t.starts_with('>') && t.chars().nth(1).is_some_and(|c| c.is_whitespace())
 }
-pub(crate) fn is_diffmeta(s: &str) -> bool {
+pub(crate) fn meta(s: &str) -> bool {
     s.starts_with("@@")
         || s.starts_with("+++")
         || s.starts_with("---")
         || s.starts_with("diff --git")
         || s.starts_with("index ")
 }
-pub(crate) fn is_diffline(s: &str) -> bool {
+pub(crate) fn diff(s: &str) -> bool {
     // 统一 diff 的正文行是 "+code" / "-code"，而不是只有第二个字符为空白才成立；
     // 三个相同前缀分别是文件头，交给 is_diffmeta 处理。
     (s.starts_with('+') && !s.starts_with("+++")) || (s.starts_with('-') && !s.starts_with("---"))
 }
 // 带前导空白的行且形如堆栈帧：at ...／File "／#N ／含 path.ext:line。
-pub(crate) fn is_frame(s: &str) -> bool {
+pub(crate) fn frame(s: &str) -> bool {
     let t = s.trim_start();
     if t.len() == s.len() {
         return false;
     }
-    if is_frame_prefix(t) {
+    if prefix(t) {
         return true;
     }
     if !t.as_bytes().contains(&b'.') {
         return false;
     }
-    frame_dot_scan(t)
+    dots(t)
 }
 
 /// `at `/`File "` 前缀或 `#N` 编号帧（如 `#3 foo`）。
-fn is_frame_prefix(t: &str) -> bool {
+fn prefix(t: &str) -> bool {
     if t.starts_with("at ") || t.starts_with("File \"") {
         return true;
     }
@@ -180,12 +180,12 @@ fn is_frame_prefix(t: &str) -> bool {
 
 /// 仅为 "." 开头的 ASCII 扩展名扫描。按字节定位 "."，但扩展名用
 /// char_indices 截取，避免在多字节 UTF-8 字符中间切片触发 panic。
-fn frame_dot_scan(t: &str) -> bool {
+fn dots(t: &str) -> bool {
     let bytes = t.as_bytes();
     for i in 1..bytes.len() {
         let prev_is_space =
             bytes[i] == b'.' && t[..i].chars().next_back().is_some_and(char::is_whitespace);
-        if bytes[i] == b'.' && !prev_is_space && frame_dot_match(t, i) {
+        if bytes[i] == b'.' && !prev_is_space && dot(t, i) {
             return true;
         }
     }
@@ -193,7 +193,7 @@ fn frame_dot_scan(t: &str) -> bool {
 }
 
 /// 判定第 `i` 个字节处的 `.` 是否为 `path.ext:digits` 帧后缀。
-fn frame_dot_match(t: &str, i: usize) -> bool {
+fn dot(t: &str, i: usize) -> bool {
     let rest = &t[i + 1..];
     let mut colon = None;
     for (off, ch) in rest.char_indices().take(MAX_FRAME_EXT_CHARS + 1) {
@@ -217,7 +217,7 @@ fn frame_dot_match(t: &str, i: usize) -> bool {
         None => false,
     }
 }
-pub(crate) fn is_lineref(s: &str) -> bool {
+pub(crate) fn lineref(s: &str) -> bool {
     let mut it = s.chars().rev();
     let mut cur = it.next();
     if cur == Some(')') {
@@ -233,43 +233,39 @@ pub(crate) fn is_lineref(s: &str) -> bool {
 
 // 单趟归一化：8+ 位十六进制串折叠为 '#'；其余数字段折叠为 '#'；空白段折叠为单空格；首尾去空。
 // run 为复用的十六进制串中转缓冲。
-pub(crate) fn norm_into(s: &str, out: &mut String, run: &mut String) {
+pub(crate) fn normalize(s: &str, out: &mut String, run: &mut String) {
     if s.is_ascii() {
-        norm_ascii(s.as_bytes(), out);
+        ascii(s.as_bytes(), out);
         return;
     }
-    norm_generic(s, out, run);
+    unicode(s, out, run);
 }
 
-/// 通用 Unicode 归一化；`norm_ascii` 的语义基准。
-fn norm_generic(s: &str, out: &mut String, run: &mut String) {
+/// 通用 Unicode 归一化；`ascii` 的语义基准。
+fn unicode(s: &str, out: &mut String, run: &mut String) {
     let mut pending_space = false;
     let mut it = s.chars().peekable();
     while let Some(c) = it.next() {
         if c.is_ascii_hexdigit() {
-            collect_hex_run(&mut it, c, run);
-            push_pending_space(&mut pending_space, out);
-            push_hex_run(run, out);
+            hex(&mut it, c, run);
+            space(&mut pending_space, out);
+            fold(run, out);
         } else if c.is_ascii_digit() {
-            skip_while(&mut it, |c| c.is_ascii_digit());
-            push_pending_space(&mut pending_space, out);
+            skip(&mut it, |c| c.is_ascii_digit());
+            space(&mut pending_space, out);
             out.push('#');
         } else if c.is_whitespace() {
-            skip_while(&mut it, |c| c.is_whitespace());
+            skip(&mut it, |c| c.is_whitespace());
             pending_space = true;
         } else {
-            push_pending_space(&mut pending_space, out);
+            space(&mut pending_space, out);
             out.push(c);
         }
     }
 }
 
 /// 收集一段连续十六进制 run（首字符已消费）。
-fn collect_hex_run(
-    it: &mut std::iter::Peekable<std::str::Chars<'_>>,
-    first: char,
-    run: &mut String,
-) {
+fn hex(it: &mut std::iter::Peekable<std::str::Chars<'_>>, first: char, run: &mut String) {
     run.clear();
     run.push(first);
     while it.peek().is_some_and(|&n| n.is_ascii_hexdigit()) {
@@ -278,14 +274,14 @@ fn collect_hex_run(
 }
 
 /// 跳过满足谓词的连续字符。
-fn skip_while(it: &mut std::iter::Peekable<std::str::Chars<'_>>, pred: impl Fn(char) -> bool) {
+fn skip(it: &mut std::iter::Peekable<std::str::Chars<'_>>, pred: impl Fn(char) -> bool) {
     while it.peek().is_some_and(|&n| pred(n)) {
         it.next();
     }
 }
 
 /// 十六进制 run < 8 位时，数字段折叠为 `#`，字母保留（`0x1f` → `#x#`）。
-fn push_hex_run(run: &str, out: &mut String) {
+fn fold(run: &str, out: &mut String) {
     if run.len() >= 8 {
         out.push('#');
         return;
@@ -304,7 +300,7 @@ fn push_hex_run(run: &str, out: &mut String) {
 }
 
 /// 在非空输出前补写悬空的单空格，并复位标志。
-fn push_pending_space(pending: &mut bool, out: &mut String) {
+fn space(pending: &mut bool, out: &mut String) {
     if *pending && !out.is_empty() {
         out.push(' ');
     }
@@ -312,7 +308,7 @@ fn push_pending_space(pending: &mut bool, out: &mut String) {
 }
 
 /// ASCII 快路径：与通用路径语义一致，跳过 Unicode 解码与临时十六进制缓冲。
-fn norm_ascii(s: &[u8], out: &mut String) {
+fn ascii(s: &[u8], out: &mut String) {
     out.reserve(s.len());
     let mut i = 0usize;
     let mut pending_space = false;
@@ -323,15 +319,15 @@ fn norm_ascii(s: &[u8], out: &mut String) {
             while i < s.len() && s[i].is_ascii_hexdigit() {
                 i += 1;
             }
-            push_pending_space(&mut pending_space, out);
-            push_hex_run_ascii(&s[start..i], out);
-        } else if is_space_byte(c) {
-            while i < s.len() && is_space_byte(s[i]) {
+            space(&mut pending_space, out);
+            bytes(&s[start..i], out);
+        } else if blank(c) {
+            while i < s.len() && blank(s[i]) {
                 i += 1;
             }
             pending_space = true;
         } else {
-            push_pending_space(&mut pending_space, out);
+            space(&mut pending_space, out);
             out.push(c as char);
             i += 1;
         }
@@ -339,7 +335,7 @@ fn norm_ascii(s: &[u8], out: &mut String) {
 }
 
 /// 十六进制 run < 8 位时按字节折叠（数字→`#`，其余保留）。
-fn push_hex_run_ascii(run: &[u8], out: &mut String) {
+fn bytes(run: &[u8], out: &mut String) {
     if run.len() >= 8 {
         out.push('#');
         return;
@@ -360,26 +356,26 @@ fn push_hex_run_ascii(run: &[u8], out: &mut String) {
 
 /// `u8::is_ascii_whitespace` 不含垂直制表 U+000B，而 `char::is_whitespace` 含；
 /// 快路径显式补齐，保证与通用路径逐字节一致。
-fn is_space_byte(b: u8) -> bool {
+fn blank(b: u8) -> bool {
     b == b'\x0b' || b.is_ascii_whitespace()
 }
 
 /// 身份归一化：保留数字段，仅折叠空白并做 Unicode 小写。
 ///
-/// 用于 case 去重 / qmap / 会话缓存这类“精确键”。`norm_into` 会把 8080/9090、
+/// 用于 case 去重 / qmap / 会话缓存这类“精确键”。`normalize` 会把 8080/9090、
 /// errno=28/29 都折叠成 `#`，适合日志词面匹配，但不适合判断“是不是同一条记忆”。
-pub(crate) fn norm_identity_into(s: &str, out: &mut String) {
+pub(crate) fn canonical(s: &str, out: &mut String) {
     if s.is_ascii() {
-        norm_identity_ascii(s, out);
+        simple(s, out);
         return;
     }
-    norm_identity_generic(s, out);
+    wide(s, out);
 }
 
-fn norm_identity_ascii(s: &str, out: &mut String) {
+fn simple(s: &str, out: &mut String) {
     let mut pending_space = false;
     for &b in s.as_bytes() {
-        if is_space_byte(b) {
+        if blank(b) {
             pending_space = true;
             continue;
         }
@@ -391,7 +387,7 @@ fn norm_identity_ascii(s: &str, out: &mut String) {
     }
 }
 
-fn norm_identity_generic(s: &str, out: &mut String) {
+fn wide(s: &str, out: &mut String) {
     let mut pending_space = false;
     for c in s.chars() {
         if c.is_whitespace() {
@@ -410,7 +406,7 @@ fn norm_identity_generic(s: &str, out: &mut String) {
 
 // 分析用小写缓冲：剥离 ANSI 转义并折叠裸 CR。输出仍保留原始行，因此只影响匹配/排序，
 // 不影响"保留行逐字原文"的承诺。进度条常用裸 \r 回写，按空白处理避免污染词面。
-pub(crate) fn push_analysis_lower(s: &str, out: &mut String) {
+pub(crate) fn lowercase(s: &str, out: &mut String) {
     // 日志分析最常见的是无控制符 ASCII 行。按字节小写可跳过 Unicode
     // 大小写迭代与 ESC/CR 状态机；输出语义与通用路径完全一致。
     // 单趟同时确认 ASCII 与无 ESC/CR；避免先 is_ascii 再 any 扫两遍。
@@ -425,7 +421,7 @@ pub(crate) fn push_analysis_lower(s: &str, out: &mut String) {
     let mut it = s.chars().peekable();
     while let Some(c) = it.next() {
         if c == '\u{1b}' {
-            skip_ansi_escape(&mut it);
+            escape(&mut it);
             continue;
         }
         if c == '\r' {
@@ -439,10 +435,10 @@ pub(crate) fn push_analysis_lower(s: &str, out: &mut String) {
 }
 
 /// 消费一个已见 `ESC` 的 ANSI 序列（CSI / OSC / 单字符）。
-fn skip_ansi_escape(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+fn escape(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
     match it.peek().copied() {
-        Some('[') => skip_csi(it),
-        Some(']') => skip_osc(it),
+        Some('[') => csi(it),
+        Some(']') => osc(it),
         Some(_) => {
             it.next();
         }
@@ -451,7 +447,7 @@ fn skip_ansi_escape(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
 }
 
 /// CSI 序列：`ESC [ ... 终止字节 @..~`。
-fn skip_csi(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+fn csi(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
     it.next();
     for esc in it.by_ref() {
         if ('@'..='~').contains(&esc) {
@@ -461,7 +457,7 @@ fn skip_csi(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
 }
 
 /// OSC 序列：`ESC ] ... BEL` 或 `ESC ] ... ESC \`。
-fn skip_osc(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+fn osc(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
     it.next();
     while let Some(esc) = it.next() {
         if esc == '\u{7}' {
@@ -475,19 +471,19 @@ fn skip_osc(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
 }
 
 /// markdown fence 开启行：trim 后以三个反引号/波浪号开头（`rust` 等后缀视为开启）。
-pub(crate) fn is_fence_open(s: &str) -> bool {
+pub(crate) fn fence(s: &str) -> bool {
     let t = s.trim_start();
     t.starts_with("```") || t.starts_with("~~~")
 }
 
 /// markdown fence 纯闭合行：trim 后恰为三个反引号/波浪号。
-pub(crate) fn is_fence_close(s: &str) -> bool {
+pub(crate) fn closes(s: &str) -> bool {
     let t = s.trim_start();
     t == "```" || t == "~~~"
 }
 
 /// import/use/#include 块行（连续此类行构成导入块区域；`use strict`/`use of` 除外）。
-pub(crate) fn is_import_line(s: &str) -> bool {
+pub(crate) fn import(s: &str) -> bool {
     let t = s.trim_start();
     if t.starts_with("import ") || t.starts_with("#include") {
         return true;
@@ -496,8 +492,8 @@ pub(crate) fn is_import_line(s: &str) -> bool {
 }
 
 /// 堆栈链行：at 帧或 `Caused by:` 延续（大小写不敏感）。
-pub(crate) fn is_stack_line(s: &str) -> bool {
-    is_frame(s) || s.to_ascii_lowercase().contains("caused by:")
+pub(crate) fn stack(s: &str) -> bool {
+    frame(s) || s.to_ascii_lowercase().contains("caused by:")
 }
 
 #[cfg(test)]
@@ -506,11 +502,11 @@ mod tests {
 
     #[test]
     fn error_flags_split_warn_from_failure() {
-        assert_eq!(error_flags("error: boom"), (true, true));
-        assert_eq!(error_flags("warning only"), (true, false));
-        assert_eq!(error_flags("failed to connect"), (true, true));
-        assert_eq!(error_flags("info heartbeat"), (false, false));
-        assert_eq!(error_flags("warn then error"), (true, true));
+        assert_eq!(flags("error: boom"), (true, true));
+        assert_eq!(flags("warning only"), (true, false));
+        assert_eq!(flags("failed to connect"), (true, true));
+        assert_eq!(flags("info heartbeat"), (false, false));
+        assert_eq!(flags("warn then error"), (true, true));
     }
 
     #[test]
@@ -518,7 +514,7 @@ mod tests {
         for needle in ERR_NEEDLES.iter().filter(|n| n.is_ascii()) {
             let expected = (true, *needle != "warn");
             assert_eq!(
-                error_flags(needle),
+                flags(needle),
                 expected,
                 "ASCII fast path mismatch for needle {needle:?}"
             );
@@ -527,9 +523,9 @@ mod tests {
 
     #[test]
     fn frame_scan_handles_non_ascii_without_slicing_panic() {
-        assert!(!is_frame("  错误.中文:42"));
-        assert!(!is_frame("  错误.abcdefghi:42"));
-        assert!(is_frame("  错误 at main.rs:42"));
+        assert!(!frame("  错误.中文:42"));
+        assert!(!frame("  错误.abcdefghi:42"));
+        assert!(frame("  错误 at main.rs:42"));
     }
 
     #[test]
@@ -548,25 +544,25 @@ mod tests {
             "ＡＢＣ　１２３",
         ];
         for input in cases {
-            let mut generic = String::new();
-            norm_generic(input, &mut generic, &mut String::new());
+            let mut expected = String::new();
+            unicode(input, &mut expected, &mut String::new());
             let mut actual = String::new();
-            norm_into(input, &mut actual, &mut String::new());
-            assert_eq!(actual, generic, "norm_into mismatch for {input:?}");
+            normalize(input, &mut actual, &mut String::new());
+            assert_eq!(actual, expected, "normalize mismatch for {input:?}");
             let mut generic_id = String::new();
-            norm_identity_generic(input, &mut generic_id);
+            wide(input, &mut generic_id);
             let mut actual_id = String::new();
-            norm_identity_into(input, &mut actual_id);
-            assert_eq!(actual_id, generic_id, "identity mismatch for {input:?}");
+            canonical(input, &mut actual_id);
+            assert_eq!(actual_id, generic_id, "canonical mismatch for {input:?}");
             if input.is_ascii() {
                 let mut fast = String::new();
-                norm_ascii(input.as_bytes(), &mut fast);
-                assert_eq!(fast, generic, "ASCII fast path mismatch for {input:?}");
+                ascii(input.as_bytes(), &mut fast);
+                assert_eq!(fast, expected, "ASCII fast path mismatch for {input:?}");
                 let mut fast_id = String::new();
-                norm_identity_ascii(input, &mut fast_id);
+                simple(input, &mut fast_id);
                 assert_eq!(
                     fast_id, generic_id,
-                    "ASCII identity fast path mismatch for {input:?}"
+                    "ASCII canonical fast path mismatch for {input:?}"
                 );
             }
         }
@@ -586,9 +582,9 @@ mod tests {
                 input.push(alphabet[(state as usize >> 16) % alphabet.len()] as char);
             }
             let mut expected = String::new();
-            norm_generic(&input, &mut expected, &mut String::new());
+            unicode(&input, &mut expected, &mut String::new());
             let mut actual = String::new();
-            norm_ascii(input.as_bytes(), &mut actual);
+            ascii(input.as_bytes(), &mut actual);
             assert_eq!(actual, expected, "chunked mismatch for {input:?}");
         }
     }
@@ -596,15 +592,15 @@ mod tests {
     #[test]
     fn normalization_folds_numbers_but_identity_keeps_them() {
         let mut norm = String::new();
-        norm_into(
+        normalize(
             " cafe 1234 deadbeef 42 错误\t运行 ",
             &mut norm,
             &mut String::new(),
         );
         assert_eq!(norm, "cafe # # # 错误 运行");
 
-        let mut identity = String::new();
-        norm_identity_into("  Hello\t WORLD 1234 ", &mut identity);
-        assert_eq!(identity, "hello world 1234");
+        let mut out = String::new();
+        canonical("  Hello\t WORLD 1234 ", &mut out);
+        assert_eq!(out, "hello world 1234");
     }
 }

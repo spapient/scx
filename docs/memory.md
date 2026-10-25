@@ -1,6 +1,6 @@
 # 本地记忆库
 
-状态：已实现（`scx 0.5.0`）。本文件同时承担设计、运维与变更记录，替代早期
+状态：已实现（`scx 0.5.1`）。本文件同时承担设计、运维与变更记录，替代早期
 `memory-design.md` / `memory-plan.md` / `memory-log.md` 三份阶段性文档。
 
 记忆库是压缩引擎的旁路能力：`scx::compress` 仍是零 I/O 纯函数；记忆只影响
@@ -29,7 +29,7 @@ src/memory/
 ├── recall.rs       # BM25 + 字段/实体加权 + 桶过滤 + PRF + 重排
 ├── ranking.rs      # BM25、PRF 扩展词选择与 MMR 多样性
 ├── index.rs        # 倒排/实体索引、校验、候选提取与 postings 编解码
-├── query_cache.rs  # 进程内会话快照 + 持久化 query 记忆图
+├── cache.rs        # 进程内会话快照 + 持久化 query 记忆图
 ├── edge.rs         # 小库线性路径的结构化实体一跳扩展
 ├── feedback.rs     # 状态机、质量分、词权与 L1 自适应
 ├── maintenance.rs  # rebuild / gc / delete / --stats 盘点
@@ -43,8 +43,8 @@ src/memory/
 
 切词、停用词、CJK 判定与中英领域同义词表统一归 `src/terms.rs`（压缩与记忆库共享）。
 
-公开 API 只从 `scx::memory` 导出：`store_case`、`recall_cases`、`rate_case`、
-`read_case`、`rebuild`、`gc`、`delete_case`、`eval_cases` 以及少量查询与
+公开 API 只从 `scx::memory` 导出：`save`、`search`、`rate`、
+`load`、`rebuild`、`gc`、`delete`、`evaluate` 以及少量查询与
 维护辅助函数。实现模块保持私有，避免文件格式和内部缓存成为外部契约。
 
 ## 3. 磁盘布局
@@ -177,7 +177,7 @@ cargo run --release --locked --example bench -- memory
 - 修复低置信场景桶硬筛漏召；PRF 扩展轮改为严格补漏。
 - 中文词表加入重叠 bigram/trigram；字段与实体加入结构化召回。
 - `--recall-only` 去除初始化副作用；记忆内部模块收窄为私有。
-- 会话快照并入 `query_cache`；qmap recency 改为真实 Unix 秒，旧格式自动作废。
+- 会话快照并入 `cache`；qmap recency 改为真实 Unix 秒，旧格式自动作废。
 - 索引打分快照改为 `Arc` 共享；query 的 df/idf/词权预计算，实体倒排由
   postings 快照派生，10k 全候选宽查询从约 15 ms 降至约 2.1 ms。
 - 召回入口只解析一次 `meta.toml`，评估与标注复用同一快照；会话快照写入不再
@@ -193,7 +193,7 @@ cargo run --release --locked --example bench -- memory
   合并时同一秒内按写入顺序保留后写者。
 - qmap 对同 query/代际、同前缀或更大 top-k 的重复快照做幂等跳过，重复 CLI 召回
   不再让 append-only 文件无限增长；分数变化仍追加。快照只复用 1 小时，避免
-  时间衰减排序长期陈旧。`read_case` 以目录 id 为唯一资产身份，JSON 反序列化
+  时间衰减排序长期陈旧。`load` 以目录 id 为唯一资产身份，JSON 反序列化
   不再克隆整棵树或读取时钟，并对 `case.json` 设置 16 MiB 读取上限。
 - 召回排序改为部分选择：默认只需 top-k（同族收紧最多看 3k），先
   `select_nth_unstable_by` 再排序候选窗口；MMR 开启时保留完整顺序。
@@ -210,8 +210,8 @@ cargo run --release --locked --example bench -- memory
 
 ## L1 直答评测协议（fix 覆盖率 / 命中率口径）
 
-L1 直答是召回后的确定性筛选层：`memory::l1_hits` 在 `recall_cases` 命中后，
-仅当 top1 满足 `feedback::l1_qualified(top1_sim, top2_sim, l1_base,
+L1 直答是召回后的确定性筛选层：`memory::hits` 在 `search` 命中后，
+仅当 top1 满足 `feedback::qualified(top1_sim, top2_sim, l1_base,
 l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_sim)
 ≥ margin && ext_hit ≥ 0.30` —— 才保留命中（直答），否则清空候选退回普通
 候选列表展示（不直答）。`l1_base` / `l1_margin_min` 由 meta.toml 提供，
@@ -222,7 +222,7 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
 - **fix 覆盖率**：库内已 store 的 case 中，`fix` 非空的比例。L1 直答输出
   依赖 fix 覆盖——无 fix 的 case 只能作为候选展示，不能作为答案直答。
   口径：`fix 非空 case 数 / 全部 case 数`，case 以目录 id 为唯一资产身份。
-- **直答触发率**：评测查询集中，`recall top1` 满足 `l1_qualified` 的查询
+- **直答触发率**：评测查询集中，`recall top1` 满足 `qualified` 的查询
   比例（分母为全部评测查询，含无命中查询）。
 - **直答命中率**：触发直答的查询中，top1 的 case id 与冻结标签的
   expected tail16 匹配（指纹匹配）或人工 rel=2 判中的比例。**分子/分母
@@ -249,4 +249,4 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
 
 > 口径声明：本协议为**作者侧自测**（语料为合成/半合成事故集，标签为作者
 > 冻结），非第三方独立评测；不用于对外发布级对比。ext_hit 在 CLI 门面恒为
-> 1.0（`l1_hits` 调用处固定），评测不模拟外部扩展命中。
+> 1.0（`hits` 调用处固定），评测不模拟外部扩展命中。

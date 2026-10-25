@@ -2,7 +2,7 @@
 //!
 //! 只支持：object / array / string / number / bool / null；
 //! 不支持：转义 \\uXXXX 之外的复杂规则、注释、尾逗号、科学计数法。
-//! 解析失败返回 Err，序列化失败仅发生在字符串含未转义控制符时（用 escape_str 不会发生）。
+//! 解析失败返回 Err，序列化失败仅发生在字符串含未转义控制符时（用 escape 不会发生）。
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Val {
@@ -15,13 +15,13 @@ pub enum Val {
 }
 
 /// 字符串转义（JSON 字符串字面量所需的最小集）。
-pub fn escape_str(s: &str, out: &mut String) {
+pub fn escape(s: &str, out: &mut String) {
     for c in s.chars() {
-        escape_char(c, out);
+        glyph(c, out);
     }
 }
 
-fn escape_char(c: char, out: &mut String) {
+fn glyph(c: char, out: &mut String) {
     match c {
         '"' => out.push_str("\\\""),
         '\\' => out.push_str("\\\\"),
@@ -36,28 +36,28 @@ fn escape_char(c: char, out: &mut String) {
 /// 序列化 Val 到字符串。
 pub fn write(v: &Val) -> String {
     let mut out = String::new();
-    write_into(v, &mut out);
+    encode(v, &mut out);
     out
 }
 
-fn write_into(v: &Val, out: &mut String) {
+fn encode(v: &Val, out: &mut String) {
     match v {
         Val::Null => out.push_str("null"),
         Val::Bool(true) => out.push_str("true"),
         Val::Bool(false) => out.push_str("false"),
-        Val::Num(n) => write_num(*n, out),
+        Val::Num(n) => number(*n, out),
         Val::Str(s) => {
             out.push('"');
-            escape_str(s, out);
+            escape(s, out);
             out.push('"');
         }
-        Val::Arr(items) => write_arr(items, out),
-        Val::Obj(kvs) => write_obj(kvs, out),
+        Val::Arr(items) => array(items, out),
+        Val::Obj(kvs) => object(kvs, out),
     }
 }
 
 /// 数值序列化：整数域内的 f64 写成整数形态（与解析容错口径一致）。
-fn write_num(n: f64, out: &mut String) {
+fn number(n: f64, out: &mut String) {
     if n.fract() == 0.0 && n.is_finite() && n.abs() < 1e15 {
         out.push_str(&format!("{}", n as i64));
     } else {
@@ -65,27 +65,27 @@ fn write_num(n: f64, out: &mut String) {
     }
 }
 
-fn write_arr(items: &[Val], out: &mut String) {
+fn array(items: &[Val], out: &mut String) {
     out.push('[');
     for (i, item) in items.iter().enumerate() {
         if i > 0 {
             out.push(',');
         }
-        write_into(item, out);
+        encode(item, out);
     }
     out.push(']');
 }
 
-fn write_obj(kvs: &[(String, Val)], out: &mut String) {
+fn object(kvs: &[(String, Val)], out: &mut String) {
     out.push('{');
     for (i, (k, item)) in kvs.iter().enumerate() {
         if i > 0 {
             out.push(',');
         }
         out.push('"');
-        escape_str(k, out);
+        escape(k, out);
         out.push_str("\":");
-        write_into(item, out);
+        encode(item, out);
     }
     out.push('}');
 }
@@ -96,9 +96,9 @@ pub fn parse(s: &str) -> Result<Val, String> {
         bytes: s.as_bytes(),
         pos: 0,
     };
-    p.skip_ws();
+    p.space();
     let v = p.value()?;
-    p.skip_ws();
+    p.space();
     if p.pos != p.bytes.len() {
         return Err(format!("trailing bytes at {}", p.pos));
     }
@@ -121,7 +121,7 @@ impl<'a> Parser<'a> {
         }
         b
     }
-    fn skip_ws(&mut self) {
+    fn space(&mut self) {
         while self
             .peek()
             .is_some_and(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'))
@@ -227,16 +227,16 @@ impl<'a> Parser<'a> {
     fn arr(&mut self) -> Result<Val, String> {
         self.expect(b'[')?;
         let mut items = Vec::new();
-        self.skip_ws();
+        self.space();
         if self.peek() == Some(b']') {
             self.next();
             return Ok(Val::Arr(items));
         }
         loop {
-            self.skip_ws();
+            self.space();
             items.push(self.value()?);
-            self.skip_ws();
-            if !self.consume_sep(b']', "array")? {
+            self.space();
+            if !self.separator(b']', "array")? {
                 return Ok(Val::Arr(items));
             }
         }
@@ -244,28 +244,28 @@ impl<'a> Parser<'a> {
     fn obj(&mut self) -> Result<Val, String> {
         self.expect(b'{')?;
         let mut kvs = Vec::new();
-        self.skip_ws();
+        self.space();
         if self.peek() == Some(b'}') {
             self.next();
             return Ok(Val::Obj(kvs));
         }
         loop {
-            self.skip_ws();
+            self.space();
             let key = self.str()?;
-            self.skip_ws();
+            self.space();
             self.expect(b':')?;
-            self.skip_ws();
+            self.space();
             let v = self.value()?;
             kvs.push((key, v));
-            self.skip_ws();
-            if !self.consume_sep(b'}', "object")? {
+            self.space();
+            if !self.separator(b'}', "object")? {
                 return Ok(Val::Obj(kvs));
             }
         }
     }
 
     /// 容器分隔符：`,` 继续、闭合符结束；其余或 EOF 报错。
-    fn consume_sep(&mut self, close: u8, name: &str) -> Result<bool, String> {
+    fn separator(&mut self, close: u8, name: &str) -> Result<bool, String> {
         match self.next() {
             Some(b',') => Ok(true),
             Some(c) if c == close => Ok(false),

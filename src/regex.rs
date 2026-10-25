@@ -45,7 +45,7 @@ struct Parser<'a> {
 }
 
 /// 解析 `pat` 为 AST；失败返回带位置的错误与支持子集提示。
-pub fn parse_regex(pat: &str) -> Result<Node, String> {
+pub fn parse(pat: &str) -> Result<Node, String> {
     let chars: Vec<char> = pat.chars().collect();
     if chars.is_empty() {
         return Err("re: pattern must not be empty".to_string());
@@ -54,7 +54,7 @@ pub fn parse_regex(pat: &str) -> Result<Node, String> {
         chars: &chars,
         pos: 0,
     };
-    let node = p.parse_alt()?;
+    let node = p.alt()?;
     if p.pos != p.chars.len() {
         return Err(format!(
             "re: unexpected token {:?} at position {}; {SUBSET}",
@@ -75,11 +75,11 @@ impl<'a> Parser<'a> {
         Some(c)
     }
 
-    fn parse_alt(&mut self) -> Result<Node, String> {
-        let mut arms = vec![self.parse_seq()?];
+    fn alt(&mut self) -> Result<Node, String> {
+        let mut arms = vec![self.seq()?];
         while self.peek() == Some('|') {
             self.bump();
-            arms.push(self.parse_seq()?);
+            arms.push(self.seq()?);
         }
         if arms.len() == 1 {
             Ok(arms.pop().unwrap())
@@ -88,7 +88,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_seq(&mut self) -> Result<Node, String> {
+    fn seq(&mut self) -> Result<Node, String> {
         let mut items = Vec::new();
         loop {
             match self.peek() {
@@ -99,7 +99,7 @@ impl<'a> Parser<'a> {
                         self.peek().unwrap()
                     ));
                 }
-                Some(_) => items.push(self.parse_atom()?),
+                Some(_) => items.push(self.atom()?),
             }
         }
         if items.is_empty() {
@@ -112,12 +112,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_atom(&mut self) -> Result<Node, String> {
-        let base = self.parse_base()?;
-        self.parse_quantifier(base)
+    fn atom(&mut self) -> Result<Node, String> {
+        let base = self.base()?;
+        self.quant(base)
     }
 
-    fn parse_base(&mut self) -> Result<Node, String> {
+    fn base(&mut self) -> Result<Node, String> {
         match self.bump().unwrap() {
             '\\' => {
                 let esc = self
@@ -125,12 +125,12 @@ impl<'a> Parser<'a> {
                     .ok_or_else(|| "re: dangling \\ escape".to_string())?;
                 Ok(Node::Char(esc))
             }
-            '[' => self.parse_class(),
+            '[' => self.class(),
             c => Ok(Node::Char(c)),
         }
     }
 
-    fn parse_quantifier(&mut self, base: Node) -> Result<Node, String> {
+    fn quant(&mut self, base: Node) -> Result<Node, String> {
         match self.peek() {
             Some('*') => {
                 self.bump();
@@ -148,7 +148,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_class(&mut self) -> Result<Node, String> {
+    fn class(&mut self) -> Result<Node, String> {
         let neg = self.peek() == Some('^');
         if neg {
             self.bump();
@@ -163,7 +163,7 @@ impl<'a> Parser<'a> {
                 Some(']') if !first => break,
                 Some(c) => {
                     first = false;
-                    self.push_class_item(c, &mut ranges)?;
+                    self.item(c, &mut ranges)?;
                 }
             }
         }
@@ -171,7 +171,7 @@ impl<'a> Parser<'a> {
     }
 
     /// 消费字符类的一个成员（字面 / 范围），失败带具体错误。
-    fn push_class_item(&mut self, c: char, ranges: &mut Vec<(char, char)>) -> Result<(), String> {
+    fn item(&mut self, c: char, ranges: &mut Vec<(char, char)>) -> Result<(), String> {
         if c == ']' {
             // 首字符 `]` 为字面。
             ranges.push((']', ']'));
@@ -256,7 +256,7 @@ fn leaf(states: &mut Vec<St>, kind: Kind) -> Frag {
     }
 }
 
-fn compile(node: &Node, states: &mut Vec<St>) -> Frag {
+fn emit(node: &Node, states: &mut Vec<St>) -> Frag {
     match node {
         Node::Char(c) => leaf(states, Kind::Char(*c)),
         Node::Class { ranges, neg } => leaf(
@@ -266,28 +266,28 @@ fn compile(node: &Node, states: &mut Vec<St>) -> Frag {
                 neg: *neg,
             },
         ),
-        Node::Seq(items) => compile_seq(items, states),
-        Node::Alt(arms) => compile_alt(arms, states),
-        Node::Star(inner) => compile_repeat(inner, states, false),
-        Node::Plus(inner) => compile_repeat(inner, states, true),
-        Node::Opt(inner) => compile_opt(inner, states),
+        Node::Seq(items) => sequence(items, states),
+        Node::Alt(arms) => choice(arms, states),
+        Node::Star(inner) => repeat(inner, states, false),
+        Node::Plus(inner) => repeat(inner, states, true),
+        Node::Opt(inner) => option(inner, states),
     }
 }
 
-fn compile_seq(items: &[Node], states: &mut Vec<St>) -> Frag {
-    let mut frag = compile(&items[0], states);
+fn sequence(items: &[Node], states: &mut Vec<St>) -> Frag {
+    let mut frag = emit(&items[0], states);
     for item in &items[1..] {
-        let next = compile(item, states);
+        let next = emit(item, states);
         patch(states, &frag.out, next.start);
         frag.out = next.out;
     }
     frag
 }
 
-fn compile_alt(arms: &[Node], states: &mut Vec<St>) -> Frag {
-    let mut frag = compile(&arms[0], states);
+fn choice(arms: &[Node], states: &mut Vec<St>) -> Frag {
+    let mut frag = emit(&arms[0], states);
     for arm in &arms[1..] {
-        let next = compile(arm, states);
+        let next = emit(arm, states);
         let id = states.len();
         states.push(St {
             kind: Kind::Split,
@@ -301,8 +301,8 @@ fn compile_alt(arms: &[Node], states: &mut Vec<St>) -> Frag {
 }
 
 /// Star/Plus 的共用编译：`keep_start` 区分入口（Star 从 split 入，Plus 从 inner 入）。
-fn compile_repeat(inner: &Node, states: &mut Vec<St>, keep_start: bool) -> Frag {
-    let inner = compile(inner, states);
+fn repeat(inner: &Node, states: &mut Vec<St>, keep_start: bool) -> Frag {
+    let inner = emit(inner, states);
     let id = states.len();
     states.push(St {
         kind: Kind::Split,
@@ -323,8 +323,8 @@ fn compile_repeat(inner: &Node, states: &mut Vec<St>, keep_start: bool) -> Frag 
     }
 }
 
-fn compile_opt(inner: &Node, states: &mut Vec<St>) -> Frag {
-    let inner = compile(inner, states);
+fn option(inner: &Node, states: &mut Vec<St>) -> Frag {
+    let inner = emit(inner, states);
     let id = states.len();
     states.push(St {
         kind: Kind::Split,
@@ -335,20 +335,20 @@ fn compile_opt(inner: &Node, states: &mut Vec<St>) -> Frag {
         start: id,
         out: vec![(id, false)],
     }
-    .extend_outs(inner.out)
+    .merge(inner.out)
 }
 
 impl Frag {
-    fn extend_outs(mut self, mut more: Vec<(usize, bool)>) -> Frag {
+    fn merge(mut self, mut more: Vec<(usize, bool)>) -> Frag {
         self.out.append(&mut more);
         self
     }
 }
 
 /// 编译 AST 为 NFA（out 收尾 patch 到 Accept）。
-pub fn compile_nfa(node: &Node) -> Compiled {
+pub fn compile(node: &Node) -> Compiled {
     let mut states: Vec<St> = Vec::new();
-    let frag = compile(node, &mut states);
+    let frag = emit(node, &mut states);
     let accept = states.len();
     states.push(St {
         kind: Kind::Accept,
@@ -374,7 +374,7 @@ pub struct Compiled {
 /// ε-closure：从一组起始状态出发，经 Split 全部可达的状态集。
 /// `seen` / `stack` / `out` 为调用方持有的复用缓冲；返回后 `seen` 恢复全
 /// false，`out` 为闭包集合（元素顺序不影响判定正确性）。
-fn closure_into(
+fn closure(
     states: &[St],
     starts: &[usize],
     seen: &mut [bool],
@@ -411,7 +411,7 @@ impl Compiled {
         let mut stack: Vec<usize> = Vec::new();
         let mut closed: Vec<usize> = Vec::new();
         let mut cur: Vec<usize> = Vec::new();
-        closure_into(
+        closure(
             &self.states,
             &[self.start],
             &mut seen,
@@ -430,7 +430,7 @@ impl Compiled {
                 }
             }
             cur.push(self.start); // 非锚定：新位置重启
-            closure_into(&self.states, &cur, &mut seen, &mut stack, &mut closed);
+            closure(&self.states, &cur, &mut seen, &mut stack, &mut closed);
             // 正则搜索语义：accept 可达即存在匹配，立即命中。
             if closed.contains(&self.accept) {
                 return true;
@@ -457,8 +457,8 @@ mod tests {
     use super::*;
 
     fn m(pat: &str, line: &str) -> bool {
-        let node = parse_regex(pat).expect("pattern parses");
-        compile_nfa(&node).matches(line)
+        let node = parse(pat).expect("pattern parses");
+        compile(&node).matches(line)
     }
 
     #[test]
@@ -494,17 +494,17 @@ mod tests {
 
     #[test]
     fn invalid_patterns_rejected_with_subset_hint() {
-        let e = parse_regex("a||b").unwrap_err();
+        let e = parse("a||b").unwrap_err();
         assert!(e.contains("empty"), "{e}");
-        let e2 = parse_regex("a|").unwrap_err();
+        let e2 = parse("a|").unwrap_err();
         assert!(e2.contains("empty"), "{e2}");
-        let e3 = parse_regex("[abc").unwrap_err();
+        let e3 = parse("[abc").unwrap_err();
         assert!(e3.contains("unterminated"), "{e3}");
-        let e4 = parse_regex("a**").unwrap_err();
+        let e4 = parse("a**").unwrap_err();
         assert!(e4.contains("no operand"), "{e4}");
-        let e5 = parse_regex("").unwrap_err();
+        let e5 = parse("").unwrap_err();
         assert!(e5.contains("must not be empty"), "{e5}");
-        let e6 = parse_regex("[z-a]").unwrap_err();
+        let e6 = parse("[z-a]").unwrap_err();
         assert!(e6.contains("inverted range"), "{e6}");
     }
 

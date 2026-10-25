@@ -8,7 +8,7 @@
 //! 语义（v0.4.1）：种子不变量（证据行与 ±context（默认 1，可设 0）最小邻域无条件保留，`ratio` 只删可选）；证据仅
 //! 来自 IDF 加权查询命中与 `forces`；种子区域门控（可选预算只填种子邻域区域：±window
 //! 扩展，间隔 <= window*3 合并；种子为零回退全图）；邻域权重只排序；context=0 完全跳过可选填充（针尖模式）；无信号 fail-open；
-//! `risk_gate` 在风险 HIGH 时保护失败级错误行(warn/警告 级除外)与事故标记行(root cause / fix hint / mitigation / recommendation / action / assertionerror)。只删不改、保留行逐字原文；省略以单行 "..." 标记；`lineno` 可为保留行附加原文行号前缀。
+//! `gate` 在风险 HIGH 时保护失败级错误行(warn/警告 级除外)与事故标记行(root cause / fix hint / mitigation / recommendation / action / assertionerror)。只删不改、保留行逐字原文；省略以单行 "..." 标记；`lineno` 可为保留行附加原文行号前缀。
 //!
 //! 模块划分：`terms` 负责词面与估算，`analysis` 负责归一化与结构分类，
 //! `compress` 是算法主体。三者均为纯函数层；本文件只保留公共类型、模块声明和
@@ -20,14 +20,14 @@
 use std::fmt;
 mod analysis;
 mod compress;
-/// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。
-pub mod conf;
 pub mod contain;
 mod policy;
 mod terms;
+/// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。
+pub mod toml;
 
 /// CLI 与集成层模块（库内可用）：`args` 声明式参数解析、`input` 输入读取、
-/// `ops` 操作编排（Op 枚举 + run + 纯渲染）。`ops::render_json` 供 MCP 等
+/// `ops` 操作编排（Op 枚举 + run + 纯渲染）。`ops::render` 供 MCP 等
 /// 集成层复用，不依赖 CLI 渲染。
 pub mod args;
 pub mod input;
@@ -54,7 +54,7 @@ pub struct Config {
     pub context: i64,
     pub window: i64,
     pub elide: bool,
-    pub risk_gate: bool,
+    pub gate: bool,
     /// 保留行输出时附加原文行号前缀（grep -n 风格 `N: `）；passthrough/fail-open 返回原文时不附加。
     pub lineno: bool,
     /// `--force` 值按 `|` 拆分后的原始子串（大小写不敏感字面匹配）。
@@ -62,7 +62,7 @@ pub struct Config {
     /// 绝对 token 硬上限（估算口径，非真实 tokenizer；`None` = 现状行为不变）。
     /// 证据地板最高优先：证据行与最小邻域无条件保留，超限时输出
     /// `mode=overflow:evidence` / `overflow:fill` 并如实报告，绝不静默丢弃证据。
-    pub max_tokens: Option<usize>,
+    pub limit: Option<usize>,
     /// 结构感知邻域（`--structure 1`）：fence 配对 / import·use·#include 块 /
     /// 堆栈 at 链 + `Caused by:` 延续整段并入种子区域（超长区域按
     /// `REGION_DEFAULT.max_span` 裁剪为种子邻域窗口）。默认 `false` =
@@ -91,10 +91,10 @@ impl Default for Config {
             context: Self::DEFAULT_CONTEXT,
             window: Self::DEFAULT_WINDOW,
             elide: true,
-            risk_gate: true,
+            gate: true,
             lineno: false,
             forces: Vec::new(),
-            max_tokens: None,
+            limit: None,
             structure: false,
             #[cfg(feature = "semantic")]
             semantic: None,
@@ -176,12 +176,12 @@ pub struct Outcome {
     /// 保留行的原始输入行号（1-based，按原顺序；仅筛选模式有值，
     /// passthrough/fail-open 为空）。记忆库 `--store` 据此从输入提取原始证据行，
     /// L1 直答可回放原文。
-    pub kept_lno: Vec<usize>,
+    pub numbers: Vec<usize>,
     pub kept: usize,
     pub total: usize,
-    pub chars_in: usize,
-    pub chars_out: usize,
-    pub cut_pct: f64,
+    pub input: usize,
+    pub output: usize,
+    pub cut: f64,
     pub dup: usize,
     pub seeds: usize,
     pub evidence: usize,
@@ -193,9 +193,9 @@ pub struct Outcome {
     pub forced: usize,
     pub mode: Mode,
     /// 生效的 `--max-tokens` 上限（`None` = 未启用）。
-    pub max_tokens: Option<usize>,
-    /// 输出文本的 token 估算（`terms::token_est` 口径）；passthrough/fail-open 不保证。
-    pub tok_est: f64,
+    pub limit: Option<usize>,
+    /// 输出文本的 token 估算（`terms::estimate` 口径）；passthrough/fail-open 不保证。
+    pub tokens: f64,
     /// 被删除的连续区间（1-based 原始行号闭区间）与原因；仅在筛选模式下有值，
     /// passthrough/fail-open/no-kept 为空。`--json` 或新渲染模式消费；默认
     /// stdout 统计行不输出（与 v0.4.1 逐字节一致）。
@@ -204,19 +204,19 @@ pub struct Outcome {
 
 /// 删除原因（`dropped` 每区间一条）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DropReason {
+pub enum Reason {
     /// 可选内容预算不足（含 `--structure 1` 超长结构区域裁剪）。
     Budget,
     /// `--max-tokens` 硬上限导致可选内容容量不足。
     MaxTokens,
 }
 
-impl DropReason {
+impl Reason {
     /// JSON 字段值（小写 kebab）。
     pub const fn as_str(self) -> &'static str {
         match self {
-            DropReason::Budget => "budget",
-            DropReason::MaxTokens => "max-tokens",
+            Reason::Budget => "budget",
+            Reason::MaxTokens => "max-tokens",
         }
     }
 }
@@ -226,11 +226,11 @@ impl DropReason {
 pub struct Dropped {
     pub start: usize,
     pub end: usize,
-    pub reason: DropReason,
+    pub reason: Reason,
 }
 
 // 零分配 u64→十进制行号写入（`N: ` 前缀，grep -n 风格；供 --lineno 使用）。
-pub(crate) fn push_lineno(out: &mut String, n: usize) {
+pub(crate) fn prefix(out: &mut String, n: usize) {
     let mut buf = [0u8; 20];
     let mut m = n;
     let mut i = buf.len();
@@ -249,9 +249,9 @@ pub(crate) fn push_lineno(out: &mut String, n: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analysis::{is_diffline, is_frame, is_incident_marker, is_lineref};
-    use crate::analysis::{norm_into, push_analysis_lower};
-    use crate::terms::build_terms;
+    use crate::analysis::{diff, frame, lineref, marker};
+    use crate::analysis::{lowercase, normalize};
+    use crate::terms::terms;
 
     fn cfg() -> Config {
         Config {
@@ -286,12 +286,12 @@ mod tests {
         let text = lines.join("\n");
         let o = compress(&text, "db timeout conn_id pool", &cfg());
         assert_eq!(o.mode, Mode::Sieve);
-        assert_eq!(o.kept_lno.len(), o.kept, "kept_lno 数量必须等于 kept");
-        assert!(!o.kept_lno.is_empty(), "筛选模式必须给出证据行号");
-        for w in o.kept_lno.windows(2) {
+        assert_eq!(o.numbers.len(), o.kept, "numbers 数量必须等于 kept");
+        assert!(!o.numbers.is_empty(), "筛选模式必须给出证据行号");
+        for w in o.numbers.windows(2) {
             assert!(w[0] < w[1], "证据行号必须严格递增（原顺序）");
         }
-        assert!(o.kept_lno.contains(&51), "保留行含 Root cause 行");
+        assert!(o.numbers.contains(&51), "保留行含 Root cause 行");
         // 输出的保留行内容与输入行一致（按行号回查）。
         let out_lines: Vec<&str> = o
             .text
@@ -309,9 +309,9 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let o = compress(&text, "绝对不存在的词zz", &cfg());
-        assert!(o.kept_lno.is_empty(), "failopen 无证据行号");
+        assert!(o.numbers.is_empty(), "failopen 无证据行号");
         let o2 = compress("small", "q", &cfg());
-        assert!(o2.kept_lno.is_empty(), "passthrough:small 无证据行号");
+        assert!(o2.numbers.is_empty(), "passthrough:small 无证据行号");
     }
 
     #[test]
@@ -374,48 +374,48 @@ mod tests {
         let gated_off = Config {
             ratio: 0.35,
             context: 0,
-            risk_gate: false,
+            gate: false,
             ..Config::default()
         };
         let o2 = compress(&text, q, &gated_off);
         assert!(
             !o2.text.contains("Root cause:"),
-            "risk_gate=0 时标记行不被强制保留"
+            "gate=0 时标记行不被强制保留"
         );
         assert_eq!(o2.guarded, 0);
     }
 
     #[test]
     fn lineref_semantics() {
-        assert!(is_lineref("foo.rs:10"));
-        assert!(is_lineref("(bar.c:3)"));
-        assert!(is_lineref(":123"));
-        assert!(is_lineref("y:3)"));
-        assert!(!is_lineref("abc:"));
-        assert!(!is_lineref("12"));
-        assert!(!is_lineref(":"));
-        assert!(!is_lineref("x)y"));
+        assert!(lineref("foo.rs:10"));
+        assert!(lineref("(bar.c:3)"));
+        assert!(lineref(":123"));
+        assert!(lineref("y:3)"));
+        assert!(!lineref("abc:"));
+        assert!(!lineref("12"));
+        assert!(!lineref(":"));
+        assert!(!lineref("x)y"));
     }
 
     #[test]
     fn unified_diff_content_lines_are_recognized() {
-        assert!(is_diffline("+let value = 1;"));
-        assert!(is_diffline("-old_value"));
-        assert!(is_diffline("+"));
-        assert!(is_diffline("-"));
-        assert!(!is_diffline("+++ b/src/lib.rs"));
-        assert!(!is_diffline("--- a/src/lib.rs"));
-        assert!(!is_diffline("diff --git a/x b/x"));
+        assert!(diff("+let value = 1;"));
+        assert!(diff("-old_value"));
+        assert!(diff("+"));
+        assert!(diff("-"));
+        assert!(!diff("+++ b/src/lib.rs"));
+        assert!(!diff("--- a/src/lib.rs"));
+        assert!(!diff("diff --git a/x b/x"));
     }
 
     #[test]
     fn analysis_strips_ansi_and_bare_carriage_returns() {
         let mut low = String::new();
-        push_analysis_lower("\u{1b}[31mRoot cause:\u{1b}[0m 10%\rnext", &mut low);
+        lowercase("\u{1b}[31mRoot cause:\u{1b}[0m 10%\rnext", &mut low);
         assert_eq!(low, "root cause: 10% next");
-        assert!(is_incident_marker(&low));
+        assert!(marker(&low));
         low.clear();
-        push_analysis_lower("\u{1b}]8;;https://example.com\u{7}link", &mut low);
+        lowercase("\u{1b}]8;;https://example.com\u{7}link", &mut low);
         assert_eq!(low, "link");
     }
 
@@ -424,7 +424,7 @@ mod tests {
         let n = |t: &str| {
             let mut o = String::new();
             let mut r = String::new();
-            norm_into(t, &mut o, &mut r);
+            normalize(t, &mut o, &mut r);
             o
         };
         assert_eq!(n("  a   b  "), "a b");
@@ -450,8 +450,8 @@ mod tests {
         let b = compress(&crlf, "kvwrite", &cfg());
         assert_eq!(a.text, b.text);
         assert_eq!(a.kept, b.kept);
-        assert_eq!(a.chars_out, b.chars_out);
-        assert!(b.chars_in > a.chars_in, "CRLF 输入的原始字符数应包含 CR");
+        assert_eq!(a.output, b.output);
+        assert!(b.input > a.input, "CRLF 输入的原始字符数应包含 CR");
     }
 
     #[test]
@@ -505,7 +505,7 @@ mod tests {
         let a = compress(&text, "kvwrite", &cfg());
         let b = compress(&text, "kvwrite", &cfg());
         assert_eq!(a.text, b.text);
-        assert_eq!(a.cut_pct.to_bits(), b.cut_pct.to_bits());
+        assert_eq!(a.cut.to_bits(), b.cut.to_bits());
     }
 
     #[test]
@@ -541,8 +541,8 @@ mod tests {
         assert_eq!(o.mode, Mode::PassNoKept);
         assert_eq!(o.text, text);
         assert_eq!(o.kept, o.total);
-        assert_eq!(o.chars_out, o.chars_in);
-        assert_eq!(o.cut_pct, 0.0);
+        assert_eq!(o.output, o.input);
+        assert_eq!(o.cut, 0.0);
     }
 
     #[test]
@@ -599,20 +599,20 @@ mod tests {
 
     #[test]
     fn cjk_stop_and_tail_terms() {
-        assert!(build_terms("这个").is_empty());
-        assert!(build_terms("数据库连接超时").contains(&"超时".to_string()));
-        assert!(build_terms("エラー").contains(&"エラー".to_string()));
+        assert!(terms("这个").is_empty());
+        assert!(terms("数据库连接超时").contains(&"超时".to_string()));
+        assert!(terms("エラー").contains(&"エラー".to_string()));
     }
 
     #[test]
     fn runaway_token_is_dropped() {
         let long = "x".repeat(crate::terms::MAX_TERM_BYTES + 1);
         assert!(
-            build_terms(&long).is_empty(),
+            terms(&long).is_empty(),
             "超长 token 不得进入索引词表（u8 长度字段会截断）"
         );
         let max = "x".repeat(crate::terms::MAX_TERM_BYTES);
-        assert_eq!(build_terms(&max), vec![max], "上限内 token 保持可用");
+        assert_eq!(terms(&max), vec![max], "上限内 token 保持可用");
     }
 
     #[test]
@@ -624,13 +624,13 @@ mod tests {
         let o = compress(&text, "zzzznomatch", &cfg());
         assert_eq!(o.mode, Mode::FailOpenZeroSignal);
         assert_eq!(o.text, text);
-        assert_eq!(o.chars_in, text.chars().count());
+        assert_eq!(o.input, text.chars().count());
     }
 
     #[test]
     fn frame_extension_scan_is_bounded() {
-        assert!(is_frame("  foo.rs:10"));
-        assert!(!is_frame(&format!("  foo.{}:10", "a".repeat(50))));
+        assert!(frame("  foo.rs:10"));
+        assert!(!frame(&format!("  foo.{}:10", "a".repeat(50))));
     }
 
     #[test]
@@ -671,17 +671,17 @@ mod tests {
         lines[100] = "conn 9f2a broken db crash".to_string();
         let text = lines.join("\n");
         let cfg = Config {
-            max_tokens: Some(3),
+            limit: Some(3),
             ..cfg()
         };
         let o = compress(&text, "alpha conn broken", &cfg);
         assert_eq!(o.mode, Mode::OverflowEvidence);
-        assert_eq!(o.max_tokens, Some(3));
+        assert_eq!(o.limit, Some(3));
         assert!(
             o.text.contains("conn 9f2a"),
             "证据行必须保留（绝不静默丢证据）"
         );
-        assert!(o.tok_est > 3.0, "tok_est 应如实报告超限后的估算");
+        assert!(o.tokens > 3.0, "tokens 应如实报告超限后的估算");
     }
 
     #[test]
@@ -696,7 +696,7 @@ mod tests {
         let cfg = Config {
             ratio: 0.35,
             context: 0,
-            max_tokens: Some(5),
+            limit: Some(5),
             ..cfg()
         };
         let o = compress(&text, "alpha conn broken", &cfg);
@@ -704,7 +704,7 @@ mod tests {
         assert_eq!(o.guarded, 1, "HIGH 风险守卫必须仍生效");
         assert!(o.text.contains("conn 9f2a"), "证据行保留");
         assert!(o.text.contains("error alpha pipe burst"), "守卫行保留");
-        assert!(o.tok_est > 5.0, "tok_est 如实报告超限");
+        assert!(o.tokens > 5.0, "tokens 如实报告超限");
     }
 
     #[test]
@@ -714,13 +714,13 @@ mod tests {
         lines[100] = "conn 9f2a broken db crash".to_string();
         let text = lines.join("\n");
         let cfg = Config {
-            max_tokens: Some(1000),
+            limit: Some(1000),
             ..cfg()
         };
         let o = compress(&text, "alpha conn broken", &cfg);
         assert_eq!(o.mode, Mode::Sieve);
-        assert_eq!(o.max_tokens, Some(1000));
-        assert!(o.tok_est <= 1000.0 + 1e-9, "正常模式下输出估算不得超上限");
+        assert_eq!(o.limit, Some(1000));
+        assert!(o.tokens <= 1000.0 + 1e-9, "正常模式下输出估算不得超上限");
         assert!(o.text.contains("conn 9f2a"));
     }
 
@@ -732,6 +732,6 @@ mod tests {
         let text = lines.join("\n");
         let o = compress(&text, "alpha conn broken", &cfg());
         assert_eq!(o.mode, Mode::Sieve);
-        assert_eq!(o.max_tokens, None);
+        assert_eq!(o.limit, None);
     }
 }

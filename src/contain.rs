@@ -22,9 +22,9 @@ pub struct Report {
     pub mode: Mode,
     pub kept: usize,
     pub total: usize,
-    pub chars_in: usize,
-    pub chars_out: usize,
-    pub cut_pct: f64,
+    pub input: usize,
+    pub output: usize,
+    pub cut: f64,
     /// 证据保留计数（等值判定：输出行集包含证据行原文）。
     pub evidence_kept: usize,
     pub evidence_total: usize,
@@ -59,9 +59,9 @@ pub fn run(case: &Slice, cfg: &Config) -> Report {
         mode: o.mode,
         kept: o.kept,
         total: o.total,
-        chars_in: o.chars_in,
-        chars_out: o.chars_out,
-        cut_pct: o.cut_pct,
+        input: o.input,
+        output: o.output,
+        cut: o.cut,
         evidence_kept: kept,
         evidence_total: case.evidence.len(),
         miss,
@@ -77,7 +77,7 @@ pub fn summarize(reports: &[Report]) -> Summary {
     for r in reports {
         ev_kept += r.evidence_kept;
         ev_total += r.evidence_total;
-        cut_sum += r.cut_pct;
+        cut_sum += r.cut;
         for m in &r.miss {
             miss.push((r.id.clone(), m.clone()));
         }
@@ -156,7 +156,7 @@ mod tests {
             r.miss
         );
         assert!(r.miss.is_empty());
-        assert!(r.cut_pct > 0.0, "压缩必须产生真实压减");
+        assert!(r.cut > 0.0, "压缩必须产生真实压减");
         assert_eq!(r.mode, Mode::Sieve);
     }
 

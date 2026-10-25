@@ -20,7 +20,7 @@ use crate::terms::PARAPHRASE_PAIRS as SYN;
 use std::io::{self, BufRead, Write};
 
 /// 一条自动标注（对应 baseline.json 的一个 case 条目 + 证据链）。
-pub(crate) struct AnnotatedCase {
+pub(crate) struct Annotated {
     pub query: String,
     pub layer: String,
     pub expected: Vec<String>,
@@ -37,8 +37,8 @@ pub(crate) struct AnnotatedCase {
 /// `dropped` 必须随报告输出：只报"生成了多少组"而不报"筛掉了多少 A 的失败
 /// 变体"，会让自检变成看不见的选择偏差。`--annotate` 现在打印
 /// `dropped: paraphrase=.. semantic=..`。
-pub(crate) struct AnnotateReport {
-    pub cases: Vec<AnnotatedCase>,
+pub(crate) struct Report {
+    pub cases: Vec<Annotated>,
     /// 自检未通过（目标不在 A 的 top-k）而丢弃的变体。
     pub dropped: Vec<(&'static str, String)>,
     /// paraphrase 无法改写（query 没有 SYN 表中的可替换词）。
@@ -48,7 +48,7 @@ pub(crate) struct AnnotateReport {
 }
 
 /// 自检结果：目标 case 在 top-k 召回中的位置与分数（None = 未召回，丢弃）。
-struct SelfCheck {
+struct Check {
     sim: f64,
     score: f64,
     rank: usize,
@@ -62,13 +62,8 @@ struct SelfCheck {
 /// note 附目标 case 摘要——供**人工盲测裁决**（不看 A/B 分数，只判 query 与目标是否相关）。
 /// 用途：消除"自检用 A 管线验证 = 用 A 自证"的选择偏差；A/B 评估平等面对全集，
 /// 自检本会丢弃的变体成为真阴性/假阳性对照。裁决后改 rel/删条，直接 `--eval` 即独立证据。
-pub(crate) fn annotate_report(
-    root: &str,
-    seed: u64,
-    max_cases: usize,
-    raw: bool,
-) -> io::Result<AnnotateReport> {
-    let ids = store::list_ids(root)?;
+pub(crate) fn report(root: &str, seed: u64, max_cases: usize, raw: bool) -> io::Result<Report> {
+    let ids = store::list(root)?;
     if ids.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
@@ -76,8 +71,8 @@ pub(crate) fn annotate_report(
         ));
     }
     // 自检与评估使用同一冻结时钟：标注结果不得因运行时刻改变近邻排序。
-    let meta = store::load_meta(root)?;
-    let ann_now_s = crate::memory::util::parse_utc_secs(&meta.created_at);
+    let meta = crate::memory::meta::load(root)?;
+    let ann_now_s = crate::memory::util::parse(&meta.created_at);
     // max_cases=0 表示全库，否则取 min 且至少 1。
     let cap = if max_cases == 0 {
         ids.len()
@@ -85,17 +80,17 @@ pub(crate) fn annotate_report(
         max_cases.min(ids.len()).max(1)
     };
     let ids: Vec<String> = ids.into_iter().take(cap).collect();
-    let mut out: Vec<AnnotatedCase> = Vec::new();
+    let mut out: Vec<Annotated> = Vec::new();
     let mut dropped: Vec<(&'static str, String)> = Vec::new();
     let mut paraphrase_no_synonym = 0usize;
     let mut semantic_no_root = 0usize;
     for id in ids {
-        let c = store::read_case(root, &id)?;
+        let c = store::load(root, &id)?;
         // literal：同指纹，直接是答案（judged=true：指纹相关可机械断言）。
-        out.push(AnnotatedCase {
+        out.push(Annotated {
             query: c.query.clone(),
             layer: "literal".to_string(),
-            expected: vec![hash16_of(&c)],
+            expected: vec![hash(&c)],
             rel: 2.0,
             judged: true,
             evidence: vec!["fingerprint".to_string()],
@@ -103,18 +98,18 @@ pub(crate) fn annotate_report(
         });
         // paraphrase 与 semantic 顺序固定：paraphrase 先改写并自检，
         // 不得因 paraphrase 分支跳过 semantic 生成（golden 回归实证）。
-        let mut ctx = AnnotateCtx {
+        let mut ctx = Ctx {
             root,
             ann_now_s,
             meta: &meta,
             out: &mut out,
             dropped: &mut dropped,
         };
-        push_paraphrase(&mut ctx, &c, seed, raw, &mut paraphrase_no_synonym);
-        push_semantic(&mut ctx, &c, raw, &mut semantic_no_root);
+        paraphrase(&mut ctx, &c, seed, raw, &mut paraphrase_no_synonym);
+        semantic(&mut ctx, &c, raw, &mut semantic_no_root);
     }
     // 总组数收敛到 30–50：cap 内每 case 最多 3 组；不足 30 时如实（宁缺毋滥，不编造）。
-    Ok(AnnotateReport {
+    Ok(Report {
         cases: out,
         dropped,
         paraphrase_no_synonym,
@@ -123,31 +118,25 @@ pub(crate) fn annotate_report(
 }
 
 /// paraphrase 层：同义词改写 + 自检（强相关门槛 top-5）；raw 模式不过自检。
-struct AnnotateCtx<'a> {
+struct Ctx<'a> {
     root: &'a str,
     ann_now_s: u64,
     meta: &'a crate::memory::store::Meta,
-    out: &'a mut Vec<AnnotatedCase>,
+    out: &'a mut Vec<Annotated>,
     dropped: &'a mut Vec<(&'static str, String)>,
 }
 
-fn push_paraphrase(
-    ctx: &mut AnnotateCtx<'_>,
-    c: &Case,
-    seed: u64,
-    raw: bool,
-    no_synonym: &mut usize,
-) {
+fn paraphrase(ctx: &mut Ctx<'_>, c: &Case, seed: u64, raw: bool, no_synonym: &mut usize) {
     let Some(q) = rewrite(c, seed) else {
         *no_synonym += 1;
         return;
     };
     if !raw {
-        match self_check(ctx.root, &q, c, 5, ctx.ann_now_s, ctx.meta) {
-            Some(s) => ctx.out.push(AnnotatedCase {
+        match check(ctx.root, &q, c, 5, ctx.ann_now_s, ctx.meta) {
+            Some(s) => ctx.out.push(Annotated {
                 query: q,
                 layer: "paraphrase".to_string(),
-                expected: vec![hash16_of(c)],
+                expected: vec![hash(c)],
                 rel: if s.sim >= 0.5 { 2.0 } else { 1.0 },
                 judged: true,
                 evidence: vec![
@@ -162,31 +151,31 @@ fn push_paraphrase(
             None => ctx.dropped.push(("paraphrase", q)),
         }
     } else {
-        ctx.out.push(AnnotatedCase {
+        ctx.out.push(Annotated {
             query: q,
             layer: "paraphrase".to_string(),
-            expected: vec![hash16_of(c)],
+            expected: vec![hash(c)],
             rel: 2.0,
             judged: false,
             evidence: vec!["synonym".to_string(), "raw".to_string()],
-            note: target_hint(c),
+            note: hint(c),
         });
     }
 }
 
 /// semantic 层：根因行词构造 + 自检（弱相关 rel=1，门槛放宽 top-10）；raw 模式不过自检。
-fn push_semantic(ctx: &mut AnnotateCtx<'_>, c: &Case, raw: bool, no_root: &mut usize) {
-    let sq = semantic_query(c);
+fn semantic(ctx: &mut Ctx<'_>, c: &Case, raw: bool, no_root: &mut usize) {
+    let sq = query(c);
     if sq.is_empty() {
         *no_root += 1;
         return;
     }
     if !raw {
-        match self_check(ctx.root, &sq, c, 10, ctx.ann_now_s, ctx.meta) {
-            Some(s) => ctx.out.push(AnnotatedCase {
+        match check(ctx.root, &sq, c, 10, ctx.ann_now_s, ctx.meta) {
+            Some(s) => ctx.out.push(Annotated {
                 query: sq,
                 layer: "semantic".to_string(),
-                expected: vec![hash16_of(c)],
+                expected: vec![hash(c)],
                 rel: 1.0,
                 judged: true,
                 evidence: vec![
@@ -201,25 +190,25 @@ fn push_semantic(ctx: &mut AnnotateCtx<'_>, c: &Case, raw: bool, no_root: &mut u
             None => ctx.dropped.push(("semantic", sq)),
         }
     } else {
-        ctx.out.push(AnnotatedCase {
+        ctx.out.push(Annotated {
             query: sq,
             layer: "semantic".to_string(),
-            expected: vec![hash16_of(c)],
+            expected: vec![hash(c)],
             rel: 1.0,
             judged: false,
             evidence: vec!["root-cause".to_string(), "raw".to_string()],
-            note: target_hint(c),
+            note: hint(c),
         });
     }
 }
 
 /// 盲测辅助信息：目标 case 摘要（query / fix / 原文首行），标注者据此裁决相关性。
-fn target_hint(c: &Case) -> String {
+fn hint(c: &Case) -> String {
     let text = c.text.lines().next().unwrap_or("").trim();
     let fix = c.fix.trim();
     format!(
         "target={} hint=[{}] fix=[{}]",
-        hash16_of(c),
+        hash(c),
         text.chars().take(64).collect::<String>(),
         fix.chars().take(48).collect::<String>()
     )
@@ -227,12 +216,12 @@ fn target_hint(c: &Case) -> String {
 
 /// 兼容入口：只要标注集（测试/门面复用）。
 #[cfg(test)]
-pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Vec<AnnotatedCase>> {
-    Ok(annotate_report(root, seed, max_cases, false)?.cases)
+pub(crate) fn annotate(root: &str, seed: u64, max_cases: usize) -> io::Result<Vec<Annotated>> {
+    Ok(report(root, seed, max_cases, false)?.cases)
 }
 
 /// hash16 后缀（与 --eval 的 tail16 匹配口径一致）。
-fn hash16_of(c: &Case) -> String {
+fn hash(c: &Case) -> String {
     c.id.rsplit('_').next().unwrap_or(&c.id).to_string()
 }
 
@@ -242,12 +231,12 @@ fn rewrite(c: &Case, seed: u64) -> Option<String> {
     let mut out = c.query.clone();
     let mut replaced = false;
     for (i, (from, to)) in SYN.iter().enumerate() {
-        if fnv1a(&format!("syn{i}\u{0}{seed}")) % 100 < 45 && replace_ci(&mut out, from, to) {
+        if fnv1a(&format!("syn{i}\u{0}{seed}")) % 100 < 45 && replace(&mut out, from, to) {
             replaced = true;
         }
     }
     if !replaced {
-        force_first_synonym(&mut out, &mut replaced);
+        force(&mut out, &mut replaced);
     }
     if !replaced || out == c.query {
         return None;
@@ -256,9 +245,9 @@ fn rewrite(c: &Case, seed: u64) -> Option<String> {
 }
 
 /// 零替换兜底：强制替换第一个可替换词（保证变体 ≠ 原 query）。
-fn force_first_synonym(out: &mut String, replaced: &mut bool) {
+fn force(out: &mut String, replaced: &mut bool) {
     for (from, to) in SYN.iter() {
-        if replace_ci(out, from, to) {
+        if replace(out, from, to) {
             *replaced = true;
             break;
         }
@@ -268,7 +257,7 @@ fn force_first_synonym(out: &mut String, replaced: &mut bool) {
 /// 大小写不敏感字面替换（首次命中即替换，避免同词多轮扰动）。
 /// 边界检查必须走 char 边界安全切片：pos 由 lower（与 s 字节对齐）求得，
 /// 前后各取一个完整 char 判断——中文 query 场景下字节切片会 panic。
-fn replace_ci(s: &mut String, from: &str, to: &str) -> bool {
+fn replace(s: &mut String, from: &str, to: &str) -> bool {
     if from.is_empty() || to.is_empty() {
         return false;
     }
@@ -297,12 +286,12 @@ fn replace_ci(s: &mut String, from: &str, to: &str) -> bool {
 
 /// semantic 查询构造：优先取根因行（Root cause / cause / 原因）的词，token 与 query
 /// 几乎不共享；无根因行则退化为 error_code 家族词反译（自检兜底放行）。
-fn semantic_query(c: &Case) -> String {
+fn query(c: &Case) -> String {
     let hay = c.evidence.join("\n");
     for kw in ["root cause", "root-cause", "cause:", "原因"] {
         if let Some(idx) = hay.to_lowercase().find(kw) {
             let line = hay[idx..].split('\n').next().unwrap_or("");
-            let terms = crate::terms::build_mem_terms(line);
+            let terms = crate::terms::memory(line);
             if !terms.is_empty() {
                 let mut q: Vec<String> = Vec::new();
                 for t in terms.iter().take(3) {
@@ -336,20 +325,20 @@ fn semantic_query(c: &Case) -> String {
 /// 自检：该 query 召回 top-k 是否含目标 case（tail16 匹配）。零写入（纯检索）。
 /// 门槛按相关度分层：literal/paraphrase（强相关）top-5；
 /// semantic（弱相关，rel=1）放宽 top-10——语义变体词面重叠天然低，top-5 会系统性误杀。
-fn self_check(
+fn check(
     root: &str,
     query: &str,
     target: &Case,
     k: usize,
     now_s: u64,
     meta: &crate::memory::store::Meta,
-) -> Option<SelfCheck> {
-    let target_tail = hash16_of(target);
-    let hits = recall::recall_at(root, query, k, now_s, meta).ok()?;
+) -> Option<Check> {
+    let target_tail = hash(target);
+    let hits = recall::clock(root, query, k, now_s, meta).ok()?;
     for (rank, h) in hits.iter().enumerate() {
         let tail = h.id.rsplit('_').next().unwrap_or(&h.id);
         if tail == target_tail {
-            return Some(SelfCheck {
+            return Some(Check {
                 sim: h.sim,
                 score: h.score,
                 rank: rank + 1,
@@ -359,10 +348,10 @@ fn self_check(
     None
 }
 
-/// JSON 字符串引号（复用 json::escape_str 最小转义集）。
+/// JSON 字符串引号（复用 json::escape 最小转义集）。
 fn quote(s: &str) -> String {
     let mut out = String::from("\"");
-    crate::memory::json::escape_str(s, &mut out);
+    crate::memory::json::escape(s, &mut out);
     out.push('"');
     out
 }
@@ -370,20 +359,20 @@ fn quote(s: &str) -> String {
 /// 把标注集序列化为 baseline.json（兼容 --eval；expected 用 hash16）。
 /// judged=false（盲测 raw 集）时不写 rel，改写 `"judge": null`——人工未裁决，
 /// `--eval` 解析到 judge:null 直接报错拒绝（防止"接受预填 rel = 自动标注自证"）。
-pub(crate) fn write_baseline(cases: &[AnnotatedCase]) -> String {
+pub(crate) fn baseline(cases: &[Annotated]) -> String {
     let mut body = String::from("{\"cases\":[");
     for (i, c) in cases.iter().enumerate() {
         if i > 0 {
             body.push(',');
         }
-        push_case_json(&mut body, c);
+        item(&mut body, c);
     }
     body.push_str("]}");
     body
 }
 
 /// 单条 case 的 JSON 序列化。
-fn push_case_json(body: &mut String, c: &AnnotatedCase) {
+fn item(body: &mut String, c: &Annotated) {
     body.push_str(&format!(
         "{{\"query\":{},\"layer\":\"{}\",\"expected\":[\"{}\"]",
         quote(&c.query),
@@ -394,12 +383,12 @@ fn push_case_json(body: &mut String, c: &AnnotatedCase) {
         body.push_str(&format!(
             ",\"rel\":{{\"{}\":{}}}",
             c.expected[0],
-            fmt_rel(c.rel)
+            relevance(c.rel)
         ));
     } else {
         body.push_str(",\"judge\":null");
     }
-    push_evidence_json(body, &c.evidence);
+    evidence(body, &c.evidence);
     if !c.note.is_empty() {
         body.push_str(&format!(",\"note\":{}", quote(&c.note)));
     }
@@ -407,7 +396,7 @@ fn push_case_json(body: &mut String, c: &AnnotatedCase) {
 }
 
 /// evidence 数组序列化（空则跳过）。
-fn push_evidence_json(body: &mut String, evidence: &[String]) {
+fn evidence(body: &mut String, evidence: &[String]) {
     if evidence.is_empty() {
         return;
     }
@@ -422,7 +411,7 @@ fn push_evidence_json(body: &mut String, evidence: &[String]) {
 }
 
 /// rel 序列化：2.0 → "2"，1.0 → "1"（省体积，eval 解析 0..=2 数值容错整数）。
-fn fmt_rel(r: f64) -> String {
+fn relevance(r: f64) -> String {
     if r == r.floor() {
         format!("{}", r as i64)
     } else {
@@ -432,7 +421,7 @@ fn fmt_rel(r: f64) -> String {
 
 /// 标注统计（stdout 报告用）：层分布 / rel 分布 / 组数。
 /// judged=false（raw 盲测集）的条目不计入 rel2/rel1，单独报 `unjudged`。
-pub(crate) fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
+pub(crate) fn stats(cases: &[Annotated]) -> Vec<String> {
     let mut by_layer: std::collections::BTreeMap<String, usize> = Default::default();
     let mut rel2 = 0usize;
     let mut unjudged = 0usize;
@@ -462,7 +451,7 @@ pub(crate) fn stats(cases: &[AnnotatedCase]) -> Vec<String> {
 }
 
 /// 含丢弃统计的报告行：让选择偏差可见。
-pub(crate) fn stats_report(report: &AnnotateReport) -> Vec<String> {
+pub(crate) fn summary(report: &Report) -> Vec<String> {
     let mut lines = stats(&report.cases);
     let paraphrase = report
         .dropped
@@ -492,7 +481,7 @@ pub(crate) fn stats_report(report: &AnnotateReport) -> Vec<String> {
 pub(crate) fn judge(path: &str, by: &str) -> io::Result<Vec<String>> {
     let txt = std::fs::read_to_string(path)?;
     let mut v = json::parse(&txt).map_err(io::Error::other)?;
-    let cases = cases_of(&mut v)?;
+    let cases = cases(&mut v)?;
     if cases.is_empty() {
         return Err(io::Error::other("judge: no cases to adjudicate"));
     }
@@ -503,17 +492,17 @@ pub(crate) fn judge(path: &str, by: &str) -> io::Result<Vec<String>> {
     let mut skipped = 0usize;
     let mut judged_rows: Vec<String> = Vec::new();
     for (i, item) in cases.iter_mut().enumerate() {
-        if let Some(row) = adjudicate_item(item, i, total, &mut lines, by)? {
+        if let Some(row) = adjudicate(item, i, total, &mut lines, by)? {
             judged += 1;
             judged_rows.push(row);
         } else {
             skipped += 1;
         }
     }
-    finish_judge(path, &v, judged, skipped, total, by, judged_rows)
+    finish(path, &v, judged, skipped, total, by, judged_rows)
 }
 
-fn adjudicate_item(
+fn adjudicate(
     item: &mut Val,
     i: usize,
     total: usize,
@@ -524,22 +513,22 @@ fn adjudicate_item(
         Val::Obj(kvs) => kvs,
         _ => return Err(io::Error::other(format!("judge: cases[{i}] not an object"))),
     };
-    if already_judged(kvs) {
+    if judged(kvs) {
         return Ok(None);
     }
-    let layer = get_str(kvs, "layer");
-    let query = get_str(kvs, "query");
-    let note = get_str(kvs, "note");
-    let target = get_first_expected(kvs).unwrap_or_default();
+    let layer = text(kvs, "layer");
+    let query = text(kvs, "query");
+    let note = text(kvs, "note");
+    let target = expected(kvs).unwrap_or_default();
     println!("[{}/{}] layer={} query=\"{}\"", i + 1, total, layer, query);
     if !note.is_empty() {
         println!("  hint: {note}");
     }
-    let rel = read_rel(lines)?;
-    Ok(record_judgment(kvs, by, &target, rel, &layer, &query))
+    let rel = number(lines)?;
+    Ok(record(kvs, by, &target, rel, &layer, &query))
 }
 
-fn finish_judge(
+fn finish(
     path: &str,
     v: &Val,
     judged: usize,
@@ -551,7 +540,7 @@ fn finish_judge(
     std::fs::write(path, json::write(v))?;
     let mut out = vec![
         format!("judge: judged={judged} skipped={skipped} total={total}"),
-        format!("  by={by} date={}", crate::memory::util::utc_now()),
+        format!("  by={by} date={}", crate::memory::util::stamp()),
         format!("  out: {path} (skipped keep judge:null, --eval still rejects them)"),
     ];
     out.extend(judged_rows);
@@ -559,7 +548,7 @@ fn finish_judge(
 }
 
 /// 从 baseline JSON 取出 cases 数组（借用至写回）；结构不符的报错文案逐字保持。
-fn cases_of(v: &mut Val) -> io::Result<&mut Vec<Val>> {
+fn cases(v: &mut Val) -> io::Result<&mut Vec<Val>> {
     match v {
         Val::Obj(kvs) => match kvs.iter_mut().find(|(k, _)| k == "cases") {
             Some((_, Val::Arr(items))) => Ok(items),
@@ -570,7 +559,7 @@ fn cases_of(v: &mut Val) -> io::Result<&mut Vec<Val>> {
 }
 
 /// 已裁决条目：rel 或 judge 已落成对象即跳过（断点续裁口径）。
-fn already_judged(kvs: &[(String, Val)]) -> bool {
+fn judged(kvs: &[(String, Val)]) -> bool {
     kvs.iter().any(|(k, val)| match k.as_str() {
         "rel" => matches!(val, Val::Obj(_)),
         "judge" => matches!(val, Val::Obj(_)),
@@ -579,7 +568,7 @@ fn already_judged(kvs: &[(String, Val)]) -> bool {
 }
 
 /// 读一条 rel 输入：2/1/0 接受，s/S/空 跳过，其余提示重输；EOF 报错文案逐字保持。
-fn read_rel(lines: &mut io::Lines<io::StdinLock<'_>>) -> io::Result<Option<f64>> {
+fn number(lines: &mut io::Lines<io::StdinLock<'_>>) -> io::Result<Option<f64>> {
     loop {
         print!("  rel? [2=strong 1=weak 0=unrelated s=skip] > ");
         io::stdout().flush()?;
@@ -592,7 +581,7 @@ fn read_rel(lines: &mut io::Lines<io::StdinLock<'_>>) -> io::Result<Option<f64>>
                 ))
             }
         };
-        match parse_rel_input(&buf) {
+        match input(&buf) {
             Some(rel) => return Ok(rel),
             None => println!("  (input: 2/1/0/s)"),
         }
@@ -600,7 +589,7 @@ fn read_rel(lines: &mut io::Lines<io::StdinLock<'_>>) -> io::Result<Option<f64>>
 }
 
 /// 单行 rel 输入解析：`Some(Some(r))` 接受，`Some(None)` 跳过，`None` 提示重输。
-fn parse_rel_input(buf: &str) -> Option<Option<f64>> {
+fn input(buf: &str) -> Option<Option<f64>> {
     match buf.trim() {
         "2" => Some(Some(2.0)),
         "1" => Some(Some(1.0)),
@@ -611,7 +600,7 @@ fn parse_rel_input(buf: &str) -> Option<Option<f64>> {
 }
 
 /// 落盘一条裁决：写 rel/judge 元数据并返回报告行；跳过返回 None。
-fn record_judgment(
+fn record(
     kvs: &mut Vec<(String, Val)>,
     by: &str,
     target: &str,
@@ -625,7 +614,7 @@ fn record_judgment(
         "rel",
         Val::Obj(vec![(target.to_string(), Val::Num(r))]),
     );
-    let date = crate::memory::util::utc_now();
+    let date = crate::memory::util::stamp();
     upsert(
         kvs,
         "judge",
@@ -636,7 +625,7 @@ fn record_judgment(
     );
     Some(format!(
         "  judged[{}] {} query=\"{}\"",
-        fmt_rel(r),
+        relevance(r),
         layer,
         query
     ))
@@ -651,7 +640,7 @@ fn upsert(kvs: &mut Vec<(String, Val)>, key: &str, val: Val) {
     }
 }
 
-fn get_str(kvs: &[(String, Val)], key: &str) -> String {
+fn text(kvs: &[(String, Val)], key: &str) -> String {
     kvs.iter()
         .find(|(k, _)| k == key)
         .map(|(_, v)| match v {
@@ -661,7 +650,7 @@ fn get_str(kvs: &[(String, Val)], key: &str) -> String {
         .unwrap_or_default()
 }
 
-fn get_first_expected(kvs: &[(String, Val)]) -> Option<String> {
+fn expected(kvs: &[(String, Val)]) -> Option<String> {
     kvs.iter()
         .find(|(k, _)| k == "expected")
         .and_then(|(_, v)| match v {
@@ -678,15 +667,15 @@ mod tests {
     use super::*;
     use crate::memory::eval;
     use crate::memory::ingest;
-    use crate::memory::store::CaseStats;
-    use crate::memory::util::tmp_root;
+    use crate::memory::store::Stats;
+    use crate::memory::util::root;
     use std::fs;
 
-    fn seed_case() -> CaseStats {
-        CaseStats {
+    fn seed_case() -> Stats {
+        Stats {
             kept: 3,
             total: 200,
-            cut_pct: 94.2,
+            cut: 94.2,
             risk: "HIGH".to_string(),
         }
     }
@@ -706,7 +695,7 @@ mod tests {
 
     #[test]
     fn annotate_three_layers_selfchecked() {
-        let root = tmp_root("3layer");
+        let root = root("3layer");
         seed_lib(&root);
         let cases = annotate(&root, 0, 16).unwrap();
         assert!(!cases.is_empty(), "必须有标注产出");
@@ -732,18 +721,18 @@ mod tests {
     #[test]
     fn annotate_baseline_roundtrip_into_eval() {
         // 生成的 baseline 必须能被 --eval 解析并重放（端到端契约）。
-        let root = tmp_root("eval");
+        let root = root("eval");
         seed_lib(&root);
         let cases = annotate(&root, 0, 16).unwrap();
-        let text = write_baseline(&cases);
-        let parsed = eval::parse_baseline(&crate::memory::json::parse(&text).unwrap()).unwrap();
+        let text = baseline(&cases);
+        let parsed = eval::baseline(&crate::memory::json::parse(&text).unwrap()).unwrap();
         assert_eq!(parsed.len(), cases.len(), "roundtrip 组数一致");
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
     fn annotate_deterministic_by_seed() {
-        let root = tmp_root("det");
+        let root = root("det");
         seed_lib(&root);
         let a = annotate(&root, 7, 16).unwrap();
         let b = annotate(&root, 7, 16).unwrap();
@@ -761,10 +750,10 @@ mod tests {
 
     #[test]
     fn annotate_reports_dropped_variants() {
-        let root = tmp_root("dropped");
+        let root = root("dropped");
         seed_lib(&root);
-        let report = annotate_report(&root, 0, 16, false).unwrap();
-        let lines = stats_report(&report);
+        let report = report(&root, 0, 16, false).unwrap();
+        let lines = summary(&report);
         let text = lines.join("\n");
         assert!(text.contains("dropped:"), "必须报告自检丢弃数: {text}");
         let dp = report
@@ -796,7 +785,7 @@ mod tests {
     #[test]
     fn replace_ci_respects_word_boundaries() {
         let mut s = "db timeout in database".to_string();
-        assert!(replace_ci(&mut s, "db", "database"));
+        assert!(replace(&mut s, "db", "database"));
         assert_eq!(
             s, "database timeout in database",
             "仅替换独立词 db，不碰 database 内嵌"
@@ -808,11 +797,11 @@ mod tests {
     fn replace_ci_safe_on_cjk_boundary() {
         let mut s = "数据库连接池耗尽 pool".to_string();
         // "连接池" 前的 "库" 是 3 字节字符——旧实现 pos.saturating_sub(1)..pos 会 panic。
-        assert!(replace_ci(&mut s, "连接池", "pool"));
+        assert!(replace(&mut s, "连接池", "pool"));
         assert_eq!(s, "数据库pool耗尽 pool", "中文同义词替换应成功");
         // 词边界不匹配时安全返回 false（不 panic、不替换）。
         let mut t = "磁盘空间不足".to_string();
-        assert!(!replace_ci(&mut t, "空间不足x", "disk"), "无命中不 panic");
+        assert!(!replace(&mut t, "空间不足x", "disk"), "无命中不 panic");
         assert_eq!(t, "磁盘空间不足");
     }
 
@@ -820,12 +809,12 @@ mod tests {
     /// 且每条 raw 变体带盲测摘要（note 含 target=hint=fix=），供人工裁决（选择偏差消除）。
     #[test]
     fn annotate_raw_is_superset_with_blind_hint() {
-        let root = tmp_root("rawsup");
+        let root = root("rawsup");
         seed_lib(&root);
         let cases = annotate(&root, 0, 16).unwrap();
-        let raw = annotate_report(&root, 0, 16, true).unwrap();
+        let raw = report(&root, 0, 16, true).unwrap();
         let raw = &raw.cases;
-        let keys = |v: &[AnnotatedCase]| -> Vec<String> {
+        let keys = |v: &[Annotated]| -> Vec<String> {
             let mut k: Vec<String> = v
                 .iter()
                 .map(|c| format!("{}-{}", c.layer, c.query))

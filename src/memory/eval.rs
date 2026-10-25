@@ -11,17 +11,17 @@
 //! 确定性：无随机源，同 baseline + 同库 → 同输出，可重放存档。
 //! 时间衰减时钟冻结到库的 `created_at`，避免同一快照因运行时刻不同而在近似并列处换序。
 //!
-use crate::memory::gate::GateMode;
+use crate::memory::gate::Gate;
 use crate::memory::json::Val;
-use crate::memory::recall::{self, RecallHit};
+use crate::memory::recall::{self, Hit};
 use crate::memory::store;
-use crate::memory::EvalMode;
-use crate::terms::{build_doc_terms, build_mem_terms};
+use crate::memory::Eval;
+use crate::terms::{document, memory};
 use std::collections::HashMap;
 
 /// 单条评估输入（baseline.json 的一行标注）。
 #[derive(Debug)]
-pub(crate) struct EvalCase {
+pub(crate) struct Case {
     pub query: String,
     pub layer: String,
     pub expected: Vec<String>,
@@ -37,17 +37,17 @@ pub(crate) struct EvalCase {
     pub judge_items: HashMap<String, String>,
 }
 
-impl EvalCase {
+impl Case {
     /// expected 首个目标的相关度；literal 层 query 就是目标 case 原文，
     /// 该值必须为 2，否则标签与行不对应（或整包机械填写）。
-    pub(crate) fn expected_rel(&self) -> Option<f64> {
-        self.expected.first().map(|e| rel_of(self, e))
+    pub(crate) fn expected(&self) -> Option<f64> {
+        self.expected.first().map(|e| relation(self, e))
     }
 }
 
 /// 解析 baseline.json：`{"name":..,"cases":[{"query":..,"layer":..,"expected":[..],"rel":{..}}]}`
 /// rel 缺省时 expected 内 case 视为 rel=1；容错（缺字段报错，不静默）。
-pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
+pub(crate) fn baseline(v: &Val) -> Result<Vec<Case>, String> {
     let cases = match v {
         Val::Obj(kvs) => match kvs.iter().find(|(k, _)| k == "cases") {
             Some((_, Val::Arr(items))) => items,
@@ -61,14 +61,14 @@ pub(crate) fn parse_baseline(v: &Val) -> Result<Vec<EvalCase>, String> {
             Val::Obj(kvs) => kvs,
             _ => return Err(format!("baseline: cases[{i}] not an object")),
         };
-        out.push(parse_case(kvs, i)?);
+        out.push(case(kvs, i)?);
     }
     Ok(out)
 }
 
 /// 解析单条 case：query/layer/expected/rel/judge 元数据/judge_items。
 /// 与原内联逻辑逐字段一一对应，仅拆分以降低圈复杂度。
-fn parse_case(kvs: &[(String, Val)], i: usize) -> Result<EvalCase, String> {
+fn case(kvs: &[(String, Val)], i: usize) -> Result<Case, String> {
     let get_str = |key: &str| -> Result<String, String> {
         match kvs.iter().find(|(k, _)| k == key) {
             Some((_, Val::Str(s))) => Ok(s.clone()),
@@ -87,11 +87,11 @@ fn parse_case(kvs: &[(String, Val)], i: usize) -> Result<EvalCase, String> {
             "baseline: cases[{i}] unjudged (judge:null) - run --judge first"
         ));
     }
-    let expected = parse_expected(kvs, i)?;
-    let rel = parse_rel(kvs, &expected, i)?;
-    let (judged_by, judged_date, judged_method) = parse_judge(kvs);
-    let judge_items = parse_items(kvs);
-    Ok(EvalCase {
+    let expected = wanted(kvs, i)?;
+    let rel = parse(kvs, &expected, i)?;
+    let (judged_by, judged_date, judged_method) = judge(kvs);
+    let judge_items = items(kvs);
+    Ok(Case {
         query,
         layer,
         expected,
@@ -104,7 +104,7 @@ fn parse_case(kvs: &[(String, Val)], i: usize) -> Result<EvalCase, String> {
 }
 
 /// 解析 expected 字符串数组。
-fn parse_expected(kvs: &[(String, Val)], i: usize) -> Result<Vec<String>, String> {
+fn wanted(kvs: &[(String, Val)], i: usize) -> Result<Vec<String>, String> {
     match kvs.iter().find(|(k, _)| k == "expected") {
         Some((_, Val::Arr(items))) => {
             let mut v = Vec::with_capacity(items.len());
@@ -121,7 +121,7 @@ fn parse_expected(kvs: &[(String, Val)], i: usize) -> Result<Vec<String>, String
 }
 
 /// 解析 rel 字典并为未标注的 expected 补 rel=1。
-fn parse_rel(
+fn parse(
     kvs: &[(String, Val)],
     expected: &[String],
     i: usize,
@@ -129,7 +129,7 @@ fn parse_rel(
     let mut rel = HashMap::new();
     if let Some((_, Val::Obj(rel_kvs))) = kvs.iter().find(|(k, _)| k == "rel") {
         for (rk, rv) in rel_kvs {
-            let r = rel_value(rv, i, rk)?;
+            let r = value(rv, i, rk)?;
             rel.insert(rk.clone(), r);
         }
     }
@@ -137,27 +137,27 @@ fn parse_rel(
     // 不同）。先按同一匹配口径找已有标签，避免为同一 case 再插入 rel=1
     // 的重复键；否则 rel_of 会因 HashMap 遍历顺序随机取到 1 或 2。
     for e in expected {
-        if !rel_has_match(&rel, e) {
+        if !matched(&rel, e) {
             rel.insert(e.clone(), 1.0);
         }
     }
     Ok(rel)
 }
 
-fn rel_value(rv: &Val, i: usize, rk: &str) -> Result<f64, String> {
+fn value(rv: &Val, i: usize, rk: &str) -> Result<f64, String> {
     match rv {
         Val::Num(n) if n.is_finite() && (0.0..=2.0).contains(n) => Ok(*n),
         _ => Err(format!("baseline: cases[{i}].rel.{rk} not 0..=2 number")),
     }
 }
 
-fn rel_has_match(rel: &HashMap<String, f64>, e: &str) -> bool {
-    rel.keys().any(|k| id_matches(e, k) || id_matches(k, e))
+fn matched(rel: &HashMap<String, f64>, e: &str) -> bool {
+    rel.keys().any(|k| same(e, k) || same(k, e))
 }
 
 /// 读取 judge 元数据供 --gate 校验。自动标注集没有 judge
 /// 对象（或只有 rel），因此不能冒充人工裁决证据。
-fn parse_judge(kvs: &[(String, Val)]) -> (Option<String>, Option<String>, Option<String>) {
+fn judge(kvs: &[(String, Val)]) -> (Option<String>, Option<String>, Option<String>) {
     let mut judged_by = None;
     let mut judged_date = None;
     let mut judged_method = None;
@@ -178,7 +178,7 @@ fn parse_judge(kvs: &[(String, Val)]) -> (Option<String>, Option<String>, Option
 }
 
 /// 读取 judge_items：候选 id → 裁决人。
-fn parse_items(kvs: &[(String, Val)]) -> HashMap<String, String> {
+fn items(kvs: &[(String, Val)]) -> HashMap<String, String> {
     let mut judge_items = HashMap::new();
     if let Some((_, Val::Obj(ikvs))) = kvs.iter().find(|(k, _)| k == "judge_items") {
         for (ik, iv) in ikvs {
@@ -204,7 +204,7 @@ fn parse_items(kvs: &[(String, Val)]) -> HashMap<String, String> {
 /// （case id 为 64 位后 tail=16 hex，标注集里的旧 8 位
 /// hash 仍须匹配，golden 免日期漂移）。完整 id 的日期前缀允许不同：重建库跨日
 /// 运行时 hash 不变，冻结 baseline 不应因此整体 miss。
-fn id_matches(exp: &str, id: &str) -> bool {
+fn same(exp: &str, id: &str) -> bool {
     let tail = id.rsplit('_').next().unwrap_or(id);
     let tail8 = if tail.len() >= 8 {
         &tail[tail.len() - 8..]
@@ -217,11 +217,11 @@ fn id_matches(exp: &str, id: &str) -> bool {
         || exp.rsplit('_').next().is_some_and(|suffix| suffix == tail)
 }
 
-fn hit_expected(exp: &[String], id: &str) -> bool {
-    exp.iter().any(|e| id_matches(e, id))
+fn contains(exp: &[String], id: &str) -> bool {
+    exp.iter().any(|e| same(e, id))
 }
 
-fn rel_of(c: &EvalCase, id: &str) -> f64 {
+fn relation(c: &Case, id: &str) -> f64 {
     if let Some(v) = c.rel.get(id) {
         return *v;
     }
@@ -242,26 +242,26 @@ fn rel_of(c: &EvalCase, id: &str) -> f64 {
     let mut keys: Vec<&String> = c.rel.keys().collect();
     keys.sort();
     keys.into_iter()
-        .find(|k| id_matches(k, id))
+        .find(|k| same(k, id))
         .map(|k| c.rel[k])
         .unwrap_or(0.0)
 }
 
 /// 单例指标：Recall@5 / Recall@10（expected 命中占比）、MRR（首个 expected 的 1/rank）、
 /// NDCG@10（rel 分级，DCG/IDCG）。r10 供弱相关 semantic 层使用。
-fn metric(c: &EvalCase, hits: &[RecallHit]) -> (f64, f64, f64, f64) {
+fn metric(c: &Case, hits: &[Hit]) -> (f64, f64, f64, f64) {
     let (r5, r10) = if c.expected.is_empty() {
         (0.0, 0.0)
     } else {
         let hit5 = hits
             .iter()
             .take(5)
-            .filter(|h| hit_expected(&c.expected, &h.id))
+            .filter(|h| contains(&c.expected, &h.id))
             .count();
         let hit10 = hits
             .iter()
             .take(10)
-            .filter(|h| hit_expected(&c.expected, &h.id))
+            .filter(|h| contains(&c.expected, &h.id))
             .count();
         (
             hit5 as f64 / c.expected.len() as f64,
@@ -270,12 +270,12 @@ fn metric(c: &EvalCase, hits: &[RecallHit]) -> (f64, f64, f64, f64) {
     };
     let mut mrr = 0.0;
     for (i, h) in hits.iter().take(10).enumerate() {
-        if hit_expected(&c.expected, &h.id) {
+        if contains(&c.expected, &h.id) {
             mrr = 1.0 / (i as f64 + 1.0);
             break;
         }
     }
-    let dcg_r: Vec<f64> = hits.iter().take(10).map(|h| rel_of(c, &h.id)).collect();
+    let dcg_r: Vec<f64> = hits.iter().take(10).map(|h| relation(c, &h.id)).collect();
     let dc = dcg(&dcg_r);
     // IDCG 必须来自 rel 字典里所有标注为相关的候选（含非 expected 的弱相关/强相关），
     // 不能只用 expected：否则实际 top-10 里的 rel=1 候选会让 DCG > IDCG，NDCG 突破 1.0。
@@ -299,44 +299,44 @@ fn dcg(rels: &[f64]) -> f64 {
 pub(crate) fn run(
     root: &str,
     path: &str,
-    mode: EvalMode,
+    mode: Eval,
     verbose: bool,
 ) -> std::io::Result<(Vec<String>, bool)> {
     let gate_mode = match mode {
-        EvalMode::Report => None,
-        EvalMode::Mechanical => Some(GateMode::Mechanical),
-        EvalMode::Human => Some(GateMode::Human),
-        EvalMode::Items => Some(GateMode::Items),
+        Eval::Report => None,
+        Eval::Mechanical => Some(Gate::Mechanical),
+        Eval::Human => Some(Gate::Human),
+        Eval::Items => Some(Gate::Items),
     };
-    run_impl(root, path, verbose, gate_mode)
+    inner(root, path, verbose, gate_mode)
 }
 
-fn run_impl(
+fn inner(
     root: &str,
     path: &str,
     verbose: bool,
-    gate_mode: Option<GateMode>,
+    gate_mode: Option<Gate>,
 ) -> std::io::Result<(Vec<String>, bool)> {
     let txt = std::fs::read_to_string(path)?;
     let v = crate::memory::json::parse(&txt)
         .map_err(|e| std::io::Error::other(format!("eval: {e}")))?;
-    let cases = parse_baseline(&v).map_err(std::io::Error::other)?;
-    let meta = store::load_meta(root)?;
-    let eval_now_s = crate::memory::util::parse_utc_secs(&meta.created_at);
-    let (l1_base, l1_margin) = crate::memory::feedback::l1_params(&meta);
-    let plain = PlainScorer::load(root, &meta)?;
-    let mut acc = EvalAcc::default();
+    let cases = baseline(&v).map_err(std::io::Error::other)?;
+    let meta = crate::memory::meta::load(root)?;
+    let eval_now_s = crate::memory::util::parse(&meta.created_at);
+    let (l1_base, l1_margin) = crate::memory::feedback::params(&meta);
+    let plain = Plain::load(root, &meta)?;
+    let mut acc = Acc::default();
     for c in &cases {
-        let a = recall::recall_at(root, &c.query, 10, eval_now_s, &meta)?;
+        let a = recall::clock(root, &c.query, 10, eval_now_s, &meta)?;
         let b = plain.search(&c.query, 10);
-        acc.fold_case(c, a, b, l1_base, l1_margin, verbose);
+        acc.fold(c, a, b, l1_base, l1_margin, verbose);
     }
-    build_report(&cases, &acc, verbose, gate_mode)
+    report(&cases, &acc, verbose, gate_mode)
 }
 
 /// 一次重放的累加状态：分层顺序按首次出现保持（golden 稳定）。
 #[derive(Default)]
-struct EvalAcc {
+struct Acc {
     l1_hit: usize,
     l1_total: usize,
     layers: Vec<String>,
@@ -345,21 +345,21 @@ struct EvalAcc {
     /// 每层每 case 的 A/B mrr/ndcg 值（bootstrap 95% CI 重采样用）。
     per: HashMap<String, [Vec<f64>; 4]>,
     /// verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
-    diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)>,
+    diag: Vec<(String, Vec<Hit>, Vec<Hit>)>,
 }
 
-impl EvalAcc {
-    fn fold_case(
+impl Acc {
+    fn fold(
         &mut self,
-        c: &EvalCase,
-        a: Vec<RecallHit>,
-        b: Vec<RecallHit>,
+        c: &Case,
+        a: Vec<Hit>,
+        b: Vec<Hit>,
         l1_base: f64,
         l1_margin: f64,
         verbose: bool,
     ) {
         if let Some(top) = a.first() {
-            if hit_expected(&c.expected, &top.id) {
+            if contains(&c.expected, &top.id) {
                 self.l1_total += 1;
                 let margin_ok = a
                     .get(1)
@@ -399,11 +399,11 @@ impl EvalAcc {
 }
 
 /// 汇总报告行 + 门禁判定；返回（输出行，是否未通过门禁）。
-fn build_report(
-    cases: &[EvalCase],
-    acc: &EvalAcc,
+fn report(
+    cases: &[Case],
+    acc: &Acc,
     verbose: bool,
-    gate_mode: Option<GateMode>,
+    gate_mode: Option<Gate>,
 ) -> std::io::Result<(Vec<String>, bool)> {
     let mut out = Vec::with_capacity(acc.layers.len() + 2);
     // 报告 NDCG 判别强度——multi-rel 条目（expected>1 或 rel 多值）
@@ -421,7 +421,7 @@ fn build_report(
     ));
     for l in &acc.layers {
         let e = acc.agg.get(l).unwrap_or(&[0.0; 9]);
-        out.push(layer_line(l, e, acc.per.get(l).unwrap()));
+        out.push(layer(l, e, acc.per.get(l).unwrap()));
     }
     // L1 直答命中率出表。
     let l1_rate = if acc.l1_total > 0 {
@@ -436,7 +436,7 @@ fn build_report(
     // 机械门——样本量/分层/裁决元数据/主指标 A≥B。
     let mut gate_failed = false;
     if let Some(mode) = gate_mode {
-        let g = gate_check(mode, cases, acc);
+        let g = gate(mode, cases, acc);
         out.extend(g.lines);
         gate_failed = g.failed;
     }
@@ -444,38 +444,34 @@ fn build_report(
     if verbose {
         for (i, (q, a, b)) in acc.diag.iter().enumerate() {
             out.push(format!("case {}/{} q=\"{}\"", i + 1, acc.diag.len(), q));
-            out.push(format!("  A: {}", fmt_hits(a, &cases[i])));
-            out.push(format!("  B: {}", fmt_hits(b, &cases[i])));
+            out.push(format!("  A: {}", hits(a, &cases[i])));
+            out.push(format!("  B: {}", hits(b, &cases[i])));
         }
     }
     Ok((out, gate_failed))
 }
 
 /// 按门禁模式选择检查器。
-fn gate_check(
-    mode: GateMode,
-    cases: &[EvalCase],
-    acc: &EvalAcc,
-) -> crate::memory::gate::GateResult {
+fn gate(mode: Gate, cases: &[Case], acc: &Acc) -> crate::memory::gate::Verdict {
     match mode {
-        GateMode::Mechanical => crate::memory::gate::check(cases, &acc.layers, &acc.agg),
-        GateMode::Human => crate::memory::gate::check_human(cases, &acc.layers, &acc.agg),
-        GateMode::Items => crate::memory::gate::check_items(cases, &acc.layers, &acc.agg),
+        Gate::Mechanical => crate::memory::gate::check(cases, &acc.layers, &acc.agg),
+        Gate::Human => crate::memory::gate::human(cases, &acc.layers, &acc.agg),
+        Gate::Items => crate::memory::gate::items(cases, &acc.layers, &acc.agg),
     }
 }
 
 /// 分层报告行：强相关层用 r@5，semantic 弱相关层用 r@10；CI 固定 seed。
-fn layer_line(name: &str, e: &[f64; 9], p: &[Vec<f64>; 4]) -> String {
+fn layer(name: &str, e: &[f64; 9], p: &[Vec<f64>; 4]) -> String {
     let n = e[0].max(1.0);
     let (k, a_r, b_r) = if name == "semantic" {
         (10, e[2], e[6])
     } else {
         (5, e[1], e[5])
     };
-    let am = boot_ci(&p[0], CI_SEED);
-    let an = boot_ci(&p[1], CI_SEED);
-    let bm = boot_ci(&p[2], CI_SEED);
-    let bn = boot_ci(&p[3], CI_SEED);
+    let am = bootstrap(&p[0], CI_SEED);
+    let an = bootstrap(&p[1], CI_SEED);
+    let bm = bootstrap(&p[2], CI_SEED);
+    let bn = bootstrap(&p[3], CI_SEED);
     format!(
         "layer {name}: n={:.0} A r@{k}={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}] | B r@{k}={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}]",
         e[0],
@@ -497,14 +493,14 @@ fn layer_line(name: &str, e: &[f64; 9], p: &[Vec<f64>; 4]) -> String {
 }
 
 /// 单行候选诊断：`1) <tail8> sim=0.86 score=0.55 [hit] | 2) ... [miss]`。
-fn fmt_hits(hits: &[RecallHit], c: &EvalCase) -> String {
+fn hits(hits: &[Hit], c: &Case) -> String {
     if hits.is_empty() {
         return "(no hits)".to_string();
     }
     let mut parts = Vec::with_capacity(hits.len());
     for (i, h) in hits.iter().enumerate() {
         let tail = h.id.rsplit('_').next().unwrap_or(&h.id);
-        let tag = if hit_expected(&c.expected, &h.id) {
+        let tag = if contains(&c.expected, &h.id) {
             "hit"
         } else {
             "miss"
@@ -540,7 +536,7 @@ impl Rng {
 }
 
 /// 有放回重采样 B 次 → 样本均值 → 95% 分位区间。空输入返回 (0,0)。
-fn boot_ci(vals: &[f64], seed: u64) -> (f64, f64) {
+fn bootstrap(vals: &[f64], seed: u64) -> (f64, f64) {
     const B: usize = 1000;
     let n = vals.len();
     if n == 0 {
@@ -565,7 +561,7 @@ fn boot_ci(vals: &[f64], seed: u64) -> (f64, f64) {
 /// 评估 B 基线：朴素 BM25。全库候选（无桶过滤）、纯词面 BM25（无字段加权/
 /// 衰减/quality/词权/PRF/MMR）、sim=score/sm 归一、按 score 降序取 top-k。
 /// 语料只加载一次，150 条查询复用，避免每个 case 重复读取全库 JSON。
-struct PlainScorer {
+struct Plain {
     docs: Vec<(String, Vec<String>)>,
     df: HashMap<String, usize>,
     n: f64,
@@ -574,14 +570,14 @@ struct PlainScorer {
     b: f64,
 }
 
-impl PlainScorer {
+impl Plain {
     fn load(root: &str, meta: &store::Meta) -> std::io::Result<Self> {
         let mut docs = Vec::new();
         let mut df: HashMap<String, usize> = HashMap::new();
         let mut total_len = 0usize;
-        for id in store::list_ids(root)? {
-            let c = store::read_case(root, &id)?;
-            let (_, terms) = build_doc_terms(&c.query, &c.text);
+        for id in store::list(root)? {
+            let c = store::load(root, &id)?;
+            let (_, terms) = document(&c.query, &c.text);
             total_len += terms.len();
             for t in &terms {
                 *df.entry(t.clone()).or_insert(0) += 1;
@@ -599,11 +595,11 @@ impl PlainScorer {
         })
     }
 
-    fn search(&self, query: &str, k: usize) -> Vec<RecallHit> {
+    fn search(&self, query: &str, k: usize) -> Vec<Hit> {
         if self.docs.is_empty() {
             return Vec::new();
         }
-        let qterms = build_mem_terms(query);
+        let qterms = memory(query);
         // query 相关 IDF 只依赖 df，与文档无关：每条 query 预计算一次，
         // 避免在 10k 候选 × 150 query 的热路径上重复做 df 查表与 ln。
         let qidf: Vec<f64> = qterms
@@ -639,7 +635,7 @@ impl PlainScorer {
         scored.truncate(k);
         scored
             .into_iter()
-            .map(|(idx, score)| RecallHit {
+            .map(|(idx, score)| Hit {
                 id: self.docs[idx].0.clone(),
                 score,
                 sim: if sm > 0.0 {
@@ -653,10 +649,10 @@ impl PlainScorer {
 }
 
 /// 运行期 [l1] 历史出表（--l1-hist）——top1.sim 采样分布统计。
-/// hist 由 recall 侧每次 push_l1_hist 落盘（meta.toml [l1] hist，CAP 上限），
+/// hist 由 recall 侧每次 meta::record 落盘（meta.toml [l1] hist，CAP 上限），
 /// 出表兑现"L1 命中率可统计"；over_base = 达到当前 l1_base 的采样占比。
-pub(crate) fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
-    let meta = store::load_meta(root)?;
+pub(crate) fn history(root: &str) -> std::io::Result<Vec<String>> {
+    let meta = crate::memory::meta::load(root)?;
     let h = &meta.l1_hist;
     if h.is_empty() {
         return Ok(vec!["l1hist: n=0 (no recall history yet)".to_string()]);
@@ -668,7 +664,7 @@ pub(crate) fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
         sorted[idx]
     };
     let mean = h.iter().sum::<f64>() / h.len() as f64;
-    let base = crate::memory::feedback::l1_params(&meta).0;
+    let base = crate::memory::feedback::params(&meta).0;
     let over = h.iter().filter(|s| **s >= base).count();
     Ok(vec![format!(
         "l1hist: n={} mean={mean:.3} p50={:.3} p90={:.3} over_base={over} (base={base:.2})",
@@ -682,8 +678,8 @@ pub(crate) fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
 mod tests {
     use super::*;
 
-    fn hit(id: &str, score: f64) -> RecallHit {
-        RecallHit {
+    fn hit(id: &str, score: f64) -> Hit {
+        Hit {
             id: id.to_string(),
             score,
             sim: score,
@@ -706,9 +702,9 @@ mod tests {
             r#"{"cases":[{"query":"q","layer":"literal","expected":["2026-10-22_abcdef0123456789"],"rel":{"abcdef0123456789":2},"judge":{"by":"fei","date":"2026-10-24T00:00:00Z"}}]}"#,
         )
         .unwrap();
-        let cases = parse_baseline(&v).unwrap();
+        let cases = baseline(&v).unwrap();
         assert_eq!(cases[0].rel.len(), 1, "{:?}", cases[0].rel);
-        assert_eq!(rel_of(&cases[0], "2026-10-24_abcdef0123456789"), 2.0);
+        assert_eq!(relation(&cases[0], "2026-10-24_abcdef0123456789"), 2.0);
     }
 
     #[test]
@@ -716,7 +712,7 @@ mod tests {
         let mut rel = HashMap::new();
         rel.insert("c1".to_string(), 2.0);
         rel.insert("c2".to_string(), 1.0);
-        let c = EvalCase {
+        let c = Case {
             query: "q".to_string(),
             layer: "literal".to_string(),
             expected: vec!["c1".to_string(), "c2".to_string()],
@@ -743,10 +739,10 @@ mod tests {
     fn frozen_full_ids_match_across_date_prefix() {
         let expected = vec!["2026-10-22_337ecde86ee61f26".to_string()];
         let current = "2026-10-24_337ecde86ee61f26";
-        assert!(hit_expected(&expected, current));
+        assert!(contains(&expected, current));
         let mut rel = HashMap::new();
         rel.insert(expected[0].clone(), 2.0);
-        let c = EvalCase {
+        let c = Case {
             query: "q".to_string(),
             layer: "literal".to_string(),
             expected,
@@ -756,8 +752,8 @@ mod tests {
             judged_method: None,
             judge_items: HashMap::new(),
         };
-        assert_eq!(rel_of(&c, current), 2.0);
-        assert!(!id_matches("2026-10-22_aaaaaaaaaaaaaaaa", current));
+        assert_eq!(relation(&c, current), 2.0);
+        assert!(!same("2026-10-22_aaaaaaaaaaaaaaaa", current));
     }
 
     #[test]
@@ -767,7 +763,7 @@ mod tests {
         let mut rel = HashMap::new();
         rel.insert("t".to_string(), 2.0);
         rel.insert("w".to_string(), 1.0);
-        let c = EvalCase {
+        let c = Case {
             query: "q".to_string(),
             layer: "literal".to_string(),
             expected: vec!["t".to_string()],
@@ -789,19 +785,19 @@ mod tests {
             r#"{"cases":[{"query":"q1","layer":"literal","expected":["a","b"],"rel":{"a":2}}]}"#,
         )
         .unwrap();
-        let cases = parse_baseline(&v).unwrap();
+        let cases = baseline(&v).unwrap();
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0].expected, vec!["a".to_string(), "b".to_string()]);
         assert_eq!(cases[0].rel.get("a"), Some(&2.0));
         assert_eq!(cases[0].rel.get("b"), Some(&1.0), "expected 内缺省 rel=1");
         // 缺 cases → 报错。
-        assert!(parse_baseline(&Val::Obj(Vec::new())).is_err());
+        assert!(baseline(&Val::Obj(Vec::new())).is_err());
         // rel 越界 → 报错。
         let bad = crate::memory::json::parse(
             r#"{"cases":[{"query":"q","layer":"l","expected":["a"],"rel":{"a":3}}]}"#,
         )
         .unwrap();
-        assert!(parse_baseline(&bad).is_err());
+        assert!(baseline(&bad).is_err());
     }
 
     #[test]
@@ -814,7 +810,7 @@ mod tests {
                                "b":{"by":"fei","date":"2026-10-24T00:00:00Z"}}}]}"#,
         )
         .unwrap();
-        let cases = parse_baseline(&v).unwrap();
+        let cases = baseline(&v).unwrap();
         assert_eq!(cases[0].judge_items.len(), 2);
         assert_eq!(
             cases[0].judge_items.get("b").map(String::as_str),
@@ -830,14 +826,14 @@ mod tests {
             r#"{"cases":[{"query":"q","layer":"paraphrase","expected":["a"],"judge":null}]}"#,
         )
         .unwrap();
-        let e = parse_baseline(&v).unwrap_err();
+        let e = baseline(&v).unwrap_err();
         assert!(e.contains("unjudged"), "{e}");
         // 裁决后（judge 对象 + rel）→ 正常解析。
         let v2 = crate::memory::json::parse(
             r#"{"cases":[{"query":"q","layer":"paraphrase","expected":["a"],"rel":{"a":1},"judge":{"by":"tester","date":"2026-10-22T00:00:00Z"}}]}"#,
         )
         .unwrap();
-        let cases = parse_baseline(&v2).unwrap();
+        let cases = baseline(&v2).unwrap();
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0].rel.get("a"), Some(&1.0));
         assert_eq!(cases[0].judged_by.as_deref(), Some("tester"));
@@ -851,13 +847,13 @@ mod tests {
     #[test]
     fn bootstrap_ci_deterministic_and_bounded() {
         let vals = vec![1.0, 1.0, 1.0, 1.0, 0.5, 0.0];
-        let (a_lo, a_hi) = boot_ci(&vals, CI_SEED);
-        let (b_lo, b_hi) = boot_ci(&vals, CI_SEED);
+        let (a_lo, a_hi) = bootstrap(&vals, CI_SEED);
+        let (b_lo, b_hi) = bootstrap(&vals, CI_SEED);
         assert_eq!(a_lo, b_lo, "同 seed 必须逐位可重放");
         assert_eq!(a_hi, b_hi);
         assert!(a_lo >= 0.0 && a_hi <= 1.000_000_1, "区间在指标范围内");
         assert!(a_lo <= a_hi);
         // 空输入 → (0,0) 不 panic。
-        assert_eq!(boot_ci(&[], CI_SEED), (0.0, 0.0));
+        assert_eq!(bootstrap(&[], CI_SEED), (0.0, 0.0));
     }
 }

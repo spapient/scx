@@ -4,11 +4,12 @@
 //! 只做旁路召回与评分先验，绝不注入压缩正文。
 //!
 //! 子模块按职责分为存储（`store`/`meta`/`index`/`lock`）、摄取与分类
-//! （`ingest`/`classify`）、召回排序（`recall`/`ranking`/`edge`/`query_cache`）、
+//! （`ingest`/`classify`）、召回排序（`recall`/`ranking`/`edge`/`cache`）、
 //! 反馈维护（`feedback`/`maintenance`）以及评估（`eval`/`gate`/`annotate`）；
 //! 具体文件职责见 `docs/memory.md`。
 
 mod annotate;
+mod cache;
 mod classify;
 mod edge;
 mod eval;
@@ -20,26 +21,25 @@ mod json;
 pub(crate) mod lock;
 mod maintenance;
 mod meta;
-mod query_cache;
 pub(crate) mod ranking;
 mod recall;
 mod store;
 mod util;
 
-pub use recall::RecallHit;
-pub use store::{Case, CaseStats, Feedback, Fields};
+pub use recall::Hit;
+pub use store::{Case, Feedback, Fields, Stats};
 
 /// `--fix` / `--fix-file` 的字节上限；CLI 读取与存储校验共享同一约束。
 pub const MAX_FIX_BYTES: usize = ingest::MAX_FIX_LEN;
 
 /// 一次写入所需的完整输入。可选字段默认空，调用方只填充实际拥有的信息；
-/// 新增存储能力不应再产生 `store_case_*` 函数族。
-pub struct StoreInput<'a> {
+/// 新增存储能力不应再产生 `save_*` 函数族。
+pub struct Input<'a> {
     pub root: &'a str,
     pub query: &'a str,
     pub text: &'a str,
     pub source: &'a [String],
-    pub stats: &'a CaseStats,
+    pub stats: &'a Stats,
     pub forces: &'a [String],
     pub fix: &'a str,
     pub evidence_lno: &'a [usize],
@@ -48,9 +48,9 @@ pub struct StoreInput<'a> {
     pub max_bytes: Option<u64>,
 }
 
-impl<'a> StoreInput<'a> {
+impl<'a> Input<'a> {
     /// 最小输入：仅 query、证据块与统计；其余字段为空。
-    pub fn new(root: &'a str, query: &'a str, text: &'a str, stats: &'a CaseStats) -> Self {
+    pub fn new(root: &'a str, query: &'a str, text: &'a str, stats: &'a Stats) -> Self {
         Self {
             root,
             query,
@@ -70,7 +70,7 @@ impl<'a> StoreInput<'a> {
 ///
 /// 所有文本在同一存储边界脱敏；query 词表由门面生成，保证指纹、索引和召回
 /// 使用同一口径。返回 `(added, case_id)`。
-pub fn store_case(input: StoreInput<'_>) -> std::io::Result<(bool, String)> {
+pub fn save(input: Input<'_>) -> std::io::Result<(bool, String)> {
     let query = crate::memory::util::sanitize(input.query);
     let text = crate::memory::util::sanitize(input.text);
     let fix = crate::memory::util::sanitize(input.fix);
@@ -79,8 +79,8 @@ pub fn store_case(input: StoreInput<'_>) -> std::io::Result<(bool, String)> {
         .iter()
         .map(|e| crate::memory::util::sanitize(e))
         .collect();
-    let terms = crate::terms::build_mem_terms(&query);
-    ingest::persist(ingest::StoreFields {
+    let terms = crate::terms::memory(&query);
+    ingest::persist(ingest::Payload {
         root: input.root,
         query: &query,
         terms,
@@ -96,13 +96,13 @@ pub fn store_case(input: StoreInput<'_>) -> std::io::Result<(bool, String)> {
 }
 
 /// 门面：读取完整 case，包括可回放的原始证据行。
-pub fn read_case(root: &str, id: &str) -> std::io::Result<Case> {
-    store::read_case(root, id)
+pub fn load(root: &str, id: &str) -> std::io::Result<Case> {
+    store::load(root, id)
 }
 
 /// 转义从记忆库回放到终端的控制字符，防止日志注入 ANSI 序列。
-pub fn escape_control(s: &str) -> String {
-    util::escape_ctrl(s)
+pub fn escape(s: &str) -> String {
+    util::escape(s)
 }
 
 /// 门面：按 query 召回 top-k case（会话缓存 → qmap 直达 → BM25+字段加权+衰减+桶过滤）。
@@ -118,23 +118,18 @@ pub fn escape_control(s: &str) -> String {
 ///
 /// `read_only`：`--recall-only` 不写 qmap、会话缓存、L1 历史或索引缓存；
 /// 索引缺失/损坏时直接回退线性扫描，保证只读查看零磁盘副作用。
-pub fn recall_cases(
-    root: &str,
-    query: &str,
-    k: usize,
-    read_only: bool,
-) -> std::io::Result<Vec<RecallHit>> {
+pub fn search(root: &str, query: &str, k: usize, read_only: bool) -> std::io::Result<Vec<Hit>> {
     if k == 0 {
         return Ok(Vec::new());
     }
-    let meta = store::load_meta(root)?;
+    let meta = crate::memory::meta::load(root)?;
     // 会话缓存命中直接返回快照（含 score/sim，L1 过滤可复用）。
     let cache_window = (meta.param("session_cache_minutes").max(0.0) * 60.0) as u64;
-    if let Some(out) = session_snapshot(root, query, &meta, cache_window, k) {
+    if let Some(out) = session(root, query, &meta, cache_window, k) {
         return Ok(out);
     }
     let hits = if read_only {
-        recall::recall_read_only(root, query, k, &meta)?
+        recall::read(root, query, k, &meta)?
     } else {
         recall::recall(root, query, k, &meta)?
     };
@@ -142,23 +137,23 @@ pub fn recall_cases(
     Ok(hits)
 }
 
-fn session_snapshot(
+fn session(
     root: &str,
     query: &str,
     meta: &store::Meta,
     cache_window: u64,
     k: usize,
-) -> Option<Vec<RecallHit>> {
-    let hits = query_cache::session_get(root, query, meta.gen, cache_window, k)?;
-    let out: Vec<RecallHit> = hits
+) -> Option<Vec<Hit>> {
+    let hits = cache::get(root, query, meta.gen, cache_window, k)?;
+    let out: Vec<Hit> = hits
         .into_iter()
-        .map(|(id, score, sim)| RecallHit { id, score, sim })
+        .map(|(id, score, sim)| Hit { id, score, sim })
         .collect();
     debug_assert!(out.len() <= k, "session snapshot must respect k");
     Some(out)
 }
 
-fn writeback(root: &str, query: &str, hits: &[RecallHit], meta: &store::Meta, read_only: bool) {
+fn writeback(root: &str, query: &str, hits: &[Hit], meta: &store::Meta, read_only: bool) {
     if hits.is_empty() || read_only {
         return;
     }
@@ -166,34 +161,34 @@ fn writeback(root: &str, query: &str, hits: &[RecallHit], meta: &store::Meta, re
         .iter()
         .map(|h| (h.id.clone(), h.score, h.sim))
         .collect();
-    let _ = query_cache::append(root, query, &snap, meta.gen); // 回流失败忽略
-    query_cache::session_put(root, query, snap, meta.gen);
-    meta::push_l1_hist(root, hits[0].sim);
+    let _ = cache::append(root, query, &snap, meta.gen); // 回流失败忽略
+    cache::put(root, query, snap, meta.gen);
+    meta::record(root, hits[0].sim);
 }
 
 /// 门面：反馈标注（状态机 + 质量分 + 词级调权 + L1 自适应基线）。
 /// 返回更新后的 case，供 CLI 输出核对。
-pub fn rate_case(root: &str, id: &str, good: bool) -> std::io::Result<store::Case> {
+pub fn rate(root: &str, id: &str, good: bool) -> std::io::Result<store::Case> {
     feedback::rate(root, id, good)
 }
 
 /// 门面：meta 中 L1 参数；缺省值由 `meta::DEFAULT_PARAMS` 单一来源提供。
-pub fn l1_params(root: &str) -> (f64, f64) {
-    match store::load_meta(root) {
-        Ok(m) => feedback::l1_params(&m),
+pub fn params(root: &str) -> (f64, f64) {
+    match crate::memory::meta::load(root) {
+        Ok(m) => feedback::params(&m),
         Err(_) => (
-            crate::memory::meta::default_param("l1_base"),
-            crate::memory::meta::default_param("l1_margin_min"),
+            crate::memory::meta::fallback("l1_base"),
+            crate::memory::meta::fallback("l1_margin_min"),
         ),
     }
 }
 
 /// 只保留达到 L1 直答条件的召回命中（top1 基线 + top1/top2 间隔）。
-pub fn l1_hits(root: &str, hits: Vec<RecallHit>) -> Vec<RecallHit> {
-    let (base, margin) = l1_params(root);
+pub fn hits(root: &str, hits: Vec<Hit>) -> Vec<Hit> {
+    let (base, margin) = params(root);
     let top1 = hits.first().map(|h| h.sim).unwrap_or(0.0);
     let top2 = hits.get(1).map(|h| h.sim).unwrap_or(0.0);
-    if feedback::l1_qualified(top1, top2, base, margin, 1.0) {
+    if feedback::qualified(top1, top2, base, margin, 1.0) {
         hits
     } else {
         Vec::new()
@@ -212,13 +207,13 @@ pub fn gc(root: &str) -> std::io::Result<usize> {
 }
 
 /// 门面：删除 case（物理删除 + 惰性作废索引）。返回是否存在。
-pub fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
-    maintenance::delete_case(root, id)
+pub fn delete(root: &str, id: &str) -> std::io::Result<bool> {
+    maintenance::delete(root, id)
 }
 
 /// 评估/门禁模式。报告模式返回的 gate 标志恒为 false。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EvalMode {
+pub enum Eval {
     Report,
     Mechanical,
     Human,
@@ -226,41 +221,41 @@ pub enum EvalMode {
 }
 
 /// 单一评估门面：冻结 baseline 重放并按模式选择报告或门禁。
-pub fn eval_cases(
+pub fn evaluate(
     root: &str,
     path: &str,
-    mode: EvalMode,
+    mode: Eval,
     verbose: bool,
 ) -> std::io::Result<(Vec<String>, bool)> {
     eval::run(root, path, mode, verbose)
 }
 
 /// 门面：输出运行期 `[l1]` 直答命中分布（`--l1-hist`）。
-pub fn l1_hist_table(root: &str) -> std::io::Result<Vec<String>> {
-    eval::l1_hist_table(root)
+pub fn history(root: &str) -> std::io::Result<Vec<String>> {
+    eval::history(root)
 }
 
 /// 门面：库盘点（`--stats`）：case、桶、状态、fix 覆盖率、质量与磁盘。
-pub fn stats_table(root: &str) -> std::io::Result<Vec<String>> {
+pub fn stats(root: &str) -> std::io::Result<Vec<String>> {
     maintenance::stats(root)
 }
 
 /// 生成标注集、原子写入目标文件，并返回 CLI 报告行。
 /// `raw` 跳过自检以生成盲测材料。
-pub fn annotate_to_file(
+pub fn annotate(
     root: &str,
     seed: u64,
     max_cases: usize,
     raw: bool,
     path: &str,
 ) -> std::io::Result<Vec<String>> {
-    let report = annotate::annotate_report(root, seed, max_cases, raw)?;
-    let body = annotate::write_baseline(&report.cases);
-    lock::atomic_write(std::path::Path::new(path), body.as_bytes())?;
-    Ok(annotate::stats_report(&report))
+    let report = annotate::report(root, seed, max_cases, raw)?;
+    let body = annotate::baseline(&report.cases);
+    lock::atomic(std::path::Path::new(path), body.as_bytes())?;
+    Ok(annotate::summary(&report))
 }
 
 /// 交互式逐候选裁决入口（`--judge`）。
-pub fn judge_baseline(path: &str, by: &str) -> std::io::Result<Vec<String>> {
+pub fn judge(path: &str, by: &str) -> std::io::Result<Vec<String>> {
     annotate::judge(path, by)
 }

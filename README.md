@@ -100,7 +100,7 @@ $env:Path = "$HOME\bin;" + $env:Path
 
 ```bash
 ./tools/scx --version            # macOS / Linux / WSL
-.inun.cmd --version        # Windows
+.\tools\scx.cmd --version       # Windows
 ```
 
 ### 安装自检
@@ -113,7 +113,7 @@ Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技
 scx --version                                  # 已将入口加入 PATH 时
 ```
 
-三条命令都应输出版本号（当前为 `scx 0.5.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
+三条命令都应输出版本号（当前为 `scx 0.5.1`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
 
 只对实际安装过的入口执行上述检查；未安装的路径报“不存在”不代表工具本身异常。
 
@@ -303,7 +303,7 @@ scx --query "..." [OPTIONS] [file...]
 
 入库前会对已知的 password、token、Authorization、Bearer 和 URL 用户信息模式做脱敏，但这只是尽力而为的已知模式匹配，**不是通用 DLP**。分享日志或记忆库前请人工复核。
 
-多进程共享同一 `--mem-dir` 受支持：所有跨文件操作通过 `acquire_all` 按固定锁序
+多进程共享同一 `--mem-dir` 受支持：所有跨文件操作通过 `locks` 按固定锁序
 （`cases/{id} → index → meta → qmap → fingerprints`）一次取多锁，避免死锁；
 持锁后的写路径使用 `*_locked` 变体，不自相争锁。并发压力测试覆盖
 store/rate/delete/rebuild 组合。契约全文见 [锁序契约](docs/locking.md)。
@@ -351,15 +351,15 @@ fn main() {
 | `src/compress.rs` | 纯函数筛选与预算分配（sieve 内核，零 I/O） |
 | `src/analysis.rs`, `src/terms.rs` | 归一化、结构分类（含 fence/import/stack 判定）、切词与 token 估算 |
 | `src/policy.rs` | 默认策略数据表（`ScoreTable`/`RiskTable`/`RegionCfg`/硬常量），不落独立硬编码文件 |
-| `src/conf.rs` | TOML 子集解析（`Entry`/`parse`/`parse_f64`…），供 `--policy-file` 与记忆库 `meta.toml` 复用 |
+| `src/toml.rs` | TOML 子集解析（`Entry`/`parse`/`float`/`size`），供 `--policy-file` 与记忆库 `meta.toml` 复用 |
 | `src/ops.rs` | 操作编排层：`Op` 枚举 + `run` + 纯渲染（统计/JSON），`main.rs` 仅薄壳 |
 | `src/regex.rs` | 手写有限正则子集（交替/字符类/量词，Thompson NFA，零第三方 crate） |
 | `src/semantic.rs` | 可选神经重打分（cargo feature=semantic）：手写 SHA-256、权重加载校验、确定性 sigmoid |
 | `src/json.rs` | 手写 JSON parser（`mcp` 与 `--json` 渲染共用） |
 | `src/contain.rs` | 证据保留（Containment）评测协议实现 |
-| `src/memory/` | 本地 case 存储、召回、反馈、索引与评估（`acquire_all` 固定锁序） |
+| `src/memory/` | 本地 case 存储、召回、反馈、索引与评估（`locks` 固定锁序） |
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
-| `src/mcp.rs`, `src/mcp.rs` | stdio MCP server（cargo feature=mcp，零第三方 crate）；`tools/scx setup` 构建入口 |
+| `src/mcp.rs` | stdio MCP server（cargo feature=mcp，零第三方 crate）；`tools/scx setup` 构建入口 |
 | `tools/scx`, `tools/scx.cmd` | Unix / Windows 自举构建入口 |
 | `tools/scx.py` | 评测语料回放、盲审与配对统计（仅标准库；含 `contain` 证据保留子命令） |
 | `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
@@ -369,7 +369,7 @@ fn main() {
 
 `src/memory/` 保持扁平、单一职责的布局：`mod.rs` 是唯一公开门面，存储
 （`store`/`meta`/`ingest`/`lock`/`json`/`util`）、召回
-（`recall`/`ranking`/`index`/`query_cache`/`edge`/`classify`）、学习与维护
+（`recall`/`ranking`/`index`/`cache`/`edge`/`classify`）、学习与维护
 （`feedback`/`maintenance`）和评估（`eval`/`gate`/`annotate`）各自成组；
 不设跨层子目录，也不把内部文件格式或缓存提升为外部契约。
 
@@ -481,7 +481,7 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 - **单机本地工具**：记忆库是本地目录，不是多租户服务或分布式数据库。
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。
 - **输入有上限**：CLI 单次输入总计 64 MiB；更大的输入需要分段。
-- **pre-1.0 状态**：当前版本 `0.5.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
+- **pre-1.0 状态**：当前版本 `0.5.1`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
 
 ## 贡献与安全
 

@@ -57,7 +57,7 @@ fn stat_field(out: &str, key: &str) -> String {
         .find(|l| l.contains("mode=") || l.contains("\"mode\":"))
         .expect("stats line");
     if let Some(f) = line.split(&format!("{key}=")).nth(1) {
-        // `kept=5/301 lines` / `mode=overflow:evidence max_tokens=1`：取首段。
+        // `kept=5/301 lines` / `mode=overflow:evidence limit=1`：取首段。
         f.split(['/', ' ']).next().unwrap().trim().to_string()
     } else {
         line.split(&format!("\"{key}\":"))

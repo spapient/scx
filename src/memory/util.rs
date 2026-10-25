@@ -4,11 +4,11 @@
 
 /// FNV-1a 64 位哈希（确定性、无随机源）。
 pub(crate) fn fnv1a(s: &str) -> u64 {
-    fnv1a_parts(&[s.as_bytes()])
+    parts(&[s.as_bytes()])
 }
 
 /// 分片 FNV-1a：避免为复合身份键拼接临时字符串。
-pub(crate) fn fnv1a_parts(parts: &[&[u8]]) -> u64 {
+pub(crate) fn parts(parts: &[&[u8]]) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for part in parts {
         for &b in *part {
@@ -21,25 +21,25 @@ pub(crate) fn fnv1a_parts(parts: &[&[u8]]) -> u64 {
 
 /// case id：`<YYYY-MM-DD>_<hash16>`，hash = FNV-1a(query‖\0‖text) 全 64 位 hex。
 /// 64 位避免持久化资产的生日碰撞（32 位在 1 万条时碰撞率 ≈1.2%）。
-pub(crate) fn case_id(now: &str, query: &str, text: &str) -> String {
+pub(crate) fn id(now: &str, query: &str, text: &str) -> String {
     let day = &now[0..10]; // YYYY-MM-DD
-    let h = fnv1a_parts(&[query.as_bytes(), b"\0", text.as_bytes()]);
+    let h = parts(&[query.as_bytes(), b"\0", text.as_bytes()]);
     format!("{day}_{h:016x}")
 }
 
 /// UTC 时间戳（秒精度，ISO-8601 `YYYY-MM-DDTHH:MM:SSZ`，零依赖自算日历）。
-pub(crate) fn utc_now_secs() -> u64 {
+pub(crate) fn seconds() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
 
-pub(crate) fn utc_now() -> String {
-    let secs = utc_now_secs();
+pub(crate) fn stamp() -> String {
+    let secs = seconds();
     let days = secs / 86_400;
     let rem = secs % 86_400;
-    let (y, mo, d) = civil_from_days(days);
+    let (y, mo, d) = civil(days);
     let (hh, mi, ss) = (rem / 3600, (rem % 3600) / 60, rem % 60);
     format!("{y:04}-{mo:02}-{d:02}T{hh:02}:{mi:02}:{ss:02}Z")
 }
@@ -49,11 +49,11 @@ pub(crate) fn utc_now() -> String {
 /// 不破坏行号与结构（键名保留、仅值替换）。朴素字节扫描（零依赖）。
 pub(crate) fn sanitize(s: &str) -> String {
     // 多轮直到稳定：嵌套形式（如 `Authorization: Bearer token=..`）逐层收敛。
-    let Some(mut out) = sanitize_once(s) else {
+    let Some(mut out) = once(s) else {
         return s.to_string();
     };
     for _ in 1..3 {
-        match sanitize_once(&out) {
+        match once(&out) {
             Some(next) => out = next,
             None => break,
         }
@@ -78,26 +78,26 @@ const SENSITIVE_KEYS: &[&str] = &[
     "auth",
 ];
 
-fn sanitize_once(s: &str) -> Option<String> {
+fn once(s: &str) -> Option<String> {
     let b = s.as_bytes();
     let mut out = String::with_capacity(s.len());
     let mut i = 0usize;
     let mut changed = false;
     while i < b.len() {
-        if let Some((key_len, sep_len)) = match_key_value(b, i) {
-            let (next, redacted) = redact_key_value(b, s, i, key_len, sep_len, &mut out);
+        if let Some((key_len, sep_len)) = pair(b, i) {
+            let (next, redacted) = redact(b, s, i, key_len, sep_len, &mut out);
             i = next;
             changed |= redacted;
             continue;
         }
-        if let Some((pw_start, at_pos)) = match_url_userinfo(b, i) {
+        if let Some((pw_start, at_pos)) = userinfo(b, i) {
             out.push_str(&s[i..pw_start]);
             out.push_str("<redacted>");
             changed = true;
             i = at_pos; // @ 由下一轮原样输出（保留结构）。
             continue;
         }
-        if let Some(len) = match_bearer(b, i) {
+        if let Some(len) = bearer(b, i) {
             out.push_str(&s[i..i + len]);
             out.push_str("<redacted>");
             changed = true;
@@ -112,7 +112,7 @@ fn sanitize_once(s: &str) -> Option<String> {
 }
 
 /// 敏感键分支：保留键与分隔符，值替换为 `<redacted>`（含 `Bearer <token>`）。
-fn redact_key_value(
+fn redact(
     b: &[u8],
     s: &str,
     i: usize,
@@ -123,10 +123,10 @@ fn redact_key_value(
     let key_end = i + key_len + sep_len;
     out.push_str(&s[i..key_end]);
     let mut v = key_end;
-    if let Some(tok_end) = match_bearer_value(b, v) {
+    if let Some(tok_end) = value(b, v) {
         v = tok_end;
     } else {
-        v = token_end(b, v);
+        v = end(b, v);
     }
     if v > key_end {
         out.push_str("<redacted>");
@@ -136,27 +136,27 @@ fn redact_key_value(
     }
 }
 
-fn is_ws(c: u8) -> bool {
+fn space(c: u8) -> bool {
     c == b' ' || c == b'\t'
 }
 
-fn is_sep(c: u8) -> bool {
+fn separator(c: u8) -> bool {
     c == b'=' || c == b':'
 }
 
-fn key_prefix_matches(b: &[u8], i: usize, k: &[u8]) -> bool {
+fn start(b: &[u8], i: usize, k: &[u8]) -> bool {
     b.len() - i > k.len() && b[i..i + k.len()].eq_ignore_ascii_case(k)
 }
 
-fn skip_ws(b: &[u8], mut j: usize) -> usize {
-    while j < b.len() && is_ws(b[j]) {
+fn skip(b: &[u8], mut j: usize) -> usize {
+    while j < b.len() && space(b[j]) {
         j += 1;
     }
     j
 }
 
-fn token_end(b: &[u8], mut n: usize) -> usize {
-    while n < b.len() && !is_val_boundary(b[n]) {
+fn end(b: &[u8], mut n: usize) -> usize {
+    while n < b.len() && !boundary(b[n]) {
         n += 1;
     }
     n
@@ -164,18 +164,18 @@ fn token_end(b: &[u8], mut n: usize) -> usize {
 
 /// 位置 i 是否以敏感键开头（大小写不敏感）且键后紧跟 `=`/`:`（可带空白）。
 /// 返回 (键字节长, 分隔符字节长含键后空白)。
-fn match_key_value(b: &[u8], i: usize) -> Option<(usize, usize)> {
+fn pair(b: &[u8], i: usize) -> Option<(usize, usize)> {
     for key in SENSITIVE_KEYS {
         let k = key.as_bytes();
-        if !key_prefix_matches(b, i, k) {
+        if !start(b, i, k) {
             continue;
         }
-        let j = skip_ws(b, i + k.len());
-        if j >= b.len() || !is_sep(b[j]) {
+        let j = skip(b, i + k.len());
+        if j >= b.len() || !separator(b[j]) {
             continue;
         }
         let mut sep_len = j - (i + k.len()) + 1; // 键后空白 + '=' / ':'
-        let after = skip_ws(b, j + 1);
+        let after = skip(b, j + 1);
         sep_len += after - (j + 1); // 分隔符后空白
         return Some((k.len(), sep_len));
     }
@@ -183,7 +183,7 @@ fn match_key_value(b: &[u8], i: usize) -> Option<(usize, usize)> {
 }
 
 /// 值边界：空白、逗号、分号、引号、尖括号。
-fn is_val_boundary(c: u8) -> bool {
+fn boundary(c: u8) -> bool {
     matches!(
         c,
         b' ' | b'\t' | b'\r' | b'\n' | b',' | b';' | b'"' | b'\'' | b'<' | b'>'
@@ -192,14 +192,14 @@ fn is_val_boundary(c: u8) -> bool {
 
 /// URL 用户信息：`://user:pass@` → 保留到密码起点，密码替换。
 /// 返回 (密码起点, @ 位置)——上层输出 s[i..pw_start] + `<redacted>` 后从 @ 续扫。
-fn match_url_userinfo(b: &[u8], i: usize) -> Option<(usize, usize)> {
+fn userinfo(b: &[u8], i: usize) -> Option<(usize, usize)> {
     if !b[i..].starts_with(b"://") {
         return None;
     }
     let mut j = i + 3;
-    while j < b.len() && !userinfo_break(b[j]) {
+    while j < b.len() && !stop(b[j]) {
         if b[j] == b':' {
-            if let Some(k) = scan_password_end(b, j + 1) {
+            if let Some(k) = password(b, j + 1) {
                 return Some((j + 1, k));
             }
         }
@@ -208,41 +208,41 @@ fn match_url_userinfo(b: &[u8], i: usize) -> Option<(usize, usize)> {
     None
 }
 
-fn userinfo_break(c: u8) -> bool {
+fn stop(c: u8) -> bool {
     matches!(c, b'/' | b'@' | b' ' | b'\t' | b'\r' | b'\n')
 }
 
-fn scan_password_end(b: &[u8], mut k: usize) -> Option<usize> {
-    while k < b.len() && !userinfo_break(b[k]) {
+fn password(b: &[u8], mut k: usize) -> Option<usize> {
+    while k < b.len() && !stop(b[k]) {
         k += 1;
     }
     (k < b.len() && b[k] == b'@').then_some(k)
 }
 
 /// `Bearer <token>` / `Basic <token>`：键 + 空白 + 8+ 字符值到空白边界。
-fn match_bearer(b: &[u8], i: usize) -> Option<usize> {
-    bearer_scan(b, i).map(|(start, end)| end - start)
+fn bearer(b: &[u8], i: usize) -> Option<usize> {
+    scan(b, i).map(|(start, end)| end - start)
 }
 
 /// 从位置 i 起，若值以 `Bearer `/`Basic ` 开头且 token ≥8 字符，返回 token 末尾
 /// （把整个 `Bearer <token>` 交给上层一并替换；否则返回 None 走普通值扫描）。
-fn match_bearer_value(b: &[u8], i: usize) -> Option<usize> {
-    bearer_scan(b, i).map(|(_, end)| end)
+fn value(b: &[u8], i: usize) -> Option<usize> {
+    scan(b, i).map(|(_, end)| end)
 }
 
 /// Bearer/Basic 扫描：返回 (token 起点, token 末尾)。
-fn bearer_scan(b: &[u8], i: usize) -> Option<(usize, usize)> {
+fn scan(b: &[u8], i: usize) -> Option<(usize, usize)> {
     for kw in ["Bearer", "Basic"] {
         let k = kw.as_bytes();
-        if !bearer_prefix(b, i, k) {
+        if !prefix(b, i, k) {
             continue;
         }
         let j = i + k.len();
-        if !is_ws(b[j]) {
+        if !space(b[j]) {
             continue;
         }
         let start = j + 1;
-        let end = token_end(b, start);
+        let end = end(b, start);
         if end - start >= 8 {
             return Some((start, end));
         }
@@ -250,22 +250,22 @@ fn bearer_scan(b: &[u8], i: usize) -> Option<(usize, usize)> {
     None
 }
 
-fn bearer_prefix(b: &[u8], i: usize, k: &[u8]) -> bool {
+fn prefix(b: &[u8], i: usize, k: &[u8]) -> bool {
     b.len() - i >= k.len() + 2 && b[i..i + k.len()].eq_ignore_ascii_case(k)
 }
 
 /// 终端输出安全转义：C0 控制字符与 ESC/ANSI 序列
 /// 转成可见字面（`\x1b`、`\xNN`），防 --recall-detail 回放证据时的转义注入。
-pub fn escape_ctrl(s: &str) -> String {
+pub fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
-        push_escaped(ch, &mut out);
+        push(ch, &mut out);
     }
     out
 }
 
 /// 单字符转义：C0 / DEL / ESC → 可见字面，其余原样。
-fn push_escaped(ch: char, out: &mut String) {
+fn push(ch: char, out: &mut String) {
     let u = ch as u32;
     if ch == '\n' {
         out.push_str("\\n");
@@ -283,7 +283,7 @@ fn push_escaped(ch: char, out: &mut String) {
 }
 
 /// Howard Hinnant 的 civil_from_days：days-since-epoch → (年, 月, 日)。
-fn civil_from_days(z: u64) -> (u64, u64, u64) {
+fn civil(z: u64) -> (u64, u64, u64) {
     let z = z + 719_468;
     let era = z / 146_097;
     let doe = z % 146_097;
@@ -298,19 +298,19 @@ fn civil_from_days(z: u64) -> (u64, u64, u64) {
 
 /// 解析本模块自产的 UTC 串（`YYYY-MM-DDTHH:MM:SSZ`）为 Unix 秒。
 /// 失败/非自产格式返回 0（与"未知年龄按全新"口径一致）。
-pub(crate) fn parse_utc_secs(s: &str) -> u64 {
+pub(crate) fn parse(s: &str) -> u64 {
     let s = s.trim();
     let s = s.strip_suffix('Z').unwrap_or(s);
     let Some((date, time)) = s.split_once('T') else {
         return 0;
     };
-    let Some((y, mo, d)) = parse_ymd(date) else {
+    let Some((y, mo, d)) = ymd(date) else {
         return 0;
     };
-    let Some((hh, mi, ss)) = parse_hms(time) else {
+    let Some((hh, mi, ss)) = hms(time) else {
         return 0;
     };
-    if out_of_range(mo, d, hh, mi, ss) {
+    if range(mo, d, hh, mi, ss) {
         return 0;
     }
     // days_since_epoch = civil_to_days(y,m,d)，逆算法。
@@ -325,7 +325,7 @@ pub(crate) fn parse_utc_secs(s: &str) -> u64 {
 }
 
 /// 截取并解析 YYYY-MM-DD 三段；任一段字节越界或非数字返回 None。
-fn parse_ymd(date: &str) -> Option<(u64, u64, u64)> {
+fn ymd(date: &str) -> Option<(u64, u64, u64)> {
     let y = date.get(0..4)?;
     let m = date.get(5..7)?;
     let d = date.get(8..10)?;
@@ -333,7 +333,7 @@ fn parse_ymd(date: &str) -> Option<(u64, u64, u64)> {
 }
 
 /// 截取并解析 HH:MM:SS 三段；任一段字节越界或非数字返回 None。
-fn parse_hms(time: &str) -> Option<(u64, u64, u64)> {
+fn hms(time: &str) -> Option<(u64, u64, u64)> {
     let h = time.get(0..2)?;
     let m = time.get(3..5)?;
     let s = time.get(6..8)?;
@@ -341,7 +341,7 @@ fn parse_hms(time: &str) -> Option<(u64, u64, u64)> {
 }
 
 /// 自产 UTC 串的粗略值域校验（历法细节由 civil 逆算法自洽兜底）。
-fn out_of_range(mo: u64, d: u64, hh: u64, mi: u64, ss: u64) -> bool {
+fn range(mo: u64, d: u64, hh: u64, mi: u64, ss: u64) -> bool {
     mo == 0 || mo > 12 || d == 0 || d > 31 || hh > 23 || mi > 59 || ss > 60
 }
 
@@ -350,7 +350,7 @@ fn out_of_range(mo: u64, d: u64, hh: u64, mi: u64, ss: u64) -> bool {
 /// 之前每个测试模块各有一份 `tmp_root`，同名标签在并行执行时可能落到同一
 /// 路径；集中到一处后只保留一个所有权和一套清理约定。
 #[cfg(test)]
-pub(crate) fn tmp_root(tag: &str) -> String {
+pub(crate) fn root(tag: &str) -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -375,39 +375,33 @@ mod tests {
 
     #[test]
     fn civil_date_algorithm() {
-        assert_eq!(civil_from_days(0), (1970, 1, 1));
-        assert_eq!(civil_from_days(19_723), (2024, 1, 1));
+        assert_eq!(civil(0), (1970, 1, 1));
+        assert_eq!(civil(19_723), (2024, 1, 1));
         // 2024-01-01 起第 79 天 = 3 月 20 日（1 月 31 + 2 月 29 + 19）。
-        assert_eq!(civil_from_days(19_802), (2024, 3, 20));
+        assert_eq!(civil(19_802), (2024, 3, 20));
     }
 
     #[test]
     fn case_id_shape() {
-        let id = case_id("2026-10-22T00:00:00Z", "q", "t");
-        assert!(id.starts_with("2026-10-22_"));
-        assert_eq!(id.len(), 11 + 16, "64 位 hash = 16 hex");
-        assert_eq!(id, case_id("2026-10-22T00:00:00Z", "q", "t"));
+        let first = id("2026-10-22T00:00:00Z", "q", "t");
+        assert!(first.starts_with("2026-10-22_"));
+        assert_eq!(first.len(), 11 + 16, "64 位 hash = 16 hex");
+        assert_eq!(first, id("2026-10-22T00:00:00Z", "q", "t"));
     }
 
     #[test]
-    fn parse_utc_secs_roundtrip() {
+    fn parse_roundtrip() {
         // 1970-01-01T00:00:00Z = 0
-        assert_eq!(parse_utc_secs("1970-01-01T00:00:00Z"), 0);
+        assert_eq!(parse("1970-01-01T00:00:00Z"), 0);
         // 2024-01-01T00:00:00Z = civil 19_723 天
-        assert_eq!(parse_utc_secs("2024-01-01T00:00:00Z"), 19_723 * 86_400);
+        assert_eq!(parse("2024-01-01T00:00:00Z"), 19_723 * 86_400);
         // 闰日：2024-02-29T00:00:00Z = 19723+59 天
-        assert_eq!(
-            parse_utc_secs("2024-02-29T00:00:00Z"),
-            (19_723 + 59) * 86_400
-        );
+        assert_eq!(parse("2024-02-29T00:00:00Z"), (19_723 + 59) * 86_400);
         // 时间分量
-        assert_eq!(
-            parse_utc_secs("2024-01-01T01:02:03Z"),
-            19_723 * 86_400 + 3723
-        );
+        assert_eq!(parse("2024-01-01T01:02:03Z"), 19_723 * 86_400 + 3723);
         // 非法输入 → 0
-        assert_eq!(parse_utc_secs("garbage"), 0);
-        assert_eq!(parse_utc_secs("2024-13-01T00:00:00Z"), 0);
+        assert_eq!(parse("garbage"), 0);
+        assert_eq!(parse("2024-13-01T00:00:00Z"), 0);
     }
 
     /// 脱敏覆盖全部模式、幂等且不误伤明文。
@@ -447,9 +441,9 @@ mod tests {
     /// 控制字符与 ANSI 序列必须可见化。
     #[test]
     fn escape_ctrl_renders_controls_visibly() {
-        assert_eq!(escape_ctrl("a\x1b[31mb"), "a\\x1b[31mb");
-        assert_eq!(escape_ctrl("x\ny"), "x\\ny");
-        assert_eq!(escape_ctrl("plain"), "plain");
-        assert_eq!(escape_ctrl("\x00\x07\x7f"), "\\x00\\x07\\x7f");
+        assert_eq!(escape("a\x1b[31mb"), "a\\x1b[31mb");
+        assert_eq!(escape("x\ny"), "x\\ny");
+        assert_eq!(escape("plain"), "plain");
+        assert_eq!(escape("\x00\x07\x7f"), "\\x00\\x07\\x7f");
     }
 }

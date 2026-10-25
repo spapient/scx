@@ -15,9 +15,9 @@
 //! MMR：贪心选择 `argmax(score_norm − λ · max(sim(c, selected)))`，以词袋
 //! Jaccard 衡量冗余，确定性、零依赖。
 
-use crate::memory::recall::RecallHit;
+use crate::memory::recall::Hit;
 use crate::memory::store::{self, Meta};
-use crate::terms::{build_doc_terms, build_mem_terms};
+use crate::terms::{document, memory};
 use std::collections::HashMap;
 
 /// Robertson/Sparck Jones IDF（平滑、非负）。
@@ -44,13 +44,13 @@ const IDF_MIN: f64 = 0.6;
 const EXPAND_MAX: usize = 6;
 
 /// 小库线性兜底：全库现算 df，返回 (库规模 n, df 表)。
-fn scan_all_df(root: &str) -> std::io::Result<(f64, HashMap<String, usize>)> {
-    let all_ids = store::list_ids(root)?;
+fn scan(root: &str) -> std::io::Result<(f64, HashMap<String, usize>)> {
+    let all_ids = store::list(root)?;
     let n = all_ids.len() as f64;
     let mut df: HashMap<String, usize> = HashMap::new();
     for id in &all_ids {
-        let c = store::read_case(root, id)?;
-        let (_, terms) = build_doc_terms(&c.query, &c.text);
+        let c = store::load(root, id)?;
+        let (_, terms) = document(&c.query, &c.text);
         for t in &terms {
             *df.entry(t.clone()).or_insert(0) += 1;
         }
@@ -59,9 +59,9 @@ fn scan_all_df(root: &str) -> std::io::Result<(f64, HashMap<String, usize>)> {
 }
 
 /// 统计批内词频：只算 sim>0 的相关 case；索引路径复用 postings 词表快照。
-fn collect_batch_tf(
+fn batch(
     root: &str,
-    hits: &[RecallHit],
+    hits: &[Hit],
     idx: Option<&super::index::Index>,
 ) -> std::io::Result<HashMap<String, usize>> {
     let mut batch: HashMap<String, usize> = HashMap::new();
@@ -70,27 +70,23 @@ fn collect_batch_tf(
             continue;
         }
         if let Some(idx) = idx {
-            if let Some(di) = super::index::doc_by_id(idx, &h.id) {
+            if let Some(di) = super::index::find(idx, &h.id) {
                 for t in idx.docs[di].terms.iter() {
                     *batch.entry(t.clone()).or_insert(0) += 1;
                 }
                 continue;
             }
         }
-        collect_case_tf(root, &h.id, &mut batch)?;
+        case(root, &h.id, &mut batch)?;
     }
     Ok(batch)
 }
 
 /// 线性回退：读 case 并把 query+text 词表并入批内词频。
-fn collect_case_tf(
-    root: &str,
-    id: &str,
-    batch: &mut HashMap<String, usize>,
-) -> std::io::Result<()> {
-    let c = store::read_case(root, id)?;
-    let mut terms = build_mem_terms(&c.query);
-    terms.extend(build_mem_terms(&c.text));
+fn case(root: &str, id: &str, batch: &mut HashMap<String, usize>) -> std::io::Result<()> {
+    let c = store::load(root, id)?;
+    let mut terms = memory(&c.query);
+    terms.extend(memory(&c.text));
     for t in &terms {
         *batch.entry(t.clone()).or_insert(0) += 1;
     }
@@ -98,14 +94,14 @@ fn collect_case_tf(
 }
 
 /// 按 df 来源（索引 postings / meta 快照 / 线性现算）查单词 df。
-fn lookup_df(
+fn lookup(
     idx: Option<&super::index::Index>,
     snapshot: Option<(&[(String, usize)], bool)>,
     df_map: Option<&HashMap<String, usize>>,
     t: &str,
 ) -> f64 {
     if let Some(idx) = idx {
-        super::index::term_df(idx, t) as f64
+        super::index::df(idx, t) as f64
     } else if let Some((snapshot, sorted)) = snapshot {
         let df = if sorted {
             snapshot
@@ -130,7 +126,7 @@ fn lookup_df(
 }
 
 /// 从批内 tf 表筛出扩展候选（tf≥MIN、idf>IDF_MIN、不在 query 词表）。
-fn filter_candidates(
+fn filter(
     batch: &HashMap<String, usize>,
     qterms: &[String],
     n: f64,
@@ -146,7 +142,7 @@ fn filter_candidates(
         if qterms.contains(t) {
             continue;
         }
-        let d = lookup_df(idx, snapshot, df_map, t);
+        let d = lookup(idx, snapshot, df_map, t);
         let idf = idf(n, d);
         if idf > IDF_MIN {
             cand.push((t.clone(), idf));
@@ -162,12 +158,12 @@ fn filter_candidates(
 /// 快照为空（小库未 rebuild）时回退全库现算（线性兜底）。
 pub(crate) fn expand(
     root: &str,
-    hits: &[RecallHit],
+    hits: &[Hit],
     query: &str,
     meta: &Meta,
     idx: Option<&super::index::Index>,
 ) -> std::io::Result<Vec<String>> {
-    let qterms = build_mem_terms(query);
+    let qterms = memory(query);
     let mut n = idx.map(|i| i.n_docs).unwrap_or(meta.case_count) as f64;
     // df 来源优先级：索引 postings（全库口径、零分配）→ meta df 快照（二分）
     // → 小库全量现算。避免每次 PRF 都把整张 df 表克隆进 HashMap。
@@ -179,7 +175,7 @@ pub(crate) fn expand(
     };
     let df_map = if idx.is_none() && meta.df.is_empty() {
         // 线性阶段兜底：全库现算（小库可接受；大库必经 rebuild → 快照非空）。
-        let (n_scan, df) = scan_all_df(root)?;
+        let (n_scan, df) = scan(root)?;
         n = n_scan;
         Some(df)
     } else {
@@ -188,17 +184,17 @@ pub(crate) fn expand(
     if n == 0.0 {
         return Ok(Vec::new());
     }
-    let batch = collect_batch_tf(root, hits, idx)?;
+    let batch = batch(root, hits, idx)?;
     // 筛选：批内 tf≥MIN、全局 idf>IDF_MIN、不在 query 词表。
-    let mut cand = filter_candidates(&batch, &qterms, n, idx, snapshot, df_map.as_ref());
+    let mut cand = filter(&batch, &qterms, n, idx, snapshot, df_map.as_ref());
     // 确定性全序：idf 降序，idf 相等按词面升序（见下方注释）。
-    sort_expansion_candidates(&mut cand);
+    sort(&mut cand);
     cand.truncate(EXPAND_MAX);
     Ok(cand.into_iter().map(|(t, _)| t).collect())
 }
 
 /// 扩展候选排序：idf 降序、idf 相同按词面升序（确定、可重放）。
-fn sort_expansion_candidates(cand: &mut [(String, f64)]) {
+fn sort(cand: &mut [(String, f64)]) {
     cand.sort_by(|a, b| {
         b.1.partial_cmp(&a.1)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -208,7 +204,7 @@ fn sort_expansion_candidates(cand: &mut [(String, f64)]) {
 
 /// 贪心 MMR 选取：返回选中下标（顺序 = 分数优先下的多样性序）。
 /// `cands` 应已按 score 降序；`docs` 与 `scores_norm` 按 doc 下标对齐。
-pub(crate) fn mmr_select(
+pub(crate) fn pick(
     cands: &[usize],
     docs: &[Vec<String>],
     scores_norm: &[f64],
@@ -269,13 +265,13 @@ pub(crate) fn jaccard(a: &[String], b: &[String]) -> f64 {
 mod tests {
     use super::*;
     use crate::memory::ingest::ingest;
-    use crate::memory::recall::RecallHit;
-    use crate::memory::store::CaseStats;
-    use crate::memory::util::tmp_root;
+    use crate::memory::recall::Hit;
+    use crate::memory::store::Stats;
+    use crate::memory::util::root;
     use std::fs;
 
-    fn stats() -> CaseStats {
-        crate::memory::store::sample_stats()
+    fn stats() -> Stats {
+        crate::memory::store::sample()
     }
 
     #[test]
@@ -287,14 +283,14 @@ mod tests {
             ("mm".to_string(), 2.0),
             ("bb".to_string(), 1.0),
         ];
-        sort_expansion_candidates(&mut cand);
+        sort(&mut cand);
         let terms: Vec<&str> = cand.iter().map(|(t, _)| t.as_str()).collect();
         assert_eq!(terms, vec!["mm", "aa", "bb", "zz"]);
     }
 
     #[test]
     fn prf_expands_paraphrase_query() {
-        let root = tmp_root("exp");
+        let root = root("exp");
         let s1 = stats();
         // 库内：多个 case 反复出现判别词 `errno` / `pool`（字母区分文本，
         // 避免 norm 数字折叠导致指纹相同被去重）。
@@ -337,12 +333,12 @@ mod tests {
 
         // 释义变体 query：词面与库内 case 几乎不重叠。
         let q = "pool 又出问题";
-        let ids = store::list_ids(&root).unwrap();
-        let meta = store::load_meta(&root).unwrap();
+        let ids = store::list(&root).unwrap();
+        let meta = crate::memory::meta::load(&root).unwrap();
         // 构造粗召回候选：全部标记 sim=1.0（PRF 只依赖词面相关标记，词频统计看 case 内容）。
-        let hits: Vec<RecallHit> = ids
+        let hits: Vec<Hit> = ids
             .iter()
-            .map(|id| RecallHit {
+            .map(|id| Hit {
                 id: id.clone(),
                 score: 1.0,
                 sim: 1.0,
@@ -383,7 +379,7 @@ mod mmr_tests {
         ];
         let cands = vec![0usize, 1, 2];
         let scores = vec![1.0, 0.7, 0.6];
-        let picked = mmr_select(&cands, &docs, &scores, 2, 0.5);
+        let picked = pick(&cands, &docs, &scores, 2, 0.5);
         assert_eq!(picked.len(), 2, "选中 2 个");
         assert!(
             !(picked.contains(&0) && picked.contains(&1)),
@@ -401,7 +397,7 @@ mod mmr_tests {
         ];
         let cands = vec![0usize, 1, 2];
         let scores = vec![1.0, 0.9, 0.8];
-        assert_eq!(mmr_select(&cands, &docs, &scores, 3, 0.0), vec![0, 1, 2]);
+        assert_eq!(pick(&cands, &docs, &scores, 3, 0.0), vec![0, 1, 2]);
     }
 
     #[test]
@@ -409,7 +405,7 @@ mod mmr_tests {
         let docs = vec![terms(&["a", "b"]), terms(&["c", "d"])];
         let cands = vec![1usize, 0];
         let scores = vec![0.8, 0.7];
-        let picked = mmr_select(&cands, &docs, &scores, 5, 0.5);
+        let picked = pick(&cands, &docs, &scores, 5, 0.5);
         assert_eq!(picked.len(), 2);
     }
 }

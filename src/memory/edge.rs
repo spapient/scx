@@ -21,11 +21,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// 实体 → case id 倒排（实体键精确匹配）。
-pub(crate) struct EdgeIndex {
+pub(crate) struct Edges {
     map: HashMap<String, Vec<String>>,
 }
 
-impl EdgeIndex {
+impl Edges {
     /// 实体命中的 case id 集合（去重、保序）。
     pub(crate) fn neighbors(&self, ents: &[String]) -> Vec<String> {
         let mut out = Vec::new();
@@ -43,26 +43,26 @@ impl EdgeIndex {
 }
 
 /// 缓存键：root + meta.toml mtime（任何库变更都重写 meta.toml → 键失效）。
-type EdgeCacheEntry = (String, Option<std::time::SystemTime>, Arc<EdgeIndex>);
-static EDGE_CACHE: OnceLock<Mutex<Option<EdgeCacheEntry>>> = OnceLock::new();
-fn cache() -> &'static Mutex<Option<EdgeCacheEntry>> {
+type Entry = (String, Option<std::time::SystemTime>, Arc<Edges>);
+static EDGE_CACHE: OnceLock<Mutex<Option<Entry>>> = OnceLock::new();
+fn cache() -> &'static Mutex<Option<Entry>> {
     EDGE_CACHE.get_or_init(|| Mutex::new(None))
 }
 
 /// 全库构建实体表：每个 case 的四类字段值各作为一条实体键（去重）。
-pub(crate) fn build(root: &str) -> std::io::Result<EdgeIndex> {
+pub(crate) fn build(root: &str) -> std::io::Result<Edges> {
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
-    for id in store::list_ids(root)? {
-        let c = store::read_case(root, &id)?;
-        for e in crate::memory::classify::entity_keys(&c.fields) {
+    for id in store::list(root)? {
+        let c = store::load(root, &id)?;
+        for e in crate::memory::classify::keys(&c.fields) {
             map.entry(e).or_default().push(id.clone());
         }
     }
-    Ok(EdgeIndex { map })
+    Ok(Edges { map })
 }
 
 /// 进程内缓存的实体表（见模块注释）。mtime 读取失败 → 每次重建（保守正确）。
-fn cached_build(root: &str) -> std::io::Result<Arc<EdgeIndex>> {
+fn cached(root: &str) -> std::io::Result<Arc<Edges>> {
     let p = std::path::Path::new(root).join("meta.toml");
     let mt = p.metadata().and_then(|m| m.modified()).ok();
     let mut g = cache().lock().unwrap();
@@ -76,8 +76,8 @@ fn cached_build(root: &str) -> std::io::Result<Arc<EdgeIndex>> {
     Ok(idx)
 }
 
-/// 桥 case 的召回上下文（与 recall::DocCtx 同构，由调用方转写）。
-pub(crate) struct BridgeCase {
+/// 桥 case 的召回上下文（与 recall::Doc 同构，由调用方转写）。
+pub(crate) struct Bridge {
     pub id: String,
     pub terms: std::sync::Arc<[String]>,
     pub query_terms: std::sync::Arc<[String]>,
@@ -91,12 +91,12 @@ pub(crate) struct BridgeCase {
 /// 桥并入：query 实体 → 兄弟 case（未在 `exist` 中）读出完整上下文与共享实体计数。
 /// 桥只增加候选；调用方保持全库 df/avgdl 口径。仅当 edge_enable>0 且 query
 /// 确有实体时触发。
-pub(crate) fn bridge_cases(
+pub(crate) fn bridge(
     root: &str,
     meta: &store::Meta,
     qf_ents: &[String],
     exist: &[String],
-) -> std::io::Result<Vec<BridgeCase>> {
+) -> std::io::Result<Vec<Bridge>> {
     if meta.param("edge_enable") <= 0.0 {
         return Ok(Vec::new());
     }
@@ -106,17 +106,17 @@ pub(crate) fn bridge_cases(
     if ents.is_empty() {
         return Ok(Vec::new());
     }
-    let idx = cached_build(root)?;
+    let idx = cached(root)?;
     let bridge = idx.neighbors(&ents);
     let mut out = Vec::new();
     for id in bridge {
         if exist.contains(&id) {
             continue;
         }
-        let c = store::read_case(root, &id)?;
-        let (query_terms, terms) = crate::terms::build_doc_terms(&c.query, &c.text);
-        let shared = shared_entity_count(&ents, &c.fields);
-        out.push(BridgeCase {
+        let c = store::load(root, &id)?;
+        let (query_terms, terms) = crate::terms::document(&c.query, &c.text);
+        let shared = shared(&ents, &c.fields);
+        out.push(Bridge {
             id,
             terms: terms.into(),
             query_terms: query_terms.into(),
@@ -130,11 +130,11 @@ pub(crate) fn bridge_cases(
     Ok(out)
 }
 
-fn shared_entity_count(ents: &[String], fields: &store::Fields) -> usize {
-    ents.iter().filter(|e| entity_in_fields(e, fields)).count()
+fn shared(ents: &[String], fields: &store::Fields) -> usize {
+    ents.iter().filter(|e| entity(e, fields)).count()
 }
 
-fn entity_in_fields(e: &str, fields: &store::Fields) -> bool {
+fn entity(e: &str, fields: &store::Fields) -> bool {
     fields.error_code.iter().any(|x| x == e)
         || fields.file_loc.iter().any(|x| x == e)
         || fields.symbol.iter().any(|x| x == e)
@@ -146,15 +146,15 @@ mod tests {
     use super::*;
     use crate::memory::ingest::ingest;
     use crate::memory::recall::recall;
-    use crate::memory::store::CaseStats;
-    use crate::memory::util::tmp_root;
+    use crate::memory::store::Stats;
+    use crate::memory::util::root;
     use std::fs;
 
-    fn stats() -> CaseStats {
-        CaseStats {
+    fn stats() -> Stats {
+        Stats {
             kept: 2,
             total: 20,
-            cut_pct: 90.0,
+            cut: 90.0,
             risk: "LOW".to_string(),
         }
     }
@@ -163,7 +163,7 @@ mod tests {
     /// 被 db/network 候选桶过滤掉后，由实体边兜底并入候选并加权召回；关桥则被滤。
     #[test]
     fn edge_bridge_recovers_cross_bucket_sibling() {
-        let root = tmp_root("eb");
+        let root = root("eb");
         let s1 = stats();
         // A：db/network 桶（含 timeout），共享实体 pool.java:214。
         ingest(
@@ -200,11 +200,11 @@ mod tests {
         .unwrap();
         // 桥开（默认 edge_enable=1）：q 实体 pool.java:214 → B 兜底召回。
         let q_open = "数据库连接池 timeout at Pool.java:214";
-        let hits = recall(&root, q_open, 3, &store::load_meta(&root).unwrap()).unwrap();
+        let hits = recall(&root, q_open, 3, &crate::memory::meta::load(&root).unwrap()).unwrap();
         let b_id = {
-            let ids = store::list_ids(&root).unwrap();
+            let ids = store::list(&root).unwrap();
             ids.iter()
-                .find(|id| store::read_case(&root, id).unwrap().query == "compile fail")
+                .find(|id| store::load(&root, id).unwrap().query == "compile fail")
                 .cloned()
                 .unwrap()
         };
@@ -217,11 +217,11 @@ mod tests {
                 .join(",")
         );
         // 关桥（edge_enable=0）：B 被桶过滤，不再出现在结果里。
-        crate::memory::meta::set_param(&root, "edge_enable", 0.0).unwrap();
+        crate::memory::meta::set(&root, "edge_enable", 0.0).unwrap();
         // 隔离本测试：关闭低置信桶回退，确保 B 只能被实体边召回。
-        crate::memory::meta::set_param(&root, "bucket_bypass_sim", 0.0).unwrap();
+        crate::memory::meta::set(&root, "bucket_bypass_sim", 0.0).unwrap();
         let q_off = "数据库连接池 timeout at Pool.java:214 pool";
-        let hits2 = recall(&root, q_off, 3, &store::load_meta(&root).unwrap()).unwrap();
+        let hits2 = recall(&root, q_off, 3, &crate::memory::meta::load(&root).unwrap()).unwrap();
         assert!(
             !hits2.iter().any(|h| h.id == b_id),
             "关桥后 B 应被桶过滤排除：{:?}",
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn build_and_neighbors_are_deterministic() {
-        let root = tmp_root("bn");
+        let root = root("bn");
         ingest(
             &root,
             "db timeout",

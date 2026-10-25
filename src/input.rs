@@ -5,31 +5,31 @@ use std::io::{self, Read};
 /// 64 MiB：交互式上下文压缩的内存上限；更大的日志应先分段，避免一次读入和筛选向量挤爆内存。
 pub(crate) const MAX_INPUT_BYTES: u64 = 64 * 1024 * 1024;
 
-pub(crate) fn decode_bytes(bytes: Vec<u8>) -> String {
+pub(crate) fn decode(bytes: Vec<u8>) -> String {
     match String::from_utf8(bytes) {
         Ok(s) => s,
         Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
     }
 }
 
-pub(crate) fn read_limited<R: Read>(reader: R, limit: u64) -> io::Result<Vec<u8>> {
+pub(crate) fn read<R: Read>(reader: R, limit: u64) -> io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     reader.take(limit.saturating_add(1)).read_to_end(&mut buf)?;
     Ok(buf)
 }
 
-pub(crate) fn exceeds_limit(len: usize, limit: u64) -> bool {
+pub(crate) fn large(len: usize, limit: u64) -> bool {
     len as u64 > limit
 }
 
-pub(crate) fn limit_error(limit: u64) -> String {
+pub(crate) fn error(limit: u64) -> String {
     format!(
         "input exceeds the {} MiB limit; split the input first",
         limit / (1024 * 1024)
     )
 }
 
-pub(crate) fn read_files(files: &[String], limit: u64) -> Result<String, String> {
+pub(crate) fn sources(files: &[String], limit: u64) -> Result<String, String> {
     let mut bytes = Vec::new();
     let mut total_bytes = 0usize;
     for f in files {
@@ -46,40 +46,39 @@ pub(crate) fn read_files(files: &[String], limit: u64) -> Result<String, String>
             .read_to_end(&mut bytes)
             .map_err(|e| format!("cannot read input: {}: {}", f, e))?;
         total_bytes = total_bytes.saturating_add(bytes.len() - before);
-        if exceeds_limit(total_bytes, limit) {
-            return Err(limit_error(limit));
+        if large(total_bytes, limit) {
+            return Err(error(limit));
         }
     }
-    Ok(decode_bytes(bytes))
+    Ok(decode(bytes))
 }
 
-pub(crate) fn read_stdin(limit: u64) -> Result<String, String> {
+pub(crate) fn stdin(limit: u64) -> Result<String, String> {
     let stdin = io::stdin();
-    let buf = read_limited(stdin.lock(), limit).map_err(|e| format!("cannot read input: {}", e))?;
-    if exceeds_limit(buf.len(), limit) {
-        return Err(limit_error(limit));
+    let buf = read(stdin.lock(), limit).map_err(|e| format!("cannot read input: {}", e))?;
+    if large(buf.len(), limit) {
+        return Err(error(limit));
     }
-    Ok(decode_bytes(buf))
+    Ok(decode(buf))
 }
 
-pub fn read_input(files: &[String]) -> Result<String, String> {
+pub fn input(files: &[String]) -> Result<String, String> {
     if files.is_empty() {
-        read_stdin(MAX_INPUT_BYTES)
+        stdin(MAX_INPUT_BYTES)
     } else {
-        read_files(files, MAX_INPUT_BYTES)
+        sources(files, MAX_INPUT_BYTES)
     }
 }
 
 /// 读取 `--fix-file` 文本，并在分配前限制到与记忆库相同的上限。
-pub fn read_fix_file(path: &str, limit: u64) -> Result<String, String> {
+pub fn fix(path: &str, limit: u64) -> Result<String, String> {
     let file =
         std::fs::File::open(path).map_err(|e| format!("cannot read --fix-file {path}: {e}"))?;
-    let buf =
-        read_limited(file, limit).map_err(|e| format!("cannot read --fix-file {path}: {e}"))?;
-    if exceeds_limit(buf.len(), limit) {
+    let buf = read(file, limit).map_err(|e| format!("cannot read --fix-file {path}: {e}"))?;
+    if large(buf.len(), limit) {
         return Err(format!("--fix-file {path} exceeds the {limit}-byte limit"));
     }
-    Ok(decode_bytes(buf))
+    Ok(decode(buf))
 }
 
 #[cfg(test)]
@@ -88,13 +87,13 @@ mod tests {
 
     #[test]
     fn capped_reader_detects_one_byte_over_limit() {
-        let exact = read_limited(std::io::Cursor::new(b"12345678"), 8).unwrap();
+        let exact = read(std::io::Cursor::new(b"12345678"), 8).unwrap();
         assert_eq!(exact, b"12345678");
-        assert!(!exceeds_limit(exact.len(), 8));
+        assert!(!large(exact.len(), 8));
 
-        let over = read_limited(std::io::Cursor::new(b"123456789"), 8).unwrap();
+        let over = read(std::io::Cursor::new(b"123456789"), 8).unwrap();
         assert_eq!(over, b"123456789");
-        assert!(exceeds_limit(over.len(), 8));
+        assert!(large(over.len(), 8));
     }
 
     #[test]
@@ -110,9 +109,9 @@ mod tests {
             b.to_string_lossy().into_owned(),
         ];
 
-        assert_eq!(read_files(&files[..1], 4).unwrap(), "1234");
-        assert!(read_files(&files, 7).is_err());
-        assert_eq!(read_files(&files, 8).unwrap(), "1234\n5678");
+        assert_eq!(sources(&files[..1], 4).unwrap(), "1234");
+        assert!(sources(&files, 7).is_err());
+        assert_eq!(sources(&files, 8).unwrap(), "1234\n5678");
 
         let _ = std::fs::remove_file(a);
         let _ = std::fs::remove_file(b);
@@ -130,7 +129,7 @@ mod tests {
             a.to_string_lossy().into_owned(),
             b.to_string_lossy().into_owned(),
         ];
-        assert_eq!(read_files(&files, 13).unwrap(), "first\nsecond\n");
+        assert_eq!(sources(&files, 13).unwrap(), "first\nsecond\n");
         let _ = std::fs::remove_file(a);
         let _ = std::fs::remove_file(b);
     }
@@ -147,8 +146,8 @@ mod tests {
         ));
         std::fs::write(&path, b"12345").unwrap();
         let path = path.to_string_lossy();
-        assert_eq!(read_fix_file(&path, 5).unwrap(), "12345");
-        assert!(read_fix_file(&path, 4).is_err());
+        assert_eq!(fix(&path, 5).unwrap(), "12345");
+        assert!(fix(&path, 4).is_err());
         let _ = std::fs::remove_file(path.as_ref());
     }
 }

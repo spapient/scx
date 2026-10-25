@@ -10,21 +10,19 @@
 
 #![forbid(unsafe_code)]
 
-use crate::json::{parse_json, Json};
+use crate::json::{parse, Json};
 use std::fs;
 
 /// SHA-256 轮常量（FIPS 180-4）。
 const SHA256_K: [u32; 64] = [
-    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-    0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-    0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-    0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-    0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-    0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-    0xc67178f2,
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
 /// SHA-256（FIPS 180-4，纯 std 实现；用于权重文件完整性校验）。
@@ -33,10 +31,10 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,
     ];
-    let msg = sha256_pad(data);
+    let msg = pad(data);
     let mut w = [0u32; 64];
     for chunk in msg.chunks_exact(64) {
-        sha256_compress(chunk, &mut w, &mut h);
+        block(chunk, &mut w, &mut h);
     }
     let mut out = [0u8; 32];
     for (i, v) in h.iter().enumerate() {
@@ -46,7 +44,7 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 }
 
 /// 消息填充：追加 `0x80`、补零至 56 mod 64，尾接 64 位大端位长。
-fn sha256_pad(data: &[u8]) -> Vec<u8> {
+fn pad(data: &[u8]) -> Vec<u8> {
     let mut msg = data.to_vec();
     let bit_len = (data.len() as u64).wrapping_mul(8);
     msg.push(0x80);
@@ -58,7 +56,7 @@ fn sha256_pad(data: &[u8]) -> Vec<u8> {
 }
 
 /// 单块压缩：消息调度 + 64 轮压缩。
-fn sha256_compress(chunk: &[u8], w: &mut [u32; 64], h: &mut [u32; 8]) {
+fn block(chunk: &[u8], w: &mut [u32; 64], h: &mut [u32; 8]) {
     for (i, b) in chunk.chunks_exact(4).enumerate() {
         w[i] = u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
     }
@@ -118,12 +116,12 @@ pub struct Weights {
     w: Vec<f64>,
 }
 
-fn parse_weights_json(path: &str) -> Result<Json, String> {
+fn read(path: &str) -> Result<Json, String> {
     let txt = fs::read_to_string(path).map_err(|e| format!("read {path}: {e}"))?;
-    parse_json(&txt).map_err(|e| format!("{path}: {e}"))
+    parse(&txt).map_err(|e| format!("{path}: {e}"))
 }
 
-fn load_dim(path: &str, v: &Json) -> Result<usize, String> {
+fn dim(path: &str, v: &Json) -> Result<usize, String> {
     let schema = v
         .get("schema")
         .and_then(Json::str)
@@ -139,7 +137,7 @@ fn load_dim(path: &str, v: &Json) -> Result<usize, String> {
         .map(|d| d.max(0.0) as usize)
 }
 
-fn load_weight_vec(path: &str, v: &Json, dim: usize) -> Result<Vec<f64>, String> {
+fn weights(path: &str, v: &Json, dim: usize) -> Result<Vec<f64>, String> {
     let ws = match v.get("weights") {
         Some(Json::Arr(items)) => items
             .iter()
@@ -156,12 +154,12 @@ fn load_weight_vec(path: &str, v: &Json, dim: usize) -> Result<Vec<f64>, String>
     Ok(ws)
 }
 
-fn check_sha(path: &str, v: &Json, ws: &[f64]) -> Result<(), String> {
+fn verify(path: &str, v: &Json, ws: &[f64]) -> Result<(), String> {
     let want = v
         .get("sha256")
         .and_then(Json::str)
         .ok_or_else(|| format!("{path}: missing sha256"))?;
-    let got = hex(&sha256(&encode_be(ws)));
+    let got = hex(&sha256(&encode(ws)));
     if got != want.to_ascii_lowercase() {
         return Err(format!(
             "{path}: sha256 mismatch (file {want}, computed {got})"
@@ -173,10 +171,10 @@ fn check_sha(path: &str, v: &Json, ws: &[f64]) -> Result<(), String> {
 impl Weights {
     /// 加载并校验权重文件；schema/dim/weights/sha256 任一不符即拒绝。
     pub fn load(path: &str) -> Result<Weights, String> {
-        let v = parse_weights_json(path)?;
-        let dim = load_dim(path, &v)?;
-        let ws = load_weight_vec(path, &v, dim)?;
-        check_sha(path, &v, &ws)?;
+        let v = read(path)?;
+        let dim = dim(path, &v)?;
+        let ws = weights(path, &v, dim)?;
+        verify(path, &v, &ws)?;
         Ok(Weights { dim, w: ws })
     }
 
@@ -193,7 +191,7 @@ impl Weights {
 }
 
 /// weights 的二进制规范编码：每 f64 大端 8 字节拼接（IEEE-754 位模式稳定）。
-fn encode_be(ws: &[f64]) -> Vec<u8> {
+fn encode(ws: &[f64]) -> Vec<u8> {
     let mut out = Vec::with_capacity(ws.len() * 8);
     for w in ws {
         out.extend_from_slice(&w.to_be_bytes());
@@ -205,14 +203,14 @@ fn encode_be(ws: &[f64]) -> Vec<u8> {
 /// 特征模板与 compress 打分表正交，只作可选加分项。
 pub fn feats(line: &str, query_terms: &[String], dim: usize) -> Vec<f64> {
     let lower = line.to_lowercase();
-    let hit = hit_count(query_terms, &lower);
-    let overlap = overlap_of(hit, query_terms.len());
+    let hit = hits(query_terms, &lower);
+    let overlap = overlap(hit, query_terms.len());
     let chars = line.chars().count();
     let caps = line.chars().filter(|c| c.is_ascii_uppercase()).count();
     let digits = line.chars().filter(|c| c.is_ascii_digit()).count();
-    let cap_ratio = ratio_or_zero(caps as f64, chars as f64);
-    let dig_ratio = ratio_or_zero(digits as f64, chars as f64);
-    let structure = structure_feat(line);
+    let cap_ratio = ratio(caps as f64, chars as f64);
+    let dig_ratio = ratio(digits as f64, chars as f64);
+    let structure = shape(line);
     let mut out = vec![
         overlap,
         hit.min(1) as f64,
@@ -225,14 +223,14 @@ pub fn feats(line: &str, query_terms: &[String], dim: usize) -> Vec<f64> {
     out
 }
 
-fn hit_count(query_terms: &[String], lower: &str) -> usize {
+fn hits(query_terms: &[String], lower: &str) -> usize {
     query_terms
         .iter()
         .filter(|t| !t.is_empty() && lower.contains(t.as_str()))
         .count()
 }
 
-fn overlap_of(hit: usize, terms: usize) -> f64 {
+fn overlap(hit: usize, terms: usize) -> f64 {
     if terms == 0 {
         0.0
     } else {
@@ -240,7 +238,7 @@ fn overlap_of(hit: usize, terms: usize) -> f64 {
     }
 }
 
-fn ratio_or_zero(num: f64, den: f64) -> f64 {
+fn ratio(num: f64, den: f64) -> f64 {
     if den == 0.0 {
         0.0
     } else {
@@ -248,7 +246,7 @@ fn ratio_or_zero(num: f64, den: f64) -> f64 {
     }
 }
 
-fn structure_feat(line: &str) -> f64 {
+fn shape(line: &str) -> f64 {
     let t = line.trim_start();
     if t.starts_with("```")
         || t.starts_with("~~~")
@@ -283,7 +281,7 @@ mod tests {
     #[test]
     fn weights_load_validates_sha() {
         let ws = vec![0.1, -0.2, 0.3];
-        let want = hex(&sha256(&encode_be(&ws)));
+        let want = hex(&sha256(&encode(&ws)));
         let path = std::env::temp_dir().join(format!("scx-sem-{}.json", std::process::id()));
         fs::write(
             &path,

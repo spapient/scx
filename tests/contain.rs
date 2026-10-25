@@ -38,7 +38,7 @@ fn blue_containment_full_on_representatives() {
             "{} 证据未全保留: {:?}",
             c.id, r.miss
         );
-        assert!(r.cut_pct > 0.0, "{} 必须产生真实压减", c.id);
+        assert!(r.cut > 0.0, "{} 必须产生真实压减", c.id);
         assert_eq!(r.mode, Mode::Sieve, "{} 应走 sieve 路径", c.id);
     }
 }
@@ -50,7 +50,7 @@ fn red_guard_evidence_never_lost_under_hard_cap() {
     // 锚定的种子行、注解块行可省略，是设计语义而非缺陷，不在本守卫内。
     for c in &[BUILD_01, DIFF_01, LOG_01] {
         let hard = Config {
-            max_tokens: Some(1),
+            limit: Some(1),
             ..cfg()
         };
         let r = run(c, &hard);
@@ -81,7 +81,7 @@ fn amber_failopen_keeps_all_evidence() {
     assert_eq!(r.mode, Mode::FailOpenZeroSignal);
     assert_eq!(r.evidence_kept, r.evidence_total);
     assert_eq!(r.kept, r.total, "failopen 原样保留");
-    assert_eq!(r.chars_in, r.chars_out);
+    assert_eq!(r.input, r.output);
 }
 
 #[test]

@@ -5,25 +5,25 @@
 // （Op 枚举 + run + 纯渲染）；筛选逻辑全在库 crate（scx::compress）。
 // 本文件只做进程入口：帮助/版本短路、解析、分派与失败出口。
 
-use scx::args::{self, parse_args};
+use scx::args::{self, parse};
 use scx::ops::{self, Failure};
 
 /// 帮助/版本短路：`--` 终止符之后不再解释为选项。
-fn early_exit(args: &[String]) -> bool {
-    let mut after_terminator = false;
+fn short(args: &[String]) -> bool {
+    let mut past = false;
     for a in args {
         if a == "--" {
-            after_terminator = true;
+            past = true;
             continue;
         }
-        if after_terminator {
+        if past {
             continue;
         }
-        if is_help(a) {
+        if help(a) {
             println!("{}", args::usage());
             return true;
         }
-        if is_version(a) {
+        if version(a) {
             println!("scx {}", scx::VERSION);
             return true;
         }
@@ -31,11 +31,11 @@ fn early_exit(args: &[String]) -> bool {
     false
 }
 
-fn is_help(a: &str) -> bool {
+fn help(a: &str) -> bool {
     a == "--help" || a == "-h"
 }
 
-fn is_version(a: &str) -> bool {
+fn version(a: &str) -> bool {
     a == "--version" || a == "-V"
 }
 
@@ -56,10 +56,10 @@ fn main() {
     std::process::exit(2);
 }
 
-fn run(args: &[String]) -> ops::CliResult {
-    if early_exit(args) {
+fn run(args: &[String]) -> ops::Reply {
+    if short(args) {
         return Ok(());
     }
-    let opts = parse_args(args).map_err(Failure::Usage)?;
-    ops::run(ops::from_opts(&opts))
+    let opts = parse(args).map_err(Failure::Usage)?;
+    ops::run(ops::parse(&opts))
 }

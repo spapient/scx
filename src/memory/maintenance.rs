@@ -5,16 +5,16 @@
 //!   不改变索引启用策略（索引只是可丢弃缓存）。
 //! - gc：expire 双条件（meta [params] gc_ttl_regressed=180 / gc_ttl_stale=365）：
 //!   regressed 且超期，或从未反馈（quality=0）且陈旧 → 物理删除 + 索引作废。
-//! - delete_case：物理删除 + 惰性作废索引（删 postings.bin，回退线性；重建由
+//! - delete：物理删除 + 惰性作废索引（删 postings.bin，回退线性；重建由
 //!   rebuild/自动构建恢复）。
 //!
 //! 索引是可丢弃缓存（index/）：任何维护操作不触碰 cases/ 资产；坏段由
 //! index::load 校验报告，重建覆盖。
 
+use crate::memory::cache;
 use crate::memory::index;
-use crate::memory::query_cache;
 use crate::memory::store;
-use crate::memory::util::{parse_utc_secs, utc_now};
+use crate::memory::util::{parse, stamp};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
@@ -22,30 +22,28 @@ use std::path::Path;
 
 /// 全量重建索引 + qmap 合并 + df 快照。返回 (n_docs, n_terms)。
 pub(crate) fn rebuild(root: &str) -> std::io::Result<(usize, usize)> {
-    store::ensure_root(root)?;
+    store::ensure(root)?;
     // 1) 倒排索引全量重建（确定性：case id 排序 + term 字典序）；df 快照随建随取。
     let (n_docs, n_terms, df) = index::build(root)?;
     // 2) qmap 合并：同归一化 query 只留 recency 最新一条。
-    query_cache::merge(root)?;
+    cache::merge(root)?;
     // 3) df 快照写 meta.toml [df]；不改 index_force（重建不得改变召回语义）。
-    write_meta_index(root, n_docs, &df);
+    write(root, n_docs, &df);
     Ok((n_docs, n_terms))
 }
 
 /// 过期清理：删除满足 expire 双条件的 case。返回删除数。
 pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
-    let meta = store::load_meta(root)?;
+    let meta = crate::memory::meta::load(root)?;
     let ttl_regressed = meta.param("gc_ttl_regressed");
     let ttl_stale = meta.param("gc_ttl_stale");
-    let now_s = parse_utc_secs(&utc_now());
+    let now_s = parse(&stamp());
     let mut removed = 0usize;
-    for id in store::list_ids(root)? {
-        let Ok(c) = store::read_case(root, &id) else {
+    for id in store::list(root)? {
+        let Ok(c) = store::load(root, &id) else {
             continue;
         };
-        if case_expired(&c, now_s, ttl_regressed, ttl_stale)
-            && delete_case(root, &id).unwrap_or(false)
-        {
+        if expired(&c, now_s, ttl_regressed, ttl_stale) && delete(root, &id).unwrap_or(false) {
             removed += 1;
         }
     }
@@ -53,8 +51,8 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
 }
 
 /// 过期双条件：regressed 超短 TTL，或从未反馈且无 fix 且陈旧。
-fn case_expired(c: &store::Case, now_s: u64, ttl_regressed: f64, ttl_stale: f64) -> bool {
-    let age_days = now_s.saturating_sub(parse_utc_secs(&c.updated_at)) as f64 / 86_400.0;
+fn expired(c: &store::Case, now_s: u64, ttl_regressed: f64, ttl_stale: f64) -> bool {
+    let age_days = now_s.saturating_sub(parse(&c.updated_at)) as f64 / 86_400.0;
     (c.status == "regressed" && age_days > ttl_regressed)
         || (c.quality == 0.0 && c.fix.is_empty() && age_days > ttl_stale)
 }
@@ -62,11 +60,11 @@ fn case_expired(c: &store::Case, now_s: u64, ttl_regressed: f64, ttl_stale: f64)
 /// 删除一个 case（物理删除 + 惰性作废索引 + 库代际前进）。
 /// id 先过白名单校验，禁止 `..` 与路径分隔符逃逸。
 /// 返回是否存在。
-pub(crate) fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
+pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
     // 锁序契约（docs/locking.md）：case → index → meta → qmap，细粒度在前。
-    // acquire_all 按固定序一次性取齐，任一把失败即整体放弃（已持锁逆序释放），
+    // locks 按固定序一次性取齐，任一把失败即整体放弃（已持锁逆序释放），
     // 绝不半持锁返回；meta 的写入用 *_locked 变体避免自死锁。
-    let _guards = crate::memory::lock::acquire_all(
+    let _guards = crate::memory::lock::locks(
         root,
         &[
             &format!("cases/{id}.lock"),
@@ -80,11 +78,11 @@ pub(crate) fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
         return Ok(false);
     }
     fs::remove_dir_all(dir)?;
-    index::invalidate_locked(root);
-    store::bump_case_count_locked(root)?;
-    crate::memory::ingest::invalidate_fp_index(root);
-    crate::memory::meta::bump_gen_locked(root)?;
-    let _ = fs::remove_file(query_cache::qmap_path(root));
+    index::clear(root);
+    store::recount(root)?;
+    crate::memory::ingest::invalidate(root);
+    crate::memory::meta::advance(root)?;
+    let _ = fs::remove_file(cache::path(root));
     Ok(true)
 }
 
@@ -92,7 +90,7 @@ pub(crate) fn delete_case(root: &str, id: &str) -> std::io::Result<bool> {
 /// 不写 `index_force`：索引只是缓存，重建不得改变召回语义
 /// （线性/索引两条路径的 df/avgdl 均为全库口径，桶过滤只裁候选；强制索引只用于
 /// A/B 对拍，不写回 meta）。索引启用只由规模阈值决定。失败静默旁路。
-fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
+fn write(root: &str, n_docs: usize, df: &[(String, usize)]) {
     let Ok(_g) = crate::memory::lock::acquire(root, "meta.lock") else {
         return;
     };
@@ -104,14 +102,14 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
     let mut wrote_df = false;
     for line in txt.lines() {
         let t = line.trim();
-        if is_section_line(t) {
+        if section(t) {
             if t == "[df]" {
                 // 跳过旧 df 节，统一在末尾重写。
                 wrote_df = true;
                 continue;
             }
-            if should_insert_df(wrote_df, df) {
-                out.extend(df_lines(df));
+            if insert(wrote_df, df) {
+                out.extend(block(df));
                 wrote_df = true;
             }
         }
@@ -121,23 +119,23 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
         }
         out.push(line.to_string());
     }
-    if should_insert_df(wrote_df, df) {
-        out.extend(df_lines(df));
+    if insert(wrote_df, df) {
+        out.extend(block(df));
     }
     let mut body = out.join("\n");
     body.push('\n');
-    let _ = crate::memory::lock::atomic_write(&p, body.as_bytes());
+    let _ = crate::memory::lock::atomic(&p, body.as_bytes());
 }
 
-fn is_section_line(t: &str) -> bool {
+fn section(t: &str) -> bool {
     t.starts_with('[') && t.ends_with(']')
 }
 
-fn should_insert_df(wrote_df: bool, df: &[(String, usize)]) -> bool {
+fn insert(wrote_df: bool, df: &[(String, usize)]) -> bool {
     !wrote_df && !df.is_empty()
 }
 
-fn df_lines(df: &[(String, usize)]) -> Vec<String> {
+fn block(df: &[(String, usize)]) -> Vec<String> {
     let mut out = vec!["[df]".to_string()];
     for (k, v) in df {
         out.push(format!("{k} = {v}"));
@@ -148,15 +146,15 @@ fn df_lines(df: &[(String, usize)]) -> Vec<String> {
 
 /// `--stats` 盘点：case/桶/状态/fix 覆盖率/质量/磁盘占用。
 pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
-    let meta = store::load_meta(root)?;
-    let ids = store::list_ids(root)?;
+    let meta = crate::memory::meta::load(root)?;
+    let ids = store::list(root)?;
     let mut buckets: HashMap<String, usize> = HashMap::new();
     let mut statuses: HashMap<String, usize> = HashMap::new();
     let mut fix_n = 0usize;
     let mut quality_sum = 0.0f64;
     let mut disk = 0u64;
     for id in &ids {
-        accumulate_stats(
+        sample(
             root,
             id,
             &mut buckets,
@@ -169,8 +167,8 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
     let n = ids.len();
     let mut lines = Vec::with_capacity(6);
     lines.push(format!("stats: cases={} gen={}", n, meta.gen));
-    lines.push(format!("  bucket: {}", join_counts(&buckets)));
-    lines.push(format!("  status: {}", join_counts(&statuses)));
+    lines.push(format!("  bucket: {}", join(&buckets)));
+    lines.push(format!("  status: {}", join(&statuses)));
     lines.push(format!(
         "  fix: {}/{} ({:.0}%)",
         fix_n,
@@ -189,7 +187,7 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
     Ok(lines)
 }
 
-fn accumulate_stats(
+fn sample(
     root: &str,
     id: &str,
     buckets: &mut HashMap<String, usize>,
@@ -198,23 +196,23 @@ fn accumulate_stats(
     quality_sum: &mut f64,
     disk: &mut u64,
 ) -> io::Result<()> {
-    let c = store::read_case(root, id)?;
+    let c = store::load(root, id)?;
     *buckets.entry(c.bucket.clone()).or_insert(0) += 1;
     *statuses.entry(c.status.clone()).or_insert(0) += 1;
     if !c.fix.is_empty() {
         *fix_n += 1;
     }
     *quality_sum += c.quality;
-    let dir = store::case_path(root, id)
+    let dir = store::path(root, id)
         .parent()
-        .expect("case_path 必含 cases/<id>/case.json")
+        .expect("path 必含 cases/<id>/case.json")
         .to_path_buf();
-    *disk += store::dir_bytes(&dir)?;
+    *disk += store::size(&dir)?;
     Ok(())
 }
 
 /// map 按 key 字典序输出（确定性）：`db=5 network=3 ...`。
-fn join_counts(counts: &HashMap<String, usize>) -> String {
+fn join(counts: &HashMap<String, usize>) -> String {
     let mut keys: Vec<&String> = counts.keys().collect();
     keys.sort();
     keys.iter()
@@ -226,18 +224,18 @@ fn join_counts(counts: &HashMap<String, usize>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::ingest::{ingest, ingest_with_fix};
-    use crate::memory::store::{self, CaseStats};
-    use crate::memory::util::tmp_root;
+    use crate::memory::ingest::{fix, ingest};
+    use crate::memory::store::{self, Stats};
+    use crate::memory::util::root;
     use std::fs;
 
-    fn stats() -> CaseStats {
-        crate::memory::store::sample_stats()
+    fn stats() -> Stats {
+        crate::memory::store::sample()
     }
 
     #[test]
     fn rebuild_builds_index_without_forcing_flag() {
-        let root = tmp_root("rb");
+        let root = root("rb");
         let s = stats();
         ingest(
             &root,
@@ -249,12 +247,12 @@ mod tests {
             vec![],
         )
         .unwrap();
-        crate::memory::meta::set_param(&root, "index_force", 1.0).unwrap();
+        crate::memory::meta::set(&root, "index_force", 1.0).unwrap();
         let (n_docs, n_terms) = rebuild(&root).unwrap();
         assert_eq!(n_docs, 1);
         assert!(n_terms > 0);
         assert!(index::load(&root).unwrap().is_some(), "索引已建");
-        let m = store::load_meta(&root).unwrap();
+        let m = crate::memory::meta::load(&root).unwrap();
         assert_eq!(
             m.param("index_force"),
             1.0,
@@ -269,7 +267,7 @@ mod tests {
 
     #[test]
     fn gc_removes_expired_only() {
-        let root = tmp_root("gc");
+        let root = root("gc");
         let s = stats();
         ingest(
             &root,
@@ -292,16 +290,16 @@ mod tests {
         )
         .unwrap();
         // 把第一个 case 拨成 regressed + 超期（gc_ttl_regressed=180）。
-        let ids = store::list_ids(&root).unwrap();
-        let mut c = store::read_case(&root, &ids[0]).unwrap();
+        let ids = store::list(&root).unwrap();
+        let mut c = store::load(&root, &ids[0]).unwrap();
         c.status = "regressed".to_string();
-        let now = store::utc_now();
+        let now = store::stamp();
         let older = format!("2020-01-01{}", &now[10..]);
         c.updated_at = older;
-        store::write_case(&root, &c).unwrap();
+        store::save(&root, &c).unwrap();
         let removed = gc(&root).unwrap();
         assert_eq!(removed, 1, "regressed 超期应被清");
-        assert_eq!(store::list_ids(&root).unwrap().len(), 1);
+        assert_eq!(store::list(&root).unwrap().len(), 1);
         // 索引已作废（惰性）。
         assert!(!index::load(&root).unwrap().is_some(), "gc 后索引作废");
         let _ = fs::remove_dir_all(&root);
@@ -310,28 +308,28 @@ mod tests {
     /// 带 fix 的 case 不因 stale 过期（经验价值最高）。
     #[test]
     fn gc_keeps_stale_case_with_fix() {
-        let root = tmp_root("gc-fix");
+        let root = root("gc-fix");
         let s = stats();
         let mut c = ingest_fix_direct(&root, &s);
         c.quality = 0.0; // 从未反馈
-        let now = store::utc_now();
+        let now = store::stamp();
         let older = format!("2020-01-01{}", &now[10..]);
         c.updated_at = older; // 远超 gc_ttl_stale=365
-        store::write_case(&root, &c).unwrap();
+        store::save(&root, &c).unwrap();
         let removed = gc(&root).unwrap();
         assert_eq!(removed, 0, "带 fix 的 case 不应被 stale GC 清理");
-        assert_eq!(store::list_ids(&root).unwrap().len(), 1);
+        assert_eq!(store::list(&root).unwrap().len(), 1);
         // 去掉 fix 后同条件应被清（对照）。
-        let mut c2 = store::read_case(&root, &store::list_ids(&root).unwrap()[0]).unwrap();
+        let mut c2 = store::load(&root, &store::list(&root).unwrap()[0]).unwrap();
         c2.fix = String::new();
-        store::write_case(&root, &c2).unwrap();
+        store::save(&root, &c2).unwrap();
         assert_eq!(gc(&root).unwrap(), 1);
         let _ = fs::remove_dir_all(&root);
     }
 
     /// 直接落一个带 fix 的 case（经 ingest_with_fix，目录/指纹/写盘齐全）。
-    fn ingest_fix_direct(root: &str, s: &store::CaseStats) -> store::Case {
-        ingest_with_fix(
+    fn ingest_fix_direct(root: &str, s: &store::Stats) -> store::Case {
+        fix(
             root,
             "磁盘满",
             vec!["disk".into()],
@@ -342,12 +340,12 @@ mod tests {
             "扩容并清理 inode",
         )
         .unwrap();
-        store::read_case(root, &store::list_ids(root).unwrap()[0]).unwrap()
+        store::load(root, &store::list(root).unwrap()[0]).unwrap()
     }
 
     #[test]
-    fn delete_case_invalidates_index() {
-        let root = tmp_root("del");
+    fn delete_invalidates_index() {
+        let root = root("del");
         let s = stats();
         ingest(
             &root,
@@ -360,11 +358,11 @@ mod tests {
         )
         .unwrap();
         rebuild(&root).unwrap();
-        let id = store::list_ids(&root).unwrap()[0].clone();
-        assert!(delete_case(&root, &id).unwrap());
-        assert!(store::list_ids(&root).unwrap().is_empty());
+        let id = store::list(&root).unwrap()[0].clone();
+        assert!(delete(&root, &id).unwrap());
+        assert!(store::list(&root).unwrap().is_empty());
         assert!(!index::load(&root).unwrap().is_some(), "删除后索引惰性作废");
-        let m = store::load_meta(&root).unwrap();
+        let m = crate::memory::meta::load(&root).unwrap();
         assert_eq!(m.case_count, 0);
         let _ = fs::remove_dir_all(&root);
     }
@@ -373,22 +371,22 @@ mod tests {
 #[cfg(test)]
 mod stats_tests {
     use super::*;
-    use crate::memory::ingest::{ingest, ingest_with_fix};
-    use crate::memory::store::CaseStats;
-    use crate::memory::util::tmp_root;
+    use crate::memory::ingest::{fix, ingest};
+    use crate::memory::store::Stats;
+    use crate::memory::util::root;
 
-    fn case_stats() -> CaseStats {
-        CaseStats {
+    fn case_stats() -> Stats {
+        Stats {
             kept: 3,
             total: 100,
-            cut_pct: 90.0,
+            cut: 90.0,
             risk: "LOW".to_string(),
         }
     }
 
     #[test]
     fn stats_reports_counts_and_coverage() {
-        let root = tmp_root("t");
+        let root = root("t");
         let s = case_stats();
         ingest(
             &root,
@@ -400,7 +398,7 @@ mod stats_tests {
             vec![],
         )
         .unwrap();
-        ingest_with_fix(
+        fix(
             &root,
             "compile fail",
             vec!["compile".into()],

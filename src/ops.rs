@@ -3,17 +3,17 @@
 //! scx 操作编排层（ops）：把「命令动作」从 CLI 外壳中独立出来。
 //!
 //! - [`Op`]：所有 CLI 一等操作的类型化表示（压缩 / 记忆库 / 评估 …）。
-//! - [`from_opts`]：`args::Opts` → `Op` 的映射（优先级与原 `main::run` 分派顺序一致）。
+//! - [`parse`]：`args::Opts` → `Op` 的映射（优先级与原 `main::run` 分派顺序一致）。
 //! - [`run`]：执行一个 `Op` 并渲染输出；不直接终止进程，失败收敛到 [`Failure`]。
-//! - `render_stats` / [`render_json`]：纯渲染函数（无 I/O），`render_json` 返回
+//! - `stats` / [`render`]：纯渲染函数（无 I/O），`render` 返回
 //!   无前缀纯 JSON，可被 MCP 等集成层直接复用；CLI 输出前缀由调用方拼接。
 //!
 //! 设计约束：本层只依赖 `crate::compress` / `crate::memory` 与 `args::Opts`，
 //! 不依赖任何第三方 crate；任何程序可直接构造 `Op::Compress` 复用压缩内核。
 
 use crate::args::Opts;
-use crate::input::{read_fix_file, read_input};
-use crate::memory::{recall_cases, Case, CaseStats, EvalMode, RecallHit, StoreInput};
+use crate::input::{fix, input};
+use crate::memory::{search, Case, Eval, Hit, Input, Stats};
 use crate::{compress, Mode, Outcome};
 use std::io::{self, Write};
 use std::sync::mpsc;
@@ -31,13 +31,13 @@ impl Failure {
     }
 }
 
-pub type CliResult<T = ()> = Result<T, Failure>;
-type StoreResult = io::Result<(bool, String)>;
-type StoreReceiver = mpsc::Receiver<StoreResult>;
+pub type Reply<T = ()> = Result<T, Failure>;
+type Stored = io::Result<(bool, String)>;
+type Receiver = mpsc::Receiver<Stored>;
 
 /// 压缩动作的独立入参（与 CLI 解析解耦，MCP 等集成层直接构造）。
 #[derive(Clone)]
-pub struct CompressJob {
+pub struct Compress {
     pub config: crate::Config,
     pub files: Vec<String>,
     pub query: String,
@@ -54,7 +54,7 @@ pub struct CompressJob {
 }
 
 /// 标注动作入参。
-pub struct AnnotateJob {
+pub struct Annotate {
     pub mem_dir: String,
     pub seed: u64,
     pub annotate_max: usize,
@@ -73,7 +73,7 @@ pub enum Op {
     Eval {
         mem_dir: String,
         path: String,
-        mode: EvalMode,
+        mode: Eval,
         verbose: bool,
     },
     L1Hist {
@@ -97,30 +97,30 @@ pub enum Op {
         mem_dir: String,
         id: String,
     },
-    Annotate(AnnotateJob),
+    Annotate(Annotate),
     Judge {
         mem_dir: String,
         path: String,
         by: String,
     },
-    Compress(Box<CompressJob>),
+    Compress(Box<Compress>),
 }
 
 /// `Opts` → `Op`：分派顺序与原 `main::run` 完全一致（recall-only → eval →
 /// l1-hist → stats → rate → rebuild → gc → delete → annotate → judge →
 /// compress 兜底），保证 CLI 行为逐字节不变。
-pub fn from_opts(opts: &Opts) -> Op {
-    if let Some(op) = memory_op_a(opts) {
+pub fn parse(opts: &Opts) -> Op {
+    if let Some(op) = select(opts) {
         op
-    } else if let Some(op) = memory_op_b(opts) {
+    } else if let Some(op) = maintain(opts) {
         op
     } else {
-        Op::Compress(Box::new(compress_job(opts)))
+        Op::Compress(Box::new(job(opts)))
     }
 }
 
 /// 前五个记忆/评估动作（判定点 ≤ 8）。
-fn memory_op_a(opts: &Opts) -> Option<Op> {
+fn select(opts: &Opts) -> Option<Op> {
     if opts.recall_only {
         return Some(Op::RecallOnly {
             mem_dir: opts.mem_dir.clone(),
@@ -133,7 +133,7 @@ fn memory_op_a(opts: &Opts) -> Option<Op> {
         return Some(Op::Eval {
             mem_dir: opts.mem_dir.clone(),
             path: path.clone(),
-            mode: eval_mode(opts),
+            mode: mode(opts),
             verbose: opts.eval_verbose,
         });
     }
@@ -157,20 +157,20 @@ fn memory_op_a(opts: &Opts) -> Option<Op> {
     None
 }
 
-fn eval_mode(opts: &Opts) -> EvalMode {
+fn mode(opts: &Opts) -> Eval {
     if opts.eval_gate_human {
-        EvalMode::Human
+        Eval::Human
     } else if opts.eval_gate_items {
-        EvalMode::Items
+        Eval::Items
     } else if opts.eval_gate {
-        EvalMode::Mechanical
+        Eval::Mechanical
     } else {
-        EvalMode::Report
+        Eval::Report
     }
 }
 
 /// 后五个维护/标注动作（判定点 ≤ 6）。
-fn memory_op_b(opts: &Opts) -> Option<Op> {
+fn maintain(opts: &Opts) -> Option<Op> {
     if opts.rebuild {
         return Some(Op::Rebuild {
             mem_dir: opts.mem_dir.clone(),
@@ -188,7 +188,7 @@ fn memory_op_b(opts: &Opts) -> Option<Op> {
         });
     }
     if opts.annotate || opts.annotate_raw {
-        return Some(Op::Annotate(AnnotateJob {
+        return Some(Op::Annotate(Annotate {
             mem_dir: opts.mem_dir.clone(),
             seed: opts.seed,
             annotate_max: opts.annotate_max,
@@ -208,9 +208,9 @@ fn memory_op_b(opts: &Opts) -> Option<Op> {
     None
 }
 
-/// `Opts` → `CompressJob`（字段搬运，无判定）。
-fn compress_job(opts: &Opts) -> CompressJob {
-    CompressJob {
+/// `Opts` → `Compress`（字段搬运，无判定）。
+fn job(opts: &Opts) -> Compress {
+    Compress {
         config: opts.config.clone(),
         files: opts.files.clone(),
         query: opts.query.clone(),
@@ -227,76 +227,76 @@ fn compress_job(opts: &Opts) -> CompressJob {
     }
 }
 
-/// 执行一个操作（3-arm 分派，V(G)=3；具体执行在 run_special_a/b 与 run_compress）。
-pub fn run(op: Op) -> CliResult {
+/// 执行一个操作（3-arm 分派，V(G)=3；具体执行在 inspect/b 与 filter）。
+pub fn run(op: Op) -> Reply {
     match op {
-        Op::Compress(job) => run_compress(&job),
+        Op::Compress(job) => filter(&job),
         Op::RecallOnly { .. }
         | Op::Eval { .. }
         | Op::L1Hist { .. }
         | Op::Stats { .. }
-        | Op::Rate { .. } => run_special_a(op),
+        | Op::Rate { .. } => dispatch(op),
         Op::Rebuild { .. }
         | Op::Gc { .. }
         | Op::Delete { .. }
         | Op::Annotate(_)
-        | Op::Judge { .. } => run_special_b(op),
+        | Op::Judge { .. } => apply(op),
     }
 }
 
 /// 记忆查询/评估类动作（5-arm match，V(G)=5）。
-fn run_special_a(op: Op) -> CliResult {
+fn dispatch(op: Op) -> Reply {
     match op {
         Op::RecallOnly {
             mem_dir,
             query,
             k,
             detail,
-        } => run_recall_result(&mem_dir, &query, k, detail),
+        } => result(&mem_dir, &query, k, detail),
         Op::Eval {
             mem_dir,
             path,
             mode,
             verbose,
-        } => emit_eval(crate::memory::eval_cases(&mem_dir, &path, mode, verbose)),
-        Op::L1Hist { mem_dir } => emit(crate::memory::l1_hist_table(&mem_dir), "l1-hist"),
-        Op::Stats { mem_dir } => emit(crate::memory::stats_table(&mem_dir), "stats"),
-        Op::Rate { mem_dir, id, good } => emit_rate(&mem_dir, &id, good),
+        } => eval(crate::memory::evaluate(&mem_dir, &path, mode, verbose)),
+        Op::L1Hist { mem_dir } => emit(crate::memory::history(&mem_dir), "l1-hist"),
+        Op::Stats { mem_dir } => emit(crate::memory::stats(&mem_dir), "stats"),
+        Op::Rate { mem_dir, id, good } => rate(&mem_dir, &id, good),
         Op::Compress(_)
         | Op::Rebuild { .. }
         | Op::Gc { .. }
         | Op::Delete { .. }
         | Op::Annotate(_)
         | Op::Judge { .. } => {
-            unreachable!("run_special_a called with non-special-a op")
+            unreachable!("inspect called with non-special-a op")
         }
     }
 }
 
-fn run_recall_result(mem_dir: &str, query: &str, k: usize, detail: bool) -> CliResult {
-    match run_recall(mem_dir, query, k, detail) {
+fn result(mem_dir: &str, query: &str, k: usize, detail: bool) -> Reply {
+    match recall(mem_dir, query, k, detail) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(e) => Err(Failure::message(format!("--recall-only failed: {e}"))),
     }
 }
 
-fn emit_rate(mem_dir: &str, id: &str, good: bool) -> CliResult {
-    let case = crate::memory::rate_case(mem_dir, id, good)
+fn rate(mem_dir: &str, id: &str, good: bool) -> Reply {
+    let case = crate::memory::rate(mem_dir, id, good)
         .map_err(|e| Failure::message(format!("rate failed: {e}")))?;
     println!(
         "rate: good={} bad={} quality={:.2} status={} case={}",
         case.feedback.good, case.feedback.bad, case.quality, case.status, id
     );
     if good {
-        let (base, _) = crate::memory::l1_params(mem_dir);
+        let (base, _) = crate::memory::params(mem_dir);
         println!("l1_base: {base:.3} (自适应)");
     }
     Ok(())
 }
 
 /// 维护/标注类动作（5-arm match，V(G)=5）。
-fn run_special_b(op: Op) -> CliResult {
+fn apply(op: Op) -> Reply {
     match op {
         Op::Rebuild { mem_dir } => {
             let (docs, terms) = crate::memory::rebuild(&mem_dir)
@@ -310,24 +310,24 @@ fn run_special_b(op: Op) -> CliResult {
             println!("gc: removed={removed}");
             Ok(())
         }
-        Op::Delete { mem_dir, id } => run_delete(&mem_dir, &id),
-        Op::Annotate(job) => run_annotate(&job),
+        Op::Delete { mem_dir, id } => delete(&mem_dir, &id),
+        Op::Annotate(job) => annotate(&job),
         Op::Judge {
             mem_dir: _,
             path,
             by,
-        } => emit(crate::memory::judge_baseline(&path, &by), "judge"),
+        } => emit(crate::memory::judge(&path, &by), "judge"),
         Op::RecallOnly { .. }
         | Op::Eval { .. }
         | Op::L1Hist { .. }
         | Op::Stats { .. }
         | Op::Rate { .. }
-        | Op::Compress(_) => unreachable!("run_special_b called with non-special-b op"),
+        | Op::Compress(_) => unreachable!("maintain called with non-special-b op"),
     }
 }
 
-fn run_delete(mem_dir: &str, id: &str) -> CliResult {
-    match crate::memory::delete_case(mem_dir, id) {
+fn delete(mem_dir: &str, id: &str) -> Reply {
+    match crate::memory::delete(mem_dir, id) {
         Ok(true) => {
             println!("delete: removed case={id}");
             Ok(())
@@ -338,41 +338,41 @@ fn run_delete(mem_dir: &str, id: &str) -> CliResult {
 }
 
 /// `--recall-only` 查看模式：只读召回、零库状态写入，库缺失时不创建目录。
-fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) -> io::Result<()> {
-    let hits = recall_cases(mem_dir, query, k, true)?;
+fn recall(mem_dir: &str, query: &str, k: usize, detail: bool) -> io::Result<()> {
+    let hits = search(mem_dir, query, k, true)?;
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    write_mem_lines(&mut out, &hits, mem_dir, detail, false)
+    lines(&mut out, &hits, mem_dir, detail, false)
 }
 
 /// 压缩统计行渲染（纯文本，无 I/O；格式与 v0.4.1 逐字节一致）。
-fn render_stats(r: &Outcome) -> String {
+fn stats(r: &Outcome) -> String {
     let base = format!(
         "compressed: kept={}/{} lines chars={}->{} ({:.1}% cut) dup={} seeds={} evidence={} risk={} guarded={} regions={} window={} terms={} forced={} mode={}",
-        r.kept, r.total, r.chars_in, r.chars_out, r.cut_pct, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode
+        r.kept, r.total, r.input, r.output, r.cut, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode
     );
     // 硬上限溢出时追加可解析的记账字段；正常模式统计行格式保持不变（golden 零漂移）。
     match r.mode {
         Mode::OverflowEvidence | Mode::OverflowFill => format!(
             "{base} max_tokens={} tok_est={:.0}",
-            r.max_tokens.unwrap_or(0),
-            r.tok_est
+            r.limit.unwrap_or(0),
+            r.tokens
         ),
         _ => base,
     }
 }
 
 /// 压缩结果 JSON 渲染（无前缀纯 JSON，MCP 等集成层可直接复用）。
-pub fn render_json(r: &Outcome) -> String {
+pub fn render(r: &Outcome) -> String {
     let mut out = format!(
         "{{\"kept\":{},\"total\":{},\"chars_in\":{},\"chars_out\":{},\"cut_pct\":{:.1},\"dup\":{},\"seeds\":{},\"evidence\":{},\"risk\":\"{}\",\"guarded\":{},\"regions\":{},\"window\":{},\"terms\":{},\"forced\":{},\"mode\":\"{}\"",
-        r.kept, r.total, r.chars_in, r.chars_out, r.cut_pct, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode
+        r.kept, r.total, r.input, r.output, r.cut, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode
     );
     // --json 新增字段向后兼容：仅启用 --max-tokens 时附加，默认输出逐字节不变。
-    if let Some(m) = r.max_tokens {
+    if let Some(m) = r.limit {
         out.push_str(&format!(
             ",\"max_tokens\":{},\"tok_est\":{:.0}",
-            m, r.tok_est
+            m, r.tokens
         ));
     }
     // 删除区间（每段一条，1-based 闭区间 + 原因）；默认 stdout 统计行不输出。
@@ -395,9 +395,9 @@ pub fn render_json(r: &Outcome) -> String {
 
 /// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
 /// case 只显示指纹段（`YYYY-MM-DD_<hash16>` 的 hash16），保证输出不随日期漂移。
-fn write_mem_lines(
+fn lines(
     out: &mut dyn Write,
-    hits: &[RecallHit],
+    hits: &[Hit],
     root: &str,
     detail: bool,
     tolerate_unreadable: bool,
@@ -409,7 +409,7 @@ fn write_mem_lines(
             "mem: sim={:.2} score={:.2} case={}",
             h.sim, h.score, short
         )?;
-        let c = match crate::memory::read_case(root, &h.id) {
+        let c = match crate::memory::load(root, &h.id) {
             Ok(c) => c,
             Err(e) if tolerate_unreadable => {
                 eprintln!("scx: warning: recall case {short} unreadable: {e}");
@@ -450,22 +450,22 @@ fn summary(c: &Case) -> String {
         .map(String::as_str)
         .collect();
     // 单趟找“首个错误行”，找不到再用“首个非空行”；避免对整篇正文扫两遍。
-    if let Some(line) = first_summary_line(&c.text) {
+    if let Some(line) = first(&c.text) {
         parts.push(line);
     }
     let s = parts.join(" | ");
     // 只数到截断点：超长日志行不应为“是否加省略号”再扫一遍剩余字符。
-    truncate_summary(&s)
+    truncate(&s)
 }
 
 /// 单趟找“首个错误行”，找不到再用“首个非空行”。
-fn first_summary_line(text: &str) -> Option<&str> {
+fn first(text: &str) -> Option<&str> {
     let mut first_nonempty = None;
     for line in text.lines().map(str::trim).filter(|t| !t.is_empty()) {
         if first_nonempty.is_none() {
             first_nonempty = Some(line);
         }
-        if is_err_text(line) {
+        if error(line) {
             return Some(line);
         }
     }
@@ -473,7 +473,7 @@ fn first_summary_line(text: &str) -> Option<&str> {
 }
 
 /// 最多 300 字符，截断处补省略号。
-fn truncate_summary(s: &str) -> String {
+fn truncate(s: &str) -> String {
     let mut out = String::with_capacity(s.len().min(900));
     for (i, ch) in s.chars().enumerate() {
         if i == 300 {
@@ -486,7 +486,7 @@ fn truncate_summary(s: &str) -> String {
 }
 
 /// 错误/警告行词面判定（summary 的谓词，V(G)=6）。
-fn is_err_text(t: &str) -> bool {
+fn error(t: &str) -> bool {
     t.contains("error")
         || t.contains("ERROR")
         || t.contains("错误")
@@ -498,10 +498,10 @@ fn is_err_text(t: &str) -> bool {
 
 /// 召回回放输出转义控制字符（ANSI ESC / C0），防恶意日志注入终端。
 fn escape(s: &str) -> String {
-    crate::memory::escape_control(s)
+    crate::memory::escape(s)
 }
 
-fn checked_write(result: io::Result<()>) -> CliResult {
+fn write(result: io::Result<()>) -> Reply {
     match result {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
@@ -509,7 +509,7 @@ fn checked_write(result: io::Result<()>) -> CliResult {
     }
 }
 
-fn emit(result: io::Result<Vec<String>>, action: &str) -> CliResult {
+fn emit(result: io::Result<Vec<String>>, action: &str) -> Reply {
     let lines = result.map_err(|e| Failure::message(format!("{action} failed: {e}")))?;
     for line in lines {
         println!("{line}");
@@ -517,7 +517,7 @@ fn emit(result: io::Result<Vec<String>>, action: &str) -> CliResult {
     Ok(())
 }
 
-fn emit_eval(result: io::Result<(Vec<String>, bool)>) -> CliResult {
+fn eval(result: io::Result<(Vec<String>, bool)>) -> Reply {
     let (lines, gate_failed) = result.map_err(|e| Failure::message(format!("eval failed: {e}")))?;
     for line in lines {
         println!("{line}");
@@ -529,7 +529,7 @@ fn emit_eval(result: io::Result<(Vec<String>, bool)>) -> CliResult {
     }
 }
 
-fn run_annotate(job: &AnnotateJob) -> CliResult {
+fn annotate(job: &Annotate) -> Reply {
     let path = job.annotate_out.clone().unwrap_or_else(|| {
         std::path::Path::new(&job.mem_dir)
             .join(if job.annotate_raw {
@@ -540,7 +540,7 @@ fn run_annotate(job: &AnnotateJob) -> CliResult {
             .to_string_lossy()
             .into_owned()
     });
-    let lines = crate::memory::annotate_to_file(
+    let lines = crate::memory::annotate(
         &job.mem_dir,
         job.seed,
         job.annotate_max,
@@ -559,53 +559,53 @@ fn run_annotate(job: &AnnotateJob) -> CliResult {
     Ok(())
 }
 
-fn run_compress(job: &CompressJob) -> CliResult {
-    let text = read_input(&job.files).map_err(Failure::message)?;
+fn filter(job: &Compress) -> Reply {
+    let text = input(&job.files).map_err(Failure::message)?;
     let outcome = compress(&text, &job.query, &job.config);
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    write_compressed(&mut out, job, &outcome)?;
-    let mut store_rx: Option<StoreReceiver> = None;
+    output(&mut out, job, &outcome)?;
+    let mut store_rx: Option<Receiver> = None;
     if job.store {
-        store_rx = prepare_store(job, &text, &outcome)?;
+        store_rx = prepare(job, &text, &outcome)?;
     }
-    write_recall(&mut out, job)?;
+    memory(&mut out, job)?;
     if !job.no_stats {
-        checked_write(writeln!(out, "{}", render_stats(&outcome)))?;
+        write(writeln!(out, "{}", stats(&outcome)))?;
     }
     if job.json {
-        eprintln!("scxjson: {}", render_json(&outcome));
+        eprintln!("scxjson: {}", render(&outcome));
     }
     if let Some(rx) = store_rx {
         let result = rx
             .recv()
             .map_err(|_| Failure::message("memory store thread lost"))?;
-        report_store(result)?;
+        report(result)?;
     }
     Ok(())
 }
 
 /// 正文输出：`--stat` 跳过；末尾补换行。
-fn write_compressed(out: &mut dyn Write, job: &CompressJob, outcome: &Outcome) -> CliResult {
+fn output(out: &mut dyn Write, job: &Compress, outcome: &Outcome) -> Reply {
     if job.stat {
         return Ok(());
     }
-    checked_write(out.write_all(outcome.text.as_bytes()))?;
+    write(out.write_all(outcome.text.as_bytes()))?;
     if !outcome.text.is_empty() && !outcome.text.ends_with('\n') {
-        checked_write(out.write_all(b"\n"))?;
+        write(out.write_all(b"\n"))?;
     }
     Ok(())
 }
 
 /// 召回旁路输出；失败只告警，不改变正文/统计/退出码。
-fn write_recall(out: &mut dyn Write, job: &CompressJob) -> CliResult {
+fn memory(out: &mut dyn Write, job: &Compress) -> Reply {
     if job.recall == 0 {
         return Ok(());
     }
-    match crate::memory::recall_cases(&job.mem_dir, &job.query, job.recall, false) {
+    match crate::memory::search(&job.mem_dir, &job.query, job.recall, false) {
         Ok(hits) => {
-            let qualified = crate::memory::l1_hits(&job.mem_dir, hits);
-            checked_write(write_mem_lines(
+            let qualified = crate::memory::hits(&job.mem_dir, hits);
+            write(lines(
                 out,
                 &qualified,
                 &job.mem_dir,
@@ -620,14 +620,9 @@ fn write_recall(out: &mut dyn Write, job: &CompressJob) -> CliResult {
     }
 }
 
-fn prepare_store(
-    job: &CompressJob,
-    input: &str,
-    outcome: &Outcome,
-) -> CliResult<Option<StoreReceiver>> {
+fn prepare(job: &Compress, input: &str, outcome: &Outcome) -> Reply<Option<Receiver>> {
     let fix = if let Some(path) = &job.fix_file {
-        let text =
-            read_fix_file(path, crate::memory::MAX_FIX_BYTES as u64).map_err(Failure::message)?;
+        let text = fix(path, crate::memory::MAX_FIX_BYTES as u64).map_err(Failure::message)?;
         let text = text.trim_end().to_string();
         if text.is_empty() {
             eprintln!("scx: note: --fix-file {path} is empty; case stored without fix");
@@ -648,23 +643,23 @@ pass --fix \"...\" after a verified fix (HARD discipline)"
 (low-signal memory). inspect with --recall-only first"
         );
     }
-    let stats = CaseStats {
+    let stats = Stats {
         kept: outcome.kept,
         total: outcome.total,
-        cut_pct: outcome.cut_pct,
+        cut: outcome.cut,
         risk: outcome.risk.to_string(),
     };
-    let evidence_lno = outcome.kept_lno.clone();
-    let evidence = extract_evidence(input, &evidence_lno);
+    let evidence_lno = outcome.numbers.clone();
+    let evidence = evidence(input, &evidence_lno);
     if job.recall > 0 {
-        let mut store_input = StoreInput::new(&job.mem_dir, &job.query, &outcome.text, &stats);
+        let mut store_input = Input::new(&job.mem_dir, &job.query, &outcome.text, &stats);
         store_input.source = &job.files;
         store_input.forces = &job.config.forces;
         store_input.fix = &fix;
         store_input.evidence_lno = &evidence_lno;
         store_input.evidence = &evidence;
         store_input.max_bytes = job.max_bytes;
-        report_store(crate::memory::store_case(store_input))?;
+        report(crate::memory::save(store_input))?;
         return Ok(None);
     }
 
@@ -676,19 +671,19 @@ pass --fix \"...\" after a verified fix (HARD discipline)"
     let forces = job.config.forces.clone();
     let max_bytes = job.max_bytes;
     std::thread::spawn(move || {
-        let mut store_input = StoreInput::new(&mem_dir, &query, &text, &stats);
+        let mut store_input = Input::new(&mem_dir, &query, &text, &stats);
         store_input.source = &files;
         store_input.forces = &forces;
         store_input.fix = &fix;
         store_input.evidence_lno = &evidence_lno;
         store_input.evidence = &evidence;
         store_input.max_bytes = max_bytes;
-        let _ = tx.send(crate::memory::store_case(store_input));
+        let _ = tx.send(crate::memory::save(store_input));
     });
     Ok(Some(rx))
 }
 
-fn report_store(result: StoreResult) -> CliResult {
+fn report(result: Stored) -> Reply {
     let (added, id) = result.map_err(|e| Failure::message(format!("memory store failed: {e}")))?;
     eprintln!(
         "scx: stored case={} added={}",
@@ -699,7 +694,7 @@ fn report_store(result: StoreResult) -> CliResult {
 }
 
 /// 按保留行原始行号从输入提取证据原文；行号越界时保留空串，不 panic。
-fn extract_evidence(input: &str, lno: &[usize]) -> Vec<String> {
+fn evidence(input: &str, lno: &[usize]) -> Vec<String> {
     if lno.is_empty() {
         return Vec::new();
     }
@@ -743,12 +738,12 @@ mod tests {
     fn render_json_keeps_legacy_fields_and_appends_max_tokens() {
         let cfg = crate::Config::default();
         let o = compress("a\nb\nc\n", "a", &cfg);
-        let legacy = render_json(&o);
+        let legacy = render(&o);
         assert!(legacy.starts_with("{\"kept\":"));
         assert!(!legacy.contains("max_tokens"), "默认路径不得带 max_tokens");
         let mut cfg2 = cfg;
-        cfg2.max_tokens = Some(100);
+        cfg2.limit = Some(100);
         let o2 = compress("a\nb\nc\n", "a", &cfg2);
-        assert!(render_json(&o2).contains("\"max_tokens\":100"));
+        assert!(render(&o2).contains("\"max_tokens\":100"));
     }
 }

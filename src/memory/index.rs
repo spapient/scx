@@ -27,7 +27,7 @@
 //!   同一 query 在两条路径下使用同一 BM25 统计量，A/B 对拍要求输出一致。
 
 use crate::memory::store::{self, Meta};
-use crate::terms::build_doc_terms;
+use crate::terms::document;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,27 +40,27 @@ pub(crate) const INDEX_MIN_DOCS: usize = 10_000;
 const POST_MAGIC: u32 = 0x5453_4f50; // "POST"
 const POST_VER: u16 = 3;
 
-pub(crate) fn postings_path(root: &str) -> PathBuf {
+pub(crate) fn postings(root: &str) -> PathBuf {
     Path::new(root).join("index").join("postings.bin")
 }
 
 /// 写 postings.bin：header + body + crc32 段尾校验。
-fn write_postings(root: &str, body: &[u8]) -> std::io::Result<()> {
-    let p = postings_path(root);
+fn write(root: &str, body: &[u8]) -> std::io::Result<()> {
+    let p = postings(root);
     if let Some(d) = p.parent() {
-        crate::memory::lock::create_dir_all(d)?;
+        crate::memory::lock::mkdir(d)?;
     }
-    let crc = crc32(body);
+    let digest = checksum(body);
     let mut buf = Vec::with_capacity(14 + body.len() + 4);
     buf.extend_from_slice(&POST_MAGIC.to_le_bytes());
     buf.extend_from_slice(&POST_VER.to_le_bytes());
     buf.extend_from_slice(&(body.len() as u64).to_le_bytes());
     buf.extend_from_slice(body);
-    buf.extend_from_slice(&crc.to_le_bytes());
-    crate::memory::lock::atomic_write(&p, &buf)
+    buf.extend_from_slice(&digest.to_le_bytes());
+    crate::memory::lock::atomic(&p, &buf)
 }
 
-fn varint_put(buf: &mut Vec<u8>, mut v: u64) {
+fn put(buf: &mut Vec<u8>, mut v: u64) {
     while v >= 0x80 {
         buf.push((v as u8) | 0x80);
         v >>= 7;
@@ -68,7 +68,7 @@ fn varint_put(buf: &mut Vec<u8>, mut v: u64) {
     buf.push(v as u8);
 }
 
-fn varint_get(buf: &[u8], i: &mut usize) -> Option<u64> {
+fn get(buf: &[u8], i: &mut usize) -> Option<u64> {
     let mut v = 0u64;
     let mut shift = 0u32;
     loop {
@@ -85,7 +85,7 @@ fn varint_get(buf: &[u8], i: &mut usize) -> Option<u64> {
     }
 }
 
-fn crc32(data: &[u8]) -> u32 {
+fn checksum(data: &[u8]) -> u32 {
     let mut table = [0u32; 256];
     for i in 0..256u32 {
         let mut c = i;
@@ -98,16 +98,16 @@ fn crc32(data: &[u8]) -> u32 {
         }
         table[i as usize] = c;
     }
-    let mut crc = 0xFFFF_FFFFu32;
+    let mut sum = 0xFFFF_FFFFu32;
     for &b in data {
-        crc = table[((crc ^ u32::from(b)) & 0xFF) as usize] ^ (crc >> 8);
+        sum = table[((sum ^ u32::from(b)) & 0xFF) as usize] ^ (sum >> 8);
     }
-    !crc
+    !sum
 }
 
 /// doc 打分快照（与 case.json 同源，build 时落盘进 postings，避免召回期二次 IO）。
 #[derive(Debug, Clone)]
-pub(crate) struct DocRec {
+pub(crate) struct Record {
     pub terms: Arc<[String]>,
     /// 原始 case query 词表（query-field 重排特征；与 terms 的 query∪text 不同）。
     pub query_terms: Arc<[String]>,
@@ -128,7 +128,7 @@ pub(crate) struct Index {
     /// doc_idx → case id（字典序）；候选只克隆 `Arc`，不复制字符串。
     pub ids: Vec<Arc<str>>,
     /// doc_idx → 打分快照（与 ids 对齐）。
-    pub docs: Vec<DocRec>,
+    pub docs: Vec<Record>,
     /// term → (df, doc_idx 升序列表)。
     pub dict: HashMap<String, (usize, Vec<usize>)>,
     /// 实体键 → doc_idx 升序列表；由 doc 快照惰性派生（无实体查询时不付构建成本）。
@@ -136,10 +136,10 @@ pub(crate) struct Index {
 }
 
 /// 从 doc 字段快照派生实体倒排（实体键去重、doc_idx 升序）。
-fn entity_map(docs: &[DocRec]) -> HashMap<String, Vec<usize>> {
+fn entities(docs: &[Record]) -> HashMap<String, Vec<usize>> {
     let mut entities: HashMap<String, Vec<usize>> = HashMap::new();
     for (di, rec) in docs.iter().enumerate() {
-        for key in crate::memory::classify::entity_keys(&rec.fields) {
+        for key in crate::memory::classify::keys(&rec.fields) {
             entities.entry(key).or_default().push(di);
         }
     }
@@ -148,13 +148,13 @@ fn entity_map(docs: &[DocRec]) -> HashMap<String, Vec<usize>> {
 
 /// 获取索引写锁。调用方在"case 资产变更 + 索引失效 + gen 前进"期间持锁，
 /// 防止 index::build 在失效之后又把旧快照写回。
-pub(crate) fn lock(root: &str) -> std::io::Result<crate::memory::lock::FileLock> {
+pub(crate) fn lock(root: &str) -> std::io::Result<crate::memory::lock::Lock> {
     crate::memory::lock::acquire(root, "index.lock")
 }
 
-/// 持锁作废索引（调用方必须已持有 [`lock`] 返回的守卫）。
-pub(crate) fn invalidate_locked(root: &str) {
-    let p = postings_path(root);
+/// 持锁清除索引（调用方必须已持有 [`lock`] 返回的守卫）。
+pub(crate) fn clear(root: &str) {
+    let p = postings(root);
     if p.exists() {
         let _ = fs::remove_file(&p);
     }
@@ -172,16 +172,16 @@ pub(crate) fn invalidate_locked(root: &str) {
 #[cfg(test)]
 pub(crate) fn invalidate(root: &str) -> std::io::Result<()> {
     let _g = lock(root)?;
-    invalidate_locked(root);
+    clear(root);
     Ok(())
 }
 
 /// 进程内索引缓存（会话/守护进程多次召回免重复 parse；CLI 单次无副作用）。
 /// 键 = (root, postings mtime)：invalidate 删文件/重建后 mtime 变化 → 自动 miss。
-type CacheEntry = (String, SystemTime, Arc<Index>);
-static INDEX_CACHE: OnceLock<Mutex<Option<CacheEntry>>> = OnceLock::new();
+type Entry = (String, SystemTime, Arc<Index>);
+static INDEX_CACHE: OnceLock<Mutex<Option<Entry>>> = OnceLock::new();
 
-fn cache() -> &'static Mutex<Option<CacheEntry>> {
+fn cache() -> &'static Mutex<Option<Entry>> {
     INDEX_CACHE.get_or_init(|| Mutex::new(None))
 }
 
@@ -189,18 +189,18 @@ fn cache() -> &'static Mutex<Option<CacheEntry>> {
 pub(crate) type Df = Vec<(String, usize)>;
 
 /// 读取全部 case 构建 doc 打分快照；返回 (docs, 全库词数 total_len)。
-fn build_doc_recs(root: &str, ids: &[String]) -> std::io::Result<(Vec<(String, DocRec)>, usize)> {
-    let mut docs: Vec<(String, DocRec)> = Vec::with_capacity(ids.len());
+fn records(root: &str, ids: &[String]) -> std::io::Result<(Vec<(String, Record)>, usize)> {
+    let mut docs: Vec<(String, Record)> = Vec::with_capacity(ids.len());
     let mut total_len = 0usize;
     for id in ids {
-        let c = store::read_case(root, id)?;
-        let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
-        let updated_s = crate::memory::util::parse_utc_secs(&c.updated_at);
+        let c = store::load(root, id)?;
+        let (query_terms, terms) = document(&c.query, &c.text);
+        let updated_s = crate::memory::util::parse(&c.updated_at);
         total_len += terms.len();
-        let buckets = crate::memory::classify::case_buckets(&[], &query_terms, &c.text);
+        let buckets = crate::memory::classify::buckets(&[], &query_terms, &c.text);
         docs.push((
             id.clone(),
-            DocRec {
+            Record {
                 terms: terms.into(),
                 query_terms: query_terms.into(),
                 buckets,
@@ -217,7 +217,7 @@ fn build_doc_recs(root: &str, ids: &[String]) -> std::io::Result<(Vec<(String, D
 }
 
 /// 由 doc 快照派生 term → doc_idx 列表（doc_idx 升序 = docs 迭代序）。
-fn build_dict(docs: &[(String, DocRec)]) -> HashMap<String, Vec<usize>> {
+fn terms(docs: &[(String, Record)]) -> HashMap<String, Vec<usize>> {
     let mut dict: HashMap<String, Vec<usize>> = HashMap::new();
     for (di, (_, rec)) in docs.iter().enumerate() {
         for t in rec.terms.iter() {
@@ -228,7 +228,7 @@ fn build_dict(docs: &[(String, DocRec)]) -> HashMap<String, Vec<usize>> {
 }
 
 /// 序列化一条字符串列表段：[len u32][(u8 len + bytes)*]。
-fn put_str_list(body: &mut Vec<u8>, list: &[String]) {
+fn strings(body: &mut Vec<u8>, list: &[String]) {
     body.extend_from_slice(&(list.len() as u32).to_le_bytes());
     for s in list {
         body.push(s.len() as u8);
@@ -237,13 +237,13 @@ fn put_str_list(body: &mut Vec<u8>, list: &[String]) {
 }
 
 /// 写 doc 表（id + 词表 + 4 字段 + 状态/质量/时间快照）。
-fn write_doc_table(body: &mut Vec<u8>, docs: &[(String, DocRec)]) {
+fn table(body: &mut Vec<u8>, docs: &[(String, Record)]) {
     for (id, rec) in docs {
         body.push(id.len() as u8);
         body.extend_from_slice(id.as_bytes());
-        put_str_list(body, &rec.terms);
-        put_str_list(body, &rec.query_terms);
-        put_str_list(body, &rec.buckets);
+        strings(body, &rec.terms);
+        strings(body, &rec.query_terms);
+        strings(body, &rec.buckets);
         for f in [
             &rec.fields.error_code,
             &rec.fields.file_loc,
@@ -267,7 +267,7 @@ fn write_doc_table(body: &mut Vec<u8>, docs: &[(String, DocRec)]) {
 }
 
 /// 写 term 表（term 字典序 + df + delta-varint doc_idx 序列）。
-fn write_term_table(body: &mut Vec<u8>, dict: &HashMap<String, Vec<usize>>) {
+fn lexicon(body: &mut Vec<u8>, dict: &HashMap<String, Vec<usize>>) {
     let mut term_keys: Vec<&String> = dict.keys().collect();
     term_keys.sort(); // term 字典序，确定性
     for t in &term_keys {
@@ -277,7 +277,7 @@ fn write_term_table(body: &mut Vec<u8>, dict: &HashMap<String, Vec<usize>>) {
         body.extend_from_slice(&(post.len() as u32).to_le_bytes());
         let mut prev = 0usize;
         for &di in post {
-            varint_put(body, (di - prev) as u64);
+            put(body, (di - prev) as u64);
             prev = di;
         }
     }
@@ -288,16 +288,16 @@ fn write_term_table(body: &mut Vec<u8>, dict: &HashMap<String, Vec<usize>>) {
 pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
     // 跨进程串行构建：避免两个 rebuild/自动构建同时写 postings.bin。
     let _g = lock(root)?;
-    let ids = store::list_ids(root)?;
-    let (docs, total_len) = build_doc_recs(root, &ids)?;
-    let dict = build_dict(&docs);
+    let ids = store::list(root)?;
+    let (docs, total_len) = records(root, &ids)?;
+    let dict = terms(&docs);
     let mut body: Vec<u8> = Vec::with_capacity(32 + docs.len() * 96);
     body.extend_from_slice(&(docs.len() as u32).to_le_bytes());
     body.extend_from_slice(&(total_len as u64).to_le_bytes());
     body.extend_from_slice(&(dict.len() as u32).to_le_bytes());
-    write_doc_table(&mut body, &docs);
-    write_term_table(&mut body, &dict);
-    write_postings(root, &body)?;
+    table(&mut body, &docs);
+    lexicon(&mut body, &dict);
+    write(root, &body)?;
     // df 快照按 term 字典序输出（与原 term_keys.sort() 同序）。
     let mut df: Vec<(String, usize)> = dict.iter().map(|(t, v)| (t.clone(), v.len())).collect();
     df.sort_by(|a, b| a.0.cmp(&b.0));
@@ -309,29 +309,29 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
 /// 一次读入解析。不使用 mmap：无文件锁时，另一进程 rebuild/truncate 会使映射失效；
 /// 1 万条库的 postings 仅数 MB，`fs::read` 在页缓存下开销可忽略，且保持零 unsafe。
 pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
-    let p = postings_path(root);
+    let p = postings(root);
     if !p.exists() {
         return Ok(None);
     }
     let mtime = p.metadata().and_then(|m| m.modified()).ok();
-    if let Some(idx) = cached_index(root, mtime.as_ref()) {
+    if let Some(idx) = cached(root, mtime.as_ref()) {
         return Ok(Some(idx));
     }
     let buf = fs::read(&p)?;
     let parsed: Option<Index> = parse(&buf).map(Some)?;
     let arc = parsed.map(Arc::new);
-    store_cache(root, mtime, arc.as_ref());
+    store(root, mtime, arc.as_ref());
     Ok(arc)
 }
 
-fn cached_index(root: &str, mtime: Option<&std::time::SystemTime>) -> Option<Arc<Index>> {
+fn cached(root: &str, mtime: Option<&std::time::SystemTime>) -> Option<Arc<Index>> {
     let mt = mtime?;
     let g = cache().lock().unwrap();
     let (r, t, idx) = g.as_ref()?;
     (r == root && t == mt).then(|| idx.clone())
 }
 
-fn store_cache(root: &str, mtime: Option<std::time::SystemTime>, idx: Option<&Arc<Index>>) {
+fn store(root: &str, mtime: Option<std::time::SystemTime>, idx: Option<&Arc<Index>>) {
     if let (Some(mt), Some(idx)) = (mtime, idx) {
         let mut g = cache().lock().unwrap();
         *g = Some((root.to_string(), mt, idx.clone()));
@@ -344,7 +344,7 @@ fn corrupt(m: &str) -> std::io::Error {
 }
 
 /// 从游标语境取 u32（边界不足返回 None）。
-fn take_u32(body: &[u8], i: &mut usize) -> Option<u32> {
+fn word(body: &[u8], i: &mut usize) -> Option<u32> {
     if *i + 4 > body.len() {
         return None;
     }
@@ -354,7 +354,7 @@ fn take_u32(body: &[u8], i: &mut usize) -> Option<u32> {
 }
 
 /// 从游标语境取一条 u8 长度前缀字符串。
-fn take_str(body: &[u8], i: &mut usize) -> std::io::Result<String> {
+fn text(body: &[u8], i: &mut usize) -> std::io::Result<String> {
     if *i >= body.len() {
         return Err(corrupt("str len truncated"));
     }
@@ -369,28 +369,28 @@ fn take_str(body: &[u8], i: &mut usize) -> std::io::Result<String> {
 }
 
 /// 从游标语境取一个 u32 长度前缀的字符串列表（用于 4 个字段向量）。
-fn take_vec(body: &[u8], i: &mut usize) -> std::io::Result<Vec<String>> {
-    let n = take_count(body, i, "no field n")?;
-    take_n_strs(body, i, n)
+fn list(body: &[u8], i: &mut usize) -> std::io::Result<Vec<String>> {
+    let n = count(body, i, "no field n")?;
+    batch(body, i, n)
 }
 
-fn take_count(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<usize> {
-    let n = take_u32(body, i).ok_or_else(|| corrupt(what))? as usize;
+fn count(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<usize> {
+    let n = word(body, i).ok_or_else(|| corrupt(what))? as usize;
     if n > body.len() {
         return Err(corrupt(&format!("{what} exceeds body")));
     }
     Ok(n)
 }
 
-fn take_n_strs(body: &[u8], i: &mut usize, n: usize) -> std::io::Result<Vec<String>> {
+fn batch(body: &[u8], i: &mut usize, n: usize) -> std::io::Result<Vec<String>> {
     let mut v = Vec::with_capacity(n);
     for _ in 0..n {
-        v.push(take_str(body, i)?);
+        v.push(text(body, i)?);
     }
     Ok(v)
 }
 
-fn take_f32(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<f32> {
+fn float(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<f32> {
     if *i + 4 > body.len() {
         return Err(corrupt(what));
     }
@@ -400,17 +400,17 @@ fn take_f32(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<f32> {
 }
 
 /// 校验 header（magic/version/body_len/crc32），返回 body 切片。
-fn open_body(buf: &[u8]) -> std::io::Result<&[u8]> {
-    let (body_end, total_len) = validate_header(buf)?;
+fn open(buf: &[u8]) -> std::io::Result<&[u8]> {
+    let (body_end, total_len) = valid(buf)?;
     let body = &buf[14..body_end];
-    let crc = u32::from_le_bytes(buf[body_end..total_len].try_into().unwrap());
-    if crc32(body) != crc {
+    let stored = u32::from_le_bytes(buf[body_end..total_len].try_into().unwrap());
+    if checksum(body) != stored {
         return Err(corrupt("crc mismatch"));
     }
     Ok(body)
 }
 
-fn validate_header(buf: &[u8]) -> std::io::Result<(usize, usize)> {
+fn valid(buf: &[u8]) -> std::io::Result<(usize, usize)> {
     if buf.len() < 14 {
         return Err(corrupt("too short"));
     }
@@ -422,14 +422,14 @@ fn validate_header(buf: &[u8]) -> std::io::Result<(usize, usize)> {
     if ver != POST_VER {
         return Err(corrupt("bad version"));
     }
-    let (body_end, total_len) = body_lengths(buf)?;
+    let (body_end, total_len) = lengths(buf)?;
     if total_len != buf.len() {
         return Err(corrupt("bad body_len"));
     }
     Ok((body_end, total_len))
 }
 
-fn body_lengths(buf: &[u8]) -> std::io::Result<(usize, usize)> {
+fn lengths(buf: &[u8]) -> std::io::Result<(usize, usize)> {
     let body_len = usize::try_from(u64::from_le_bytes(buf[6..14].try_into().unwrap()))
         .map_err(|_| corrupt("body_len too large"))?;
     let body_end = 14usize
@@ -442,29 +442,29 @@ fn body_lengths(buf: &[u8]) -> std::io::Result<(usize, usize)> {
 }
 
 /// 解析 doc 表（n_docs 条打分快照），返回 (ids, docs)。
-fn parse_doc_recs(
+fn scan(
     body: &[u8],
     n_docs: usize,
     i: &mut usize,
-) -> std::io::Result<(Vec<Arc<str>>, Vec<DocRec>)> {
+) -> std::io::Result<(Vec<Arc<str>>, Vec<Record>)> {
     let mut ids: Vec<Arc<str>> = Vec::with_capacity(n_docs);
-    let mut docs: Vec<DocRec> = Vec::with_capacity(n_docs);
+    let mut docs: Vec<Record> = Vec::with_capacity(n_docs);
     for _ in 0..n_docs {
-        let (id, doc) = parse_doc(body, i)?;
+        let (id, doc) = doc(body, i)?;
         ids.push(id);
         docs.push(doc);
     }
     Ok((ids, docs))
 }
 
-fn parse_doc(body: &[u8], i: &mut usize) -> std::io::Result<(Arc<str>, DocRec)> {
-    let (id, terms, query_terms, buckets) = parse_doc_terms(body, i)?;
-    let fields = parse_doc_fields(body, i)?;
-    let (bucket, status, quality, updated_at) = parse_doc_tail(body, i)?;
-    let updated_s = crate::memory::util::parse_utc_secs(&updated_at);
+fn doc(body: &[u8], i: &mut usize) -> std::io::Result<(Arc<str>, Record)> {
+    let (id, terms, query_terms, buckets) = split(body, i)?;
+    let fields = values(body, i)?;
+    let (bucket, status, quality, updated_at) = tail(body, i)?;
+    let updated_s = crate::memory::util::parse(&updated_at);
     Ok((
         id.into(),
-        DocRec {
+        Record {
             terms: terms.into(),
             query_terms: query_terms.into(),
             buckets,
@@ -478,38 +478,38 @@ fn parse_doc(body: &[u8], i: &mut usize) -> std::io::Result<(Arc<str>, DocRec)> 
     ))
 }
 
-type DocTerms = (String, Vec<String>, Vec<String>, Vec<String>);
+type Terms = (String, Vec<String>, Vec<String>, Vec<String>);
 
-fn parse_doc_terms(body: &[u8], i: &mut usize) -> std::io::Result<DocTerms> {
-    let id = take_str(body, i)?;
-    let nterms = take_count(body, i, "no doc nterms")?;
-    let terms = take_n_strs(body, i, nterms)?;
-    let nqterms = take_count(body, i, "no doc nqterms")?;
-    let query_terms = take_n_strs(body, i, nqterms)?;
-    let nbuckets = take_count(body, i, "no doc nbuckets")?;
-    let buckets = take_n_strs(body, i, nbuckets)?;
+fn split(body: &[u8], i: &mut usize) -> std::io::Result<Terms> {
+    let id = text(body, i)?;
+    let nterms = count(body, i, "no doc nterms")?;
+    let terms = batch(body, i, nterms)?;
+    let nqterms = count(body, i, "no doc nqterms")?;
+    let query_terms = batch(body, i, nqterms)?;
+    let nbuckets = count(body, i, "no doc nbuckets")?;
+    let buckets = batch(body, i, nbuckets)?;
     Ok((id, terms, query_terms, buckets))
 }
 
-fn parse_doc_fields(body: &[u8], i: &mut usize) -> std::io::Result<crate::memory::store::Fields> {
+fn values(body: &[u8], i: &mut usize) -> std::io::Result<crate::memory::store::Fields> {
     Ok(crate::memory::store::Fields {
-        error_code: take_vec(body, i)?,
-        file_loc: take_vec(body, i)?,
-        symbol: take_vec(body, i)?,
-        num_fp: take_vec(body, i)?,
+        error_code: list(body, i)?,
+        file_loc: list(body, i)?,
+        symbol: list(body, i)?,
+        num_fp: list(body, i)?,
     })
 }
 
-fn parse_doc_tail(body: &[u8], i: &mut usize) -> std::io::Result<(String, String, f64, String)> {
-    let bucket = take_str(body, i)?;
-    let status = take_str(body, i)?;
-    let quality = take_f32(body, i, "no quality")? as f64;
-    let updated_at = take_str(body, i)?;
+fn tail(body: &[u8], i: &mut usize) -> std::io::Result<(String, String, f64, String)> {
+    let bucket = text(body, i)?;
+    let status = text(body, i)?;
+    let quality = float(body, i, "no quality")? as f64;
+    let updated_at = text(body, i)?;
     Ok((bucket, status, quality, updated_at))
 }
 
 /// 解析 term 表（n_terms 条倒排），返回 term → (df, doc_idx 升序列表)。
-fn parse_dict(
+fn dictionary(
     body: &[u8],
     n_terms: usize,
     n_docs: usize,
@@ -517,13 +517,13 @@ fn parse_dict(
 ) -> std::io::Result<HashMap<String, (usize, Vec<usize>)>> {
     let mut dict: HashMap<String, (usize, Vec<usize>)> = HashMap::with_capacity(n_terms);
     for _ in 0..n_terms {
-        let (term, entry) = parse_term(body, n_docs, i)?;
+        let (term, entry) = term(body, n_docs, i)?;
         dict.insert(term, entry);
     }
     Ok(dict)
 }
 
-fn parse_term(
+fn term(
     body: &[u8],
     n_docs: usize,
     i: &mut usize,
@@ -546,7 +546,7 @@ fn parse_term(
     let mut post = Vec::with_capacity(df);
     let mut prev = 0usize;
     for _ in 0..df {
-        let d = varint_get(body, i).ok_or_else(|| corrupt("posting varint"))?;
+        let d = get(body, i).ok_or_else(|| corrupt("posting varint"))?;
         let doc = prev + d as usize;
         if doc >= n_docs {
             return Err(corrupt("doc idx overflow"));
@@ -559,11 +559,11 @@ fn parse_term(
 
 /// 解析字节切片为内存索引（纯函数，输入来自 fs::read）。
 pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
-    let body = open_body(buf)?;
+    let body = open(buf)?;
     let mut i = 0usize;
-    let (n_docs, total_len, n_terms) = parse_header_counts(body, &mut i)?;
-    let (ids, docs) = parse_doc_recs(body, n_docs, &mut i)?;
-    let dict = parse_dict(body, n_terms, n_docs, &mut i)?;
+    let (n_docs, total_len, n_terms) = header(body, &mut i)?;
+    let (ids, docs) = scan(body, n_docs, &mut i)?;
+    let dict = dictionary(body, n_terms, n_docs, &mut i)?;
     Ok(Index {
         n_docs,
         total_len,
@@ -574,8 +574,8 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
     })
 }
 
-fn parse_header_counts(body: &[u8], i: &mut usize) -> std::io::Result<(usize, usize, usize)> {
-    let n_docs = take_u32(body, i).ok_or_else(|| corrupt("no n_docs"))? as usize;
+fn header(body: &[u8], i: &mut usize) -> std::io::Result<(usize, usize, usize)> {
+    let n_docs = word(body, i).ok_or_else(|| corrupt("no n_docs"))? as usize;
     if n_docs > body.len() {
         return Err(corrupt("n_docs exceeds body"));
     }
@@ -584,7 +584,7 @@ fn parse_header_counts(body: &[u8], i: &mut usize) -> std::io::Result<(usize, us
     }
     let total_len = u64::from_le_bytes(body[*i..*i + 8].try_into().unwrap()) as usize;
     *i += 8;
-    let n_terms = take_u32(body, i).ok_or_else(|| corrupt("no n_terms"))? as usize;
+    let n_terms = word(body, i).ok_or_else(|| corrupt("no n_terms"))? as usize;
     if n_terms > body.len() {
         return Err(corrupt("n_terms exceeds body"));
     }
@@ -609,23 +609,23 @@ pub(crate) fn candidates(idx: &Index, qterms: &[String]) -> Vec<usize> {
 }
 
 /// term 的全库 df（未收录 = 0）。
-pub(crate) fn term_df(idx: &Index, t: &str) -> usize {
+pub(crate) fn df(idx: &Index, t: &str) -> usize {
     idx.dict.get(t).map(|(df, _)| *df).unwrap_or(0)
 }
 
 /// case id → doc 下标（`ids` 已按字典序，二分查找）。
-pub(crate) fn doc_by_id(idx: &Index, id: &str) -> Option<usize> {
+pub(crate) fn find(idx: &Index, id: &str) -> Option<usize> {
     idx.ids.binary_search_by(|x| x.as_ref().cmp(id)).ok()
 }
 
 /// query 实体命中的兄弟 doc（去重后按 doc_idx 升序），并给出共享实体数。
-pub(crate) fn entity_neighbors(idx: &Index, ents: &[String]) -> Vec<(usize, usize)> {
+pub(crate) fn neighbors(idx: &Index, ents: &[String]) -> Vec<(usize, usize)> {
     let mut keys: Vec<&str> = ents.iter().map(String::as_str).collect();
     keys.sort_unstable();
     keys.dedup();
     let mut shared = vec![0usize; idx.n_docs];
     for key in keys {
-        if let Some(docs) = idx.entity_map().get(key) {
+        if let Some(docs) = idx.entities().get(key) {
             for &di in docs {
                 shared[di] += 1;
             }
@@ -639,13 +639,13 @@ pub(crate) fn entity_neighbors(idx: &Index, ents: &[String]) -> Vec<(usize, usiz
 }
 
 impl Index {
-    fn entity_map(&self) -> &HashMap<String, Vec<usize>> {
-        self.entities.get_or_init(|| entity_map(&self.docs))
+    fn entities(&self) -> &HashMap<String, Vec<usize>> {
+        self.entities.get_or_init(|| entities(&self.docs))
     }
 }
 
 /// 是否启用倒排路径：规模达标（meta 可覆盖）或 --rebuild 后强制（index_force=1）。
-pub(crate) fn use_index(meta: &Meta) -> bool {
+pub(crate) fn enabled(meta: &Meta) -> bool {
     let force = meta.param("index_force") > 0.0;
     force || meta.case_count >= INDEX_MIN_DOCS
 }
@@ -654,32 +654,32 @@ pub(crate) fn use_index(meta: &Meta) -> bool {
 mod tests {
     use super::*;
     use crate::memory::ingest::ingest;
-    use crate::memory::store::{self, CaseStats};
-    use crate::memory::util::tmp_root;
+    use crate::memory::store::{self, Stats};
+    use crate::memory::util::root;
     use std::fs;
 
-    fn stats() -> CaseStats {
-        crate::memory::store::sample_stats()
+    fn stats() -> Stats {
+        crate::memory::store::sample()
     }
 
     #[test]
     fn crc_and_varint_are_deterministic() {
-        let a = crc32(b"hello world");
-        assert_eq!(a, crc32(b"hello world"));
-        assert_ne!(a, crc32(b"hello worle"));
+        let a = checksum(b"hello world");
+        assert_eq!(a, checksum(b"hello world"));
+        assert_ne!(a, checksum(b"hello worle"));
         let mut buf = Vec::new();
-        varint_put(&mut buf, 0);
-        varint_put(&mut buf, 127);
-        varint_put(&mut buf, 128);
-        varint_put(&mut buf, 300);
-        varint_put(&mut buf, 1 << 35);
+        put(&mut buf, 0);
+        put(&mut buf, 127);
+        put(&mut buf, 128);
+        put(&mut buf, 300);
+        put(&mut buf, 1 << 35);
         let mut i = 0;
-        assert_eq!(varint_get(&buf, &mut i), Some(0));
-        assert_eq!(varint_get(&buf, &mut i), Some(127));
-        assert_eq!(varint_get(&buf, &mut i), Some(128));
-        assert_eq!(varint_get(&buf, &mut i), Some(300));
-        assert_eq!(varint_get(&buf, &mut i), Some(1 << 35));
-        assert_eq!(varint_get(&buf, &mut i), None, "越界返回 None");
+        assert_eq!(get(&buf, &mut i), Some(0));
+        assert_eq!(get(&buf, &mut i), Some(127));
+        assert_eq!(get(&buf, &mut i), Some(128));
+        assert_eq!(get(&buf, &mut i), Some(300));
+        assert_eq!(get(&buf, &mut i), Some(1 << 35));
+        assert_eq!(get(&buf, &mut i), None, "越界返回 None");
     }
 
     fn seed(root: &str) {
@@ -718,7 +718,7 @@ mod tests {
 
     #[test]
     fn build_parse_roundtrip() {
-        let root = tmp_root("rt");
+        let root = root("rt");
         seed(&root);
         let (n_docs, n_terms, df) = build(&root).unwrap();
         assert_eq!(n_docs, 3);
@@ -749,7 +749,7 @@ mod tests {
         // C 的 "error: could not" 冒号并入 token → "error:" 独立（df=1）。
         assert_eq!(idx.dict.get("error").map(|(df, _)| *df), Some(2));
         assert_eq!(idx.dict.get("error:").map(|(df, _)| *df), Some(1));
-        let entities = entity_neighbors(&idx, &["conn_id=9f2a".to_string()]);
+        let entities = neighbors(&idx, &["conn_id=9f2a".to_string()]);
         assert_eq!(entities.len(), 1, "实体倒排应直接来自 doc 快照");
         assert_eq!(entities[0].1, 1, "共享实体数必须参与实体加权");
         let _ = fs::remove_dir_all(&root);
@@ -757,7 +757,7 @@ mod tests {
 
     #[test]
     fn candidates_union_dedup_sorted() {
-        let root = tmp_root("cand");
+        let root = root("cand");
         seed(&root);
         build(&root).unwrap();
         let idx = load(&root).unwrap().unwrap();
@@ -771,10 +771,10 @@ mod tests {
 
     #[test]
     fn corrupt_tail_rejected_and_rebuild_recovers() {
-        let root = tmp_root("cor");
+        let root = root("cor");
         seed(&root);
         build(&root).unwrap();
-        let p = postings_path(&root);
+        let p = postings(&root);
         let mut buf = fs::read(&p).unwrap();
         buf.truncate(buf.len() - 4); // 截断 crc 尾部 → body_len 不匹配
         fs::write(&p, &buf).unwrap();
@@ -791,31 +791,31 @@ mod tests {
 
     #[test]
     fn invalidate_removes_index_file() {
-        let root = tmp_root("inv");
+        let root = root("inv");
         seed(&root);
         build(&root).unwrap();
-        assert!(postings_path(&root).exists());
+        assert!(postings(&root).exists());
         invalidate(&root).unwrap();
-        assert!(!postings_path(&root).exists());
+        assert!(!postings(&root).exists());
         assert!(load(&root).unwrap().is_none());
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
     fn write_case_invalidates_cached_index() {
-        let root = tmp_root("wcinv");
+        let root = root("wcinv");
         seed(&root);
         build(&root).unwrap();
-        assert!(postings_path(&root).exists());
+        assert!(postings(&root).exists());
         let c = store::Case::new(
             "newcase".to_string(),
             "new query".to_string(),
             vec![],
             "ERROR new evidence".to_string(),
         );
-        store::write_case(&root, &c).unwrap();
+        store::save(&root, &c).unwrap();
         assert!(
-            !postings_path(&root).exists(),
+            !postings(&root).exists(),
             "新 case 必须让旧索引失效，否则大库会漏召"
         );
         let _ = fs::remove_dir_all(&root);

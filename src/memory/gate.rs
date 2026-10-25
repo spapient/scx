@@ -7,9 +7,9 @@
 //! 目标：把"30–50 组、每层 ≥10、非 literal 必须人工裁决、A 不劣于 B"
 //! 从口头约定变成可执行门禁，防止用 5 条 demo 或自动标注集冒充人工证据。
 //!
-//! 纯函数：只读解析后的 EvalCase 与已聚合指标，不触碰库、不写文件。
+//! 纯函数：只读解析后的 Case 与已聚合指标，不触碰库、不写文件。
 
-use crate::memory::eval::EvalCase;
+use crate::memory::eval::Case;
 use std::collections::HashMap;
 
 /// 证据门最少总组数（30–50 组；超过 50 组不惩罚）。
@@ -31,61 +31,44 @@ pub(crate) const MIN_NEGATIVE: usize = 10;
 pub(crate) const MIN_CONTROL_LAYERS: usize = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum GateMode {
+pub(crate) enum Gate {
     Mechanical,
     Human,
     Items,
 }
 
-impl GateMode {
+impl Gate {
     fn name(self) -> &'static str {
         match self {
-            GateMode::Mechanical => "mechanical",
-            GateMode::Human => "human",
-            GateMode::Items => "items",
+            Gate::Mechanical => "mechanical",
+            Gate::Human => "human",
+            Gate::Items => "items",
         }
     }
 }
 
-pub(crate) struct GateResult {
+pub(crate) struct Verdict {
     pub lines: Vec<String>,
     pub failed: bool,
 }
 
 /// 机械校验证据门。`layers` 为报告层顺序，`agg` 为 eval 的 [n, A(4), B(4)] 聚合。
-pub(crate) fn check(
-    cases: &[EvalCase],
-    layers: &[String],
-    agg: &HashMap<String, [f64; 9]>,
-) -> GateResult {
-    check_mode(cases, layers, agg, GateMode::Mechanical)
+pub(crate) fn check(cases: &[Case], layers: &[String], agg: &HashMap<String, [f64; 9]>) -> Verdict {
+    mode(cases, layers, agg, Gate::Mechanical)
 }
 
 /// 人工弱相关/负例闭环门：在机械门之上增加全量人工元数据、控制标签与 NDCG 校验。
-pub(crate) fn check_human(
-    cases: &[EvalCase],
-    layers: &[String],
-    agg: &HashMap<String, [f64; 9]>,
-) -> GateResult {
-    check_mode(cases, layers, agg, GateMode::Human)
+pub(crate) fn human(cases: &[Case], layers: &[String], agg: &HashMap<String, [f64; 9]>) -> Verdict {
+    mode(cases, layers, agg, Gate::Human)
 }
 
 /// 逐候选裁决门（允许非人类裁决人）：证据等级低于 `--gate-human`，
 /// 只证明"每一条候选都有独立裁决记录"，不证明人工闭环。
-pub(crate) fn check_items(
-    cases: &[EvalCase],
-    layers: &[String],
-    agg: &HashMap<String, [f64; 9]>,
-) -> GateResult {
-    check_mode(cases, layers, agg, GateMode::Items)
+pub(crate) fn items(cases: &[Case], layers: &[String], agg: &HashMap<String, [f64; 9]>) -> Verdict {
+    mode(cases, layers, agg, Gate::Items)
 }
 
-fn check_mode(
-    cases: &[EvalCase],
-    layers: &[String],
-    agg: &HashMap<String, [f64; 9]>,
-    mode: GateMode,
-) -> GateResult {
+fn mode(cases: &[Case], layers: &[String], agg: &HashMap<String, [f64; 9]>, mode: Gate) -> Verdict {
     let mut lines = Vec::new();
     let mut failed = false;
 
@@ -97,29 +80,29 @@ fn check_mode(
     ));
     failed |= cases.len() < MIN_TOTAL;
 
-    layer_counts(cases, &mut lines, &mut failed);
-    unknown_layers(layers, &mut lines, &mut failed);
-    nonliteral_meta(cases, &mut lines, &mut failed);
+    tiers(cases, &mut lines, &mut failed);
+    unknown(layers, &mut lines, &mut failed);
+    literal(cases, &mut lines, &mut failed);
 
-    if mode != GateMode::Mechanical {
-        adjudication_checks(
+    if mode != Gate::Mechanical {
+        adjudication(
             cases,
             layers,
             agg,
             &mut lines,
             &mut failed,
-            mode == GateMode::Human,
+            mode == Gate::Human,
         );
     }
 
     // 主指标预声明：literal/paraphrase 用 r@5，semantic 用 r@10；另加 MRR。
     // NDCG 只报告不过门（单相关时接近二值，判别力弱）。
     // 同时校验 A/B 的绝对地板：B 全 miss 时 A 的"相对优势"不是有效证据。
-    let diff_layers = metric_lines(layers, agg, &mut lines, &mut failed);
+    let diff_layers = metrics(layers, agg, &mut lines, &mut failed);
 
     // 标签分布与判别力只告警、不单独判失败：全 2 的语料可以证明"能召回"，
     // 但证明不了 A 相对 B 的优势；报告必须带着这两行引用。
-    rel_dist(cases, &mut lines);
+    spread(cases, &mut lines);
 
     lines.push(format!(
         "gate: discrimination A!=B layers={diff_layers}/{}",
@@ -129,18 +112,18 @@ fn check_mode(
         lines.push("gate: warning A=B on all layers (no measurable advantage)".to_string());
     }
 
-    if mode == GateMode::Mechanical {
+    if mode == Gate::Mechanical {
         lines.push(
             "gate: note mechanical target labels are not human weak/negative closure; use --gate-human"
                 .to_string(),
         );
     }
     lines.push(format!("gate: {}", if failed { "FAIL" } else { "PASS" }));
-    GateResult { lines, failed }
+    Verdict { lines, failed }
 }
 
 /// 固定三层（literal/paraphrase/semantic）的样本量门槛。
-fn layer_counts(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut bool) {
+fn tiers(cases: &[Case], lines: &mut Vec<String>, failed: &mut bool) {
     for layer in ["literal", "paraphrase", "semantic"] {
         let n = cases.iter().filter(|c| c.layer == layer).count();
         let ok = n >= MIN_LAYER;
@@ -153,7 +136,7 @@ fn layer_counts(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut bool) 
 }
 
 /// 未知层不允许用来凑总数：证据门只认三层。
-fn unknown_layers(layers: &[String], lines: &mut Vec<String>, failed: &mut bool) {
+fn unknown(layers: &[String], lines: &mut Vec<String>, failed: &mut bool) {
     for layer in layers {
         if !matches!(layer.as_str(), "literal" | "paraphrase" | "semantic") {
             lines.push(format!("gate: unknown layer {layer} FAIL"));
@@ -165,12 +148,12 @@ fn unknown_layers(layers: &[String], lines: &mut Vec<String>, failed: &mut bool)
 /// non-literal 层的 judge 元数据（by+date）与占位裁决人拒绝。
 /// literal 是 query 原样/指纹机械判定，不要求 judge 元数据；
 /// paraphrase/semantic 必须由 --judge 写入 by+date，自动标注集不得过门。
-fn nonliteral_meta(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut bool) {
+fn literal(cases: &[Case], lines: &mut Vec<String>, failed: &mut bool) {
     let non_literal = cases.iter().filter(|c| c.layer != "literal").count();
     let meta_ok = cases
         .iter()
         .filter(|c| c.layer != "literal")
-        .all(|c| valid_judge(c.judged_by.as_deref()) && non_empty(c.judged_date.as_deref()));
+        .all(|c| acceptable(c.judged_by.as_deref()) && present(c.judged_date.as_deref()));
     lines.push(format!(
         "gate: judge metadata nonliteral={non_literal} (need real by+date) {}",
         verdict(meta_ok)
@@ -178,7 +161,7 @@ fn nonliteral_meta(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut boo
     *failed |= !meta_ok;
     let mut placeholders: Vec<String> = cases
         .iter()
-        .filter(|c| c.layer != "literal" && !valid_judge(c.judged_by.as_deref()))
+        .filter(|c| c.layer != "literal" && !acceptable(c.judged_by.as_deref()))
         .filter_map(|c| c.judged_by.clone())
         .filter(|s| !s.trim().is_empty())
         .collect();
@@ -193,7 +176,7 @@ fn nonliteral_meta(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut boo
 }
 
 /// 逐层主指标（r@5/r@10 + MRR）相对非劣与绝对地板；返回 A≠B 的层数。
-fn metric_lines(
+fn metrics(
     layers: &[String],
     agg: &HashMap<String, [f64; 9]>,
     lines: &mut Vec<String>,
@@ -208,7 +191,7 @@ fn metric_lines(
         if n <= 0.0 {
             continue;
         }
-        if metric_line(layer, n, e, lines, failed) {
+        if metric(layer, n, e, lines, failed) {
             diff_layers += 1;
         }
     }
@@ -216,13 +199,7 @@ fn metric_lines(
 }
 
 /// 单层主指标判定；返回 A 与 B 是否有可测差异。
-fn metric_line(
-    layer: &str,
-    n: f64,
-    e: &[f64; 9],
-    lines: &mut Vec<String>,
-    failed: &mut bool,
-) -> bool {
+fn metric(layer: &str, n: f64, e: &[f64; 9], lines: &mut Vec<String>, failed: &mut bool) -> bool {
     let (a_r, b_r, metric) = if layer == "semantic" {
         (e[2] / n, e[6] / n, "r@10")
     } else {
@@ -250,7 +227,7 @@ fn metric_line(
 }
 
 /// rel 标签分布统计与"全 2"告警。
-fn rel_dist(cases: &[EvalCase], lines: &mut Vec<String>) {
+fn spread(cases: &[Case], lines: &mut Vec<String>) {
     let mut rel2 = 0usize;
     let mut rel1 = 0usize;
     let mut rel0 = 0usize;
@@ -271,17 +248,17 @@ fn rel_dist(cases: &[EvalCase], lines: &mut Vec<String>) {
     }
 }
 
-fn adjudication_checks(
-    cases: &[EvalCase],
+fn adjudication(
+    cases: &[Case],
     layers: &[String],
     agg: &HashMap<String, [f64; 9]>,
     lines: &mut Vec<String>,
     failed: &mut bool,
     human: bool,
 ) {
-    judge_meta_line(cases, human, lines, failed);
-    policy_line(cases, lines, failed);
-    item_line(cases, human, lines, failed);
+    judge(cases, human, lines, failed);
+    policy(cases, lines, failed);
+    item(cases, human, lines, failed);
     if !human {
         let mut names: Vec<String> = cases.iter().filter_map(|c| c.judged_by.clone()).collect();
         names.sort();
@@ -291,8 +268,8 @@ fn adjudication_checks(
             names.join(",")
         ));
     }
-    literal_match_line(cases, human, lines, failed);
-    let (rel1, rel0, control_layers) = control_counts(cases, layers);
+    matches(cases, human, lines, failed);
+    let (rel1, rel0, control_layers) = controls(cases, layers);
     let control_ok =
         rel1 >= MIN_WEAK && rel0 >= MIN_NEGATIVE && control_layers >= MIN_CONTROL_LAYERS;
     lines.push(format!(
@@ -300,18 +277,18 @@ fn adjudication_checks(
         verdict(control_ok)
     ));
     *failed |= !control_ok;
-    ndcg_lines(layers, agg, lines, failed);
+    ndcg(layers, agg, lines, failed);
 }
 
 /// 全量 judge 元数据（by+date）与裁决人去重清单。
-fn judge_meta_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
+fn judge(cases: &[Case], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
     let judge_ok = cases.iter().all(|c| {
         let by_ok = if human {
-            human_judge(c)
+            person(c)
         } else {
-            valid_judge(c.judged_by.as_deref()) && !policy_materialized(c)
+            acceptable(c.judged_by.as_deref()) && !materialized(c)
         };
-        by_ok && non_empty(c.judged_date.as_deref())
+        by_ok && present(c.judged_date.as_deref())
     });
     let mut judges: Vec<String> = cases
         .iter()
@@ -331,8 +308,8 @@ fn judge_meta_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, fai
 }
 
 /// 规则物化标签即使真人签署也不是逐条裁决；human 门必须失败。
-fn policy_line(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut bool) {
-    let policy = cases.iter().filter(|c| policy_materialized(c)).count();
+fn policy(cases: &[Case], lines: &mut Vec<String>, failed: &mut bool) {
+    let policy = cases.iter().filter(|c| materialized(c)).count();
     if policy > 0 {
         lines.push(format!(
             "gate: human provenance policy-materialized labels={policy} (not per-item review) FAIL"
@@ -342,7 +319,7 @@ fn policy_line(cases: &[EvalCase], lines: &mut Vec<String>, failed: &mut bool) {
 }
 
 /// 逐候选溯源计数：required/covered/bad_by/complete_cases。
-fn item_counts(cases: &[EvalCase], human: bool) -> (usize, usize, usize, usize) {
+fn counts(cases: &[Case], human: bool) -> (usize, usize, usize, usize) {
     let mut required = 0usize;
     let mut covered = 0usize;
     let mut bad_by = 0usize;
@@ -351,13 +328,13 @@ fn item_counts(cases: &[EvalCase], human: bool) -> (usize, usize, usize, usize) 
         let mut complete = !c.rel.is_empty();
         for k in c.rel.keys() {
             required += 1;
-            match classify_item(&c.judge_items, k, human) {
-                ItemVerdict::Covered => covered += 1,
-                ItemVerdict::Bad => {
+            match classify(&c.judge_items, k, human) {
+                Item::Covered => covered += 1,
+                Item::Bad => {
                     bad_by += 1;
                     complete = false;
                 }
-                ItemVerdict::Missing => complete = false,
+                Item::Missing => complete = false,
             }
         }
         if complete {
@@ -368,25 +345,23 @@ fn item_counts(cases: &[EvalCase], human: bool) -> (usize, usize, usize, usize) 
 }
 
 /// 单候选裁决分类：covered / bad_by / missing。
-enum ItemVerdict {
+enum Item {
     Covered,
     Bad,
     Missing,
 }
 
-fn classify_item(items: &HashMap<String, String>, k: &str, human: bool) -> ItemVerdict {
+fn classify(items: &HashMap<String, String>, k: &str, human: bool) -> Item {
     match items.get(k) {
-        Some(by) if human_judge_name(by) || (!human && valid_judge(Some(by))) => {
-            ItemVerdict::Covered
-        }
-        Some(_) => ItemVerdict::Bad,
-        None => ItemVerdict::Missing,
+        Some(by) if name(by) || (!human && acceptable(Some(by))) => Item::Covered,
+        Some(_) => Item::Bad,
+        None => Item::Missing,
     }
 }
 
 /// 逐候选溯源行：每个 rel 键都有真人 per-item 条目。
-fn item_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
-    let (required, covered, bad_by, complete_cases) = item_counts(cases, human);
+fn item(cases: &[Case], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
+    let (required, covered, bad_by, complete_cases) = counts(cases, human);
     let method_ok = cases.iter().all(|c| {
         c.judged_method
             .as_deref()
@@ -404,15 +379,12 @@ fn item_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, failed: &
 }
 
 /// literal 层 self-match：query 即目标原文，expected_rel 必须为 2。
-fn literal_match_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
-    let literal: Vec<&EvalCase> = cases
+fn matches(cases: &[Case], human: bool, lines: &mut Vec<String>, failed: &mut bool) {
+    let literal: Vec<&Case> = cases
         .iter()
         .filter(|c| c.layer == "literal" && !c.rel.is_empty())
         .collect();
-    let literal_bad = literal
-        .iter()
-        .filter(|c| c.expected_rel() != Some(2.0))
-        .count();
+    let literal_bad = literal.iter().filter(|c| c.expected() != Some(2.0)).count();
     let literal_ok = literal_bad == 0;
     lines.push(format!(
         "gate: {} literal self-match rel=2 bad={literal_bad}/{} {}",
@@ -424,12 +396,12 @@ fn literal_match_line(cases: &[EvalCase], human: bool, lines: &mut Vec<String>, 
 }
 
 /// 逐层统计弱相关(rel=1)/负例(rel=0)总数与同时含两者的层数。
-fn control_counts(cases: &[EvalCase], layers: &[String]) -> (usize, usize, usize) {
+fn controls(cases: &[Case], layers: &[String]) -> (usize, usize, usize) {
     let mut rel1 = 0usize;
     let mut rel0 = 0usize;
     let mut control_layers = 0usize;
     for layer in layers {
-        let (weak, negative) = count_layer_controls(cases, layer);
+        let (weak, negative) = control(cases, layer);
         rel1 += weak;
         rel0 += negative;
         if weak > 0 && negative > 0 {
@@ -440,7 +412,7 @@ fn control_counts(cases: &[EvalCase], layers: &[String]) -> (usize, usize, usize
 }
 
 /// 单层的弱相关/负例标签计数。
-fn count_layer_controls(cases: &[EvalCase], layer: &str) -> (usize, usize) {
+fn control(cases: &[Case], layer: &str) -> (usize, usize) {
     let mut weak = 0usize;
     let mut negative = 0usize;
     for c in cases.iter().filter(|c| c.layer == layer) {
@@ -459,7 +431,7 @@ fn count_layer_controls(cases: &[EvalCase], layer: &str) -> (usize, usize) {
 }
 
 /// 逐层 NDCG@10 相对非劣（人工闭环证据）。
-fn ndcg_lines(
+fn ndcg(
     layers: &[String],
     agg: &HashMap<String, [f64; 9]>,
     lines: &mut Vec<String>,
@@ -492,12 +464,12 @@ fn verdict(ok: bool) -> &'static str {
     }
 }
 
-fn non_empty(s: Option<&str>) -> bool {
+fn present(s: Option<&str>) -> bool {
     s.is_some_and(|v| !v.trim().is_empty())
 }
 
 /// 真实裁决人标识：拒绝空值、尖括号占位符和常见匿名/模板名。
-fn valid_judge(s: Option<&str>) -> bool {
+fn acceptable(s: Option<&str>) -> bool {
     let Some(s) = s else {
         return false;
     };
@@ -512,16 +484,16 @@ fn valid_judge(s: Option<&str>) -> bool {
 }
 
 /// 人工裁决人标识：机械 target 规则、AI 草案和自动标注不得冒充人工闭环。
-fn human_judge(c: &EvalCase) -> bool {
+fn person(c: &Case) -> bool {
     let Some(s) = c.judged_by.as_deref() else {
         return false;
     };
-    human_judge_name(s) && !policy_materialized(c)
+    name(s) && !materialized(c)
 }
 
 /// 逐候选裁决人标识：同一套真人判定，不含整包 policy 方法判断。
-fn human_judge_name(s: &str) -> bool {
-    if !valid_judge(Some(s)) {
+fn name(s: &str) -> bool {
+    if !acceptable(Some(s)) {
         return false;
     }
     let t = s.trim().to_lowercase();
@@ -543,7 +515,7 @@ fn human_judge_name(s: &str) -> bool {
 }
 
 /// 规则/评分卡物化标签：即使由真人签署，也不是逐条候选裁决。
-fn policy_materialized(c: &EvalCase) -> bool {
+fn materialized(c: &Case) -> bool {
     c.judged_method.as_deref().is_some_and(|m| {
         let m = m.to_lowercase();
         ["policy", "materialized", "rubric", "mechanical", "auto"]
@@ -556,8 +528,8 @@ fn policy_materialized(c: &EvalCase) -> bool {
 mod tests {
     use super::*;
 
-    fn case(layer: &str, judged: bool) -> EvalCase {
-        EvalCase {
+    fn case(layer: &str, judged: bool) -> Case {
+        Case {
             query: format!("q-{layer}"),
             layer: layer.to_string(),
             expected: vec!["a".to_string()],
@@ -570,14 +542,14 @@ mod tests {
     }
 
     /// 把当前 rel 的每个键都标成逐条人工裁决（测试用）。
-    fn stamp_items(c: &mut EvalCase, by: &str) {
+    fn stamp_items(c: &mut Case, by: &str) {
         for k in c.rel.keys() {
             c.judge_items.insert(k.clone(), by.to_string());
         }
         c.judged_method = Some("per-item-blind-v1".to_string());
     }
 
-    fn corpus() -> Vec<EvalCase> {
+    fn corpus() -> Vec<Case> {
         let mut cases = Vec::new();
         for layer in ["literal", "paraphrase", "semantic"] {
             for _ in 0..MIN_LAYER {
@@ -767,7 +739,7 @@ mod tests {
             "paraphrase".to_string(),
             "semantic".to_string(),
         ];
-        let r = check_human(&cases, &layers, &perfect_agg());
+        let r = human(&cases, &layers, &perfect_agg());
         assert!(r.failed);
         let joined = r.lines.join("\n");
         assert!(joined.contains("human judge metadata"), "{joined}");
@@ -789,7 +761,7 @@ mod tests {
             "paraphrase".to_string(),
             "semantic".to_string(),
         ];
-        let r = check_human(&cases, &layers, &perfect_agg());
+        let r = human(&cases, &layers, &perfect_agg());
         assert!(r.failed);
         let joined = r.lines.join("\n");
         assert!(
@@ -812,7 +784,7 @@ mod tests {
             "paraphrase".to_string(),
             "semantic".to_string(),
         ];
-        let r = check_human(&cases, &layers, &perfect_agg());
+        let r = human(&cases, &layers, &perfect_agg());
         assert!(r.failed);
         assert!(
             r.lines
@@ -839,7 +811,7 @@ mod tests {
             "paraphrase".to_string(),
             "semantic".to_string(),
         ];
-        let r = check_human(&cases, &layers, &perfect_agg());
+        let r = human(&cases, &layers, &perfect_agg());
         assert!(!r.failed, "{}", r.lines.join("\n"));
         let joined = r.lines.join("\n");
         assert!(joined.contains("gate: mode=human"), "{joined}");
@@ -867,7 +839,7 @@ mod tests {
             "paraphrase".to_string(),
             "semantic".to_string(),
         ];
-        let r = check_human(&cases, &layers, &perfect_agg());
+        let r = human(&cases, &layers, &perfect_agg());
         assert!(r.failed);
         let joined = r.lines.join("\n");
         assert!(
@@ -894,7 +866,7 @@ mod tests {
             "paraphrase".to_string(),
             "semantic".to_string(),
         ];
-        let r = check_human(&cases, &layers, &perfect_agg());
+        let r = human(&cases, &layers, &perfect_agg());
         assert!(r.failed);
         let joined = r.lines.join("\n");
         assert!(
@@ -922,7 +894,7 @@ mod tests {
             "paraphrase".to_string(),
             "semantic".to_string(),
         ];
-        let items = check_items(&cases, &layers, &perfect_agg());
+        let items = items(&cases, &layers, &perfect_agg());
         assert!(!items.failed, "{}", items.lines.join("\n"));
         let joined = items.lines.join("\n");
         assert!(joined.contains("gate: mode=items"), "{joined}");
@@ -930,7 +902,7 @@ mod tests {
             joined.contains("non-human (evidence: per-item AI"),
             "{joined}"
         );
-        let human = check_human(&cases, &layers, &perfect_agg());
+        let human = human(&cases, &layers, &perfect_agg());
         assert!(human.failed);
         assert!(
             human
@@ -960,7 +932,7 @@ mod tests {
         ];
         let mut agg = perfect_agg();
         agg.get_mut("paraphrase").unwrap()[4] = 9.0; // A NDCG 0.9 < B 1.0
-        let r = check_human(&cases, &layers, &agg);
+        let r = human(&cases, &layers, &agg);
         assert!(r.failed);
         assert!(
             r.lines

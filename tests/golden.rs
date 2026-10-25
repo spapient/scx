@@ -706,7 +706,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
     ));
 
     // 30) --max-tokens：证据地板（证据 + 最小邻域）超限 → overflow:evidence，
-    //     证据行仍全保留，统计行追加 max_tokens/tok_est 记账字段。
+    //     证据行仍全保留，统计行追加 limit/tokens 记账字段。
     let mut mt1: Vec<String> = (0..200)
         .map(|i| format!("INFO heartbeat seq={} ok pool=3 latency=1ms", i))
         .collect();

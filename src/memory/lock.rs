@@ -5,7 +5,7 @@
 //! read-modify-write 没有跨进程互斥：并发写会互相 rename、丢 gen 更新。
 //!
 //! 本模块提供两件互补的机制：
-//! - `atomic_write`：每次写入使用唯一临时名 + rename，保证读者只看到旧文件
+//! - `atomic`：每次写入使用唯一临时名 + rename，保证读者只看到旧文件
 //!   或完整新文件（防半写）；Windows 上对短暂 sharing violation 做有限重试。
 //! - `acquire`：`create_new` 锁文件 + 超时/陈旧锁回收，保护 meta/qmap/index
 //!   这类 read-modify-write 或追加写。锁内容带唯一 token，Drop 只删除自己的锁，
@@ -27,7 +27,7 @@ const RETRY: Duration = Duration::from_millis(10);
 static TOKEN_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// 建目录（Windows 杀毒/索引器短暂占用时重试 PermissionDenied）。
-pub(crate) fn create_dir_all(path: &Path) -> io::Result<()> {
+pub(crate) fn mkdir(path: &Path) -> io::Result<()> {
     let mut last: Option<io::Error> = None;
     for attempt in 0..3 {
         match fs::create_dir_all(path) {
@@ -46,12 +46,12 @@ pub(crate) fn create_dir_all(path: &Path) -> io::Result<()> {
 }
 
 /// 锁守卫：作用域结束自动释放（只删自己 token 的锁文件）。
-pub(crate) struct FileLock {
+pub(crate) struct Lock {
     path: PathBuf,
     token: String,
 }
 
-impl Drop for FileLock {
+impl Drop for Lock {
     fn drop(&mut self) {
         // 被判定陈旧后可能已被新持有者替换：只删自己的 token。
         if let Ok(txt) = fs::read_to_string(&self.path) {
@@ -63,10 +63,10 @@ impl Drop for FileLock {
 }
 
 /// 获取 `<root>/<name>` 锁；超时返回 `WouldBlock`。
-pub(crate) fn acquire(root: &str, name: &str) -> io::Result<FileLock> {
+pub(crate) fn acquire(root: &str, name: &str) -> io::Result<Lock> {
     let path = Path::new(root).join(name);
     if let Some(dir) = path.parent() {
-        create_dir_all(dir)?;
+        mkdir(dir)?;
     }
     let seq = TOKEN_SEQ.fetch_add(1, Ordering::Relaxed);
     let token = format!("{}-{seq}", std::process::id());
@@ -74,9 +74,9 @@ pub(crate) fn acquire(root: &str, name: &str) -> io::Result<FileLock> {
     let mut permission_retries = 0u32;
     loop {
         match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(f) => return finish_lock(&path, f, &token),
+            Ok(f) => return finish(&path, f, &token),
             Err(e) if contended(e.kind()) => {
-                wait_lock(&path, deadline, &e, &mut permission_retries)?;
+                wait(&path, deadline, &e, &mut permission_retries)?;
             }
             Err(e) => return Err(e),
         }
@@ -87,19 +87,19 @@ fn contended(kind: io::ErrorKind) -> bool {
     kind == io::ErrorKind::AlreadyExists || kind == io::ErrorKind::PermissionDenied
 }
 
-fn finish_lock(path: &Path, mut f: fs::File, token: &str) -> io::Result<FileLock> {
+fn finish(path: &Path, mut f: fs::File, token: &str) -> io::Result<Lock> {
     // token 落盘后其它进程才可能看到锁；写失败则移除，避免假锁。
     if let Err(e) = writeln!(f, "{token}") {
         let _ = fs::remove_file(path);
         return Err(e);
     }
-    Ok(FileLock {
+    Ok(Lock {
         path: path.to_path_buf(),
         token: token.to_string(),
     })
 }
 
-fn wait_lock(
+fn wait(
     path: &Path,
     deadline: Instant,
     original: &io::Error,
@@ -114,7 +114,7 @@ fn wait_lock(
             return Err(io::Error::new(kind, format!("memory lock: {original}")));
         }
     }
-    if is_stale(path) {
+    if stale(path) {
         let _ = fs::remove_file(path);
         return Ok(());
     }
@@ -132,7 +132,7 @@ fn wait_lock(
 ///
 /// 任一锁获取失败时，已持有的锁随守卫 `Drop` 逆序自动释放——绝不半持锁返回。
 /// 调用方必须按契约顺序传 `names`（细粒度在前、粗粒度在后），禁止自行穿插。
-pub(crate) fn acquire_all(root: &str, names: &[&str]) -> io::Result<Vec<FileLock>> {
+pub(crate) fn locks(root: &str, names: &[&str]) -> io::Result<Vec<Lock>> {
     let mut guards = Vec::with_capacity(names.len());
     for name in names {
         guards.push(acquire(root, name)?);
@@ -140,7 +140,7 @@ pub(crate) fn acquire_all(root: &str, names: &[&str]) -> io::Result<Vec<FileLock
     Ok(guards)
 }
 
-fn is_stale(path: &Path) -> bool {
+fn stale(path: &Path) -> bool {
     fs::metadata(path)
         .and_then(|m| m.modified())
         .ok()
@@ -153,9 +153,9 @@ fn is_stale(path: &Path) -> bool {
 /// 说明：保证“不会读到半写文件”，不做 fsync 级别的掉电持久化；case/meta 都是
 /// 可再生/可重建数据，崩溃后最坏回到上一个完整版本。每次写使用
 /// `<name>.tmp.<pid>.<seq>`，并发写不会互相覆盖临时文件。
-pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(dir) = path.parent() {
-        create_dir_all(dir)?;
+        mkdir(dir)?;
     }
     let base = path.file_name().and_then(|s| s.to_str()).unwrap_or("data");
     let mut last: Option<io::Error> = None;
@@ -164,12 +164,12 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     for attempt in 0..3 {
         let seq = TOKEN_SEQ.fetch_add(1, Ordering::Relaxed);
         let tmp = path.with_file_name(format!("{base}.tmp.{}.{seq}", std::process::id()));
-        let result = write_once(&tmp, path, bytes);
+        let result = once(&tmp, path, bytes);
         match result {
             Ok(()) => return Ok(()),
             Err(e) => {
                 let _ = fs::remove_file(&tmp);
-                let transient = retryable(e.kind());
+                let transient = retry(e.kind());
                 last = Some(io::Error::new(
                     e.kind(),
                     format!("atomic write {}: {e}", path.display()),
@@ -181,22 +181,22 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
             }
         }
     }
-    Err(last.expect("atomic_write always records an error"))
+    Err(last.expect("atomic always records an error"))
 }
 
-fn write_once(tmp: &Path, path: &Path, bytes: &[u8]) -> io::Result<()> {
+fn once(tmp: &Path, path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut f = OpenOptions::new().write(true).create_new(true).open(tmp)?;
     f.write_all(bytes)?;
     drop(f);
-    rename_retry(tmp, path)
+    rename(tmp, path)
 }
 
-fn retryable(kind: io::ErrorKind) -> bool {
+fn retry(kind: io::ErrorKind) -> bool {
     kind == io::ErrorKind::PermissionDenied || kind == io::ErrorKind::WouldBlock
 }
 
 /// Windows 上目标文件可能被短暂打开（杀毒/索引/读者），rename 做有限重试。
-fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
+fn rename(from: &Path, to: &Path) -> io::Result<()> {
     let mut last: Option<io::Error> = None;
     for attempt in 0..10 {
         match fs::rename(from, to) {
@@ -215,20 +215,20 @@ fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::util::tmp_root;
+    use crate::memory::util::root;
     use std::sync::Arc;
     use std::thread;
 
     #[test]
-    fn atomic_write_keeps_last_complete_value() {
-        let root = tmp_root("atomic");
+    fn atomic_keeps_last_complete_value() {
+        let root = root("atomic");
         let p = Path::new(&root).join("value.txt");
         fs::create_dir_all(&root).unwrap();
         let mut handles = Vec::new();
         for i in 0..8 {
             let p = p.clone();
             handles.push(thread::spawn(move || {
-                atomic_write(&p, format!("value-{i}").as_bytes()).unwrap();
+                atomic(&p, format!("value-{i}").as_bytes()).unwrap();
             }));
         }
         for h in handles {
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn lock_serializes_and_releases() {
-        let root = tmp_root("lock");
+        let root = root("lock");
         fs::create_dir_all(&root).unwrap();
         let root = Arc::new(root);
         let mut handles = Vec::new();
@@ -262,12 +262,12 @@ mod tests {
     }
 
     #[test]
-    fn acquire_all_fixed_order_and_failure_releases() {
-        let root = tmp_root("lock_all");
+    fn locks_fixed_order_and_failure_releases() {
+        let root = root("lock_all");
         fs::create_dir_all(&root).unwrap();
         // 固定序获取成功，Drop 逆序释放后锁文件全部消失。
         {
-            let _g = acquire_all(&root, &["a.lock", "b.lock", "c.lock"]).unwrap();
+            let _g = locks(&root, &["a.lock", "b.lock", "c.lock"]).unwrap();
             assert!(Path::new(&root).join("a.lock").exists());
             assert!(Path::new(&root).join("b.lock").exists());
             assert!(Path::new(&root).join("c.lock").exists());
@@ -275,8 +275,8 @@ mod tests {
         assert!(!Path::new(&root).join("a.lock").exists());
         // 中途失败：已持锁逆序释放，不留半持状态。
         let _held = acquire(&root, "b.lock").unwrap();
-        let err = match acquire_all(&root, &["a.lock", "b.lock"]) {
-            Ok(_) => panic!("acquire_all 必须失败"),
+        let err = match locks(&root, &["a.lock", "b.lock"]) {
+            Ok(_) => panic!("locks 必须失败"),
             Err(e) => e,
         };
         assert_eq!(err.kind(), io::ErrorKind::WouldBlock);

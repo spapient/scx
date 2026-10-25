@@ -7,7 +7,7 @@
 //! 红线：本模块是 I/O 侧（memory），compress 零改动；摄取结果不影响压缩输出，
 //! 只沉淀旁路资产。
 //!
-use crate::memory::store::{self, Case, CaseStats};
+use crate::memory::store::{self, Case, Stats};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -26,123 +26,119 @@ const FP_LOCK: &str = "index/fingerprints.lock";
 /// 计算去重指纹（确定性、无随机源）。
 ///
 /// 身份口径：query 保留数字（8080/9090、errno=28/29 是不同事故），text 仍按
-/// `norm_into` 折叠数字（日志里的 PID/时间戳/行号不应制造重复 case）。
+/// `normalize` 折叠数字（日志里的 PID/时间戳/行号不应制造重复 case）。
 /// 这修复了旧实现"query 数字也被折叠 → 不同端口事故互相去重"的问题。
 pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut q = String::new();
-    crate::analysis::norm_identity_into(query, &mut q);
+    crate::analysis::canonical(query, &mut q);
     let mut run = String::new();
     let mut t = String::new();
-    crate::analysis::norm_into(text, &mut t, &mut run);
-    let h = store::fnv1a_parts(&[q.as_bytes(), b"\0", t.as_bytes()]);
+    crate::analysis::normalize(text, &mut t, &mut run);
+    let h = store::parts(&[q.as_bytes(), b"\0", t.as_bytes()]);
     format!("{:016x}", h)
 }
 
-fn fp_index_path(root: &str) -> PathBuf {
+fn index(root: &str) -> PathBuf {
     Path::new(root).join(FP_INDEX)
 }
 
-fn fp_ready_path(root: &str) -> PathBuf {
+fn ready(root: &str) -> PathBuf {
     Path::new(root).join(FP_READY)
 }
 
-fn fp_ready_count(root: &str) -> Option<usize> {
-    fs::read_to_string(fp_ready_path(root))
-        .ok()?
-        .trim()
-        .parse()
-        .ok()
+fn total(root: &str) -> Option<usize> {
+    fs::read_to_string(ready(root)).ok()?.trim().parse().ok()
 }
 
 /// 惰性构建去重索引：一次性读取旧库 case，之后只看一个小文件。
-fn ensure_fp_index(root: &str) -> io::Result<()> {
-    let count = store::load_meta(root)?.case_count;
-    if fp_ready_count(root) == Some(count) && fp_index_path(root).exists() {
+fn ensure(root: &str) -> io::Result<()> {
+    let count = crate::memory::meta::load(root)?.case_count;
+    if total(root) == Some(count) && index(root).exists() {
         return Ok(());
     }
     let _lock = crate::memory::lock::acquire(root, FP_LOCK)?;
-    let count = store::load_meta(root)?.case_count;
-    if fp_ready_count(root) == Some(count) && fp_index_path(root).exists() {
+    let count = crate::memory::meta::load(root)?.case_count;
+    if total(root) == Some(count) && index(root).exists() {
         return Ok(());
     }
-    rebuild_fp_index_locked(root)
+    rebuild(root)
 }
 
-fn rebuild_fp_index_locked(root: &str) -> io::Result<()> {
-    let ids = store::list_ids(root)?;
+fn rebuild(root: &str) -> io::Result<()> {
+    let ids = store::list(root)?;
     let mut body = String::with_capacity(ids.len().saturating_mul(40));
     for id in &ids {
-        let c = store::read_case(root, id)?;
+        let c = store::load(root, id)?;
         body.push_str(&fingerprint(&c.query, &c.text));
         body.push('\t');
         body.push_str(id);
         body.push('\n');
     }
-    crate::memory::lock::atomic_write(&fp_index_path(root), body.as_bytes())?;
-    crate::memory::lock::atomic_write(&fp_ready_path(root), ids.len().to_string().as_bytes())
+    crate::memory::lock::atomic(&index(root), body.as_bytes())?;
+    crate::memory::lock::atomic(&ready(root), ids.len().to_string().as_bytes())
 }
 
-fn remember_fp(root: &str, fp: &str, id: &str) -> io::Result<()> {
+fn remember(root: &str, fp: &str, id: &str) -> io::Result<()> {
     let _lock = crate::memory::lock::acquire(root, FP_LOCK)?;
-    let path = fp_index_path(root);
+    let path = index(root);
     if !path.exists() {
-        return rebuild_fp_index_locked(root);
+        return rebuild(root);
     }
     let mut file = fs::OpenOptions::new().append(true).open(path)?;
     writeln!(file, "{fp}\t{id}")?;
-    let count = store::load_meta(root)?.case_count;
-    crate::memory::lock::atomic_write(&fp_ready_path(root), count.to_string().as_bytes())
+    let count = crate::memory::meta::load(root)?.case_count;
+    crate::memory::lock::atomic(&ready(root), count.to_string().as_bytes())
 }
 
 /// case 删除后让去重索引在下一次写入时惰性重建。
-pub(crate) fn invalidate_fp_index(root: &str) {
-    let _ = fs::remove_file(fp_ready_path(root));
+pub(crate) fn invalidate(root: &str) {
+    let _ = fs::remove_file(ready(root));
 }
 
 /// 按身份指纹查库内是否已存在 case，返回其 id。
 /// 索引按动态重算指纹构建，因此旧库无需迁移也能按当前身份口径去重。
-pub(crate) fn find_by_fp(root: &str, fp: &str) -> io::Result<Option<String>> {
-    ensure_fp_index(root)?;
-    let Some(body) = read_fp_body(root)? else {
+pub(crate) fn find(root: &str, fp: &str) -> io::Result<Option<String>> {
+    ensure(root)?;
+    let Some(body) = read(root)? else {
         return Ok(None);
     };
     for line in body.lines() {
-        if let Some(id) = fp_match(root, line, fp) {
+        if let Some(id) = matched(root, line, fp) {
             return Ok(Some(id));
         }
     }
     Ok(None)
 }
 
-fn read_fp_body(root: &str) -> io::Result<Option<String>> {
-    match fs::read_to_string(fp_index_path(root)) {
+fn read(root: &str) -> io::Result<Option<String>> {
+    match fs::read_to_string(index(root)) {
         Ok(body) => Ok(Some(body)),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
     }
 }
 
-fn fp_match(root: &str, line: &str, fp: &str) -> Option<String> {
+fn matched(root: &str, line: &str, fp: &str) -> Option<String> {
     let (stored, id) = line.split_once('\t')?;
     if stored != fp {
         return None;
     }
-    if store::valid_id(id) && store::case_path(root, id).exists() {
+    if store::valid(id) && store::path(root, id).exists() {
         return Some(id.to_string());
     }
-    invalidate_fp_index(root);
+    invalidate(root);
     None
 }
 
-/// 已脱敏、已切词的存储字段。公开门面 `memory::store_case` 是唯一构造入口；
+/// 已脱敏、已切词的存储字段。公开门面 `memory::save` 是唯一构造入口；
 /// 本结构只负责持久化，避免每种可选字段各复制一套函数。
-pub(crate) struct StoreFields<'a> {
+pub(crate) struct Payload<'a> {
     pub root: &'a str,
     pub query: &'a str,
     pub terms: Vec<String>,
     pub text: &'a str,
     pub source: &'a [String],
-    pub stats: &'a CaseStats,
+    pub stats: &'a Stats,
     pub forces: &'a [String],
     pub fix: &'a str,
     pub evidence_lno: &'a [usize],
@@ -150,9 +146,9 @@ pub(crate) struct StoreFields<'a> {
     pub max_bytes: Option<u64>,
 }
 
-pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)> {
-    store::ensure_root(input.root)?;
-    validate(
+pub(crate) fn persist(input: Payload<'_>) -> std::io::Result<(bool, String)> {
+    store::ensure(input.root)?;
+    check(
         input.root,
         input.max_bytes,
         input.text,
@@ -165,8 +161,8 @@ pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)>
     // 会跨秒生成两个 id，或在去重更新时用旧快照覆盖刚写入的反馈。
     let _ingest_lock =
         crate::memory::lock::acquire(input.root, &format!("cases/.ingest-{fp}.lock"))?;
-    if let Some(existing) = find_by_fp(input.root, &fp)? {
-        return update_existing(
+    if let Some(existing) = find(input.root, &fp)? {
+        return update(
             input.root,
             &existing,
             input.fix,
@@ -174,28 +170,28 @@ pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)>
             input.evidence,
         );
     }
-    let id = insert_new(input, &fp)?;
+    let id = insert(input, &fp)?;
     Ok((true, id))
 }
 
-fn update_existing(
+fn update(
     root: &str,
     existing: &str,
     fix: &str,
     evidence_lno: &[usize],
     evidence: &[String],
 ) -> std::io::Result<(bool, String)> {
-    let _case_lock = store::lock_case(root, existing)?;
-    let mut c = store::read_case(root, existing)?;
-    let now = store::utc_now();
+    let _case_lock = store::lock(root, existing)?;
+    let mut c = store::load(root, existing)?;
+    let now = store::stamp();
     c.updated_at = now;
     backfill(&mut c, fix, evidence_lno, evidence);
-    store::write_case(root, &c)?;
+    store::save(root, &c)?;
     Ok((false, existing.to_string()))
 }
 
-fn insert_new(fields: StoreFields<'_>, fp: &str) -> std::io::Result<String> {
-    let StoreFields {
+fn insert(fields: Payload<'_>, fp: &str) -> std::io::Result<String> {
+    let Payload {
         root,
         query,
         terms,
@@ -208,9 +204,9 @@ fn insert_new(fields: StoreFields<'_>, fp: &str) -> std::io::Result<String> {
         evidence,
         max_bytes: _,
     } = fields;
-    let now = store::utc_now();
-    let id = store::case_id(&now, query, text);
-    let _case_lock = store::lock_case(root, &id)?;
+    let now = store::stamp();
+    let id = store::id(&now, query, text);
+    let _case_lock = store::lock(root, &id)?;
     let mut c = Case::new(id.clone(), query.to_string(), terms, text.to_string());
     c.fp = fp.to_string();
     c.fix = fix.to_string();
@@ -224,16 +220,16 @@ fn insert_new(fields: StoreFields<'_>, fp: &str) -> std::io::Result<String> {
     // 摄取即分桶：先用 case query 判家族，query 无证据再回退正文，
     // 避免根因里的宽域词把 query 已明确的场景带偏。
     let fvec = c.fields.error_code.clone();
-    let qterms = crate::terms::build_mem_terms(&c.query);
-    c.bucket = crate::memory::classify::bucket_of_query(&fvec, &qterms, text);
-    store::write_case(root, &c)?;
-    store::bump_case_count(root)?;
-    remember_fp(root, fp, &id)?;
+    let qterms = crate::terms::memory(&c.query);
+    c.bucket = crate::memory::classify::query(&fvec, &qterms, text);
+    store::save(root, &c)?;
+    store::bump(root)?;
+    remember(root, fp, &id)?;
     Ok(id)
 }
 
 /// 入库前校验：配额 / 文本上限 / fix 上限 / 证据数组长度一致。
-fn validate(
+fn check(
     root: &str,
     max_bytes: Option<u64>,
     text: &str,
@@ -242,7 +238,7 @@ fn validate(
     evidence: &[String],
 ) -> std::io::Result<()> {
     if let Some(max) = max_bytes {
-        let total = store::bytes_total(root)?;
+        let total = store::bytes(root)?;
         if total > max {
             return Err(std::io::Error::other(format!(
                 "memory quota exceeded: {total} bytes > --max-bytes {max}"
@@ -297,26 +293,26 @@ pub(crate) fn ingest(
     terms: Vec<String>,
     text: &str,
     source: Vec<String>,
-    stats: &CaseStats,
+    stats: &Stats,
     forces: Vec<String>,
 ) -> std::io::Result<(bool, String)> {
-    ingest_with_fix(root, query, terms, text, source, stats, forces, "")
+    fix(root, query, terms, text, source, stats, forces, "")
 }
 
 /// 测试便捷入口：只扩展 fix，不改变既有测试的七参数调用形态。
 #[cfg(test)]
-#[allow(clippy::too_many_arguments)] // 测试夹具兼容：生产路径只用 StoreFields。
-pub(crate) fn ingest_with_fix(
+#[allow(clippy::too_many_arguments)] // 测试夹具兼容：生产路径只用 Payload。
+pub(crate) fn fix(
     root: &str,
     query: &str,
     terms: Vec<String>,
     text: &str,
     source: Vec<String>,
-    stats: &CaseStats,
+    stats: &Stats,
     forces: Vec<String>,
     fix: &str,
 ) -> std::io::Result<(bool, String)> {
-    ingest_with_evidence(
+    evidence(
         root,
         query,
         terms,
@@ -332,20 +328,20 @@ pub(crate) fn ingest_with_fix(
 
 /// 测试便捷入口：完整可选字段。
 #[cfg(test)]
-#[allow(clippy::too_many_arguments)] // 测试夹具兼容：字段已由 StoreFields 统一。
-pub(crate) fn ingest_with_evidence(
+#[allow(clippy::too_many_arguments)] // 测试夹具兼容：字段已由 Payload 统一。
+pub(crate) fn evidence(
     root: &str,
     query: &str,
     terms: Vec<String>,
     text: &str,
     source: Vec<String>,
-    stats: &CaseStats,
+    stats: &Stats,
     forces: Vec<String>,
     fix: &str,
     evidence_lno: &[usize],
     evidence: &[String],
 ) -> std::io::Result<(bool, String)> {
-    persist(StoreFields {
+    persist(Payload {
         root,
         query,
         terms,
@@ -363,25 +359,25 @@ pub(crate) fn ingest_with_evidence(
 /// 按 id 删除一个 case，并让派生索引按库代际自动失效。
 #[cfg(test)]
 pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
-    crate::memory::maintenance::delete_case(root, id)
+    crate::memory::maintenance::delete(root, id)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::memory::store;
-    use crate::memory::util::tmp_root;
+    use crate::memory::util::root;
     use std::fs;
 
     const TEXT: &str = "ERROR db timeout conn_id=9f2a\nat Pool.java:214\nRoot cause: pool size";
 
     #[test]
     fn ingest_dedup_by_fingerprint() {
-        let root = tmp_root("dedup");
-        let s1 = CaseStats {
+        let root = root("dedup");
+        let s1 = Stats {
             kept: 3,
             total: 200,
-            cut_pct: 94.2,
+            cut: 94.2,
             risk: "HIGH".to_string(),
         };
         let a = ingest(
@@ -407,19 +403,15 @@ mod tests {
         .unwrap();
         assert!(!b.0, "同指纹重复摄取应去重，不新增");
         assert!(
-            store::list_ids(&root).unwrap().contains(&b.1),
+            store::list(&root).unwrap().contains(&b.1),
             "去重也应返回既有 case id"
         );
-        assert_eq!(
-            store::list_ids(&root).unwrap().len(),
-            1,
-            "case 数必须保持 1"
-        );
+        assert_eq!(store::list(&root).unwrap().len(), 1, "case 数必须保持 1");
         // 内容变体（证据块不同）应新增
-        let s2 = CaseStats {
+        let s2 = Stats {
             kept: 1,
             total: 100,
-            cut_pct: 90.0,
+            cut: 90.0,
             risk: "HIGH".to_string(),
         };
         let c = ingest(
@@ -433,21 +425,21 @@ mod tests {
         )
         .unwrap();
         assert!(c.0, "证据块变体应新增");
-        assert_eq!(store::list_ids(&root).unwrap().len(), 2);
+        assert_eq!(store::list(&root).unwrap().len(), 2);
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
     fn ingest_with_fix_persists_and_rejects_oversize() {
         // --store 配 --fix 时修复结论随 case 入库（L1 本地直答）。
-        let root = tmp_root("fix");
-        let s1 = CaseStats {
+        let root = root("fix");
+        let s1 = Stats {
             kept: 3,
             total: 200,
-            cut_pct: 94.2,
+            cut: 94.2,
             risk: "HIGH".to_string(),
         };
-        let added = ingest_with_fix(
+        let added = fix(
             &root,
             "数据库连接超时 conn_id",
             vec!["conn_id".into()],
@@ -459,16 +451,15 @@ mod tests {
         )
         .unwrap();
         assert!(added.0, "带 fix 首次摄取应为新增");
-        let ids = store::list_ids(&root).unwrap();
-        let c = store::read_case(&root, &ids[0]).unwrap();
+        let ids = store::list(&root).unwrap();
+        let c = store::load(&root, &ids[0]).unwrap();
         assert_eq!(
             c.fix, "enlarge pool to 64 conns, restart daemon",
             "fix 必须落盘"
         );
         // 超长 fix 拒绝。
         let huge_fix = "x".repeat(MAX_FIX_LEN + 1);
-        let err =
-            ingest_with_fix(&root, "q", vec![], "t", vec![], &s1, vec![], &huge_fix).unwrap_err();
+        let err = fix(&root, "q", vec![], "t", vec![], &s1, vec![], &huge_fix).unwrap_err();
         assert!(
             err.to_string().contains("case fix too long"),
             "超长 fix 应明确拒绝: {err}"
@@ -478,16 +469,16 @@ mod tests {
 
     #[test]
     fn dedup_backfills_missing_fix_and_evidence_without_overwriting() {
-        let root = tmp_root("backfill");
-        let s = CaseStats {
+        let root = root("backfill");
+        let s = Stats {
             kept: 1,
             total: 10,
-            cut_pct: 90.0,
+            cut: 90.0,
             risk: "LOW".to_string(),
         };
         let first = ingest(&root, "q", vec![], TEXT, vec![], &s, vec![]).unwrap();
         assert!(first.0);
-        let second = ingest_with_evidence(
+        let second = evidence(
             &root,
             "q",
             vec![],
@@ -501,12 +492,12 @@ mod tests {
         )
         .unwrap();
         assert!(!second.0, "同指纹必须去重");
-        let c = store::read_case(&root, &first.1).unwrap();
+        let c = store::load(&root, &first.1).unwrap();
         assert_eq!(c.fix, "restart pool", "空 fix 可由后续 store 补录");
         assert_eq!(c.evidence_lno, vec![1], "空 evidence 可由后续 store 补录");
         assert_eq!(c.evidence, vec!["ERROR db timeout"]);
         // 已有结论不被后续重复摄取覆盖。
-        ingest_with_fix(
+        fix(
             &root,
             "q",
             vec![],
@@ -517,7 +508,7 @@ mod tests {
             "different fix",
         )
         .unwrap();
-        let c = store::read_case(&root, &first.1).unwrap();
+        let c = store::load(&root, &first.1).unwrap();
         assert_eq!(c.fix, "restart pool", "已有修复结论不得被覆盖");
         let _ = fs::remove_dir_all(&root);
     }
@@ -525,11 +516,11 @@ mod tests {
     #[test]
     fn ingest_with_evidence_roundtrip_and_legacy_compat() {
         // 证据行区间与原始证据落盘；旧 case 缺键时读为空，不 panic。
-        let root = tmp_root("ev");
-        let s1 = CaseStats {
+        let root = root("ev");
+        let s1 = Stats {
             kept: 3,
             total: 200,
-            cut_pct: 94.2,
+            cut: 94.2,
             risk: "HIGH".to_string(),
         };
         let ev_lno = vec![3usize, 14, 37];
@@ -538,7 +529,7 @@ mod tests {
             "at Pool.java:214".to_string(),
             "fix hint".to_string(),
         ];
-        let added = ingest_with_evidence(
+        let added = evidence(
             &root,
             "数据库连接超时 conn_id",
             vec!["conn_id".into()],
@@ -552,13 +543,13 @@ mod tests {
         )
         .unwrap();
         assert!(added.0, "带证据首次摄取应为新增");
-        let ids = store::list_ids(&root).unwrap();
-        let c = store::read_case(&root, &ids[0]).unwrap();
+        let ids = store::list(&root).unwrap();
+        let c = store::load(&root, &ids[0]).unwrap();
         assert_eq!(c.evidence_lno, ev_lno, "证据行区间必须落盘");
         assert_eq!(c.evidence, ev, "原始证据行必须落盘");
         assert_eq!(c.fix, "enlarge pool", "fix 与 evidence 可同时落盘");
-        // 旧 case 兼容：直接用 store::val_to_case 模拟无键读取（无 evidence 字段）。
-        let legacy = store::val_to_case(
+        // 旧 case 兼容：直接用 store::decode 模拟无键读取（无 evidence 字段）。
+        let legacy = store::decode(
             &crate::memory::json::parse(
                 "{\"id\":\"x\",\"query\":\"q\",\"terms\":[],\"text\":\"t\",\
                  \"fp\":\"f\",\"source\":[],\"tags\":[],\"fields\":{},\"stats\":{},\
@@ -572,7 +563,7 @@ mod tests {
         );
         assert!(legacy.evidence.is_empty(), "旧 case 无 evidence 键应读空");
         // 长度不匹配拒绝。
-        let err = ingest_with_evidence(
+        let err = evidence(
             &root,
             "q",
             vec![],
@@ -626,36 +617,30 @@ mod tests {
 
     #[test]
     fn fingerprint_index_is_lazily_rebuilt() {
-        let root = tmp_root("fpidx");
-        let s = CaseStats {
+        let root = root("fpidx");
+        let s = Stats {
             kept: 1,
             total: 10,
-            cut_pct: 0.0,
+            cut: 0.0,
             risk: "LOW".to_string(),
         };
         let (_, id) = ingest(&root, "q index", vec![], TEXT, vec![], &s, vec![]).unwrap();
         let fp = fingerprint("q index", TEXT);
-        assert_eq!(
-            find_by_fp(&root, &fp).unwrap().as_deref(),
-            Some(id.as_str())
-        );
+        assert_eq!(find(&root, &fp).unwrap().as_deref(), Some(id.as_str()));
 
-        fs::remove_file(fp_index_path(&root)).unwrap();
-        fs::remove_file(fp_ready_path(&root)).unwrap();
-        assert_eq!(
-            find_by_fp(&root, &fp).unwrap().as_deref(),
-            Some(id.as_str())
-        );
-        assert!(fp_index_path(&root).exists(), "重查应重建指纹索引");
+        fs::remove_file(index(&root)).unwrap();
+        fs::remove_file(ready(&root)).unwrap();
+        assert_eq!(find(&root, &fp).unwrap().as_deref(), Some(id.as_str()));
+        assert!(index(&root).exists(), "重查应重建指纹索引");
     }
 
     #[test]
     fn fingerprint_index_rebuilds_after_delete() {
-        let root = tmp_root("fpdel");
-        let s = CaseStats {
+        let root = root("fpdel");
+        let s = Stats {
             kept: 1,
             total: 10,
-            cut_pct: 0.0,
+            cut: 0.0,
             risk: "LOW".to_string(),
         };
         let (_, first) = ingest(&root, "q alpha", vec![], TEXT, vec![], &s, vec![]).unwrap();
@@ -669,12 +654,12 @@ mod tests {
             vec![],
         )
         .unwrap();
-        assert!(crate::memory::maintenance::delete_case(&root, &first).unwrap());
-        assert!(find_by_fp(&root, &fingerprint("q alpha", TEXT))
+        assert!(crate::memory::maintenance::delete(&root, &first).unwrap());
+        assert!(find(&root, &fingerprint("q alpha", TEXT))
             .unwrap()
             .is_none());
         assert_eq!(
-            find_by_fp(&root, &fingerprint("q beta", "FATAL other evidence"))
+            find(&root, &fingerprint("q beta", "FATAL other evidence"))
                 .unwrap()
                 .as_deref(),
             Some(second.as_str())
@@ -683,11 +668,11 @@ mod tests {
 
     #[test]
     fn ingest_keeps_numeric_query_variants_and_dedups_legacy_fp() {
-        let root = tmp_root("numid");
-        let s = CaseStats {
+        let root = root("numid");
+        let s = Stats {
             kept: 1,
             total: 10,
-            cut_pct: 0.0,
+            cut: 0.0,
             risk: "LOW".to_string(),
         };
         let text = "ERROR port 8080 already in use\nat Sock.java:1";
@@ -712,12 +697,12 @@ mod tests {
         )
         .unwrap();
         assert!(a.0 && b.0, "不同端口必须各自落库");
-        assert_eq!(store::list_ids(&root).unwrap().len(), 2);
+        assert_eq!(store::list(&root).unwrap().len(), 2);
 
         // 模拟旧库：fp 是旧"数字折叠"口径；动态重算仍应识别同一条记忆。
-        let mut c = store::read_case(&root, &a.1).unwrap();
+        let mut c = store::load(&root, &a.1).unwrap();
         c.fp = "0000000000000000".to_string();
-        store::write_case(&root, &c).unwrap();
+        store::save(&root, &c).unwrap();
         let dup = ingest(
             &root,
             "port 8080 already in use",
@@ -729,24 +714,24 @@ mod tests {
         )
         .unwrap();
         assert!(!dup.0, "旧 fp 也应通过动态身份键去重");
-        assert_eq!(store::list_ids(&root).unwrap().len(), 2);
+        assert_eq!(store::list(&root).unwrap().len(), 2);
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
     fn delete_removes_case_and_meta() {
-        let root = tmp_root("del");
-        let s1 = CaseStats {
+        let root = root("del");
+        let s1 = Stats {
             kept: 1,
             total: 10,
-            cut_pct: 0.0,
+            cut: 0.0,
             risk: "LOW".to_string(),
         };
         ingest(&root, "q1", vec![], "t1", vec![], &s1, vec![]).unwrap();
-        let id = store::list_ids(&root).unwrap()[0].clone();
+        let id = store::list(&root).unwrap()[0].clone();
         assert!(delete(&root, &id).unwrap());
-        assert!(store::list_ids(&root).unwrap().is_empty());
-        let m = store::load_meta(&root).unwrap();
+        assert!(store::list(&root).unwrap().is_empty());
+        let m = crate::memory::meta::load(&root).unwrap();
         assert_eq!(m.case_count, 0);
         let _ = fs::remove_dir_all(&root);
     }

@@ -112,7 +112,7 @@ pub struct Opts {
 }
 
 /// 默认记忆库目录：$SCX_MEM_DIR 优先，否则用户主目录下的 .scx-memory。
-fn default_mem_dir() -> String {
+fn home() -> String {
     if let Ok(d) = std::env::var("SCX_MEM_DIR") {
         if !d.trim().is_empty() {
             return d;
@@ -130,7 +130,7 @@ fn default_mem_dir() -> String {
         .into_owned()
 }
 
-fn option_value(
+fn value(
     args: &[String],
     i: &mut usize,
     name: &str,
@@ -153,7 +153,7 @@ fn option_value(
     Ok(v.clone())
 }
 
-fn parse_bool01(value: &str, name: &str) -> Result<bool, String> {
+fn boolean(value: &str, name: &str) -> Result<bool, String> {
     match value {
         "0" => Ok(false),
         "1" => Ok(true),
@@ -585,7 +585,7 @@ static FLAGS: &[Flag] = &[
     },
 ];
 
-fn flag_by_name(name: &str) -> Option<&'static Flag> {
+fn find(name: &str) -> Option<&'static Flag> {
     FLAGS.iter().find(|f| f.name == name)
 }
 
@@ -621,7 +621,7 @@ struct ParseState {
     judge: Option<String>,
     judge_by: Option<String>,
     max_bytes: Option<u64>,
-    max_tokens: Option<u64>,
+    limit: Option<u64>,
     mem_dir: String,
     files: Vec<String>,
     seen: HashSet<&'static str>,
@@ -660,8 +660,8 @@ impl ParseState {
             judge: None,
             judge_by: None,
             max_bytes: None,
-            max_tokens: None,
-            mem_dir: default_mem_dir(),
+            limit: None,
+            mem_dir: home(),
             files: Vec::new(),
             seen: HashSet::new(),
         }
@@ -669,7 +669,7 @@ impl ParseState {
 }
 
 /// 自由字符串字段赋值（query / fix / mem-dir）。
-fn set_free(s: &mut ParseState, f: &Flag, v: String) {
+fn free(s: &mut ParseState, f: &Flag, v: String) {
     match f.name {
         "--query" => s.query = Some(v),
         "--fix" => s.fix = v,
@@ -678,7 +678,7 @@ fn set_free(s: &mut ParseState, f: &Flag, v: String) {
 }
 
 /// 路径/标识字段赋值（fix-file / eval / annotate-out / judge / judge-by / delete）。
-fn set_path(s: &mut ParseState, f: &Flag, v: String) {
+fn path(s: &mut ParseState, f: &Flag, v: String) {
     match f.name {
         "--fix-file" => s.fix_file = Some(v),
         "--eval" => s.eval = Some(v),
@@ -690,7 +690,7 @@ fn set_path(s: &mut ParseState, f: &Flag, v: String) {
 }
 
 /// 输出形态开关（json / stat / no-stats）。
-fn set_output(s: &mut ParseState, name: &str) {
+fn output(s: &mut ParseState, name: &str) {
     match name {
         "--json" => s.json = true,
         "--stat" => s.stat = true,
@@ -699,7 +699,7 @@ fn set_output(s: &mut ParseState, name: &str) {
 }
 
 /// 库维护开关（rebuild / gc）。
-fn set_house(s: &mut ParseState, name: &str) {
+fn house(s: &mut ParseState, name: &str) {
     match name {
         "--rebuild" => s.rebuild = true,
         _ => s.gc = true,
@@ -707,7 +707,7 @@ fn set_house(s: &mut ParseState, name: &str) {
 }
 
 /// 标注与证据门开关（annotate / annotate-raw / gate / gate-human / gate-items）。
-fn set_eval_switch(s: &mut ParseState, name: &str) {
+fn evaluate(s: &mut ParseState, name: &str) {
     match name {
         "--annotate" => s.annotate = true,
         "--annotate-raw" => s.annotate_raw = true,
@@ -719,7 +719,7 @@ fn set_eval_switch(s: &mut ParseState, name: &str) {
 
 /// 召回与杂项开关（recall-only / recall-detail / l1-hist / stats / eval-verbose）。
 /// `--eval-verbose` 依赖已出现的 `--eval`（顺序敏感，与历史行为一致）。
-fn set_recall_switch(s: &mut ParseState, name: &str) -> Result<(), String> {
+fn repeat(s: &mut ParseState, name: &str) -> Result<(), String> {
     match name {
         "--recall-only" => s.recall_only = true,
         "--recall-detail" => s.recall_detail = true,
@@ -738,7 +738,7 @@ fn set_recall_switch(s: &mut ParseState, name: &str) -> Result<(), String> {
 /// 按 `Kind` 统一分派单个 flag 的取值与写入。
 /// 参数分派：每个 Kind 的处理在独立小函数中，本函数只做 match 分发
 /// （McCabe 判定点 = kind 分支数，远低于门禁 10）。
-fn parse_flag(
+fn flag(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -746,18 +746,16 @@ fn parse_flag(
     i: &mut usize,
 ) -> Result<(), String> {
     match f.kind {
-        Kind::NoValue | Kind::Value | Kind::Force | Kind::RatePair => {
-            parse_valueish(s, f, inline, args, i)
-        }
-        Kind::F64 | Kind::I64 | Kind::U64 | Kind::Bool01 => parse_numericish(s, f, inline, args, i),
+        Kind::NoValue | Kind::Value | Kind::Force | Kind::RatePair => raw(s, f, inline, args, i),
+        Kind::F64 | Kind::I64 | Kind::U64 | Kind::Bool01 => numeric(s, f, inline, args, i),
         #[cfg(feature = "semantic")]
-        Kind::Semantic => parse_semantic_kind(s, f, inline, args, i),
-        Kind::PolicyFile => parse_policy_file(s, f, inline, args, i),
+        Kind::Semantic => weights(s, f, inline, args, i),
+        Kind::PolicyFile => policy(s, f, inline, args, i),
     }
 }
 
 /// 文本/开关类 flag 的二级分派（无值、自由文本、force、rate）。
-fn parse_valueish(
+fn raw(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -765,16 +763,16 @@ fn parse_valueish(
     i: &mut usize,
 ) -> Result<(), String> {
     match f.kind {
-        Kind::NoValue => parse_no_value(s, f, inline),
-        Kind::Value => parse_value(s, f, inline, args, i),
-        Kind::Force => parse_force(s, f, inline, args, i),
-        Kind::RatePair => parse_rate_pair(s, f, inline, args, i),
+        Kind::NoValue => none(s, f, inline),
+        Kind::Value => word(s, f, inline, args, i),
+        Kind::Force => force(s, f, inline, args, i),
+        Kind::RatePair => pair(s, f, inline, args, i),
         _ => unreachable!("valueish flag without handler: {}", f.name),
     }
 }
 
 /// 数值类 flag 的二级分派（f64/i64/u64/0-1）。
-fn parse_numericish(
+fn numeric(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -782,32 +780,32 @@ fn parse_numericish(
     i: &mut usize,
 ) -> Result<(), String> {
     match f.kind {
-        Kind::F64 => parse_f64_kind(s, f, inline, args, i),
-        Kind::I64 => parse_i64_kind(s, f, inline, args, i),
-        Kind::U64 => parse_u64_kind(s, f, inline, args, i),
-        Kind::Bool01 => parse_bool01_kind(s, f, inline, args, i),
+        Kind::F64 => float(s, f, inline, args, i),
+        Kind::I64 => signed(s, f, inline, args, i),
+        Kind::U64 => count(s, f, inline, args, i),
+        Kind::Bool01 => either(s, f, inline, args, i),
         _ => unreachable!("numeric flag without handler: {}", f.name),
     }
 }
 
 /// 无值开关：按名字分组写入状态（输出形态 / 维护动作 / 评估开关 / 召回开关）。
-fn parse_no_value(s: &mut ParseState, f: &Flag, inline: Option<String>) -> Result<(), String> {
+fn none(s: &mut ParseState, f: &Flag, inline: Option<String>) -> Result<(), String> {
     if inline.is_some() {
         return Err(format!("{} does not take a value", f.name));
     }
     match f.name {
-        "--json" | "--stat" | "--no-stats" => set_output(s, f.name),
-        "--rebuild" | "--gc" => set_house(s, f.name),
+        "--json" | "--stat" | "--no-stats" => output(s, f.name),
+        "--rebuild" | "--gc" => house(s, f.name),
         "--annotate" | "--annotate-raw" | "--gate" | "--gate-human" | "--gate-items" => {
-            set_eval_switch(s, f.name)
+            evaluate(s, f.name)
         }
-        _ => set_recall_switch(s, f.name)?,
+        _ => repeat(s, f.name)?,
     }
     Ok(())
 }
 
 /// 自由文本值（query/fix/mem-dir 入 state；其余按路径处理）。
-fn parse_value(
+fn word(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -817,19 +815,19 @@ fn parse_value(
     if f.once {
         once(&mut s.seen, f.name)?;
     }
-    let v = option_value(args, i, f.name, inline)?;
+    let v = value(args, i, f.name, inline)?;
     if !f.err_empty.is_empty() && v.is_empty() {
         return Err(format!("{} {}", f.name, f.err_empty));
     }
     match f.name {
-        "--query" | "--fix" | "--mem-dir" => set_free(s, f, v),
-        _ => set_path(s, f, v),
+        "--query" | "--fix" | "--mem-dir" => free(s, f, v),
+        _ => path(s, f, v),
     }
     Ok(())
 }
 
 /// 比率（有限且在 MIN_RATIO..=1.0）。
-fn parse_f64_kind(
+fn float(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -837,7 +835,7 @@ fn parse_f64_kind(
     i: &mut usize,
 ) -> Result<(), String> {
     once(&mut s.seen, f.name)?;
-    let v = option_value(args, i, f.name, inline)?;
+    let v = value(args, i, f.name, inline)?;
     let parsed: f64 = v
         .parse()
         .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
@@ -853,7 +851,7 @@ fn parse_f64_kind(
 }
 
 /// 整数档（window/context，0..=上限）。
-fn parse_i64_kind(
+fn signed(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -861,7 +859,7 @@ fn parse_i64_kind(
     i: &mut usize,
 ) -> Result<(), String> {
     once(&mut s.seen, f.name)?;
-    let v = option_value(args, i, f.name, inline)?;
+    let v = value(args, i, f.name, inline)?;
     let parsed: i64 = v
         .parse()
         .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
@@ -882,7 +880,7 @@ fn parse_i64_kind(
 }
 
 /// 无符号整数档（下限 f.min 起）。
-fn parse_u64_kind(
+fn count(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -890,32 +888,32 @@ fn parse_u64_kind(
     i: &mut usize,
 ) -> Result<(), String> {
     once(&mut s.seen, f.name)?;
-    let v = option_value(args, i, f.name, inline)?;
+    let v = value(args, i, f.name, inline)?;
     let parsed: u64 = v
         .parse()
         .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
     if parsed < f.min {
         return Err(format!("{} {}", f.name, f.err_zero));
     }
-    apply_u64_flag(s, f, parsed);
+    unsigned(s, f, parsed);
     Ok(())
 }
 
 /// u64 值落位到对应 state 字段。
-fn apply_u64_flag(s: &mut ParseState, f: &Flag, parsed: u64) {
+fn unsigned(s: &mut ParseState, f: &Flag, parsed: u64) {
     match f.name {
         "--seed" => s.seed = parsed,
         "--annotate-max" => s.annotate_max = parsed as usize,
         "--recall" => s.recall = parsed as usize,
         "--max-bytes" => s.max_bytes = Some(parsed),
-        "--max-tokens" => s.max_tokens = Some(parsed),
+        "--max-tokens" => s.limit = Some(parsed),
         _ => unreachable!("U64 flag without arm: {}", f.name),
     }
 }
 
 /// 语义权重文件：加载 + SHA256 校验，失败即报错拒绝运行。
 #[cfg(feature = "semantic")]
-fn parse_semantic_kind(
+fn weights(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -923,16 +921,16 @@ fn parse_semantic_kind(
     i: &mut usize,
 ) -> Result<(), String> {
     once(&mut s.seen, f.name)?;
-    let v = option_value(args, i, f.name, inline)?;
+    let v = value(args, i, f.name, inline)?;
     let w = crate::semantic::Weights::load(&v).map_err(|e| format!("{}: {e}", f.name))?;
     s.config.semantic = Some(w);
     Ok(())
 }
 
 /// `--policy-file`：读文本策略覆盖 `DEFAULT`。优先级：CLI 显式参数 > 文件 > DEFAULT。
-/// 文件按 TOML 子集（`conf::parse_with_lineno`）解析；未知键 / 类型错 /
+/// 文件按 TOML 子集（`toml::numbered`）解析；未知键 / 类型错 /
 /// 范围越界均报错并带行号。CLI 已显式给出的字段（`s.seen`）不被文件覆盖。
-fn parse_policy_file(
+fn policy(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -940,10 +938,10 @@ fn parse_policy_file(
     i: &mut usize,
 ) -> Result<(), String> {
     once(&mut s.seen, f.name)?;
-    let path = option_value(args, i, f.name, inline)?;
+    let path = value(args, i, f.name, inline)?;
     let body = std::fs::read_to_string(&path)
         .map_err(|e| format!("{}: cannot read {}: {}", f.name, path, e))?;
-    let entries = crate::conf::parse_with_lineno(body.lines().enumerate().map(|(n, l)| (n + 1, l)));
+    let entries = crate::toml::numbered(body.lines().enumerate().map(|(n, l)| (n + 1, l)));
     for le in entries {
         if !le.entry.section.is_empty() {
             return Err(format!(
@@ -953,7 +951,7 @@ fn parse_policy_file(
         }
         let key = le.entry.key;
         let v = le.entry.value;
-        let Some(flag) = policy_flag(key) else {
+        let Some(flag) = lookup(key) else {
             return Err(format!(
                 "{}: {}:{}: unknown policy key `{}` (allowed: ratio/context/window/elide/risk_gate/lineno/max_tokens/structure)",
                 f.name, path, le.line, key
@@ -963,13 +961,13 @@ fn parse_policy_file(
         if s.seen.contains(flag) {
             continue;
         }
-        apply_policy_value(s, key, v, &path, le.line)?;
+        apply(s, key, v, &path, le.line)?;
     }
     Ok(())
 }
 
 /// 策略键到 CLI flag 的静态映射（表驱动，避免长 match 链）。
-fn policy_flag(key: &str) -> Option<&'static str> {
+fn lookup(key: &str) -> Option<&'static str> {
     const TABLE: &[(&str, &str)] = &[
         ("ratio", "--ratio"),
         ("context", "--context"),
@@ -984,47 +982,35 @@ fn policy_flag(key: &str) -> Option<&'static str> {
 }
 
 /// 单键策略值落位：类型 + 范围校验，失败带行号报错。
-fn apply_policy_value(
-    s: &mut ParseState,
-    key: &str,
-    v: &str,
-    path: &str,
-    line: usize,
-) -> Result<(), String> {
+fn apply(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Result<(), String> {
     match key {
-        "ratio" | "context" | "window" => apply_policy_numeric(s, key, v, path, line)?,
-        "elide" | "risk_gate" | "lineno" | "structure" => apply_policy_bool(s, key, v, path, line)?,
-        "max_tokens" => apply_policy_max_tokens(s, v, path, line)?,
+        "ratio" | "context" | "window" => number(s, key, v, path, line)?,
+        "elide" | "risk_gate" | "lineno" | "structure" => toggle(s, key, v, path, line)?,
+        "max_tokens" => tokens(s, v, path, line)?,
         _ => unreachable!("policy key whitelist"),
     }
     Ok(())
 }
 
 /// 数值类策略键的二级分派。
-fn apply_policy_numeric(
-    s: &mut ParseState,
-    key: &str,
-    v: &str,
-    path: &str,
-    line: usize,
-) -> Result<(), String> {
+fn number(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Result<(), String> {
     match key {
-        "ratio" => apply_policy_ratio(s, v, path, line),
-        "context" => apply_policy_context(s, v, path, line),
-        "window" => apply_policy_window(s, v, path, line),
+        "ratio" => ratio(s, v, path, line),
+        "context" => context(s, v, path, line),
+        "window" => window(s, v, path, line),
         _ => unreachable!("numeric policy key whitelist"),
     }
 }
 
-fn policy_err(path: &str, line: usize, msg: String) -> String {
+fn error(path: &str, line: usize, msg: String) -> String {
     format!("--policy-file: {path}:{line}: {msg}")
 }
 
-fn apply_policy_ratio(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
-    let r: f64 = crate::conf::parse_f64(v)
-        .ok_or_else(|| policy_err(path, line, format!("ratio must be a finite f64, got {v:?}")))?;
+fn ratio(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let r: f64 = crate::toml::float(v)
+        .ok_or_else(|| error(path, line, format!("ratio must be a finite f64, got {v:?}")))?;
     if !(crate::policy::MIN_RATIO..=1.0).contains(&r) {
-        return Err(policy_err(
+        return Err(error(
             path,
             line,
             format!("ratio must be in {}..=1.0", crate::policy::MIN_RATIO),
@@ -1034,14 +1020,9 @@ fn apply_policy_ratio(s: &mut ParseState, v: &str, path: &str, line: usize) -> R
     Ok(())
 }
 
-fn apply_policy_context(
-    s: &mut ParseState,
-    v: &str,
-    path: &str,
-    line: usize,
-) -> Result<(), String> {
-    let c = parse_i64_range(v, 0, crate::policy::MAX_CONTEXT).ok_or_else(|| {
-        policy_err(
+fn context(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let c = range(v, 0, crate::policy::MAX_CONTEXT).ok_or_else(|| {
+        error(
             path,
             line,
             format!("context must be 0..={}", crate::policy::MAX_CONTEXT),
@@ -1051,36 +1032,28 @@ fn apply_policy_context(
     Ok(())
 }
 
-fn apply_policy_window(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
-    let w = parse_i64_range(v, crate::policy::MIN_WINDOW, crate::policy::MAX_WINDOW).ok_or_else(
-        || {
-            policy_err(
-                path,
-                line,
-                format!(
-                    "window must be {}..={}",
-                    crate::policy::MIN_WINDOW,
-                    crate::policy::MAX_WINDOW
-                ),
-            )
-        },
-    )?;
+fn window(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let w = range(v, crate::policy::MIN_WINDOW, crate::policy::MAX_WINDOW).ok_or_else(|| {
+        error(
+            path,
+            line,
+            format!(
+                "window must be {}..={}",
+                crate::policy::MIN_WINDOW,
+                crate::policy::MAX_WINDOW
+            ),
+        )
+    })?;
     s.config.window = w;
     Ok(())
 }
 
 /// 0/1 布尔类策略键：先统一解析，再按键落位。
-fn apply_policy_bool(
-    s: &mut ParseState,
-    key: &str,
-    v: &str,
-    path: &str,
-    line: usize,
-) -> Result<(), String> {
-    let b = parse_bool0_1(v).ok_or_else(|| policy_err(path, line, format!("{key} must be 0/1")))?;
+fn toggle(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let b = zero(v).ok_or_else(|| error(path, line, format!("{key} must be 0/1")))?;
     match key {
         "elide" => s.config.elide = b,
-        "risk_gate" => s.config.risk_gate = b,
+        "risk_gate" => s.config.gate = b,
         "lineno" => s.config.lineno = b,
         "structure" => s.config.structure = b,
         _ => unreachable!("bool policy key whitelist"),
@@ -1088,25 +1061,20 @@ fn apply_policy_bool(
     Ok(())
 }
 
-fn apply_policy_max_tokens(
-    s: &mut ParseState,
-    v: &str,
-    path: &str,
-    line: usize,
-) -> Result<(), String> {
-    let m: usize = crate::conf::parse_usize(v).ok_or_else(|| {
-        policy_err(
+fn tokens(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let m: usize = crate::toml::size(v).ok_or_else(|| {
+        error(
             path,
             line,
             format!("max_tokens must be a non-negative integer, got {v:?}"),
         )
     })?;
-    s.config.max_tokens = Some(m);
+    s.config.limit = Some(m);
     Ok(())
 }
 
 /// `0/1` 布尔文本。
-fn parse_bool0_1(v: &str) -> Option<bool> {
+fn zero(v: &str) -> Option<bool> {
     match v {
         "0" => Some(false),
         "1" => Some(true),
@@ -1115,13 +1083,13 @@ fn parse_bool0_1(v: &str) -> Option<bool> {
 }
 
 /// i64 文本 + 范围校验。
-fn parse_i64_range(v: &str, lo: i64, hi: i64) -> Option<i64> {
+fn range(v: &str, lo: i64, hi: i64) -> Option<i64> {
     let n: i64 = v.parse().ok()?;
     (lo..=hi).contains(&n).then_some(n)
 }
 
 /// 0/1 开关。
-fn parse_bool01_kind(
+fn either(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -1129,11 +1097,11 @@ fn parse_bool01_kind(
     i: &mut usize,
 ) -> Result<(), String> {
     once(&mut s.seen, f.name)?;
-    let v = option_value(args, i, f.name, inline)?;
-    let b = parse_bool01(&v, f.name)?;
+    let v = value(args, i, f.name, inline)?;
+    let b = boolean(&v, f.name)?;
     match f.name {
         "--elide" => s.config.elide = b,
-        "--risk-gate" => s.config.risk_gate = b,
+        "--risk-gate" => s.config.gate = b,
         "--lineno" => s.config.lineno = b,
         "--structure" => s.config.structure = b,
         _ => s.store = b,
@@ -1142,14 +1110,14 @@ fn parse_bool01_kind(
 }
 
 /// 强制模式子串（`|` 分隔，允许重复）。
-fn parse_force(
+fn force(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
     args: &[String],
     i: &mut usize,
 ) -> Result<(), String> {
-    let v = option_value(args, i, f.name, inline)?;
+    let v = value(args, i, f.name, inline)?;
     if v.split('|').all(|p| p.trim().is_empty()) {
         return Err(format!("{} {}", f.name, f.err_empty));
     }
@@ -1158,7 +1126,7 @@ fn parse_force(
     for part in v.split('|') {
         let p = part.trim();
         if let Some(rest) = p.strip_prefix("re:") {
-            crate::regex::parse_regex(rest).map_err(|e| format!("{}: {e}", f.name))?;
+            crate::regex::parse(rest).map_err(|e| format!("{}: {e}", f.name))?;
         }
     }
     s.config.forces.push(v);
@@ -1166,7 +1134,7 @@ fn parse_force(
 }
 
 /// 反馈对（good/bad + case-id）。
-fn parse_rate_pair(
+fn pair(
     s: &mut ParseState,
     f: &Flag,
     inline: Option<String>,
@@ -1174,13 +1142,13 @@ fn parse_rate_pair(
     i: &mut usize,
 ) -> Result<(), String> {
     once(&mut s.seen, f.name)?;
-    let v = option_value(args, i, f.name, inline)?;
+    let v = value(args, i, f.name, inline)?;
     let good = match v.as_str() {
         "good" => true,
         "bad" => false,
         _ => return Err("--rate expects good or bad".to_string()),
     };
-    let id = option_value(args, i, f.name, None)?;
+    let id = value(args, i, f.name, None)?;
     if id.is_empty() {
         return Err("--rate requires a case-id".to_string());
     }
@@ -1189,7 +1157,7 @@ fn parse_rate_pair(
 }
 
 /// 无维护动作（rebuild/gc/delete/eval/l1-hist/stats/judge）时是否豁免 `--query`。
-fn action_free(s: &ParseState) -> bool {
+fn idle(s: &ParseState) -> bool {
     s.rate.is_none()
         && !s.rebuild
         && !s.gc
@@ -1201,13 +1169,13 @@ fn action_free(s: &ParseState) -> bool {
 }
 
 /// 标注动作（annotate/annotate-raw）豁免 `--query`。
-fn annotate_free(s: &ParseState) -> bool {
+fn exempt(s: &ParseState) -> bool {
     !s.annotate && !s.annotate_raw
 }
 
-fn validate_query(s: &ParseState) -> Result<(), String> {
+fn query(s: &ParseState) -> Result<(), String> {
     let query_empty = s.query.as_deref().unwrap_or("").is_empty();
-    if action_free(s) && annotate_free(s) && query_empty && s.config.forces.is_empty() {
+    if idle(s) && exempt(s) && query_empty && s.config.forces.is_empty() {
         return Err("missing --query (or provide at least one --force pattern)".to_string());
     }
     if s.recall_only && query_empty {
@@ -1216,7 +1184,7 @@ fn validate_query(s: &ParseState) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_judge(s: &ParseState) -> Result<(), String> {
+fn judge(s: &ParseState) -> Result<(), String> {
     if s.judge.is_some() && (s.annotate || s.annotate_raw || s.eval.is_some()) {
         return Err("--judge cannot be combined with --annotate/--annotate-raw/--eval".to_string());
     }
@@ -1226,8 +1194,8 @@ fn validate_judge(s: &ParseState) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_annotate(s: &ParseState) -> Result<(), String> {
-    if annotate_conflict(s) {
+fn annotation(s: &ParseState) -> Result<(), String> {
+    if conflict(s) {
         return Err(
             "--annotate/--annotate-raw cannot be combined with --eval/--l1-hist".to_string(),
         );
@@ -1235,24 +1203,24 @@ fn validate_annotate(s: &ParseState) -> Result<(), String> {
     if s.annotate && s.annotate_raw {
         return Err("--annotate and --annotate-raw are mutually exclusive".to_string());
     }
-    if annotate_requires_missing(s) {
+    if missing(s) {
         return Err("--annotate-out/--seed/--annotate-max require --annotate".to_string());
     }
     Ok(())
 }
 
 /// --annotate/--annotate-raw 与 --eval/--l1-hist 互斥。
-fn annotate_conflict(s: &ParseState) -> bool {
+fn conflict(s: &ParseState) -> bool {
     (s.annotate || s.annotate_raw) && (s.eval.is_some() || s.l1_hist)
 }
 
 /// 标注参数出现但未启用 --annotate。
-fn annotate_requires_missing(s: &ParseState) -> bool {
+fn missing(s: &ParseState) -> bool {
     (s.annotate_out.is_some() || s.seen.contains("--seed") || s.seen.contains("--annotate-max"))
         && !(s.annotate || s.annotate_raw)
 }
 
-fn validate_actions(s: &ParseState) -> Result<(), String> {
+fn actions(s: &ParseState) -> Result<(), String> {
     let actions = [
         s.rate.is_some(),
         s.rebuild,
@@ -1271,7 +1239,7 @@ fn validate_actions(s: &ParseState) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_gates(s: &ParseState) -> Result<(), String> {
+fn gates(s: &ParseState) -> Result<(), String> {
     let gate_count = [s.eval_gate, s.eval_gate_human, s.eval_gate_items]
         .iter()
         .filter(|v| **v)
@@ -1286,40 +1254,40 @@ fn validate_gates(s: &ParseState) -> Result<(), String> {
 }
 
 /// `--store` 相关的绑定约束（fix/fix-file/max-bytes/recall-only）。
-fn validate_store_binds(s: &ParseState) -> Result<(), String> {
-    if fix_needs_store(s) {
+fn store(s: &ParseState) -> Result<(), String> {
+    if fix(s) {
         return Err("--fix requires --store 1".to_string());
     }
-    if fix_file_needs_store(s) {
+    if file(s) {
         return Err("--fix-file requires --store 1".to_string());
     }
-    if max_bytes_needs_store(s) {
+    if bytes(s) {
         return Err("--max-bytes requires --store 1".to_string());
     }
-    if fix_conflict(s) {
+    if clash(s) {
         return Err("--fix and --fix-file are mutually exclusive".to_string());
     }
     Ok(())
 }
 
-fn fix_needs_store(s: &ParseState) -> bool {
+fn fix(s: &ParseState) -> bool {
     s.seen.contains("--fix") && !s.store
 }
 
-fn fix_file_needs_store(s: &ParseState) -> bool {
+fn file(s: &ParseState) -> bool {
     s.fix_file.is_some() && !s.store
 }
 
-fn max_bytes_needs_store(s: &ParseState) -> bool {
+fn bytes(s: &ParseState) -> bool {
     s.max_bytes.is_some() && !s.store
 }
 
-fn fix_conflict(s: &ParseState) -> bool {
+fn clash(s: &ParseState) -> bool {
     s.seen.contains("--fix") && s.fix_file.is_some()
 }
 
 /// `--recall` 相关的绑定约束（recall-only/recall-detail 与 store 互斥）。
-fn validate_recall_binds(s: &ParseState) -> Result<(), String> {
+fn recall(s: &ParseState) -> Result<(), String> {
     if s.recall_only && s.store {
         return Err("--recall-only cannot be combined with --store 1".to_string());
     }
@@ -1329,31 +1297,23 @@ fn validate_recall_binds(s: &ParseState) -> Result<(), String> {
     Ok(())
 }
 
-fn validate(s: &ParseState) -> Result<(), String> {
-    if stat_conflict(s) {
+fn check(s: &ParseState) -> Result<(), String> {
+    if stat(s) {
         return Err("--stat and --no-stats cannot be used together".to_string());
     }
-    type CheckFn = fn(&ParseState) -> Result<(), String>;
-    const CHECKS: [CheckFn; 7] = [
-        validate_query,
-        validate_judge,
-        validate_annotate,
-        validate_actions,
-        validate_gates,
-        validate_store_binds,
-        validate_recall_binds,
-    ];
+    type Check = fn(&ParseState) -> Result<(), String>;
+    const CHECKS: [Check; 7] = [query, judge, annotation, actions, gates, store, recall];
     for check in CHECKS {
         check(s)?;
     }
     Ok(())
 }
 
-fn stat_conflict(s: &ParseState) -> bool {
+fn stat(s: &ParseState) -> bool {
     s.stat && s.no_stats
 }
 
-fn into_opts(s: ParseState) -> Opts {
+fn finish(s: ParseState) -> Opts {
     let recall = if s.recall_only && !s.seen.contains("--recall") {
         3 // recall-only 未指定 K 时默认 top-3（与主流程 --recall 语义一致）
     } else {
@@ -1363,7 +1323,7 @@ fn into_opts(s: ParseState) -> Opts {
     // 仅 CLI 显式 `--max-tokens` 覆盖（优先级 CLI > 文件 > DEFAULT）；
     // 未显式时保留 `--policy-file` 写入的值，避免 None 覆盖文件设置。
     if s.seen.contains("--max-tokens") {
-        config.max_tokens = s.max_tokens.map(|v| v as usize);
+        config.limit = s.limit.map(|v| v as usize);
     }
     Opts {
         query: s.query.unwrap_or_default(),
@@ -1401,7 +1361,7 @@ fn into_opts(s: ParseState) -> Opts {
     }
 }
 
-fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
+fn all(args: Vec<String>) -> Result<Opts, String> {
     let mut s = ParseState::new();
     let mut i = 0usize;
     while i < args.len() {
@@ -1409,20 +1369,20 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
             s.files.extend(args[i + 1..].iter().cloned());
             break;
         }
-        parse_one_arg(&mut s, &args, &mut i)?;
+        one(&mut s, &args, &mut i)?;
         i += 1;
     }
-    validate(&s)?;
-    Ok(into_opts(s))
+    check(&s)?;
+    Ok(finish(s))
 }
 
 /// 解析并分派单个命令行 token（不含 `--` 终止符与循环步进）。
-fn parse_one_arg(s: &mut ParseState, args: &[String], i: &mut usize) -> Result<(), String> {
+fn one(s: &mut ParseState, args: &[String], i: &mut usize) -> Result<(), String> {
     let raw = &args[*i];
-    let (name, inline) = split_name_inline(raw);
-    match flag_by_name(name) {
-        Some(f) => parse_flag(s, f, inline, args, i),
-        None if unknown_option(raw) => Err(format!("unknown option: {}", raw)),
+    let (name, inline) = split(raw);
+    match find(name) {
+        Some(f) => flag(s, f, inline, args, i),
+        None if option(raw) => Err(format!("unknown option: {}", raw)),
         None => {
             s.files.push(raw.clone());
             Ok(())
@@ -1431,20 +1391,20 @@ fn parse_one_arg(s: &mut ParseState, args: &[String], i: &mut usize) -> Result<(
 }
 
 /// `--name=value` 拆分；仅长选项允许内联值。
-fn split_name_inline(raw: &str) -> (&str, Option<String>) {
+fn split(raw: &str) -> (&str, Option<String>) {
     match raw.split_once('=') {
         Some((n, v)) if n.starts_with("--") => (n, Some(v.to_string())),
         _ => (raw, None),
     }
 }
 
-fn unknown_option(raw: &str) -> bool {
+fn option(raw: &str) -> bool {
     raw.starts_with("--") || (raw.starts_with('-') && raw.len() > 1)
 }
 
-pub fn parse_args(args: &[String]) -> Result<Opts, String> {
+pub fn parse(args: &[String]) -> Result<Opts, String> {
     // help/version 短路由由 main 在调用前处理；此处只解析与校验。
-    parse_args_from(args.to_vec())
+    all(args.to_vec())
 }
 
 #[cfg(test)]
@@ -1457,21 +1417,21 @@ mod tests {
 
     #[test]
     fn rejects_unknown_options_and_bad_values() {
-        assert!(parse_args_from(args(&["--bogus", "x", "--query", "a"])).is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--ratio", "abc"])).is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--ratio", "-1"])).is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--context", "5"])).is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--window", "9"])).is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--elide", "2"])).is_err());
+        assert!(all(args(&["--bogus", "x", "--query", "a"])).is_err());
+        assert!(all(args(&["--query", "a", "--ratio", "abc"])).is_err());
+        assert!(all(args(&["--query", "a", "--ratio", "-1"])).is_err());
+        assert!(all(args(&["--query", "a", "--context", "5"])).is_err());
+        assert!(all(args(&["--query", "a", "--window", "9"])).is_err());
+        assert!(all(args(&["--query", "a", "--elide", "2"])).is_err());
     }
 
     #[test]
     fn rejects_missing_values_and_duplicate_scalars() {
-        assert!(parse_args_from(args(&["--query"])).is_err());
-        assert!(parse_args_from(args(&["--force", "--json"])).is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--query", "b"])).is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--seed", "1", "--seed", "2"])).is_err());
-        assert!(parse_args_from(args(&[
+        assert!(all(args(&["--query"])).is_err());
+        assert!(all(args(&["--force", "--json"])).is_err());
+        assert!(all(args(&["--query", "a", "--query", "b"])).is_err());
+        assert!(all(args(&["--query", "a", "--seed", "1", "--seed", "2"])).is_err());
+        assert!(all(args(&[
             "--query",
             "a",
             "--annotate-max",
@@ -1480,12 +1440,12 @@ mod tests {
             "2"
         ]))
         .is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--stat", "--no-stats"])).is_err());
+        assert!(all(args(&["--query", "a", "--stat", "--no-stats"])).is_err());
     }
 
     #[test]
     fn supports_equals_and_terminator() {
-        let o = parse_args_from(args(&[
+        let o = all(args(&[
             "--query=alpha",
             "--ratio=0.5",
             "--context=0",
@@ -1501,29 +1461,29 @@ mod tests {
 
     #[test]
     fn defaults_come_from_engine_config() {
-        let o = parse_args_from(args(&["--query", "q"])).unwrap();
+        let o = all(args(&["--query", "q"])).unwrap();
         let d = Config::default();
         assert_eq!(o.config.ratio, d.ratio);
         assert_eq!(o.config.context, d.context);
         assert_eq!(o.config.window, d.window);
         assert_eq!(o.config.elide, d.elide);
-        assert_eq!(o.config.risk_gate, d.risk_gate);
+        assert_eq!(o.config.gate, d.gate);
         assert_eq!(o.config.lineno, d.lineno);
     }
 
     #[test]
     fn query_can_be_empty_only_with_force() {
-        assert!(parse_args_from(args(&[])).is_err());
-        assert!(parse_args_from(args(&["--force="])).is_err());
-        assert!(parse_args_from(args(&["--force", "|"])).is_err());
-        let o = parse_args_from(args(&["--force", "SPECIAL"])).unwrap();
+        assert!(all(args(&[])).is_err());
+        assert!(all(args(&["--force="])).is_err());
+        assert!(all(args(&["--force", "|"])).is_err());
+        let o = all(args(&["--force", "SPECIAL"])).unwrap();
         assert_eq!(o.query, "");
         assert_eq!(o.config.forces, vec!["SPECIAL".to_string()]);
     }
 
     #[test]
     fn windows_and_booleans_are_normalized() {
-        let o = parse_args_from(args(&[
+        let o = all(args(&[
             "--query",
             "a",
             "--window",
@@ -1536,20 +1496,20 @@ mod tests {
         .unwrap();
         assert_eq!(o.config.window, 1);
         assert!(!o.config.elide);
-        assert!(!o.config.risk_gate);
-        let o2 = parse_args_from(args(&["--force=--json"])).unwrap();
+        assert!(!o.config.gate);
+        let o2 = all(args(&["--force=--json"])).unwrap();
         assert_eq!(o2.config.forces, vec!["--json".to_string()]);
-        let o3 = parse_args_from(args(&["--query", "a", "--lineno", "1"])).unwrap();
+        let o3 = all(args(&["--query", "a", "--lineno", "1"])).unwrap();
         assert!(o3.config.lineno);
-        let o4 = parse_args_from(args(&["--query", "a", "--lineno=0"])).unwrap();
+        let o4 = all(args(&["--query", "a", "--lineno=0"])).unwrap();
         assert!(!o4.config.lineno);
-        assert!(parse_args_from(args(&["--query", "a", "--lineno", "2"])).is_err());
-        assert!(parse_args_from(args(&["--query", "a", "--lineno"])).is_err());
+        assert!(all(args(&["--query", "a", "--lineno", "2"])).is_err());
+        assert!(all(args(&["--query", "a", "--lineno"])).is_err());
     }
 
     #[test]
     fn memory_flags_are_parsed() {
-        let o = parse_args_from(args(&[
+        let o = all(args(&[
             "--query",
             "q",
             "--store",
@@ -1564,7 +1524,7 @@ mod tests {
         assert_eq!(o.recall, 3);
         assert_eq!(o.mem_dir, "/tmp/m");
         // --fix 与 --store 绑定。
-        let o = parse_args_from(args(&[
+        let o = all(args(&[
             "--query",
             "q",
             "--store",
@@ -1574,65 +1534,62 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(o.fix, "enlarge pool");
-        assert!(parse_args_from(args(&["--query", "q", "--fix", "x"])).is_err());
-        assert!(parse_args_from(args(&["--query", "q", "--store", "1", "--fix="])).is_err());
-        assert!(parse_args_from(args(&["--query", "q", "--store", "2"])).is_err());
-        assert!(parse_args_from(args(&["--query", "q", "--recall", "0"])).is_err());
-        assert!(parse_args_from(args(&["--recall-only"])).is_err());
-        let o = parse_args_from(args(&["--query", "q", "--recall-only"])).unwrap();
+        assert!(all(args(&["--query", "q", "--fix", "x"])).is_err());
+        assert!(all(args(&["--query", "q", "--store", "1", "--fix="])).is_err());
+        assert!(all(args(&["--query", "q", "--store", "2"])).is_err());
+        assert!(all(args(&["--query", "q", "--recall", "0"])).is_err());
+        assert!(all(args(&["--recall-only"])).is_err());
+        let o = all(args(&["--query", "q", "--recall-only"])).unwrap();
         assert_eq!(o.recall, 3, "recall-only 未指定 K 时应默认 top-3");
         // 库维护参数不要求 --query。
-        let o = parse_args_from(args(&["--rebuild", "--mem-dir", "/tmp/m"])).unwrap();
+        let o = all(args(&["--rebuild", "--mem-dir", "/tmp/m"])).unwrap();
         assert!(o.rebuild);
-        let o = parse_args_from(args(&["--gc", "--mem-dir", "/tmp/m"])).unwrap();
+        let o = all(args(&["--gc", "--mem-dir", "/tmp/m"])).unwrap();
         assert!(o.gc);
-        let o = parse_args_from(args(&["--delete", "2026-10-22_ab12cd34"])).unwrap();
+        let o = all(args(&["--delete", "2026-10-22_ab12cd34"])).unwrap();
         assert_eq!(o.delete.as_deref(), Some("2026-10-22_ab12cd34"));
-        assert!(parse_args_from(args(&["--delete"])).is_err());
-        assert!(parse_args_from(args(&["--rebuild=x"])).is_err());
+        assert!(all(args(&["--delete"])).is_err());
+        assert!(all(args(&["--rebuild=x"])).is_err());
         // --eval 豁免 --query；--recall-detail 是独立开关。
-        let o = parse_args_from(args(&["--eval", "bl.json", "--mem-dir", "/tmp/m"])).unwrap();
+        let o = all(args(&["--eval", "bl.json", "--mem-dir", "/tmp/m"])).unwrap();
         assert_eq!(o.eval.as_deref(), Some("bl.json"));
         // --eval-verbose 需配合 --eval。
-        let o = parse_args_from(args(&["--eval", "bl.json", "--eval-verbose"])).unwrap();
+        let o = all(args(&["--eval", "bl.json", "--eval-verbose"])).unwrap();
         assert!(o.eval_verbose);
         // --gate 必须配 --eval，且不允许带值。
-        let o = parse_args_from(args(&["--eval", "bl.json", "--gate"])).unwrap();
+        let o = all(args(&["--eval", "bl.json", "--gate"])).unwrap();
         assert!(o.eval_gate);
-        assert!(parse_args_from(args(&["--gate"])).is_err());
-        assert!(parse_args_from(args(&["--eval", "bl.json", "--gate=x"])).is_err());
-        let o = parse_args_from(args(&["--eval", "bl.json", "--gate-human"])).unwrap();
+        assert!(all(args(&["--gate"])).is_err());
+        assert!(all(args(&["--eval", "bl.json", "--gate=x"])).is_err());
+        let o = all(args(&["--eval", "bl.json", "--gate-human"])).unwrap();
         assert!(o.eval_gate_human);
-        assert!(parse_args_from(args(&["--gate-human"])).is_err());
-        assert!(parse_args_from(args(&["--eval", "bl.json", "--gate", "--gate-human"])).is_err());
-        let o = parse_args_from(args(&["--eval", "bl.json", "--gate-items"])).unwrap();
+        assert!(all(args(&["--gate-human"])).is_err());
+        assert!(all(args(&["--eval", "bl.json", "--gate", "--gate-human"])).is_err());
+        let o = all(args(&["--eval", "bl.json", "--gate-items"])).unwrap();
         assert!(o.eval_gate_items);
+        assert!(all(args(&["--eval", "bl.json", "--gate-human", "--gate-items"])).is_err());
         assert!(
-            parse_args_from(args(&["--eval", "bl.json", "--gate-human", "--gate-items"])).is_err()
-        );
-        assert!(
-            parse_args_from(args(&["--eval-verbose"])).is_err(),
+            all(args(&["--eval-verbose"])).is_err(),
             "无 --eval 时 --eval-verbose 应报错"
         );
-        let o =
-            parse_args_from(args(&["--query", "q", "--recall", "3", "--recall-detail"])).unwrap();
+        let o = all(args(&["--query", "q", "--recall", "3", "--recall-detail"])).unwrap();
         assert!(o.recall_detail);
-        assert!(parse_args_from(args(&["--recall-detail=x"])).is_err());
-        assert!(parse_args_from(args(&["--eval"])).is_err());
+        assert!(all(args(&["--recall-detail=x"])).is_err());
+        assert!(all(args(&["--eval"])).is_err());
         // --stats 豁免 --query。
-        let o = parse_args_from(args(&["--stats", "--mem-dir", "/tmp/m"])).unwrap();
+        let o = all(args(&["--stats", "--mem-dir", "/tmp/m"])).unwrap();
         assert!(o.stats);
-        assert!(parse_args_from(args(&["--stats=x"])).is_err());
+        assert!(all(args(&["--stats=x"])).is_err());
     }
 
     #[test]
     fn rejects_conflicting_or_orphaned_actions() {
-        assert!(parse_args_from(args(&["--rebuild", "--gc"])).is_err());
-        assert!(parse_args_from(args(&["--stats", "--eval", "b.json"])).is_err());
-        assert!(parse_args_from(args(&["--query", "q", "--max-bytes", "10"])).is_err());
-        assert!(parse_args_from(args(&["--query", "q", "--recall-detail"])).is_err());
-        assert!(parse_args_from(args(&["--query", "q", "--seed", "1"])).is_err());
-        assert!(parse_args_from(args(&["--judge-by", "hao"])).is_err());
-        assert!(parse_args_from(args(&["--query", "q", "--store", "1", "--recall-only"])).is_err());
+        assert!(all(args(&["--rebuild", "--gc"])).is_err());
+        assert!(all(args(&["--stats", "--eval", "b.json"])).is_err());
+        assert!(all(args(&["--query", "q", "--max-bytes", "10"])).is_err());
+        assert!(all(args(&["--query", "q", "--recall-detail"])).is_err());
+        assert!(all(args(&["--query", "q", "--seed", "1"])).is_err());
+        assert!(all(args(&["--judge-by", "hao"])).is_err());
+        assert!(all(args(&["--query", "q", "--store", "1", "--recall-only"])).is_err());
     }
 }

@@ -55,7 +55,7 @@ impl<'a> Parser<'a> {
         self.src.get(self.pos).copied()
     }
 
-    fn skip_ws(&mut self) {
+    fn space(&mut self) {
         while let Some(b) = self.peek() {
             if b.is_ascii_whitespace() {
                 self.pos += 1;
@@ -66,7 +66,7 @@ impl<'a> Parser<'a> {
     }
 
     fn eat(&mut self, b: u8) -> Result<(), String> {
-        self.skip_ws();
+        self.space();
         if self.peek() == Some(b) {
             self.pos += 1;
             Ok(())
@@ -76,7 +76,7 @@ impl<'a> Parser<'a> {
     }
 
     fn value(&mut self) -> Result<Json, String> {
-        self.skip_ws();
+        self.space();
         match self.peek() {
             Some(b'{') => self.obj(),
             Some(b'[') => self.arr(),
@@ -168,13 +168,13 @@ impl<'a> Parser<'a> {
         self.eat(b'[')?;
         let mut items = Vec::new();
         loop {
-            self.skip_ws();
+            self.space();
             if self.peek() == Some(b']') {
                 self.pos += 1;
                 return Ok(Json::Arr(items));
             }
             items.push(self.value()?);
-            self.skip_ws();
+            self.space();
             if self.peek() == Some(b',') {
                 self.pos += 1;
             } else if self.peek() == Some(b']') {
@@ -190,7 +190,7 @@ impl<'a> Parser<'a> {
         self.eat(b'{')?;
         let mut kv = Vec::new();
         loop {
-            self.skip_ws();
+            self.space();
             if self.peek() == Some(b'}') {
                 self.pos += 1;
                 return Ok(Json::Obj(kv));
@@ -199,7 +199,7 @@ impl<'a> Parser<'a> {
             self.eat(b':')?;
             let val = self.value()?;
             kv.push((key, val));
-            self.skip_ws();
+            self.space();
             if self.peek() == Some(b',') {
                 self.pos += 1;
             } else if self.peek() == Some(b'}') {
@@ -213,10 +213,10 @@ impl<'a> Parser<'a> {
 }
 
 /// 解析 JSON 文本（递归下降；MCP 消息规模远小于深度限制风险）。
-pub fn parse_json(s: &str) -> Result<Json, String> {
+pub fn parse(s: &str) -> Result<Json, String> {
     let mut p = Parser::new(s);
     let v = p.value()?;
-    p.skip_ws();
+    p.space();
     if p.peek().is_some() {
         Err(format!("trailing data at pos {}", p.pos))
     } else {

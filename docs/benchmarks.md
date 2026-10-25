@@ -22,10 +22,10 @@
 | `--structure 1` 关 | 结构富语料（import/stack/fence+噪声，1,438,623 字符） | 7,888 µs | 7750–8539 | 3002 | 与开启同语料对比用 |
 | `--structure 1` 开 | 同上 | 8,813 µs | 8654–12581 | 3002 | 相对关闭 +12% 增量开销；kept 不变（结构并入不改变证据地板） |
 | `--max-tokens 2000` | 默认语料 | 12,029 µs | 11655–12181 | 1499 | `mode=overflow:evidence`（证据地板 > 2000，全部证据保留并如实报告） |
-| `--policy-file` 字段覆盖 | 默认语料 | 12,955 µs（压缩） | 12868–13147 | 1499 | conf 解析一次性 13,257 µs（per-invocation，与 CLI 层等价）；稳态压缩延迟与字段覆盖等价 |
+| `--policy-file` 字段覆盖 | 默认语料 | 12,955 µs（压缩） | 12868–13147 | 1499 | TOML 解析一次性 13,257 µs（per-invocation，与 CLI 层等价）；稳态压缩延迟与字段覆盖等价 |
 
 口径说明：
-- `--policy-file` 的 conf 解析是 **CLI 一次性开销**（读文件 + TOML 子集解析），
+- `--policy-file` 的 TOML 解析是 **CLI 一次性开销**（读文件 + TOML 子集解析），
   不进入每次压缩的热路径；完整 CLI 映射在 `args::parse_policy_file`，本表为
   字段级近似（ratio/context/max_tokens/structure 代表字段）。
 - `--max-tokens` 路径报告的是**加了上限检查的压缩延迟**；overflow 分支保留
