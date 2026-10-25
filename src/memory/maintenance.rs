@@ -40,21 +40,23 @@ pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
     let now_s = parse_utc_secs(&utc_now());
     let mut removed = 0usize;
     for id in store::list_ids(root)? {
-        let c = match store::read_case(root, &id) {
-            Ok(c) => c,
-            Err(_) => continue,
+        let Ok(c) = store::read_case(root, &id) else {
+            continue;
         };
-        let upd_s = parse_utc_secs(&c.updated_at);
-        let age_days = now_s.saturating_sub(upd_s) as f64 / 86_400.0;
-        // 带 fix 的 case（已沉淀"怎么解决"）不因 stale 过期——
-        // 经验价值最高，默认永不因"未反馈"被清；regressed 仍按短 TTL 清理。
-        let expired = (c.status == "regressed" && age_days > ttl_regressed)
-            || (c.quality == 0.0 && c.fix.is_empty() && age_days > ttl_stale);
-        if expired && delete_case(root, &id).unwrap_or(false) {
+        if case_expired(&c, now_s, ttl_regressed, ttl_stale)
+            && delete_case(root, &id).unwrap_or(false)
+        {
             removed += 1;
         }
     }
     Ok(removed)
+}
+
+/// 过期双条件：regressed 超短 TTL，或从未反馈且无 fix 且陈旧。
+fn case_expired(c: &store::Case, now_s: u64, ttl_regressed: f64, ttl_stale: f64) -> bool {
+    let age_days = now_s.saturating_sub(parse_utc_secs(&c.updated_at)) as f64 / 86_400.0;
+    (c.status == "regressed" && age_days > ttl_regressed)
+        || (c.quality == 0.0 && c.fix.is_empty() && age_days > ttl_stale)
 }
 
 /// 删除一个 case（物理删除 + 惰性作废索引 + 库代际前进）。
@@ -102,18 +104,14 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
     let mut wrote_df = false;
     for line in txt.lines() {
         let t = line.trim();
-        if t.starts_with('[') && t.ends_with(']') {
+        if is_section_line(t) {
             if t == "[df]" {
                 // 跳过旧 df 节，统一在末尾重写。
                 wrote_df = true;
                 continue;
             }
-            if !wrote_df && !df.is_empty() {
-                out.push("[df]".to_string());
-                for (k, v) in df {
-                    out.push(format!("{k} = {v}"));
-                }
-                out.push("".to_string());
+            if should_insert_df(wrote_df, df) {
+                out.extend(df_lines(df));
                 wrote_df = true;
             }
         }
@@ -123,16 +121,29 @@ fn write_meta_index(root: &str, n_docs: usize, df: &[(String, usize)]) {
         }
         out.push(line.to_string());
     }
-    if !wrote_df && !df.is_empty() {
-        out.push("[df]".to_string());
-        for (k, v) in df {
-            out.push(format!("{k} = {v}"));
-        }
-        out.push("".to_string());
+    if should_insert_df(wrote_df, df) {
+        out.extend(df_lines(df));
     }
     let mut body = out.join("\n");
     body.push('\n');
     let _ = crate::memory::lock::atomic_write(&p, body.as_bytes());
+}
+
+fn is_section_line(t: &str) -> bool {
+    t.starts_with('[') && t.ends_with(']')
+}
+
+fn should_insert_df(wrote_df: bool, df: &[(String, usize)]) -> bool {
+    !wrote_df && !df.is_empty()
+}
+
+fn df_lines(df: &[(String, usize)]) -> Vec<String> {
+    let mut out = vec!["[df]".to_string()];
+    for (k, v) in df {
+        out.push(format!("{k} = {v}"));
+    }
+    out.push(String::new());
+    out
 }
 
 /// `--stats` 盘点：case/桶/状态/fix 覆盖率/质量/磁盘占用。
@@ -145,18 +156,15 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
     let mut quality_sum = 0.0f64;
     let mut disk = 0u64;
     for id in &ids {
-        let c = store::read_case(root, id)?;
-        *buckets.entry(c.bucket.clone()).or_insert(0) += 1;
-        *statuses.entry(c.status.clone()).or_insert(0) += 1;
-        if !c.fix.is_empty() {
-            fix_n += 1;
-        }
-        quality_sum += c.quality;
-        let dir = store::case_path(root, id)
-            .parent()
-            .expect("case_path 必含 cases/<id>/case.json")
-            .to_path_buf();
-        disk += store::dir_bytes(&dir)?;
+        accumulate_stats(
+            root,
+            id,
+            &mut buckets,
+            &mut statuses,
+            &mut fix_n,
+            &mut quality_sum,
+            &mut disk,
+        )?;
     }
     let n = ids.len();
     let mut lines = Vec::with_capacity(6);
@@ -179,6 +187,30 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
     ));
     lines.push(format!("  disk: {:.1} KiB", disk as f64 / 1024.0));
     Ok(lines)
+}
+
+fn accumulate_stats(
+    root: &str,
+    id: &str,
+    buckets: &mut HashMap<String, usize>,
+    statuses: &mut HashMap<String, usize>,
+    fix_n: &mut usize,
+    quality_sum: &mut f64,
+    disk: &mut u64,
+) -> io::Result<()> {
+    let c = store::read_case(root, id)?;
+    *buckets.entry(c.bucket.clone()).or_insert(0) += 1;
+    *statuses.entry(c.status.clone()).or_insert(0) += 1;
+    if !c.fix.is_empty() {
+        *fix_n += 1;
+    }
+    *quality_sum += c.quality;
+    let dir = store::case_path(root, id)
+        .parent()
+        .expect("case_path 必含 cases/<id>/case.json")
+        .to_path_buf();
+    *disk += store::dir_bytes(&dir)?;
+    Ok(())
 }
 
 /// map 按 key 字典序输出（确定性）：`db=5 network=3 ...`。

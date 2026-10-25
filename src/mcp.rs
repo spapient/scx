@@ -11,6 +11,7 @@
 //! 默认构建不含 MCP 代码，压缩主路径与 v0.4.1 逐字节一致。
 
 #![forbid(unsafe_code)]
+#![warn(clippy::cognitive_complexity)]
 
 use scx::json::{parse_json, Json};
 
@@ -40,61 +41,87 @@ const TOOLS: &[(&str, &str)] = &[
 
 /// 单条消息的响应体（`None` = 无响应，如 notifications/initialized）。
 fn handle(line: &str, usage: &mut Usage) -> Option<String> {
-    let msg = match parse_json(line) {
+    let msg = match parse_msg(line) {
         Ok(v) => v,
-        Err(e) => {
-            return Some(error_frame(None, -32700, &format!("parse error: {e}")));
-        }
+        Err(frame) => return frame,
     };
     let id = msg.get("id").cloned();
-    let method = match msg.get("method").and_then(Json::str) {
-        Some(m) => m.to_string(),
-        None => {
-            return Some(error_frame(id, -32600, "invalid request: missing method"));
-        }
+    let Some(method) = msg.get("method").and_then(Json::str) else {
+        return Some(error_frame(id, -32600, "invalid request: missing method"));
     };
+    dispatch_method(method, id, &msg, usage)
+}
+
+/// 解析单条 JSON 消息；语法错误直接产出错误响应帧。
+fn parse_msg(line: &str) -> Result<Json, Option<String>> {
+    parse_json(line).map_err(|e| Some(error_frame(None, -32700, &format!("parse error: {e}"))))
+}
+
+/// 方法级分派：每种方法一个独立小函数，保持本函数单一职责。
+fn dispatch_method(
+    method: &str,
+    id: Option<Json>,
+    msg: &Json,
+    usage: &mut Usage,
+) -> Option<String> {
     let id_str = id_string(&id);
-    match method.as_str() {
-        "initialize" => Some(format!(
+    match method {
+        "initialize" => Some(init_frame(&id_str)),
+        "notifications/initialized" | "notifications/cancelled" => None,
+        "ping" => Some(ping_frame(&id_str)),
+        "tools/list" => Some(tools_list(&id_str)),
+        "tools/call" => tools_call(id, msg, usage),
+        _ => Some(error_frame(
+            id,
+            -32601,
+            &format!("method not found: {method}"),
+        )),
+    }
+}
+
+fn init_frame(id_str: &str) -> String {
+    format!(
             "{{\"jsonrpc\":\"2.0\",\"id\":{id_str},\"result\":{{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{{\"tools\":{{}}}},\"serverInfo\":{{\"name\":\"scx-mcp\",\"version\":\"{}\"}}}}}}",
             env!("CARGO_PKG_VERSION")
-        )),
-        "notifications/initialized" | "notifications/cancelled" => None,
-        "ping" => Some(format!(
-            "{{\"jsonrpc\":\"2.0\",\"id\":{id_str},\"result\":{{}}}}"
-        )),
-        "tools/list" => {
-            let mut items = String::new();
-            for (name, desc) in TOOLS {
-                if !items.is_empty() {
-                    items.push(',');
-                }
-                items.push_str(&format!(
-                    "{{\"name\":\"{name}\",\"description\":\"{}\"}}",
-                    desc.replace('"', "\\\"")
-                ));
-            }
-            Some(format!(
-                "{{\"jsonrpc\":\"2.0\",\"id\":{id_str},\"result\":{{\"tools\":[{items}]}}}}"
-            ))
+        )
+}
+
+fn ping_frame(id_str: &str) -> String {
+    format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_str},\"result\":{{}}}}")
+}
+
+fn tools_list(id_str: &str) -> String {
+    let mut items = String::new();
+    for (name, desc) in TOOLS {
+        if !items.is_empty() {
+            items.push(',');
         }
-        "tools/call" => {
-            let name = msg
-                .get("params")
-                .and_then(|p| p.get("name"))
-                .and_then(Json::str)
-                .unwrap_or("")
-                .to_string();
-            let args = msg.get("params").and_then(|p| p.get("arguments"));
-            Some(match name.as_str() {
-                "compress_context" => call_compress(id, args, usage),
-                "connect_account" => call_account(id),
-                "usage_summary" => call_usage(id, usage),
-                _ => error_frame(id, -32602, &format!("unknown tool: {name}")),
-            })
-        }
-        _ => Some(error_frame(id, -32601, &format!("method not found: {method}"))),
+        items.push_str(&tool_item(name, desc));
     }
+    format!("{{\"jsonrpc\":\"2.0\",\"id\":{id_str},\"result\":{{\"tools\":[{items}]}}}}")
+}
+
+fn tool_item(name: &str, desc: &str) -> String {
+    format!(
+        "{{\"name\":\"{name}\",\"description\":\"{}\"}}",
+        desc.replace('"', "\\\"")
+    )
+}
+
+fn tools_call(id: Option<Json>, msg: &Json, usage: &mut Usage) -> Option<String> {
+    let name = msg
+        .get("params")
+        .and_then(|p| p.get("name"))
+        .and_then(Json::str)
+        .unwrap_or("")
+        .to_string();
+    let args = msg.get("params").and_then(|p| p.get("arguments"));
+    Some(match name.as_str() {
+        "compress_context" => call_compress(id, args, usage),
+        "connect_account" => call_account(id),
+        "usage_summary" => call_usage(id, usage),
+        _ => error_frame(id, -32602, &format!("unknown tool: {name}")),
+    })
 }
 
 /// `id` 序列化（数字/字符串/空）。消息里 id 多为数字，宽容处理。
@@ -151,6 +178,16 @@ fn call_compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> St
         _ => return error_frame(id, -32602, "compress_context: missing text"),
     };
     let mut cfg = scx::Config::default();
+    apply_num_cfg(&mut cfg, args);
+    let outcome = scx::compress(&text, &query, &cfg);
+    usage.compressed += 1;
+    usage.chars_in += text.len() as u64;
+    usage.chars_out += outcome.text.len() as u64;
+    tool_result_frame(id, &scx::ops::render_json(&outcome))
+}
+
+/// 数值与开关参数落到压缩配置（缺省即保持 `Config::default()`）。
+fn apply_num_cfg(cfg: &mut scx::Config, args: &Json) {
     if let Some(r) = num_arg(args, "ratio") {
         cfg.ratio = r.min(1000) as f64 / 1000.0;
     }
@@ -164,11 +201,6 @@ fn call_compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> St
         cfg.max_tokens = Some(m);
     }
     cfg.structure = bool_arg(args, "structure");
-    let outcome = scx::compress(&text, &query, &cfg);
-    usage.compressed += 1;
-    usage.chars_in += text.len() as u64;
-    usage.chars_out += outcome.text.len() as u64;
-    tool_result_frame(id, &scx::ops::render_json(&outcome))
 }
 
 fn call_account(id: Option<Json>) -> String {

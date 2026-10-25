@@ -113,16 +113,24 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_atom(&mut self) -> Result<Node, String> {
-        let base = match self.bump().unwrap() {
+        let base = self.parse_base()?;
+        self.parse_quantifier(base)
+    }
+
+    fn parse_base(&mut self) -> Result<Node, String> {
+        match self.bump().unwrap() {
             '\\' => {
                 let esc = self
                     .bump()
                     .ok_or_else(|| "re: dangling \\ escape".to_string())?;
-                Node::Char(esc)
+                Ok(Node::Char(esc))
             }
-            '[' => self.parse_class()?,
-            c => Node::Char(c),
-        };
+            '[' => self.parse_class(),
+            c => Ok(Node::Char(c)),
+        }
+    }
+
+    fn parse_quantifier(&mut self, base: Node) -> Result<Node, String> {
         match self.peek() {
             Some('*') => {
                 self.bump();
@@ -155,33 +163,39 @@ impl<'a> Parser<'a> {
                 Some(']') if !first => break,
                 Some(c) => {
                     first = false;
-                    if c == ']' {
-                        // 首字符 `]` 为字面。
-                        ranges.push((']', ']'));
-                        continue;
-                    }
-                    if self.peek() == Some('-') && self.chars.get(self.pos + 1).is_some() {
-                        let hi = self.chars[self.pos + 1];
-                        if hi == ']' {
-                            // `-` 后紧跟 `]`：`-` 按字面处理。
-                            ranges.push((c, c));
-                            ranges.push(('-', '-'));
-                            self.bump();
-                            continue;
-                        }
-                        self.bump();
-                        self.bump();
-                        if hi < c {
-                            return Err(format!("re: inverted range [{c}-{hi}] in class"));
-                        }
-                        ranges.push((c, hi));
-                    } else {
-                        ranges.push((c, c));
-                    }
+                    self.push_class_item(c, &mut ranges)?;
                 }
             }
         }
         Ok(Node::Class { ranges, neg })
+    }
+
+    /// 消费字符类的一个成员（字面 / 范围），失败带具体错误。
+    fn push_class_item(&mut self, c: char, ranges: &mut Vec<(char, char)>) -> Result<(), String> {
+        if c == ']' {
+            // 首字符 `]` 为字面。
+            ranges.push((']', ']'));
+            return Ok(());
+        }
+        if self.peek() == Some('-') && self.chars.get(self.pos + 1).is_some() {
+            let hi = self.chars[self.pos + 1];
+            if hi == ']' {
+                // `-` 后紧跟 `]`：`-` 按字面处理。
+                ranges.push((c, c));
+                ranges.push(('-', '-'));
+                self.bump();
+                return Ok(());
+            }
+            self.bump();
+            self.bump();
+            if hi < c {
+                return Err(format!("re: inverted range [{c}-{hi}] in class"));
+            }
+            ranges.push((c, hi));
+        } else {
+            ranges.push((c, c));
+        }
+        Ok(())
     }
 }
 
@@ -252,73 +266,76 @@ fn compile(node: &Node, states: &mut Vec<St>) -> Frag {
                 neg: *neg,
             },
         ),
-        Node::Seq(items) => {
-            let mut frag = compile(&items[0], states);
-            for item in &items[1..] {
-                let next = compile(item, states);
-                patch(states, &frag.out, next.start);
-                frag.out = next.out;
-            }
-            frag
+        Node::Seq(items) => compile_seq(items, states),
+        Node::Alt(arms) => compile_alt(arms, states),
+        Node::Star(inner) => compile_repeat(inner, states, false),
+        Node::Plus(inner) => compile_repeat(inner, states, true),
+        Node::Opt(inner) => compile_opt(inner, states),
+    }
+}
+
+fn compile_seq(items: &[Node], states: &mut Vec<St>) -> Frag {
+    let mut frag = compile(&items[0], states);
+    for item in &items[1..] {
+        let next = compile(item, states);
+        patch(states, &frag.out, next.start);
+        frag.out = next.out;
+    }
+    frag
+}
+
+fn compile_alt(arms: &[Node], states: &mut Vec<St>) -> Frag {
+    let mut frag = compile(&arms[0], states);
+    for arm in &arms[1..] {
+        let next = compile(arm, states);
+        let id = states.len();
+        states.push(St {
+            kind: Kind::Split,
+            a: frag.start,
+            b: next.start,
+        });
+        frag.start = id;
+        frag.out.extend(next.out);
+    }
+    frag
+}
+
+/// Star/Plus 的共用编译：`keep_start` 区分入口（Star 从 split 入，Plus 从 inner 入）。
+fn compile_repeat(inner: &Node, states: &mut Vec<St>, keep_start: bool) -> Frag {
+    let inner = compile(inner, states);
+    let id = states.len();
+    states.push(St {
+        kind: Kind::Split,
+        a: inner.start,
+        b: OPEN,
+    });
+    patch(states, &inner.out, id);
+    if keep_start {
+        Frag {
+            start: inner.start,
+            out: vec![(id, false)],
         }
-        Node::Alt(arms) => {
-            let mut frag = compile(&arms[0], states);
-            for arm in &arms[1..] {
-                let next = compile(arm, states);
-                let id = states.len();
-                states.push(St {
-                    kind: Kind::Split,
-                    a: frag.start,
-                    b: next.start,
-                });
-                frag.start = id;
-                frag.out.extend(next.out);
-            }
-            frag
-        }
-        Node::Star(inner) => {
-            let inner = compile(inner, states);
-            let id = states.len();
-            states.push(St {
-                kind: Kind::Split,
-                a: inner.start,
-                b: OPEN,
-            });
-            patch(states, &inner.out, id); // 循环回 id
-            Frag {
-                start: id,
-                out: vec![(id, false)],
-            }
-        }
-        Node::Plus(inner) => {
-            let inner = compile(inner, states);
-            let id = states.len();
-            states.push(St {
-                kind: Kind::Split,
-                a: inner.start,
-                b: OPEN,
-            });
-            patch(states, &inner.out, id); // 循环
-            Frag {
-                start: inner.start,
-                out: vec![(id, false)],
-            }
-        }
-        Node::Opt(inner) => {
-            let inner = compile(inner, states);
-            let id = states.len();
-            states.push(St {
-                kind: Kind::Split,
-                a: inner.start,
-                b: OPEN,
-            });
-            Frag {
-                start: id,
-                out: vec![(id, false)],
-            }
-            .extend_outs(inner.out)
+    } else {
+        Frag {
+            start: id,
+            out: vec![(id, false)],
         }
     }
+}
+
+fn compile_opt(inner: &Node, states: &mut Vec<St>) -> Frag {
+    let inner = compile(inner, states);
+    let id = states.len();
+    states.push(St {
+        kind: Kind::Split,
+        a: inner.start,
+        b: OPEN,
+    });
+    Frag {
+        start: id,
+        out: vec![(id, false)],
+    }
+    .extend_outs(inner.out)
 }
 
 impl Frag {
@@ -408,15 +425,8 @@ impl Compiled {
         for ch in line.chars() {
             cur.clear();
             for &s in &closed {
-                match &self.states[s].kind {
-                    Kind::Char(c) if *c == ch => cur.push(self.states[s].a),
-                    Kind::Class { ranges, neg } => {
-                        let hit = ranges.iter().any(|(lo, hi)| *lo <= ch && ch <= *hi);
-                        if hit != *neg {
-                            cur.push(self.states[s].a);
-                        }
-                    }
-                    _ => {}
+                if let Some(next) = self.step(s, ch) {
+                    cur.push(next);
                 }
             }
             cur.push(self.start); // 非锚定：新位置重启
@@ -427,6 +437,18 @@ impl Compiled {
             }
         }
         false
+    }
+
+    /// 单状态单字符转移：Char 精确命中 / Class 命中取反语义；其余 ε 不转移。
+    fn step(&self, s: usize, ch: char) -> Option<usize> {
+        match &self.states[s].kind {
+            Kind::Char(c) if *c == ch => Some(self.states[s].a),
+            Kind::Class { ranges, neg } => {
+                let hit = ranges.iter().any(|(lo, hi)| *lo <= ch && ch <= *hi);
+                (hit != *neg).then_some(self.states[s].a)
+            }
+            _ => None,
+        }
     }
 }
 

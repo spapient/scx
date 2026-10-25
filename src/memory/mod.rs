@@ -130,12 +130,7 @@ pub fn recall_cases(
     let meta = store::load_meta(root)?;
     // 会话缓存命中直接返回快照（含 score/sim，L1 过滤可复用）。
     let cache_window = (meta.param("session_cache_minutes").max(0.0) * 60.0) as u64;
-    if let Some(hits) = query_cache::session_get(root, query, meta.gen, cache_window, k) {
-        let out: Vec<RecallHit> = hits
-            .into_iter()
-            .map(|(id, score, sim)| RecallHit { id, score, sim })
-            .collect();
-        debug_assert!(out.len() <= k, "session snapshot must respect k");
+    if let Some(out) = session_snapshot(root, query, &meta, cache_window, k) {
         return Ok(out);
     }
     let hits = if read_only {
@@ -143,17 +138,37 @@ pub fn recall_cases(
     } else {
         recall::recall(root, query, k, &meta)?
     };
-    if !hits.is_empty() && !read_only {
-        let snap: Vec<(String, f64, f64)> = hits
-            .iter()
-            .map(|h| (h.id.clone(), h.score, h.sim))
-            .collect();
-        let _ = query_cache::append(root, query, &snap, meta.gen); // 回流失败忽略
-        query_cache::session_put(root, query, snap, meta.gen);
-        // 记录 top1.sim 到 L1 滑动历史（旁路，失败静默）。
-        meta::push_l1_hist(root, hits[0].sim);
-    }
+    writeback(root, query, &hits, &meta, read_only);
     Ok(hits)
+}
+
+fn session_snapshot(
+    root: &str,
+    query: &str,
+    meta: &store::Meta,
+    cache_window: u64,
+    k: usize,
+) -> Option<Vec<RecallHit>> {
+    let hits = query_cache::session_get(root, query, meta.gen, cache_window, k)?;
+    let out: Vec<RecallHit> = hits
+        .into_iter()
+        .map(|(id, score, sim)| RecallHit { id, score, sim })
+        .collect();
+    debug_assert!(out.len() <= k, "session snapshot must respect k");
+    Some(out)
+}
+
+fn writeback(root: &str, query: &str, hits: &[RecallHit], meta: &store::Meta, read_only: bool) {
+    if hits.is_empty() || read_only {
+        return;
+    }
+    let snap: Vec<(String, f64, f64)> = hits
+        .iter()
+        .map(|h| (h.id.clone(), h.score, h.sim))
+        .collect();
+    let _ = query_cache::append(root, query, &snap, meta.gen); // 回流失败忽略
+    query_cache::session_put(root, query, snap, meta.gen);
+    meta::push_l1_hist(root, hits[0].sim);
 }
 
 /// 门面：反馈标注（状态机 + 质量分 + 词级调权 + L1 自适应基线）。

@@ -74,42 +74,58 @@ pub(crate) fn acquire(root: &str, name: &str) -> io::Result<FileLock> {
     let mut permission_retries = 0u32;
     loop {
         match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(mut f) => {
-                // token 落盘后其它进程才可能看到锁；写失败则移除，避免假锁。
-                if let Err(e) = writeln!(f, "{token}") {
-                    let _ = fs::remove_file(&path);
-                    return Err(e);
-                }
-                return Ok(FileLock { path, token });
-            }
-            Err(e)
-                if e.kind() == io::ErrorKind::AlreadyExists
-                    || e.kind() == io::ErrorKind::PermissionDenied =>
-            {
-                // Windows：锁文件处于 pending-delete 时 CreateFile(CREATE_NEW)
-                // 会返回 ACCESS_DENIED 而不是 ALREADY_EXISTS。给 1s 让删除完成；
-                // 超过后按真实权限错误返回，避免只读目录白等 10s。
-                if e.kind() == io::ErrorKind::PermissionDenied {
-                    permission_retries += 1;
-                    if permission_retries > 100 {
-                        return Err(e);
-                    }
-                }
-                if is_stale(&path) {
-                    let _ = fs::remove_file(&path);
-                    continue;
-                }
-                if Instant::now() >= deadline {
-                    return Err(io::Error::new(
-                        io::ErrorKind::WouldBlock,
-                        format!("memory lock busy: {}", path.display()),
-                    ));
-                }
-                thread::sleep(RETRY);
+            Ok(f) => return finish_lock(&path, f, &token),
+            Err(e) if contended(e.kind()) => {
+                wait_lock(&path, deadline, &e, &mut permission_retries)?;
             }
             Err(e) => return Err(e),
         }
     }
+}
+
+fn contended(kind: io::ErrorKind) -> bool {
+    kind == io::ErrorKind::AlreadyExists || kind == io::ErrorKind::PermissionDenied
+}
+
+fn finish_lock(path: &Path, mut f: fs::File, token: &str) -> io::Result<FileLock> {
+    // token 落盘后其它进程才可能看到锁；写失败则移除，避免假锁。
+    if let Err(e) = writeln!(f, "{token}") {
+        let _ = fs::remove_file(path);
+        return Err(e);
+    }
+    Ok(FileLock {
+        path: path.to_path_buf(),
+        token: token.to_string(),
+    })
+}
+
+fn wait_lock(
+    path: &Path,
+    deadline: Instant,
+    original: &io::Error,
+    permission_retries: &mut u32,
+) -> io::Result<()> {
+    let kind = original.kind();
+    // Windows：锁文件 pending-delete 时 CreateFile(CREATE_NEW) 返回
+    // ACCESS_DENIED；给 1s 让删除完成，超过按真实权限错误返回。
+    if kind == io::ErrorKind::PermissionDenied {
+        *permission_retries += 1;
+        if *permission_retries > 100 {
+            return Err(io::Error::new(kind, format!("memory lock: {original}")));
+        }
+    }
+    if is_stale(path) {
+        let _ = fs::remove_file(path);
+        return Ok(());
+    }
+    if Instant::now() >= deadline {
+        return Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            format!("memory lock busy: {}", path.display()),
+        ));
+    }
+    thread::sleep(RETRY);
+    Ok(())
 }
 
 /// 按固定序一次性获取多把锁（锁序契约见 `docs/locking.md`）。
@@ -148,18 +164,12 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     for attempt in 0..3 {
         let seq = TOKEN_SEQ.fetch_add(1, Ordering::Relaxed);
         let tmp = path.with_file_name(format!("{base}.tmp.{}.{seq}", std::process::id()));
-        let result = (|| {
-            let mut f = OpenOptions::new().write(true).create_new(true).open(&tmp)?;
-            f.write_all(bytes)?;
-            drop(f);
-            rename_retry(&tmp, path)
-        })();
+        let result = write_once(&tmp, path, bytes);
         match result {
             Ok(()) => return Ok(()),
             Err(e) => {
                 let _ = fs::remove_file(&tmp);
-                let transient = e.kind() == io::ErrorKind::PermissionDenied
-                    || e.kind() == io::ErrorKind::WouldBlock;
+                let transient = retryable(e.kind());
                 last = Some(io::Error::new(
                     e.kind(),
                     format!("atomic write {}: {e}", path.display()),
@@ -172,6 +182,17 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
         }
     }
     Err(last.expect("atomic_write always records an error"))
+}
+
+fn write_once(tmp: &Path, path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut f = OpenOptions::new().write(true).create_new(true).open(tmp)?;
+    f.write_all(bytes)?;
+    drop(f);
+    rename_retry(tmp, path)
+}
+
+fn retryable(kind: io::ErrorKind) -> bool {
+    kind == io::ErrorKind::PermissionDenied || kind == io::ErrorKind::WouldBlock
 }
 
 /// Windows 上目标文件可能被短暂打开（杀毒/索引/读者），rename 做有限重试。

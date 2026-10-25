@@ -71,26 +71,51 @@ fn collect_err_tokens(line: &str, out: &mut Vec<String>, seen: &mut Vec<String>)
     let bytes = line.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
-        if is_ident_start(bytes[i]) {
-            let s = i;
-            while i < bytes.len() && is_ident_char(bytes[i]) {
-                i += 1;
-            }
-            let key = &line[s..i];
-            if i < bytes.len() && bytes[i] == b'=' {
-                let v = i + 1;
-                let mut j = v;
-                while j < bytes.len() && is_val_char(bytes[j]) {
-                    j += 1;
-                }
-                if j > v && bytes[v..j].iter().any(|&b| b.is_ascii_digit()) {
-                    push_capped(out, &format!("{key}={}", &line[v..j]).to_lowercase(), seen);
-                }
-            }
-        } else {
-            i += 1;
-        }
+        i = scan_err_ident(line, bytes, i, out, seen);
     }
+}
+
+/// 扫描单个 ident；若其后接 `=` 则尝试收集值，否则推进到 ident 末尾。
+fn scan_err_ident(
+    line: &str,
+    bytes: &[u8],
+    i: usize,
+    out: &mut Vec<String>,
+    seen: &mut Vec<String>,
+) -> usize {
+    if !is_ident_start(bytes[i]) {
+        return i + 1;
+    }
+    let s = i;
+    let mut j = i;
+    while j < bytes.len() && is_ident_char(bytes[j]) {
+        j += 1;
+    }
+    let key = &line[s..j];
+    if j < bytes.len() && bytes[j] == b'=' {
+        collect_err_value(line, bytes, j + 1, key, out, seen)
+    } else {
+        j
+    }
+}
+
+/// 收集 `=` 后的值 token（含数字才入集），返回扫描终点。
+fn collect_err_value(
+    line: &str,
+    bytes: &[u8],
+    v: usize,
+    key: &str,
+    out: &mut Vec<String>,
+    seen: &mut Vec<String>,
+) -> usize {
+    let mut j = v;
+    while j < bytes.len() && is_val_char(bytes[j]) {
+        j += 1;
+    }
+    if j > v && bytes[v..j].iter().any(|&b| b.is_ascii_digit()) {
+        push_capped(out, &format!("{key}={}", &line[v..j]).to_lowercase(), seen);
+    }
+    j
 }
 
 /// 收集 `path.ext:line` 形式的位置（统一小写）。

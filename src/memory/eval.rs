@@ -129,10 +129,7 @@ fn parse_rel(
     let mut rel = HashMap::new();
     if let Some((_, Val::Obj(rel_kvs))) = kvs.iter().find(|(k, _)| k == "rel") {
         for (rk, rv) in rel_kvs {
-            let r = match rv {
-                Val::Num(n) if n.is_finite() && (0.0..=2.0).contains(n) => *n,
-                _ => return Err(format!("baseline: cases[{i}].rel.{rk} not 0..=2 number")),
-            };
+            let r = rel_value(rv, i, rk)?;
             rel.insert(rk.clone(), r);
         }
     }
@@ -140,11 +137,22 @@ fn parse_rel(
     // 不同）。先按同一匹配口径找已有标签，避免为同一 case 再插入 rel=1
     // 的重复键；否则 rel_of 会因 HashMap 遍历顺序随机取到 1 或 2。
     for e in expected {
-        if !rel.keys().any(|k| id_matches(e, k) || id_matches(k, e)) {
+        if !rel_has_match(&rel, e) {
             rel.insert(e.clone(), 1.0);
         }
     }
     Ok(rel)
+}
+
+fn rel_value(rv: &Val, i: usize, rk: &str) -> Result<f64, String> {
+    match rv {
+        Val::Num(n) if n.is_finite() && (0.0..=2.0).contains(n) => Ok(*n),
+        _ => Err(format!("baseline: cases[{i}].rel.{rk} not 0..=2 number")),
+    }
+}
+
+fn rel_has_match(rel: &HashMap<String, f64>, e: &str) -> bool {
+    rel.keys().any(|k| id_matches(e, k) || id_matches(k, e))
 }
 
 /// 读取 judge 元数据供 --gate 校验。自动标注集没有 judge
@@ -317,33 +325,53 @@ fn run_impl(
     let eval_now_s = crate::memory::util::parse_utc_secs(&meta.created_at);
     let (l1_base, l1_margin) = crate::memory::feedback::l1_params(&meta);
     let plain = PlainScorer::load(root, &meta)?;
-    let mut l1_hit = 0usize;
-    let mut l1_total = 0usize;
-    // 分层顺序按首次出现保持（golden 稳定）。
-    let mut layers: Vec<String> = Vec::new();
-    // [n, A:r5,r10,mrr,ndcg, B:r5,r10,mrr,ndcg]；semantic 层报告 r@10（弱相关口径）。
-    let mut agg: HashMap<String, [f64; 9]> = HashMap::new();
-    // 每层每 case 的 A/B mrr/ndcg 值（bootstrap 95% CI 重采样用）。
-    let mut per: HashMap<String, [Vec<f64>; 4]> = HashMap::new();
-    // verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
-    let mut diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)> = Vec::new();
+    let mut acc = EvalAcc::default();
     for c in &cases {
         let a = recall::recall_at(root, &c.query, 10, eval_now_s, &meta)?;
         let b = plain.search(&c.query, 10);
+        acc.fold_case(c, a, b, l1_base, l1_margin, verbose);
+    }
+    build_report(&cases, &acc, verbose, gate_mode)
+}
+
+/// 一次重放的累加状态：分层顺序按首次出现保持（golden 稳定）。
+#[derive(Default)]
+struct EvalAcc {
+    l1_hit: usize,
+    l1_total: usize,
+    layers: Vec<String>,
+    /// [n, A:r5,r10,mrr,ndcg, B:r5,r10,mrr,ndcg]；semantic 层报告 r@10（弱相关口径）。
+    agg: HashMap<String, [f64; 9]>,
+    /// 每层每 case 的 A/B mrr/ndcg 值（bootstrap 95% CI 重采样用）。
+    per: HashMap<String, [Vec<f64>; 4]>,
+    /// verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
+    diag: Vec<(String, Vec<RecallHit>, Vec<RecallHit>)>,
+}
+
+impl EvalAcc {
+    fn fold_case(
+        &mut self,
+        c: &EvalCase,
+        a: Vec<RecallHit>,
+        b: Vec<RecallHit>,
+        l1_base: f64,
+        l1_margin: f64,
+        verbose: bool,
+    ) {
         if let Some(top) = a.first() {
             if hit_expected(&c.expected, &top.id) {
-                l1_total += 1;
+                self.l1_total += 1;
                 let margin_ok = a
                     .get(1)
                     .is_none_or(|second| top.score - second.score >= l1_margin);
                 if top.sim >= l1_base && margin_ok {
-                    l1_hit += 1;
+                    self.l1_hit += 1;
                 }
             }
         }
         let (ar5, ar10, amrr, andcg) = metric(c, &a);
         let (br5, br10, bmrr, bndcg) = metric(c, &b);
-        let e = agg.entry(c.layer.clone()).or_insert([0.0; 9]);
+        let e = self.agg.entry(c.layer.clone()).or_insert([0.0; 9]);
         e[0] += 1.0;
         e[1] += ar5;
         e[2] += ar10;
@@ -353,21 +381,31 @@ fn run_impl(
         e[6] += br10;
         e[7] += bmrr;
         e[8] += bndcg;
-        let p = per
+        let p = self
+            .per
             .entry(c.layer.clone())
             .or_insert_with(|| [Vec::new(), Vec::new(), Vec::new(), Vec::new()]);
         p[0].push(amrr);
         p[1].push(andcg);
         p[2].push(bmrr);
         p[3].push(bndcg);
-        if !layers.iter().any(|l| l == &c.layer) {
-            layers.push(c.layer.clone());
+        if !self.layers.iter().any(|l| l == &c.layer) {
+            self.layers.push(c.layer.clone());
         }
         if verbose {
-            diag.push((c.query.clone(), a, b));
+            self.diag.push((c.query.clone(), a, b));
         }
     }
-    let mut out = Vec::with_capacity(layers.len() + 2);
+}
+
+/// 汇总报告行 + 门禁判定；返回（输出行，是否未通过门禁）。
+fn build_report(
+    cases: &[EvalCase],
+    acc: &EvalAcc,
+    verbose: bool,
+    gate_mode: Option<GateMode>,
+) -> std::io::Result<(Vec<String>, bool)> {
+    let mut out = Vec::with_capacity(acc.layers.len() + 2);
     // 报告 NDCG 判别强度——multi-rel 条目（expected>1 或 rel 多值）
     // 使 NDCG 非二值；single-rel 条目 NDCG 接近二值（单相关时评估严格性有限）。
     let multi_rel = cases
@@ -377,43 +415,53 @@ fn run_impl(
     out.push(format!(
         "eval: cases={} layers={} multi-rel={} single-rel={} (NDCG strength)",
         cases.len(),
-        layers.join(","),
+        acc.layers.join(","),
         multi_rel,
         cases.len().saturating_sub(multi_rel)
     ));
-    for l in &layers {
-        let e = agg.get(l).unwrap_or(&[0.0; 9]);
-        out.push(layer_line(l, e, per.get(l).unwrap()));
+    for l in &acc.layers {
+        let e = acc.agg.get(l).unwrap_or(&[0.0; 9]);
+        out.push(layer_line(l, e, acc.per.get(l).unwrap()));
     }
     // L1 直答命中率出表。
-    let l1_rate = if l1_total > 0 {
-        l1_hit as f64 / l1_total as f64
+    let l1_rate = if acc.l1_total > 0 {
+        acc.l1_hit as f64 / acc.l1_total as f64
     } else {
         0.0
     };
     out.push(format!(
-        "l1: hits={l1_hit} total={l1_total} rate={l1_rate:.3}"
+        "l1: hits={} total={} rate={l1_rate:.3}",
+        acc.l1_hit, acc.l1_total
     ));
     // 机械门——样本量/分层/裁决元数据/主指标 A≥B。
     let mut gate_failed = false;
     if let Some(mode) = gate_mode {
-        let g = match mode {
-            GateMode::Mechanical => crate::memory::gate::check(&cases, &layers, &agg),
-            GateMode::Human => crate::memory::gate::check_human(&cases, &layers, &agg),
-            GateMode::Items => crate::memory::gate::check_items(&cases, &layers, &agg),
-        };
+        let g = gate_check(mode, cases, acc);
         out.extend(g.lines);
         gate_failed = g.failed;
     }
     // 逐 case 诊断段（A/B 各 top-10，case 尾 8 位与 --eval 口径一致）。
     if verbose {
-        for (i, (q, a, b)) in diag.iter().enumerate() {
-            out.push(format!("case {}/{} q=\"{}\"", i + 1, diag.len(), q));
+        for (i, (q, a, b)) in acc.diag.iter().enumerate() {
+            out.push(format!("case {}/{} q=\"{}\"", i + 1, acc.diag.len(), q));
             out.push(format!("  A: {}", fmt_hits(a, &cases[i])));
             out.push(format!("  B: {}", fmt_hits(b, &cases[i])));
         }
     }
     Ok((out, gate_failed))
+}
+
+/// 按门禁模式选择检查器。
+fn gate_check(
+    mode: GateMode,
+    cases: &[EvalCase],
+    acc: &EvalAcc,
+) -> crate::memory::gate::GateResult {
+    match mode {
+        GateMode::Mechanical => crate::memory::gate::check(cases, &acc.layers, &acc.agg),
+        GateMode::Human => crate::memory::gate::check_human(cases, &acc.layers, &acc.agg),
+        GateMode::Items => crate::memory::gate::check_items(cases, &acc.layers, &acc.agg),
+    }
 }
 
 /// 分层报告行：强相关层用 r@5，semantic 弱相关层用 r@10；CI 固定 seed。

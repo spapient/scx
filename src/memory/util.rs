@@ -85,26 +85,9 @@ fn sanitize_once(s: &str) -> Option<String> {
     let mut changed = false;
     while i < b.len() {
         if let Some((key_len, sep_len)) = match_key_value(b, i) {
-            // key + 分隔符（保留键名与分隔符原样）。
-            let key_end = i + key_len + sep_len;
-            out.push_str(&s[i..key_end]);
-            // 值：到空白/逗号/分号/引号/尖括号边界；空值不替换。
-            // Bearer/Basic 前缀的整个 `Bearer <token>` 一并替换（Authorization 一行收敛）。
-            let mut v = key_end;
-            if let Some(tok_end) = match_bearer_value(b, v) {
-                v = tok_end;
-            } else {
-                while v < b.len() && !is_val_boundary(b[v]) {
-                    v += 1;
-                }
-            }
-            if v > key_end {
-                out.push_str("<redacted>");
-                changed = true;
-                i = v;
-            } else {
-                i = key_end;
-            }
+            let (next, redacted) = redact_key_value(b, s, i, key_len, sep_len, &mut out);
+            i = next;
+            changed |= redacted;
             continue;
         }
         if let Some((pw_start, at_pos)) = match_url_userinfo(b, i) {
@@ -128,33 +111,72 @@ fn sanitize_once(s: &str) -> Option<String> {
     changed.then_some(out)
 }
 
+/// 敏感键分支：保留键与分隔符，值替换为 `<redacted>`（含 `Bearer <token>`）。
+fn redact_key_value(
+    b: &[u8],
+    s: &str,
+    i: usize,
+    key_len: usize,
+    sep_len: usize,
+    out: &mut String,
+) -> (usize, bool) {
+    let key_end = i + key_len + sep_len;
+    out.push_str(&s[i..key_end]);
+    let mut v = key_end;
+    if let Some(tok_end) = match_bearer_value(b, v) {
+        v = tok_end;
+    } else {
+        v = token_end(b, v);
+    }
+    if v > key_end {
+        out.push_str("<redacted>");
+        (v, true)
+    } else {
+        (key_end, false)
+    }
+}
+
+fn is_ws(c: u8) -> bool {
+    c == b' ' || c == b'\t'
+}
+
+fn is_sep(c: u8) -> bool {
+    c == b'=' || c == b':'
+}
+
+fn key_prefix_matches(b: &[u8], i: usize, k: &[u8]) -> bool {
+    b.len() - i > k.len() && b[i..i + k.len()].eq_ignore_ascii_case(k)
+}
+
+fn skip_ws(b: &[u8], mut j: usize) -> usize {
+    while j < b.len() && is_ws(b[j]) {
+        j += 1;
+    }
+    j
+}
+
+fn token_end(b: &[u8], mut n: usize) -> usize {
+    while n < b.len() && !is_val_boundary(b[n]) {
+        n += 1;
+    }
+    n
+}
+
 /// 位置 i 是否以敏感键开头（大小写不敏感）且键后紧跟 `=`/`:`（可带空白）。
 /// 返回 (键字节长, 分隔符字节长含键后空白)。
 fn match_key_value(b: &[u8], i: usize) -> Option<(usize, usize)> {
     for key in SENSITIVE_KEYS {
         let k = key.as_bytes();
-        if b.len() - i < k.len() + 1 {
+        if !key_prefix_matches(b, i, k) {
             continue;
         }
-        if !b[i..i + k.len()].eq_ignore_ascii_case(k) {
+        let j = skip_ws(b, i + k.len());
+        if j >= b.len() || !is_sep(b[j]) {
             continue;
         }
-        let mut j = i + k.len();
-        let mut sep_len = 0usize;
-        while j < b.len() && (b[j] == b' ' || b[j] == b'\t') {
-            j += 1;
-            sep_len += 1;
-        }
-        if j >= b.len() || (b[j] != b'=' && b[j] != b':') {
-            continue;
-        }
-        sep_len += 1; // '=' 或 ':'
-                      // 分隔符后的前导空白也并入分隔符（`passwd: hunter2` → sep=": "）。
-        j += 1;
-        while j < b.len() && (b[j] == b' ' || b[j] == b'\t') {
-            j += 1;
-            sep_len += 1;
-        }
+        let mut sep_len = j - (i + k.len()) + 1; // 键后空白 + '=' / ':'
+        let after = skip_ws(b, j + 1);
+        sep_len += after - (j + 1); // 分隔符后空白
         return Some((k.len(), sep_len));
     }
     None
@@ -175,14 +197,9 @@ fn match_url_userinfo(b: &[u8], i: usize) -> Option<(usize, usize)> {
         return None;
     }
     let mut j = i + 3;
-    while j < b.len() && !matches!(b[j], b'/' | b'@' | b' ' | b'\t' | b'\r' | b'\n') {
+    while j < b.len() && !userinfo_break(b[j]) {
         if b[j] == b':' {
-            // 找到 user:pass@ 形态。
-            let mut k = j + 1;
-            while k < b.len() && !matches!(b[k], b'@' | b'/' | b' ' | b'\t' | b'\r' | b'\n') {
-                k += 1;
-            }
-            if k < b.len() && b[k] == b'@' {
+            if let Some(k) = scan_password_end(b, j + 1) {
                 return Some((j + 1, k));
             }
         }
@@ -191,57 +208,50 @@ fn match_url_userinfo(b: &[u8], i: usize) -> Option<(usize, usize)> {
     None
 }
 
+fn userinfo_break(c: u8) -> bool {
+    matches!(c, b'/' | b'@' | b' ' | b'\t' | b'\r' | b'\n')
+}
+
+fn scan_password_end(b: &[u8], mut k: usize) -> Option<usize> {
+    while k < b.len() && !userinfo_break(b[k]) {
+        k += 1;
+    }
+    (k < b.len() && b[k] == b'@').then_some(k)
+}
+
 /// `Bearer <token>` / `Basic <token>`：键 + 空白 + 8+ 字符值到空白边界。
 fn match_bearer(b: &[u8], i: usize) -> Option<usize> {
-    for kw in ["Bearer", "Basic"] {
-        let k = kw.as_bytes();
-        if b.len() - i < k.len() + 2 {
-            continue;
-        }
-        if !b[i..i + k.len()].eq_ignore_ascii_case(k) {
-            continue;
-        }
-        let mut j = i + k.len();
-        if b[j] != b' ' && b[j] != b'\t' {
-            continue;
-        }
-        j += 1;
-        let mut n = j;
-        while n < b.len() && !is_val_boundary(b[n]) {
-            n += 1;
-        }
-        if n - j >= 8 {
-            return Some(n - j);
-        }
-    }
-    None
+    bearer_scan(b, i).map(|(start, end)| end - start)
 }
 
 /// 从位置 i 起，若值以 `Bearer `/`Basic ` 开头且 token ≥8 字符，返回 token 末尾
 /// （把整个 `Bearer <token>` 交给上层一并替换；否则返回 None 走普通值扫描）。
 fn match_bearer_value(b: &[u8], i: usize) -> Option<usize> {
+    bearer_scan(b, i).map(|(_, end)| end)
+}
+
+/// Bearer/Basic 扫描：返回 (token 起点, token 末尾)。
+fn bearer_scan(b: &[u8], i: usize) -> Option<(usize, usize)> {
     for kw in ["Bearer", "Basic"] {
         let k = kw.as_bytes();
-        if b.len() - i < k.len() + 2 {
+        if !bearer_prefix(b, i, k) {
             continue;
         }
-        if !b[i..i + k.len()].eq_ignore_ascii_case(k) {
+        let j = i + k.len();
+        if !is_ws(b[j]) {
             continue;
         }
-        let mut j = i + k.len();
-        if b[j] != b' ' && b[j] != b'\t' {
-            continue;
-        }
-        j += 1;
-        let mut n = j;
-        while n < b.len() && !is_val_boundary(b[n]) {
-            n += 1;
-        }
-        if n - j >= 8 {
-            return Some(n);
+        let start = j + 1;
+        let end = token_end(b, start);
+        if end - start >= 8 {
+            return Some((start, end));
         }
     }
     None
+}
+
+fn bearer_prefix(b: &[u8], i: usize, k: &[u8]) -> bool {
+    b.len() - i >= k.len() + 2 && b[i..i + k.len()].eq_ignore_ascii_case(k)
 }
 
 /// 终端输出安全转义：C0 控制字符与 ESC/ANSI 序列
@@ -249,22 +259,27 @@ fn match_bearer_value(b: &[u8], i: usize) -> Option<usize> {
 pub fn escape_ctrl(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
-        let u = ch as u32;
-        if ch == '\n' {
-            out.push_str("\\n");
-        } else if ch == '\t' {
-            out.push_str("\\t");
-        } else if ch == '\r' {
-            out.push_str("\\r");
-        } else if u == 0x1b {
-            out.push_str("\\x1b");
-        } else if u < 0x20 || u == 0x7f {
-            out.push_str(&format!("\\x{u:02x}"));
-        } else {
-            out.push(ch);
-        }
+        push_escaped(ch, &mut out);
     }
     out
+}
+
+/// 单字符转义：C0 / DEL / ESC → 可见字面，其余原样。
+fn push_escaped(ch: char, out: &mut String) {
+    let u = ch as u32;
+    if ch == '\n' {
+        out.push_str("\\n");
+    } else if ch == '\t' {
+        out.push_str("\\t");
+    } else if ch == '\r' {
+        out.push_str("\\r");
+    } else if u == 0x1b {
+        out.push_str("\\x1b");
+    } else if u < 0x20 || u == 0x7f {
+        out.push_str(&format!("\\x{u:02x}"));
+    } else {
+        out.push(ch);
+    }
 }
 
 /// Howard Hinnant 的 civil_from_days：days-since-epoch → (年, 月, 日)。

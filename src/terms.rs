@@ -31,30 +31,39 @@ pub(crate) fn is_cjk_or_fullwidth(c: char) -> bool {
 
 /// 压缩与记忆库共享的词法扫描；两种口径只在 CJK 子词展开策略上不同。
 fn build_terms_mode(query: &str, memory: bool) -> Vec<String> {
-    let stop = |s: &str| STOP.contains(&s);
-    let is_tok = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || "_./\\:@-".contains(c);
     let mut terms: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
+    let lower = query.to_lowercase();
+    scan_ascii_terms(&lower, &mut terms, &mut seen);
+    if terms.len() < MAX_QUERY_TERMS {
+        scan_cjk_terms(query, &mut terms, &mut seen, memory);
+    }
+    terms
+}
+
+/// ASCII/标点词法扫描：按分隔符切词，停用词与超长 token 不入词表。
+fn scan_ascii_terms(lower: &str, terms: &mut Vec<String>, seen: &mut HashSet<String>) {
     let mut cur = String::new();
-    for c in query.to_lowercase().chars() {
-        if is_tok(c) {
+    for c in lower.chars() {
+        if is_tok_char(c) {
             cur.push(c);
             continue;
         }
-        if cur.len() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
-            push_unique(&mut terms, &mut seen, cur.clone());
+        if valid_ascii_term(&cur) {
+            push_unique(terms, seen, cur.clone());
             if terms.len() >= MAX_QUERY_TERMS {
-                return terms;
+                return;
             }
         }
         cur.clear();
     }
-    if cur.len() >= 2 && cur.len() <= MAX_TERM_BYTES && !stop(&cur) {
-        push_unique(&mut terms, &mut seen, cur);
+    if valid_ascii_term(&cur) {
+        push_unique(terms, seen, cur);
     }
-    if terms.len() >= MAX_QUERY_TERMS {
-        return terms;
-    }
+}
+
+/// CJK 词法扫描：连续 CJK 字符成段，段长 >=2 进入词表。
+fn scan_cjk_terms(query: &str, terms: &mut Vec<String>, seen: &mut HashSet<String>, memory: bool) {
     let mut run = String::new();
     for c in query.chars() {
         if is_cjk(c) {
@@ -62,17 +71,24 @@ fn build_terms_mode(query: &str, memory: bool) -> Vec<String> {
             continue;
         }
         if run.chars().count() >= 2 {
-            push_cjk(&mut terms, &mut seen, &run, memory);
+            push_cjk(terms, seen, &run, memory);
             if terms.len() >= MAX_QUERY_TERMS {
-                return terms;
+                return;
             }
         }
         run.clear();
     }
     if run.chars().count() >= 2 {
-        push_cjk(&mut terms, &mut seen, &run, memory);
+        push_cjk(terms, seen, &run, memory);
     }
-    terms
+}
+
+fn is_tok_char(c: char) -> bool {
+    c.is_ascii_lowercase() || c.is_ascii_digit() || "_./\\:@-".contains(c)
+}
+
+fn valid_ascii_term(cur: &str) -> bool {
+    cur.len() >= 2 && cur.len() <= MAX_TERM_BYTES && !STOP.contains(&cur)
 }
 
 fn push_unique(terms: &mut Vec<String>, seen: &mut HashSet<String>, term: String) {
@@ -102,21 +118,26 @@ fn push_cjk(terms: &mut Vec<String>, seen: &mut HashSet<String>, run: &str, memo
     while start < chars.len() {
         let end = (start + 6).min(chars.len());
         if end - start >= 2 {
-            if memory {
-                push_zh(terms, seen, &chars[start..end]);
-            } else {
-                push_unique(terms, seen, chars[start..end].iter().collect());
-            }
+            push_cjk_segment(terms, seen, &chars[start..end], memory);
         }
         start += 6;
     }
     if chars.len() % 6 == 1 {
         let tail = &chars[chars.len() - 2..];
-        if memory {
-            push_zh(terms, seen, tail);
-        } else {
-            push_unique(terms, seen, tail.iter().collect());
-        }
+        push_cjk_segment(terms, seen, tail, memory);
+    }
+}
+
+fn push_cjk_segment(
+    terms: &mut Vec<String>,
+    seen: &mut HashSet<String>,
+    segment: &[char],
+    memory: bool,
+) {
+    if memory {
+        push_zh(terms, seen, segment);
+    } else {
+        push_unique(terms, seen, segment.iter().collect());
     }
 }
 

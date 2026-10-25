@@ -17,15 +17,19 @@ pub enum Val {
 /// 字符串转义（JSON 字符串字面量所需的最小集）。
 pub fn escape_str(s: &str, out: &mut String) {
     for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
+        escape_char(c, out);
+    }
+}
+
+fn escape_char(c: char, out: &mut String) {
+    match c {
+        '"' => out.push_str("\\\""),
+        '\\' => out.push_str("\\\\"),
+        '\n' => out.push_str("\\n"),
+        '\r' => out.push_str("\\r"),
+        '\t' => out.push_str("\\t"),
+        c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+        c => out.push(c),
     }
 }
 
@@ -232,11 +236,8 @@ impl<'a> Parser<'a> {
             self.skip_ws();
             items.push(self.value()?);
             self.skip_ws();
-            match self.next() {
-                Some(b',') => continue,
-                Some(b']') => return Ok(Val::Arr(items)),
-                Some(other) => return Err(format!("expected , or ] got {:?}", other as char)),
-                None => return Err("unterminated array".to_string()),
+            if !self.consume_sep(b']', "array")? {
+                return Ok(Val::Arr(items));
             }
         }
     }
@@ -257,12 +258,22 @@ impl<'a> Parser<'a> {
             let v = self.value()?;
             kvs.push((key, v));
             self.skip_ws();
-            match self.next() {
-                Some(b',') => continue,
-                Some(b'}') => return Ok(Val::Obj(kvs)),
-                Some(other) => return Err(format!("expected , or }} got {:?}", other as char)),
-                None => return Err("unterminated object".to_string()),
+            if !self.consume_sep(b'}', "object")? {
+                return Ok(Val::Obj(kvs));
             }
+        }
+    }
+
+    /// 容器分隔符：`,` 继续、闭合符结束；其余或 EOF 报错。
+    fn consume_sep(&mut self, close: u8, name: &str) -> Result<bool, String> {
+        match self.next() {
+            Some(b',') => Ok(true),
+            Some(c) if c == close => Ok(false),
+            Some(other) => Err(format!(
+                "expected , or {} got {:?}",
+                close as char, other as char
+            )),
+            None => Err(format!("unterminated {name}")),
         }
     }
 }

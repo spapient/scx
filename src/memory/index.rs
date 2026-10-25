@@ -314,22 +314,28 @@ pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
         return Ok(None);
     }
     let mtime = p.metadata().and_then(|m| m.modified()).ok();
-    if let Some(mt) = mtime {
-        let g = cache().lock().unwrap();
-        if let Some((r, t, idx)) = g.as_ref() {
-            if r == root && *t == mt {
-                return Ok(Some(idx.clone()));
-            }
-        }
+    if let Some(idx) = cached_index(root, mtime.as_ref()) {
+        return Ok(Some(idx));
     }
     let buf = fs::read(&p)?;
     let parsed: Option<Index> = parse(&buf).map(Some)?;
     let arc = parsed.map(Arc::new);
-    if let (Some(mt), Some(idx)) = (mtime, arc.as_ref()) {
+    store_cache(root, mtime, arc.as_ref());
+    Ok(arc)
+}
+
+fn cached_index(root: &str, mtime: Option<&std::time::SystemTime>) -> Option<Arc<Index>> {
+    let mt = mtime?;
+    let g = cache().lock().unwrap();
+    let (r, t, idx) = g.as_ref()?;
+    (r == root && t == mt).then(|| idx.clone())
+}
+
+fn store_cache(root: &str, mtime: Option<std::time::SystemTime>, idx: Option<&Arc<Index>>) {
+    if let (Some(mt), Some(idx)) = (mtime, idx) {
         let mut g = cache().lock().unwrap();
         *g = Some((root.to_string(), mt, idx.clone()));
     }
-    Ok(arc)
 }
 
 /// 解析失败统一错误（postings.bin corrupt: ...）。
@@ -364,10 +370,19 @@ fn take_str(body: &[u8], i: &mut usize) -> std::io::Result<String> {
 
 /// 从游标语境取一个 u32 长度前缀的字符串列表（用于 4 个字段向量）。
 fn take_vec(body: &[u8], i: &mut usize) -> std::io::Result<Vec<String>> {
-    let n = take_u32(body, i).ok_or_else(|| corrupt("no field n"))? as usize;
+    let n = take_count(body, i, "no field n")?;
+    take_n_strs(body, i, n)
+}
+
+fn take_count(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<usize> {
+    let n = take_u32(body, i).ok_or_else(|| corrupt(what))? as usize;
     if n > body.len() {
-        return Err(corrupt("field count exceeds body"));
+        return Err(corrupt(&format!("{what} exceeds body")));
     }
+    Ok(n)
+}
+
+fn take_n_strs(body: &[u8], i: &mut usize, n: usize) -> std::io::Result<Vec<String>> {
     let mut v = Vec::with_capacity(n);
     for _ in 0..n {
         v.push(take_str(body, i)?);
@@ -375,8 +390,27 @@ fn take_vec(body: &[u8], i: &mut usize) -> std::io::Result<Vec<String>> {
     Ok(v)
 }
 
+fn take_f32(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<f32> {
+    if *i + 4 > body.len() {
+        return Err(corrupt(what));
+    }
+    let v = f32::from_le_bytes(body[*i..*i + 4].try_into().unwrap());
+    *i += 4;
+    Ok(v)
+}
+
 /// 校验 header（magic/version/body_len/crc32），返回 body 切片。
 fn open_body(buf: &[u8]) -> std::io::Result<&[u8]> {
+    let (body_end, total_len) = validate_header(buf)?;
+    let body = &buf[14..body_end];
+    let crc = u32::from_le_bytes(buf[body_end..total_len].try_into().unwrap());
+    if crc32(body) != crc {
+        return Err(corrupt("crc mismatch"));
+    }
+    Ok(body)
+}
+
+fn validate_header(buf: &[u8]) -> std::io::Result<(usize, usize)> {
     if buf.len() < 14 {
         return Err(corrupt("too short"));
     }
@@ -388,6 +422,14 @@ fn open_body(buf: &[u8]) -> std::io::Result<&[u8]> {
     if ver != POST_VER {
         return Err(corrupt("bad version"));
     }
+    let (body_end, total_len) = body_lengths(buf)?;
+    if total_len != buf.len() {
+        return Err(corrupt("bad body_len"));
+    }
+    Ok((body_end, total_len))
+}
+
+fn body_lengths(buf: &[u8]) -> std::io::Result<(usize, usize)> {
     let body_len = usize::try_from(u64::from_le_bytes(buf[6..14].try_into().unwrap()))
         .map_err(|_| corrupt("body_len too large"))?;
     let body_end = 14usize
@@ -396,15 +438,7 @@ fn open_body(buf: &[u8]) -> std::io::Result<&[u8]> {
     let total_len = body_end
         .checked_add(4)
         .ok_or_else(|| corrupt("file length overflow"))?;
-    if total_len != buf.len() {
-        return Err(corrupt("bad body_len"));
-    }
-    let body = &buf[14..body_end];
-    let crc = u32::from_le_bytes(buf[body_end..total_len].try_into().unwrap());
-    if crc32(body) != crc {
-        return Err(corrupt("crc mismatch"));
-    }
-    Ok(body)
+    Ok((body_end, total_len))
 }
 
 /// 解析 doc 表（n_docs 条打分快照），返回 (ids, docs)。
@@ -416,48 +450,21 @@ fn parse_doc_recs(
     let mut ids: Vec<Arc<str>> = Vec::with_capacity(n_docs);
     let mut docs: Vec<DocRec> = Vec::with_capacity(n_docs);
     for _ in 0..n_docs {
-        let id = take_str(body, i)?;
-        let nterms = take_u32(body, i).ok_or_else(|| corrupt("no doc nterms"))? as usize;
-        if nterms > body.len() {
-            return Err(corrupt("doc nterms exceeds body"));
-        }
-        let mut terms = Vec::with_capacity(nterms);
-        for _ in 0..nterms {
-            terms.push(take_str(body, i)?);
-        }
-        let nqterms = take_u32(body, i).ok_or_else(|| corrupt("no doc nqterms"))? as usize;
-        if nqterms > body.len() {
-            return Err(corrupt("doc nqterms exceeds body"));
-        }
-        let mut query_terms = Vec::with_capacity(nqterms);
-        for _ in 0..nqterms {
-            query_terms.push(take_str(body, i)?);
-        }
-        let nbuckets = take_u32(body, i).ok_or_else(|| corrupt("no doc nbuckets"))? as usize;
-        if nbuckets > body.len() {
-            return Err(corrupt("doc nbuckets exceeds body"));
-        }
-        let mut buckets = Vec::with_capacity(nbuckets);
-        for _ in 0..nbuckets {
-            buckets.push(take_str(body, i)?);
-        }
-        let fields = crate::memory::store::Fields {
-            error_code: take_vec(body, i)?,
-            file_loc: take_vec(body, i)?,
-            symbol: take_vec(body, i)?,
-            num_fp: take_vec(body, i)?,
-        };
-        let bucket = take_str(body, i)?;
-        let status = take_str(body, i)?;
-        if *i + 4 > body.len() {
-            return Err(corrupt("no quality"));
-        }
-        let quality = f32::from_le_bytes(body[*i..*i + 4].try_into().unwrap()) as f64;
-        *i += 4;
-        let updated_at = take_str(body, i)?;
-        let updated_s = crate::memory::util::parse_utc_secs(&updated_at);
-        ids.push(id.into());
-        docs.push(DocRec {
+        let (id, doc) = parse_doc(body, i)?;
+        ids.push(id);
+        docs.push(doc);
+    }
+    Ok((ids, docs))
+}
+
+fn parse_doc(body: &[u8], i: &mut usize) -> std::io::Result<(Arc<str>, DocRec)> {
+    let (id, terms, query_terms, buckets) = parse_doc_terms(body, i)?;
+    let fields = parse_doc_fields(body, i)?;
+    let (bucket, status, quality, updated_at) = parse_doc_tail(body, i)?;
+    let updated_s = crate::memory::util::parse_utc_secs(&updated_at);
+    Ok((
+        id.into(),
+        DocRec {
             terms: terms.into(),
             query_terms: query_terms.into(),
             buckets,
@@ -467,9 +474,38 @@ fn parse_doc_recs(
             quality,
             updated_at: updated_at.into(),
             updated_s,
-        });
-    }
-    Ok((ids, docs))
+        },
+    ))
+}
+
+type DocTerms = (String, Vec<String>, Vec<String>, Vec<String>);
+
+fn parse_doc_terms(body: &[u8], i: &mut usize) -> std::io::Result<DocTerms> {
+    let id = take_str(body, i)?;
+    let nterms = take_count(body, i, "no doc nterms")?;
+    let terms = take_n_strs(body, i, nterms)?;
+    let nqterms = take_count(body, i, "no doc nqterms")?;
+    let query_terms = take_n_strs(body, i, nqterms)?;
+    let nbuckets = take_count(body, i, "no doc nbuckets")?;
+    let buckets = take_n_strs(body, i, nbuckets)?;
+    Ok((id, terms, query_terms, buckets))
+}
+
+fn parse_doc_fields(body: &[u8], i: &mut usize) -> std::io::Result<crate::memory::store::Fields> {
+    Ok(crate::memory::store::Fields {
+        error_code: take_vec(body, i)?,
+        file_loc: take_vec(body, i)?,
+        symbol: take_vec(body, i)?,
+        num_fp: take_vec(body, i)?,
+    })
+}
+
+fn parse_doc_tail(body: &[u8], i: &mut usize) -> std::io::Result<(String, String, f64, String)> {
+    let bucket = take_str(body, i)?;
+    let status = take_str(body, i)?;
+    let quality = take_f32(body, i, "no quality")? as f64;
+    let updated_at = take_str(body, i)?;
+    Ok((bucket, status, quality, updated_at))
 }
 
 /// 解析 term 表（n_terms 条倒排），返回 term → (df, doc_idx 升序列表)。
@@ -481,54 +517,51 @@ fn parse_dict(
 ) -> std::io::Result<HashMap<String, (usize, Vec<usize>)>> {
     let mut dict: HashMap<String, (usize, Vec<usize>)> = HashMap::with_capacity(n_terms);
     for _ in 0..n_terms {
-        if *i + 2 > body.len() {
-            return Err(corrupt("term len truncated"));
-        }
-        let tlen = u16::from_le_bytes(body[*i..*i + 2].try_into().unwrap()) as usize;
-        *i += 2;
-        if *i + tlen + 4 > body.len() {
-            return Err(corrupt("term overflow"));
-        }
-        let term = String::from_utf8_lossy(&body[*i..*i + tlen]).into_owned();
-        *i += tlen;
-        let df = u32::from_le_bytes(body[*i..*i + 4].try_into().unwrap()) as usize;
-        *i += 4;
-        if df > body.len() {
-            return Err(corrupt("df exceeds body"));
-        }
-        let mut post = Vec::with_capacity(df);
-        let mut prev = 0usize;
-        for _ in 0..df {
-            let d = varint_get(body, i).ok_or_else(|| corrupt("posting varint"))?;
-            let doc = prev + d as usize;
-            if doc >= n_docs {
-                return Err(corrupt("doc idx overflow"));
-            }
-            post.push(doc);
-            prev = doc;
-        }
-        dict.insert(term, (df, post));
+        let (term, entry) = parse_term(body, n_docs, i)?;
+        dict.insert(term, entry);
     }
     Ok(dict)
+}
+
+fn parse_term(
+    body: &[u8],
+    n_docs: usize,
+    i: &mut usize,
+) -> std::io::Result<(String, (usize, Vec<usize>))> {
+    if *i + 2 > body.len() {
+        return Err(corrupt("term len truncated"));
+    }
+    let tlen = u16::from_le_bytes(body[*i..*i + 2].try_into().unwrap()) as usize;
+    *i += 2;
+    if *i + tlen + 4 > body.len() {
+        return Err(corrupt("term overflow"));
+    }
+    let term = String::from_utf8_lossy(&body[*i..*i + tlen]).into_owned();
+    *i += tlen;
+    let df = u32::from_le_bytes(body[*i..*i + 4].try_into().unwrap()) as usize;
+    *i += 4;
+    if df > body.len() {
+        return Err(corrupt("df exceeds body"));
+    }
+    let mut post = Vec::with_capacity(df);
+    let mut prev = 0usize;
+    for _ in 0..df {
+        let d = varint_get(body, i).ok_or_else(|| corrupt("posting varint"))?;
+        let doc = prev + d as usize;
+        if doc >= n_docs {
+            return Err(corrupt("doc idx overflow"));
+        }
+        post.push(doc);
+        prev = doc;
+    }
+    Ok((term, (df, post)))
 }
 
 /// 解析字节切片为内存索引（纯函数，输入来自 fs::read）。
 pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
     let body = open_body(buf)?;
     let mut i = 0usize;
-    let n_docs = take_u32(body, &mut i).ok_or_else(|| corrupt("no n_docs"))? as usize;
-    if n_docs > body.len() {
-        return Err(corrupt("n_docs exceeds body"));
-    }
-    if i + 8 > body.len() {
-        return Err(corrupt("no total_len"));
-    }
-    let total_len = u64::from_le_bytes(body[i..i + 8].try_into().unwrap()) as usize;
-    i += 8;
-    let n_terms = take_u32(body, &mut i).ok_or_else(|| corrupt("no n_terms"))? as usize;
-    if n_terms > body.len() {
-        return Err(corrupt("n_terms exceeds body"));
-    }
+    let (n_docs, total_len, n_terms) = parse_header_counts(body, &mut i)?;
     let (ids, docs) = parse_doc_recs(body, n_docs, &mut i)?;
     let dict = parse_dict(body, n_terms, n_docs, &mut i)?;
     Ok(Index {
@@ -539,6 +572,23 @@ pub(crate) fn parse(buf: &[u8]) -> std::io::Result<Index> {
         dict,
         entities: OnceLock::new(),
     })
+}
+
+fn parse_header_counts(body: &[u8], i: &mut usize) -> std::io::Result<(usize, usize, usize)> {
+    let n_docs = take_u32(body, i).ok_or_else(|| corrupt("no n_docs"))? as usize;
+    if n_docs > body.len() {
+        return Err(corrupt("n_docs exceeds body"));
+    }
+    if *i + 8 > body.len() {
+        return Err(corrupt("no total_len"));
+    }
+    let total_len = u64::from_le_bytes(body[*i..*i + 8].try_into().unwrap()) as usize;
+    *i += 8;
+    let n_terms = take_u32(body, i).ok_or_else(|| corrupt("no n_terms"))? as usize;
+    if n_terms > body.len() {
+        return Err(corrupt("n_terms exceeds body"));
+    }
+    Ok((n_docs, total_len, n_terms))
 }
 
 /// 候选：query 词命中 doc 的并集（去重、按 doc_idx 升序 → 确定性）。

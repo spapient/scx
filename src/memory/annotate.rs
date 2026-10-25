@@ -247,17 +247,22 @@ fn rewrite(c: &Case, seed: u64) -> Option<String> {
         }
     }
     if !replaced {
-        for (from, to) in SYN.iter() {
-            if replace_ci(&mut out, from, to) {
-                replaced = true;
-                break;
-            }
-        }
+        force_first_synonym(&mut out, &mut replaced);
     }
     if !replaced || out == c.query {
         return None;
     }
     Some(out)
+}
+
+/// 零替换兜底：强制替换第一个可替换词（保证变体 ≠ 原 query）。
+fn force_first_synonym(out: &mut String, replaced: &mut bool) {
+    for (from, to) in SYN.iter() {
+        if replace_ci(out, from, to) {
+            *replaced = true;
+            break;
+        }
+    }
 }
 
 /// 大小写不敏感字面替换（首次命中即替换，避免同词多轮扰动）。
@@ -371,38 +376,49 @@ pub(crate) fn write_baseline(cases: &[AnnotatedCase]) -> String {
         if i > 0 {
             body.push(',');
         }
-        body.push_str(&format!(
-            "{{\"query\":{},\"layer\":\"{}\",\"expected\":[\"{}\"]",
-            quote(&c.query),
-            c.layer,
-            c.expected[0]
-        ));
-        if c.judged {
-            body.push_str(&format!(
-                ",\"rel\":{{\"{}\":{}}}",
-                c.expected[0],
-                fmt_rel(c.rel)
-            ));
-        } else {
-            body.push_str(",\"judge\":null");
-        }
-        if !c.evidence.is_empty() {
-            body.push_str(",\"evidence\":[");
-            for (j, e) in c.evidence.iter().enumerate() {
-                if j > 0 {
-                    body.push(',');
-                }
-                body.push_str(&quote(e));
-            }
-            body.push(']');
-        }
-        if !c.note.is_empty() {
-            body.push_str(&format!(",\"note\":{}", quote(&c.note)));
-        }
-        body.push('}');
+        push_case_json(&mut body, c);
     }
     body.push_str("]}");
     body
+}
+
+/// 单条 case 的 JSON 序列化。
+fn push_case_json(body: &mut String, c: &AnnotatedCase) {
+    body.push_str(&format!(
+        "{{\"query\":{},\"layer\":\"{}\",\"expected\":[\"{}\"]",
+        quote(&c.query),
+        c.layer,
+        c.expected[0]
+    ));
+    if c.judged {
+        body.push_str(&format!(
+            ",\"rel\":{{\"{}\":{}}}",
+            c.expected[0],
+            fmt_rel(c.rel)
+        ));
+    } else {
+        body.push_str(",\"judge\":null");
+    }
+    push_evidence_json(body, &c.evidence);
+    if !c.note.is_empty() {
+        body.push_str(&format!(",\"note\":{}", quote(&c.note)));
+    }
+    body.push('}');
+}
+
+/// evidence 数组序列化（空则跳过）。
+fn push_evidence_json(body: &mut String, evidence: &[String]) {
+    if evidence.is_empty() {
+        return;
+    }
+    body.push_str(",\"evidence\":[");
+    for (j, e) in evidence.iter().enumerate() {
+        if j > 0 {
+            body.push(',');
+        }
+        body.push_str(&quote(e));
+    }
+    body.push(']');
 }
 
 /// rel 序列化：2.0 → "2"，1.0 → "1"（省体积，eval 解析 0..=2 数值容错整数）。
@@ -487,31 +503,52 @@ pub(crate) fn judge(path: &str, by: &str) -> io::Result<Vec<String>> {
     let mut skipped = 0usize;
     let mut judged_rows: Vec<String> = Vec::new();
     for (i, item) in cases.iter_mut().enumerate() {
-        let kvs = match item {
-            Val::Obj(kvs) => kvs,
-            _ => return Err(io::Error::other(format!("judge: cases[{i}] not an object"))),
-        };
-        if already_judged(kvs) {
-            skipped += 1;
-            continue;
-        }
-        let layer = get_str(kvs, "layer");
-        let query = get_str(kvs, "query");
-        let note = get_str(kvs, "note");
-        let target = get_first_expected(kvs).unwrap_or_default();
-        println!("[{}/{}] layer={} query=\"{}\"", i + 1, total, layer, query);
-        if !note.is_empty() {
-            println!("  hint: {note}");
-        }
-        let rel = read_rel(&mut lines)?;
-        if let Some(row) = record_judgment(kvs, by, &target, rel, &layer, &query) {
+        if let Some(row) = adjudicate_item(item, i, total, &mut lines, by)? {
             judged += 1;
             judged_rows.push(row);
         } else {
             skipped += 1;
         }
     }
-    std::fs::write(path, json::write(&v))?;
+    finish_judge(path, &v, judged, skipped, total, by, judged_rows)
+}
+
+fn adjudicate_item(
+    item: &mut Val,
+    i: usize,
+    total: usize,
+    lines: &mut std::io::Lines<std::io::StdinLock<'_>>,
+    by: &str,
+) -> io::Result<Option<String>> {
+    let kvs = match item {
+        Val::Obj(kvs) => kvs,
+        _ => return Err(io::Error::other(format!("judge: cases[{i}] not an object"))),
+    };
+    if already_judged(kvs) {
+        return Ok(None);
+    }
+    let layer = get_str(kvs, "layer");
+    let query = get_str(kvs, "query");
+    let note = get_str(kvs, "note");
+    let target = get_first_expected(kvs).unwrap_or_default();
+    println!("[{}/{}] layer={} query=\"{}\"", i + 1, total, layer, query);
+    if !note.is_empty() {
+        println!("  hint: {note}");
+    }
+    let rel = read_rel(lines)?;
+    Ok(record_judgment(kvs, by, &target, rel, &layer, &query))
+}
+
+fn finish_judge(
+    path: &str,
+    v: &Val,
+    judged: usize,
+    skipped: usize,
+    total: usize,
+    by: &str,
+    judged_rows: Vec<String>,
+) -> io::Result<Vec<String>> {
+    std::fs::write(path, json::write(v))?;
     let mut out = vec![
         format!("judge: judged={judged} skipped={skipped} total={total}"),
         format!("  by={by} date={}", crate::memory::util::utc_now()),

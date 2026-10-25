@@ -158,31 +158,24 @@ fn recall_inner(
     // query 记忆图：精确同指纹直接返回历史 top-k（跳过整个 BM25 管线）。
     // 代际失效：条目 gen < 当前 meta.gen 视为过期（库已变化，走 BM25 重算）。
     // 条数不足 k 的快照同样不可用：快照只含当时的 top-k，不能证明它覆盖本次 k。
-    if let Some((_, qhits)) = crate::memory::query_cache::lookup(root, query, k, meta.gen)? {
-        let hits: Vec<RecallHit> = qhits
-            .into_iter()
-            .map(|h| RecallHit {
-                id: h.id,
-                score: h.score as f64,
-                sim: h.sim as f64,
-            })
-            .collect();
+    if let Some(hits) = try_query_cache(root, query, k, meta)? {
         return Ok(hits);
     }
+    recall_pipeline(root, query, k, now_s, meta, repair_index)
+}
+
+/// BM25 检索管线：倒排/线性候选 + 桶回退 + 字段重排 + PRF 补漏。
+fn recall_pipeline(
+    root: &str,
+    query: &str,
+    k: usize,
+    now_s: u64,
+    meta: &Meta,
+    repair_index: bool,
+) -> std::io::Result<Vec<RecallHit>> {
     // 倒排路径：规模达标或 --rebuild 强制（index_force=1）时启用。
     // 索引缺失/坏段时自动重建覆盖（build 确定性），重建失败回退线性扫描。
-    let idx = if index::use_index(meta) {
-        match index::load(root) {
-            Ok(Some(i)) => Some(i),
-            _ if repair_index => {
-                let _ = index::build(root);
-                index::load(root).ok().flatten()
-            }
-            _ => None,
-        }
-    } else {
-        None
-    };
+    let idx = load_index(root, meta, repair_index);
     // 场景桶：候选桶由原始 query 判定一次，首轮与 PRF 第二轮共用（防扩展词带偏过滤）。
     let cand = candidate_buckets(query);
     // 消融开关（默认全开）：bucket_enable/prf_enable 只服务可复现的 A−组件对拍，
@@ -214,15 +207,78 @@ fn recall_inner(
     let (hits, qf_strength, qf_exact_only, _) = recall_qf_rerank(root, &plan, &ctx, hits);
     // PRF：低置信（top1.sim < confidence_high_sim）时粗召回 top-K 扩展查询再召一轮。
     // 扩展轮严格补漏，不覆盖首轮顺序（见下方合并逻辑）。
-    let low_conf = meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
-    if low_conf {
-        if let Some(merged) =
-            recall_prf_extend(root, query, &ctx, qf_strength, qf_exact_only, &hits)
-        {
-            return Ok(merged);
-        }
+    let prf_low_conf =
+        meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
+    if let Some(merged) = recall_prf_extend_if(
+        prf_low_conf,
+        root,
+        query,
+        &ctx,
+        qf_strength,
+        qf_exact_only,
+        &hits,
+    )? {
+        return Ok(merged);
     }
     Ok(hits)
+}
+
+/// 查询记忆图快照命中：直接返回历史 top-k；未命中/过期/不足 k → None。
+fn try_query_cache(
+    root: &str,
+    query: &str,
+    k: usize,
+    meta: &Meta,
+) -> std::io::Result<Option<Vec<RecallHit>>> {
+    let Some((_, qhits)) = crate::memory::query_cache::lookup(root, query, k, meta.gen)? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        qhits
+            .into_iter()
+            .map(|h| RecallHit {
+                id: h.id,
+                score: h.score as f64,
+                sim: h.sim as f64,
+            })
+            .collect(),
+    ))
+}
+
+fn load_index(root: &str, meta: &Meta, repair_index: bool) -> Option<Arc<Index>> {
+    if !index::use_index(meta) {
+        return None;
+    }
+    match index::load(root) {
+        Ok(Some(i)) => Some(i),
+        _ if repair_index => {
+            let _ = index::build(root);
+            index::load(root).ok().flatten()
+        }
+        _ => None,
+    }
+}
+
+fn recall_prf_extend_if(
+    low_conf: bool,
+    root: &str,
+    query: &str,
+    ctx: &PassCtx<'_>,
+    qf_strength: f64,
+    qf_exact_only: bool,
+    hits: &[RecallHit],
+) -> std::io::Result<Option<Vec<RecallHit>>> {
+    if !low_conf {
+        return Ok(None);
+    }
+    Ok(recall_prf_extend(
+        root,
+        query,
+        ctx,
+        qf_strength,
+        qf_exact_only,
+        hits,
+    ))
 }
 
 /// 低置信退桶：首轮 top1 sim 低于 `bucket_bypass_sim` 时，词面证据不足，
@@ -333,31 +389,45 @@ fn recall_prf_extend(
 ) -> Option<Vec<RecallHit>> {
     if let Ok(ext) = crate::memory::ranking::expand(root, hits, query, ctx.meta, ctx.idx) {
         if !ext.is_empty() {
-            let q2 = format!("{query} {}", ext.join(" "));
-            let q2_plan = QueryPlan::new(&q2, ctx.meta);
-            if let Ok(hits2) = score_pass(
-                root,
-                &q2_plan,
-                &PassCtx {
-                    qf_weight: if qf_strength > 1e-9 { qf_strength } else { 0.0 },
-                    qf_exact_only,
-                    ..*ctx
-                },
-            ) {
-                if !hits2.is_empty() {
-                    let mut merged: Vec<RecallHit> = hits.to_vec();
-                    for h in hits2 {
-                        if !merged.iter().any(|m| m.id == h.id) {
-                            merged.push(h);
-                        }
-                    }
-                    merged.truncate(ctx.k);
-                    return Some(merged);
-                }
-            }
+            return merge_prf_hits(root, query, ctx, qf_strength, qf_exact_only, hits, &ext);
         }
     }
     None
+}
+
+/// 扩展词二轮打分并按首轮顺序合并（新命中追加尾部，截断回 k）。
+fn merge_prf_hits(
+    root: &str,
+    query: &str,
+    ctx: &PassCtx<'_>,
+    qf_strength: f64,
+    qf_exact_only: bool,
+    hits: &[RecallHit],
+    ext: &[String],
+) -> Option<Vec<RecallHit>> {
+    let q2 = format!("{query} {}", ext.join(" "));
+    let q2_plan = QueryPlan::new(&q2, ctx.meta);
+    let hits2 = score_pass(
+        root,
+        &q2_plan,
+        &PassCtx {
+            qf_weight: if qf_strength > 1e-9 { qf_strength } else { 0.0 },
+            qf_exact_only,
+            ..*ctx
+        },
+    )
+    .ok()?;
+    if hits2.is_empty() {
+        return None;
+    }
+    let mut merged: Vec<RecallHit> = hits.to_vec();
+    for h in hits2 {
+        if !merged.iter().any(|m| m.id == h.id) {
+            merged.push(h);
+        }
+    }
+    merged.truncate(ctx.k);
+    Some(merged)
 }
 
 /// case-query 字段重排强度：exact tie 全量；CJK 低置信按 sim 线性衰减；
@@ -477,59 +547,102 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
         sm += f_list.len() as f64 * w;
     }
 
+    let params = ScoreParams {
+        qinfo: &qinfo,
+        qf,
+        fw,
+        edge_w,
+        orig_qterms,
+        qterms,
+        qf_exact_only,
+        qf_weight,
+        now_s,
+        tau_solved,
+        tau_regressed,
+        tau,
+        q_prior,
+        sm,
+        qf_min_sim,
+        k1,
+        b,
+        avgdl,
+    };
     let mut hits: Vec<Ranked> = Vec::with_capacity(docs.len());
     for (doc, (_id, dctx)) in docs.iter().enumerate() {
-        // terms 在建库/桥接/线性路径均已 sort+dedup，tf 恒为 1；直接二分查存在性，
-        // 避免每个候选文档分配一张 tf HashMap。
-        let dl = dctx.terms.len() as f64;
-        let denom = crate::memory::ranking::denom(k1, b, dl, avgdl);
-        let mut score = doc_lexical(dctx, &qinfo, k1, denom);
-        let mut fb = doc_field_bonus(dctx, &qf, &fw, edge_w);
-        let (score_qf, qf_add) = doc_qf_bonus(
-            dctx,
-            &qinfo,
-            orig_qterms,
-            qterms,
-            qf_exact_only,
-            qf_weight,
-            score,
-        );
-        score = score_qf;
-        // 纯词面/字段/实体支持度：quality/decay 只能给已有证据的 case 加权，
-        // 不能让零匹配 case 仅凭质量先验进入 top-k（否则任意候选会以 0 分返回，
-        // 评估会把“按库顺序碰巧命中”误算成召回）。
-        let support = score + fb;
-        // 时间衰减：age 用 updated_at 的预解析快照，τ 随状态动态。
-        let (decay, qsign) = doc_decay(dctx, now_s, tau_solved, tau_regressed, tau);
-        // quality 排序先验：solved/质量高的 case 提分，regressed 压分。
-        fb += dctx.quality * q_prior * qsign;
-        if support <= 0.0 {
-            continue;
+        if let Some(r) = score_doc(doc, dctx, &params) {
+            hits.push(r);
         }
-        let mut ranked = (score + fb) * decay;
-        // query-field 只改排序，不伪造词面置信：sim 用不含 qf 的词面/字段分，
-        // 否则同 query 的 sim 会因重排项而低于 1，误触发 PRF。
-        let mut lexical = (score + fb - qf_add) * decay;
-        // 词面证据过弱时不允许 qf 重排“救活”候选：否则一个泛化的 CJK
-        // bigram 命中就能把跨事故 case 抬进 top-10（Flowdock 语义查询实测
-        // sim=0.04 的 Tarsnap case 被抬到第 7）。阈值只作用于重排项，
-        // 不影响纯词面/字段分，也不改变目标 case 的召回资格。
-        if qf_add > 0.0 && sm > 0.0 && lexical / sm < qf_min_sim {
-            score -= qf_add;
-            lexical = (score + fb) * decay;
-            ranked = (score + fb) * decay;
-        }
-        hits.push(Ranked {
-            doc,
-            score: ranked,
-            sim: if sm > 0.0 {
-                (lexical / sm).clamp(0.0, 1.0)
-            } else {
-                0.0
-            },
-        });
     }
     Ok(select_hits(&hits, &docs, k, meta))
+}
+
+/// 单文档打分的不变量集合；集中传参避免 score_pass 循环体膨胀。
+struct ScoreParams<'a> {
+    qinfo: &'a [QueryTerm<'a>],
+    qf: [&'a Vec<String>; 4],
+    fw: [f64; 4],
+    edge_w: f64,
+    orig_qterms: &'a [String],
+    qterms: &'a [String],
+    qf_exact_only: bool,
+    qf_weight: f64,
+    now_s: u64,
+    tau_solved: f64,
+    tau_regressed: f64,
+    tau: f64,
+    q_prior: f64,
+    sm: f64,
+    qf_min_sim: f64,
+    k1: f64,
+    b: f64,
+    avgdl: f64,
+}
+
+/// 单文档打分：零证据候选返回 None（不进入 top-k）。
+fn score_doc(doc: usize, dctx: &DocCtx, p: &ScoreParams<'_>) -> Option<Ranked> {
+    // terms 在建库/桥接/线性路径均已 sort+dedup，tf 恒为 1；直接二分查存在性，
+    // 避免每个候选文档分配一张 tf HashMap。
+    let dl = dctx.terms.len() as f64;
+    let denom = crate::memory::ranking::denom(p.k1, p.b, dl, p.avgdl);
+    let mut score = doc_lexical(dctx, p.qinfo, p.k1, denom);
+    let mut fb = doc_field_bonus(dctx, &p.qf, &p.fw, p.edge_w);
+    let (score_qf, qf_add) = doc_qf_bonus(
+        dctx,
+        p.qinfo,
+        p.orig_qterms,
+        p.qterms,
+        p.qf_exact_only,
+        p.qf_weight,
+        score,
+    );
+    score = score_qf;
+    // 纯词面/字段/实体支持度：quality/decay 只能给已有证据的 case 加权。
+    let support = score + fb;
+    // 时间衰减：age 用 updated_at 的预解析快照，τ 随状态动态。
+    let (decay, qsign) = doc_decay(dctx, p.now_s, p.tau_solved, p.tau_regressed, p.tau);
+    // quality 排序先验：solved/质量高的 case 提分，regressed 压分。
+    fb += dctx.quality * p.q_prior * qsign;
+    if support <= 0.0 {
+        return None;
+    }
+    let mut ranked = (score + fb) * decay;
+    // query-field 只改排序，不伪造词面置信：sim 用不含 qf 的词面/字段分。
+    let mut lexical = (score + fb - qf_add) * decay;
+    // 词面证据过弱时不允许 qf 重排“救活”候选。
+    if qf_add > 0.0 && p.sm > 0.0 && lexical / p.sm < p.qf_min_sim {
+        score -= qf_add;
+        lexical = (score + fb) * decay;
+        ranked = (score + fb) * decay;
+    }
+    Some(Ranked {
+        doc,
+        score: ranked,
+        sim: if p.sm > 0.0 {
+            (lexical / p.sm).clamp(0.0, 1.0)
+        } else {
+            0.0
+        },
+    })
 }
 
 /// 索引路径候选：倒排候选 + 桶过滤 + 实体边一跳（桥入无需重读全库 case.json，
@@ -616,60 +729,98 @@ fn collect_docs_scan(
     if ids.is_empty() {
         return Ok((Vec::new(), Vec::new(), 0.0, 0.0));
     }
-    let mut docs: Docs = Vec::with_capacity(ids.len());
-    let mut df = vec![0usize; qterms.len()];
-    let mut total_len = 0usize;
+    let cfg = ScanCfg {
+        qterms,
+        use_buckets,
+        cand,
+        allow_other,
+    };
+    let mut acc = ScanAcc {
+        docs: Vec::with_capacity(ids.len()),
+        df: vec![0usize; qterms.len()],
+        total_len: 0,
+    };
     for id in &ids {
-        let c = store::read_case(root, id)?;
-        let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
-        let buckets = classify::case_buckets(&[], &query_terms, &c.text);
-        total_len += terms.len();
-        for (qi, qt) in qterms.iter().enumerate() {
-            if terms.binary_search(qt).is_ok() {
-                df[qi] += 1;
-            }
-        }
-        // BM25 的 df/avgdl 必须保持全库口径；桶过滤只裁候选，不能改统计量。
-        if use_buckets && !bucket_allowed(&buckets, cand, allow_other) {
-            continue;
-        }
-        docs.push((
-            Arc::from(id.as_str()),
-            DocCtx {
-                terms: terms.into(),
-                query_terms: query_terms.into(),
-                fields: Arc::new(c.fields),
-                status: c.status.into(),
-                quality: c.quality,
-                updated_s: crate::memory::util::parse_utc_secs(&c.updated_at),
-                edge_shared: 0,
-            },
-        ));
+        scan_one_case(root, id, &cfg, &mut acc)?;
     }
     // 实体边一跳：桥 case 只并入候选；df/n/avgdl 仍取全库词面口径。
-    let exist_ids: Vec<String> = docs.iter().map(|(id, _)| id.to_string()).collect();
+    let exist_ids: Vec<String> = acc.docs.iter().map(|(id, _)| id.to_string()).collect();
     let bridges = crate::memory::edge::bridge_cases(root, meta, q_ent_list, &exist_ids)?;
     for b in bridges {
-        docs.push((
-            b.id.into(),
-            DocCtx {
-                terms: b.terms,
-                query_terms: b.query_terms,
-                fields: b.fields,
-                status: b.status,
-                quality: b.quality,
-                updated_s: crate::memory::util::parse_utc_secs(&b.updated_at),
-                edge_shared: b.edge_shared,
-            },
-        ));
+        push_bridge_doc(&mut acc.docs, b);
     }
-    if docs.is_empty() {
+    if acc.docs.is_empty() {
         return Ok((Vec::new(), Vec::new(), 0.0, 0.0));
     }
     // 与索引路径一致：n/avgdl 取全库口径，桥入 case 不改变平均文档长度。
     let n = ids.len() as f64;
-    let avgdl = total_len as f64 / n;
-    Ok((docs, df, n, avgdl))
+    let avgdl = acc.total_len as f64 / n;
+    Ok((acc.docs, acc.df, n, avgdl))
+}
+
+/// 线性扫描的只读配置。
+struct ScanCfg<'a> {
+    qterms: &'a [String],
+    use_buckets: bool,
+    cand: &'a [String],
+    allow_other: bool,
+}
+
+/// 线性扫描的累加状态。
+struct ScanAcc {
+    docs: Docs,
+    df: Vec<usize>,
+    total_len: usize,
+}
+
+/// 单 case 线性扫描：df/avgdl 保持全库口径；桶过滤只裁候选，不改统计量。
+fn scan_one_case(
+    root: &str,
+    id: &str,
+    cfg: &ScanCfg<'_>,
+    acc: &mut ScanAcc,
+) -> std::io::Result<()> {
+    let c = store::read_case(root, id)?;
+    let (query_terms, terms) = build_doc_terms(&c.query, &c.text);
+    let buckets = classify::case_buckets(&[], &query_terms, &c.text);
+    acc.total_len += terms.len();
+    for (qi, qt) in cfg.qterms.iter().enumerate() {
+        if terms.binary_search(qt).is_ok() {
+            acc.df[qi] += 1;
+        }
+    }
+    if cfg.use_buckets && !bucket_allowed(&buckets, cfg.cand, cfg.allow_other) {
+        return Ok(());
+    }
+    acc.docs.push((
+        Arc::from(id),
+        DocCtx {
+            terms: terms.into(),
+            query_terms: query_terms.into(),
+            fields: Arc::new(c.fields),
+            status: c.status.into(),
+            quality: c.quality,
+            updated_s: crate::memory::util::parse_utc_secs(&c.updated_at),
+            edge_shared: 0,
+        },
+    ));
+    Ok(())
+}
+
+/// 实体桥 case 并入候选。
+fn push_bridge_doc(docs: &mut Docs, b: crate::memory::edge::BridgeCase) {
+    docs.push((
+        b.id.into(),
+        DocCtx {
+            terms: b.terms,
+            query_terms: b.query_terms,
+            fields: b.fields,
+            status: b.status,
+            quality: b.quality,
+            updated_s: crate::memory::util::parse_utc_secs(&b.updated_at),
+            edge_shared: b.edge_shared,
+        },
+    ));
 }
 
 /// 词面分：query 词命中（tf 恒 1，二分查存在性）+ 词级调权（可正可负）。
@@ -720,22 +871,24 @@ fn doc_qf_bonus(
     mut score: f64,
 ) -> (f64, f64) {
     let mut qf_add = 0.0;
-    if qf_w > 0.0 {
-        let need = orig_qterms.len().min(2);
-        let support = orig_qterms
-            .iter()
-            .filter(|t| dctx.query_terms.iter().any(|x| x == *t))
-            .count();
-        if support >= need {
-            let qf_terms = if qf_exact_only { orig_qterms } else { qterms };
-            for qt in qf_terms {
-                if dctx.query_terms.iter().any(|t| t == qt) {
-                    if let Some(q) = qinfo.iter().find(|q| q.text == qt) {
-                        let add = q.weight * q.idf * qf_w;
-                        score += add;
-                        qf_add += add;
-                    }
-                }
+    if qf_w <= 0.0 {
+        return (score, qf_add);
+    }
+    let need = orig_qterms.len().min(2);
+    let support = orig_qterms
+        .iter()
+        .filter(|t| dctx.query_terms.iter().any(|x| x == *t))
+        .count();
+    if support < need {
+        return (score, qf_add);
+    }
+    let qf_terms = if qf_exact_only { orig_qterms } else { qterms };
+    for qt in qf_terms {
+        if dctx.query_terms.iter().any(|t| t == qt) {
+            if let Some(q) = qinfo.iter().find(|q| q.text == qt) {
+                let add = q.weight * q.idf * qf_w;
+                score += add;
+                qf_add += add;
             }
         }
     }

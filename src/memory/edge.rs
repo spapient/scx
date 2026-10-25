@@ -115,15 +115,7 @@ pub(crate) fn bridge_cases(
         }
         let c = store::read_case(root, &id)?;
         let (query_terms, terms) = crate::terms::build_doc_terms(&c.query, &c.text);
-        let shared = ents
-            .iter()
-            .filter(|e| {
-                c.fields.error_code.contains(e)
-                    || c.fields.file_loc.contains(e)
-                    || c.fields.symbol.contains(e)
-                    || c.fields.num_fp.contains(e)
-            })
-            .count();
+        let shared = shared_entity_count(&ents, &c.fields);
         out.push(BridgeCase {
             id,
             terms: terms.into(),
@@ -136,6 +128,17 @@ pub(crate) fn bridge_cases(
         });
     }
     Ok(out)
+}
+
+fn shared_entity_count(ents: &[String], fields: &store::Fields) -> usize {
+    ents.iter().filter(|e| entity_in_fields(e, fields)).count()
+}
+
+fn entity_in_fields(e: &str, fields: &store::Fields) -> bool {
+    fields.error_code.iter().any(|x| x == e)
+        || fields.file_loc.iter().any(|x| x == e)
+        || fields.symbol.iter().any(|x| x == e)
+        || fields.num_fp.iter().any(|x| x == e)
 }
 
 #[cfg(test)]

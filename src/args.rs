@@ -746,17 +746,47 @@ fn parse_flag(
     i: &mut usize,
 ) -> Result<(), String> {
     match f.kind {
+        Kind::NoValue | Kind::Value | Kind::Force | Kind::RatePair => {
+            parse_valueish(s, f, inline, args, i)
+        }
+        Kind::F64 | Kind::I64 | Kind::U64 | Kind::Bool01 => parse_numericish(s, f, inline, args, i),
+        #[cfg(feature = "semantic")]
+        Kind::Semantic => parse_semantic_kind(s, f, inline, args, i),
+        Kind::PolicyFile => parse_policy_file(s, f, inline, args, i),
+    }
+}
+
+/// 文本/开关类 flag 的二级分派（无值、自由文本、force、rate）。
+fn parse_valueish(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    match f.kind {
         Kind::NoValue => parse_no_value(s, f, inline),
         Kind::Value => parse_value(s, f, inline, args, i),
+        Kind::Force => parse_force(s, f, inline, args, i),
+        Kind::RatePair => parse_rate_pair(s, f, inline, args, i),
+        _ => unreachable!("valueish flag without handler: {}", f.name),
+    }
+}
+
+/// 数值类 flag 的二级分派（f64/i64/u64/0-1）。
+fn parse_numericish(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    match f.kind {
         Kind::F64 => parse_f64_kind(s, f, inline, args, i),
         Kind::I64 => parse_i64_kind(s, f, inline, args, i),
         Kind::U64 => parse_u64_kind(s, f, inline, args, i),
         Kind::Bool01 => parse_bool01_kind(s, f, inline, args, i),
-        Kind::Force => parse_force(s, f, inline, args, i),
-        Kind::RatePair => parse_rate_pair(s, f, inline, args, i),
-        #[cfg(feature = "semantic")]
-        Kind::Semantic => parse_semantic_kind(s, f, inline, args, i),
-        Kind::PolicyFile => parse_policy_file(s, f, inline, args, i),
+        _ => unreachable!("numeric flag without handler: {}", f.name),
     }
 }
 
@@ -867,6 +897,12 @@ fn parse_u64_kind(
     if parsed < f.min {
         return Err(format!("{} {}", f.name, f.err_zero));
     }
+    apply_u64_flag(s, f, parsed);
+    Ok(())
+}
+
+/// u64 值落位到对应 state 字段。
+fn apply_u64_flag(s: &mut ParseState, f: &Flag, parsed: u64) {
     match f.name {
         "--seed" => s.seed = parsed,
         "--annotate-max" => s.annotate_max = parsed as usize,
@@ -875,7 +911,6 @@ fn parse_u64_kind(
         "--max-tokens" => s.max_tokens = Some(parsed),
         _ => unreachable!("U64 flag without arm: {}", f.name),
     }
-    Ok(())
 }
 
 /// 语义权重文件：加载 + SHA256 校验，失败即报错拒绝运行。
@@ -918,18 +953,7 @@ fn parse_policy_file(
         }
         let key = le.entry.key;
         let v = le.entry.value;
-        let flag = match key {
-            "ratio" => Some("--ratio"),
-            "context" => Some("--context"),
-            "window" => Some("--window"),
-            "elide" => Some("--elide"),
-            "risk_gate" => Some("--risk-gate"),
-            "lineno" => Some("--lineno"),
-            "max_tokens" => Some("--max-tokens"),
-            "structure" => Some("--structure"),
-            _ => None,
-        };
-        let Some(flag) = flag else {
+        let Some(flag) = policy_flag(key) else {
             return Err(format!(
                 "{}: {}:{}: unknown policy key `{}` (allowed: ratio/context/window/elide/risk_gate/lineno/max_tokens/structure)",
                 f.name, path, le.line, key
@@ -944,6 +968,21 @@ fn parse_policy_file(
     Ok(())
 }
 
+/// 策略键到 CLI flag 的静态映射（表驱动，避免长 match 链）。
+fn policy_flag(key: &str) -> Option<&'static str> {
+    const TABLE: &[(&str, &str)] = &[
+        ("ratio", "--ratio"),
+        ("context", "--context"),
+        ("window", "--window"),
+        ("elide", "--elide"),
+        ("risk_gate", "--risk-gate"),
+        ("lineno", "--lineno"),
+        ("max_tokens", "--max-tokens"),
+        ("structure", "--structure"),
+    ];
+    TABLE.iter().find(|(k, _)| *k == key).map(|(_, flag)| *flag)
+}
+
 /// 单键策略值落位：类型 + 范围校验，失败带行号报错。
 fn apply_policy_value(
     s: &mut ParseState,
@@ -952,63 +991,117 @@ fn apply_policy_value(
     path: &str,
     line: usize,
 ) -> Result<(), String> {
-    let err = |msg: String| format!("--policy-file: {path}:{line}: {msg}");
     match key {
-        "ratio" => {
-            let r: f64 = crate::conf::parse_f64(v)
-                .ok_or_else(|| err(format!("ratio must be a finite f64, got {v:?}")))?;
-            if !(crate::policy::MIN_RATIO..=1.0).contains(&r) {
-                return Err(err(format!(
-                    "ratio must be in {}..=1.0",
-                    crate::policy::MIN_RATIO
-                )));
-            }
-            s.config.ratio = r;
-        }
-        "context" => {
-            let c = parse_i64_range(v, 0, crate::policy::MAX_CONTEXT).ok_or_else(|| {
-                err(format!(
-                    "context must be 0..={}",
-                    crate::policy::MAX_CONTEXT
-                ))
-            })?;
-            s.config.context = c;
-        }
-        "window" => {
-            let w = parse_i64_range(v, crate::policy::MIN_WINDOW, crate::policy::MAX_WINDOW)
-                .ok_or_else(|| {
-                    err(format!(
-                        "window must be {}..={}",
-                        crate::policy::MIN_WINDOW,
-                        crate::policy::MAX_WINDOW
-                    ))
-                })?;
-            s.config.window = w;
-        }
-        "elide" => {
-            s.config.elide = parse_bool0_1(v).ok_or_else(|| err("elide must be 0/1".into()))?
-        }
-        "risk_gate" => {
-            s.config.risk_gate =
-                parse_bool0_1(v).ok_or_else(|| err("risk_gate must be 0/1".into()))?
-        }
-        "lineno" => {
-            s.config.lineno = parse_bool0_1(v).ok_or_else(|| err("lineno must be 0/1".into()))?
-        }
-        "structure" => {
-            s.config.structure =
-                parse_bool0_1(v).ok_or_else(|| err("structure must be 0/1".into()))?
-        }
-        "max_tokens" => {
-            let m: usize = crate::conf::parse_usize(v).ok_or_else(|| {
-                err(format!(
-                    "max_tokens must be a non-negative integer, got {v:?}"
-                ))
-            })?;
-            s.config.max_tokens = Some(m);
-        }
+        "ratio" | "context" | "window" => apply_policy_numeric(s, key, v, path, line)?,
+        "elide" | "risk_gate" | "lineno" | "structure" => apply_policy_bool(s, key, v, path, line)?,
+        "max_tokens" => apply_policy_max_tokens(s, v, path, line)?,
         _ => unreachable!("policy key whitelist"),
     }
+    Ok(())
+}
+
+/// 数值类策略键的二级分派。
+fn apply_policy_numeric(
+    s: &mut ParseState,
+    key: &str,
+    v: &str,
+    path: &str,
+    line: usize,
+) -> Result<(), String> {
+    match key {
+        "ratio" => apply_policy_ratio(s, v, path, line),
+        "context" => apply_policy_context(s, v, path, line),
+        "window" => apply_policy_window(s, v, path, line),
+        _ => unreachable!("numeric policy key whitelist"),
+    }
+}
+
+fn policy_err(path: &str, line: usize, msg: String) -> String {
+    format!("--policy-file: {path}:{line}: {msg}")
+}
+
+fn apply_policy_ratio(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let r: f64 = crate::conf::parse_f64(v)
+        .ok_or_else(|| policy_err(path, line, format!("ratio must be a finite f64, got {v:?}")))?;
+    if !(crate::policy::MIN_RATIO..=1.0).contains(&r) {
+        return Err(policy_err(
+            path,
+            line,
+            format!("ratio must be in {}..=1.0", crate::policy::MIN_RATIO),
+        ));
+    }
+    s.config.ratio = r;
+    Ok(())
+}
+
+fn apply_policy_context(
+    s: &mut ParseState,
+    v: &str,
+    path: &str,
+    line: usize,
+) -> Result<(), String> {
+    let c = parse_i64_range(v, 0, crate::policy::MAX_CONTEXT).ok_or_else(|| {
+        policy_err(
+            path,
+            line,
+            format!("context must be 0..={}", crate::policy::MAX_CONTEXT),
+        )
+    })?;
+    s.config.context = c;
+    Ok(())
+}
+
+fn apply_policy_window(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let w = parse_i64_range(v, crate::policy::MIN_WINDOW, crate::policy::MAX_WINDOW).ok_or_else(
+        || {
+            policy_err(
+                path,
+                line,
+                format!(
+                    "window must be {}..={}",
+                    crate::policy::MIN_WINDOW,
+                    crate::policy::MAX_WINDOW
+                ),
+            )
+        },
+    )?;
+    s.config.window = w;
+    Ok(())
+}
+
+/// 0/1 布尔类策略键：先统一解析，再按键落位。
+fn apply_policy_bool(
+    s: &mut ParseState,
+    key: &str,
+    v: &str,
+    path: &str,
+    line: usize,
+) -> Result<(), String> {
+    let b = parse_bool0_1(v).ok_or_else(|| policy_err(path, line, format!("{key} must be 0/1")))?;
+    match key {
+        "elide" => s.config.elide = b,
+        "risk_gate" => s.config.risk_gate = b,
+        "lineno" => s.config.lineno = b,
+        "structure" => s.config.structure = b,
+        _ => unreachable!("bool policy key whitelist"),
+    }
+    Ok(())
+}
+
+fn apply_policy_max_tokens(
+    s: &mut ParseState,
+    v: &str,
+    path: &str,
+    line: usize,
+) -> Result<(), String> {
+    let m: usize = crate::conf::parse_usize(v).ok_or_else(|| {
+        policy_err(
+            path,
+            line,
+            format!("max_tokens must be a non-negative integer, got {v:?}"),
+        )
+    })?;
+    s.config.max_tokens = Some(m);
     Ok(())
 }
 
@@ -1194,19 +1287,35 @@ fn validate_gates(s: &ParseState) -> Result<(), String> {
 
 /// `--store` 相关的绑定约束（fix/fix-file/max-bytes/recall-only）。
 fn validate_store_binds(s: &ParseState) -> Result<(), String> {
-    if s.seen.contains("--fix") && !s.store {
+    if fix_needs_store(s) {
         return Err("--fix requires --store 1".to_string());
     }
-    if s.fix_file.is_some() && !s.store {
+    if fix_file_needs_store(s) {
         return Err("--fix-file requires --store 1".to_string());
     }
-    if s.max_bytes.is_some() && !s.store {
+    if max_bytes_needs_store(s) {
         return Err("--max-bytes requires --store 1".to_string());
     }
-    if s.seen.contains("--fix") && s.fix_file.is_some() {
+    if fix_conflict(s) {
         return Err("--fix and --fix-file are mutually exclusive".to_string());
     }
     Ok(())
+}
+
+fn fix_needs_store(s: &ParseState) -> bool {
+    s.seen.contains("--fix") && !s.store
+}
+
+fn fix_file_needs_store(s: &ParseState) -> bool {
+    s.fix_file.is_some() && !s.store
+}
+
+fn max_bytes_needs_store(s: &ParseState) -> bool {
+    s.max_bytes.is_some() && !s.store
+}
+
+fn fix_conflict(s: &ParseState) -> bool {
+    s.seen.contains("--fix") && s.fix_file.is_some()
 }
 
 /// `--recall` 相关的绑定约束（recall-only/recall-detail 与 store 互斥）。
@@ -1221,17 +1330,27 @@ fn validate_recall_binds(s: &ParseState) -> Result<(), String> {
 }
 
 fn validate(s: &ParseState) -> Result<(), String> {
-    if s.stat && s.no_stats {
+    if stat_conflict(s) {
         return Err("--stat and --no-stats cannot be used together".to_string());
     }
-    validate_query(s)?;
-    validate_judge(s)?;
-    validate_annotate(s)?;
-    validate_actions(s)?;
-    validate_gates(s)?;
-    validate_store_binds(s)?;
-    validate_recall_binds(s)?;
+    type CheckFn = fn(&ParseState) -> Result<(), String>;
+    const CHECKS: [CheckFn; 7] = [
+        validate_query,
+        validate_judge,
+        validate_annotate,
+        validate_actions,
+        validate_gates,
+        validate_store_binds,
+        validate_recall_binds,
+    ];
+    for check in CHECKS {
+        check(s)?;
+    }
     Ok(())
+}
+
+fn stat_conflict(s: &ParseState) -> bool {
+    s.stat && s.no_stats
 }
 
 fn into_opts(s: ParseState) -> Opts {
@@ -1286,26 +1405,41 @@ fn parse_args_from(args: Vec<String>) -> Result<Opts, String> {
     let mut s = ParseState::new();
     let mut i = 0usize;
     while i < args.len() {
-        let raw = &args[i];
-        if raw == "--" {
+        if args[i] == "--" {
             s.files.extend(args[i + 1..].iter().cloned());
             break;
         }
-        let (name, inline) = match raw.split_once('=') {
-            Some((n, v)) if n.starts_with("--") => (n, Some(v.to_string())),
-            _ => (raw.as_str(), None),
-        };
-        match flag_by_name(name) {
-            Some(f) => parse_flag(&mut s, f, inline, &args, &mut i)?,
-            None if raw.starts_with("--") || (raw.starts_with('-') && raw.len() > 1) => {
-                return Err(format!("unknown option: {}", raw));
-            }
-            None => s.files.push(raw.clone()),
-        }
+        parse_one_arg(&mut s, &args, &mut i)?;
         i += 1;
     }
     validate(&s)?;
     Ok(into_opts(s))
+}
+
+/// 解析并分派单个命令行 token（不含 `--` 终止符与循环步进）。
+fn parse_one_arg(s: &mut ParseState, args: &[String], i: &mut usize) -> Result<(), String> {
+    let raw = &args[*i];
+    let (name, inline) = split_name_inline(raw);
+    match flag_by_name(name) {
+        Some(f) => parse_flag(s, f, inline, args, i),
+        None if unknown_option(raw) => Err(format!("unknown option: {}", raw)),
+        None => {
+            s.files.push(raw.clone());
+            Ok(())
+        }
+    }
+}
+
+/// `--name=value` 拆分；仅长选项允许内联值。
+fn split_name_inline(raw: &str) -> (&str, Option<String>) {
+    match raw.split_once('=') {
+        Some((n, v)) if n.starts_with("--") => (n, Some(v.to_string())),
+        _ => (raw, None),
+    }
+}
+
+fn unknown_option(raw: &str) -> bool {
+    raw.starts_with("--") || (raw.starts_with('-') && raw.len() > 1)
 }
 
 pub fn parse_args(args: &[String]) -> Result<Opts, String> {

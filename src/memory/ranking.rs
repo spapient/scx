@@ -77,14 +77,24 @@ fn collect_batch_tf(
                 continue;
             }
         }
-        let c = store::read_case(root, &h.id)?;
-        let mut terms = build_mem_terms(&c.query);
-        terms.extend(build_mem_terms(&c.text));
-        for t in &terms {
-            *batch.entry(t.clone()).or_insert(0) += 1;
-        }
+        collect_case_tf(root, &h.id, &mut batch)?;
     }
     Ok(batch)
+}
+
+/// 线性回退：读 case 并把 query+text 词表并入批内词频。
+fn collect_case_tf(
+    root: &str,
+    id: &str,
+    batch: &mut HashMap<String, usize>,
+) -> std::io::Result<()> {
+    let c = store::read_case(root, id)?;
+    let mut terms = build_mem_terms(&c.query);
+    terms.extend(build_mem_terms(&c.text));
+    for t in &terms {
+        *batch.entry(t.clone()).or_insert(0) += 1;
+    }
+    Ok(())
 }
 
 /// 按 df 来源（索引 postings / meta 快照 / 线性现算）查单词 df。

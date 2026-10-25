@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![warn(clippy::cognitive_complexity)]
 
 // scx CLI：参数解析在 scx::args，输入读取在 scx::input，操作编排在 scx::ops
 // （Op 枚举 + run + 纯渲染）；筛选逻辑全在库 crate（scx::compress）。
@@ -15,16 +16,27 @@ fn early_exit(args: &[String]) -> bool {
             after_terminator = true;
             continue;
         }
-        if !after_terminator && (a == "--help" || a == "-h") {
+        if after_terminator {
+            continue;
+        }
+        if is_help(a) {
             println!("{}", args::usage());
             return true;
         }
-        if !after_terminator && (a == "--version" || a == "-V") {
+        if is_version(a) {
             println!("scx {}", scx::VERSION);
             return true;
         }
     }
     false
+}
+
+fn is_help(a: &str) -> bool {
+    a == "--help" || a == "-h"
+}
+
+fn is_version(a: &str) -> bool {
+    a == "--version" || a == "-V"
 }
 
 fn main() {

@@ -127,16 +127,20 @@ pub(crate) fn load_meta(root: &str) -> std::io::Result<Meta> {
     };
     // 行式解析统一由 scx::conf 提供（节感知 TOML 子集），语义与历史实现一致。
     for e in crate::conf::parse(txt.lines()) {
-        match e.section {
-            "" => apply_scalar(e.key, e.value, &mut meta),
-            "df" => push_usize(&mut meta.df, e.key, e.value),
-            "params" => push_f64(&mut meta.params, e.key, e.value),
-            "word_w" => push_f64(&mut meta.word_w, e.key, e.value),
-            "l1" if e.key == "hist" => push_hist(e.value, &mut meta.l1_hist),
-            _ => {}
-        }
+        apply_meta_entry(e, &mut meta);
     }
     Ok(meta)
+}
+
+fn apply_meta_entry(e: crate::conf::Entry<'_>, meta: &mut Meta) {
+    match e.section {
+        "" => apply_scalar(e.key, e.value, meta),
+        "df" => push_usize(&mut meta.df, e.key, e.value),
+        "params" => push_f64(&mut meta.params, e.key, e.value),
+        "word_w" => push_f64(&mut meta.word_w, e.key, e.value),
+        "l1" if e.key == "hist" => push_hist(e.value, &mut meta.l1_hist),
+        _ => {}
+    }
 }
 
 /// 无节标量（created_at / case_count / gen）：未知键忽略（老库缺字段按默认）。
@@ -182,31 +186,44 @@ pub(crate) fn bump_gen_locked(root: &str) -> std::io::Result<()> {
     let mut out: Vec<String> = Vec::new();
     for line in txt.lines() {
         let t = line.trim();
-        if !t.starts_with('[') && !t.starts_with('#') {
-            if let Some(eq) = t.find('=') {
-                if t[..eq].trim() == "gen" {
-                    if let Ok(v) = t[eq + 1..].trim().parse::<u64>() {
-                        next = Some(v.saturating_add(1));
-                        out.push(format!("gen = {}", next.unwrap()));
-                        continue;
-                    }
-                }
-            }
+        if is_comment_or_section(t) {
+            out.push(line.to_string());
+            continue;
+        }
+        if let Some(v) = gen_value(t) {
+            next = Some(v.saturating_add(1));
+            out.push(format!("gen = {}", next.unwrap()));
+            continue;
         }
         out.push(line.to_string());
     }
     let gen = next.unwrap_or(1);
     if next.is_none() {
-        // 无 gen 行（老库）：在 case_count 之后补一行。
-        if let Some(ci) = out.iter().position(|l| l.trim().starts_with("case_count")) {
-            out.insert(ci + 1, format!("gen = {gen}"));
-        } else {
-            out.push(format!("gen = {gen}"));
-        }
+        insert_gen_line(&mut out, gen);
     }
     let mut body = out.join("\n");
     body.push('\n');
     lock::atomic_write(&p, body.as_bytes())
+}
+
+fn is_comment_or_section(t: &str) -> bool {
+    t.starts_with('[') || t.starts_with('#')
+}
+
+fn gen_value(t: &str) -> Option<u64> {
+    let eq = t.find('=')?;
+    if t[..eq].trim() != "gen" {
+        return None;
+    }
+    t[eq + 1..].trim().parse::<u64>().ok()
+}
+
+fn insert_gen_line(out: &mut Vec<String>, gen: u64) {
+    if let Some(ci) = out.iter().position(|l| l.trim().starts_with("case_count")) {
+        out.insert(ci + 1, format!("gen = {gen}"));
+    } else {
+        out.push(format!("gen = {gen}"));
+    }
 }
 
 /// 代际递增（包装 `bump_gen_locked`：取 `meta.lock` 后执行）。
@@ -354,29 +371,8 @@ pub(crate) fn set_param(root: &str, key: &str, val: f64) -> std::io::Result<()> 
     let key_line = format!("{key} = {val:.3}");
     let mut lines: Vec<String> = txt.lines().map(|s| s.to_string()).collect();
     if let Some(pi) = lines.iter().position(|l| l.trim() == "[params]") {
-        let mut replaced = false;
-        for l in lines.iter_mut().skip(pi + 1) {
-            let t = l.trim();
-            if t.starts_with('[') {
-                break;
-            }
-            if let Some(eq) = t.find('=') {
-                if t[..eq].trim() == key {
-                    *l = key_line.clone();
-                    replaced = true;
-                    break;
-                }
-            }
-        }
-        if !replaced {
-            let end = lines
-                .iter()
-                .enumerate()
-                .skip(pi + 1)
-                .find(|(_, l)| l.trim().starts_with('['))
-                .map(|(i, _)| i)
-                .unwrap_or(lines.len());
-            lines.insert(end, key_line.clone());
+        if !replace_param_line(&mut lines, pi, key, &key_line) {
+            insert_param_line(&mut lines, pi, key_line);
         }
     } else {
         lines.push("[params]".to_string());
@@ -385,6 +381,35 @@ pub(crate) fn set_param(root: &str, key: &str, val: f64) -> std::io::Result<()> 
     let mut body = lines.join("\n");
     body.push('\n');
     lock::atomic_write(&p, body.as_bytes())
+}
+
+fn replace_param_line(lines: &mut [String], pi: usize, key: &str, key_line: &str) -> bool {
+    for l in lines.iter_mut().skip(pi + 1) {
+        let t = l.trim();
+        if t.starts_with('[') {
+            return false;
+        }
+        if line_key_is(t, key) {
+            *l = key_line.to_string();
+            return true;
+        }
+    }
+    false
+}
+
+fn insert_param_line(lines: &mut Vec<String>, pi: usize, key_line: String) {
+    let end = lines
+        .iter()
+        .enumerate()
+        .skip(pi + 1)
+        .find(|(_, l)| l.trim().starts_with('['))
+        .map(|(i, _)| i)
+        .unwrap_or(lines.len());
+    lines.insert(end, key_line);
+}
+
+fn line_key_is(t: &str, key: &str) -> bool {
+    t.find('=').is_some_and(|eq| t[..eq].trim() == key)
 }
 
 fn meta_toml(case_count: usize) -> String {

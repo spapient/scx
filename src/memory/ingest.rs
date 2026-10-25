@@ -103,25 +103,35 @@ pub(crate) fn invalidate_fp_index(root: &str) {
 /// 索引按动态重算指纹构建，因此旧库无需迁移也能按当前身份口径去重。
 pub(crate) fn find_by_fp(root: &str, fp: &str) -> io::Result<Option<String>> {
     ensure_fp_index(root)?;
-    let body = match fs::read_to_string(fp_index_path(root)) {
-        Ok(body) => body,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e),
+    let Some(body) = read_fp_body(root)? else {
+        return Ok(None);
     };
     for line in body.lines() {
-        let Some((stored, id)) = line.split_once('\t') else {
-            continue;
-        };
-        if stored != fp {
-            continue;
+        if let Some(id) = fp_match(root, line, fp) {
+            return Ok(Some(id));
         }
-        if store::valid_id(id) && store::case_path(root, id).exists() {
-            return Ok(Some(id.to_string()));
-        }
-        invalidate_fp_index(root);
-        return Ok(None);
     }
     Ok(None)
+}
+
+fn read_fp_body(root: &str) -> io::Result<Option<String>> {
+    match fs::read_to_string(fp_index_path(root)) {
+        Ok(body) => Ok(Some(body)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+fn fp_match(root: &str, line: &str, fp: &str) -> Option<String> {
+    let (stored, id) = line.split_once('\t')?;
+    if stored != fp {
+        return None;
+    }
+    if store::valid_id(id) && store::case_path(root, id).exists() {
+        return Some(id.to_string());
+    }
+    invalidate_fp_index(root);
+    None
 }
 
 /// 已脱敏、已切词的存储字段。公开门面 `memory::store_case` 是唯一构造入口；
@@ -141,6 +151,50 @@ pub(crate) struct StoreFields<'a> {
 }
 
 pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)> {
+    store::ensure_root(input.root)?;
+    validate(
+        input.root,
+        input.max_bytes,
+        input.text,
+        input.fix,
+        input.evidence_lno,
+        input.evidence,
+    )?;
+    let fp = fingerprint(input.query, input.text);
+    // 同一指纹的"查重 + 写入"必须串行：两个并发 store 若都在 find 前进入，
+    // 会跨秒生成两个 id，或在去重更新时用旧快照覆盖刚写入的反馈。
+    let _ingest_lock =
+        crate::memory::lock::acquire(input.root, &format!("cases/.ingest-{fp}.lock"))?;
+    if let Some(existing) = find_by_fp(input.root, &fp)? {
+        return update_existing(
+            input.root,
+            &existing,
+            input.fix,
+            input.evidence_lno,
+            input.evidence,
+        );
+    }
+    let id = insert_new(input, &fp)?;
+    Ok((true, id))
+}
+
+fn update_existing(
+    root: &str,
+    existing: &str,
+    fix: &str,
+    evidence_lno: &[usize],
+    evidence: &[String],
+) -> std::io::Result<(bool, String)> {
+    let _case_lock = store::lock_case(root, existing)?;
+    let mut c = store::read_case(root, existing)?;
+    let now = store::utc_now();
+    c.updated_at = now;
+    backfill(&mut c, fix, evidence_lno, evidence);
+    store::write_case(root, &c)?;
+    Ok((false, existing.to_string()))
+}
+
+fn insert_new(fields: StoreFields<'_>, fp: &str) -> std::io::Result<String> {
     let StoreFields {
         root,
         query,
@@ -152,30 +206,13 @@ pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)>
         fix,
         evidence_lno,
         evidence,
-        max_bytes,
-    } = input;
-    store::ensure_root(root)?;
-    validate(root, max_bytes, text, fix, evidence_lno, evidence)?;
-    let fp = fingerprint(query, text);
-    // 同一指纹的"查重 + 写入"必须串行：两个并发 store 若都在 find 前进入，
-    // 会跨秒生成两个 id，或在去重更新时用旧快照覆盖刚写入的反馈。
-    let _ingest_lock = crate::memory::lock::acquire(root, &format!("cases/.ingest-{fp}.lock"))?;
-    if let Some(existing) = find_by_fp(root, &fp)? {
-        let _case_lock = store::lock_case(root, &existing)?;
-        let mut c = store::read_case(root, &existing)?;
-        let now = store::utc_now();
-        c.updated_at = now;
-        // 反馈/状态等历史字段保留；空修复结论/空证据可由后续 --store 补录，
-        // 已有结论绝不覆盖（同指纹重复摄取以首条有效结论为准）。
-        backfill(&mut c, fix, evidence_lno, evidence);
-        store::write_case(root, &c)?;
-        return Ok((false, existing));
-    }
+        max_bytes: _,
+    } = fields;
     let now = store::utc_now();
     let id = store::case_id(&now, query, text);
     let _case_lock = store::lock_case(root, &id)?;
     let mut c = Case::new(id.clone(), query.to_string(), terms, text.to_string());
-    c.fp = fp.clone();
+    c.fp = fp.to_string();
     c.fix = fix.to_string();
     c.evidence_lno = evidence_lno.to_vec();
     c.evidence = evidence.to_vec();
@@ -191,8 +228,8 @@ pub(crate) fn persist(input: StoreFields<'_>) -> std::io::Result<(bool, String)>
     c.bucket = crate::memory::classify::bucket_of_query(&fvec, &qterms, text);
     store::write_case(root, &c)?;
     store::bump_case_count(root)?;
-    remember_fp(root, &fp, &id)?;
-    Ok((true, id))
+    remember_fp(root, fp, &id)?;
+    Ok(id)
 }
 
 /// 入库前校验：配额 / 文本上限 / fix 上限 / 证据数组长度一致。

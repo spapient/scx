@@ -130,19 +130,10 @@ fn memory_op_a(opts: &Opts) -> Option<Op> {
         });
     }
     if let Some(path) = &opts.eval {
-        let mode = if opts.eval_gate_human {
-            EvalMode::Human
-        } else if opts.eval_gate_items {
-            EvalMode::Items
-        } else if opts.eval_gate {
-            EvalMode::Mechanical
-        } else {
-            EvalMode::Report
-        };
         return Some(Op::Eval {
             mem_dir: opts.mem_dir.clone(),
             path: path.clone(),
-            mode,
+            mode: eval_mode(opts),
             verbose: opts.eval_verbose,
         });
     }
@@ -164,6 +155,18 @@ fn memory_op_a(opts: &Opts) -> Option<Op> {
         });
     }
     None
+}
+
+fn eval_mode(opts: &Opts) -> EvalMode {
+    if opts.eval_gate_human {
+        EvalMode::Human
+    } else if opts.eval_gate_items {
+        EvalMode::Items
+    } else if opts.eval_gate {
+        EvalMode::Mechanical
+    } else {
+        EvalMode::Report
+    }
 }
 
 /// 后五个维护/标注动作（判定点 ≤ 6）。
@@ -249,11 +252,7 @@ fn run_special_a(op: Op) -> CliResult {
             query,
             k,
             detail,
-        } => match run_recall(&mem_dir, &query, k, detail) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
-            Err(e) => Err(Failure::message(format!("--recall-only failed: {e}"))),
-        },
+        } => run_recall_result(&mem_dir, &query, k, detail),
         Op::Eval {
             mem_dir,
             path,
@@ -262,19 +261,7 @@ fn run_special_a(op: Op) -> CliResult {
         } => emit_eval(crate::memory::eval_cases(&mem_dir, &path, mode, verbose)),
         Op::L1Hist { mem_dir } => emit(crate::memory::l1_hist_table(&mem_dir), "l1-hist"),
         Op::Stats { mem_dir } => emit(crate::memory::stats_table(&mem_dir), "stats"),
-        Op::Rate { mem_dir, id, good } => {
-            let case = crate::memory::rate_case(&mem_dir, &id, good)
-                .map_err(|e| Failure::message(format!("rate failed: {e}")))?;
-            println!(
-                "rate: good={} bad={} quality={:.2} status={} case={}",
-                case.feedback.good, case.feedback.bad, case.quality, case.status, id
-            );
-            if good {
-                let (base, _) = crate::memory::l1_params(&mem_dir);
-                println!("l1_base: {base:.3} (自适应)");
-            }
-            Ok(())
-        }
+        Op::Rate { mem_dir, id, good } => emit_rate(&mem_dir, &id, good),
         Op::Compress(_)
         | Op::Rebuild { .. }
         | Op::Gc { .. }
@@ -284,6 +271,28 @@ fn run_special_a(op: Op) -> CliResult {
             unreachable!("run_special_a called with non-special-a op")
         }
     }
+}
+
+fn run_recall_result(mem_dir: &str, query: &str, k: usize, detail: bool) -> CliResult {
+    match run_recall(mem_dir, query, k, detail) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(Failure::message(format!("--recall-only failed: {e}"))),
+    }
+}
+
+fn emit_rate(mem_dir: &str, id: &str, good: bool) -> CliResult {
+    let case = crate::memory::rate_case(mem_dir, id, good)
+        .map_err(|e| Failure::message(format!("rate failed: {e}")))?;
+    println!(
+        "rate: good={} bad={} quality={:.2} status={} case={}",
+        case.feedback.good, case.feedback.bad, case.quality, case.status, id
+    );
+    if good {
+        let (base, _) = crate::memory::l1_params(mem_dir);
+        println!("l1_base: {base:.3} (自适应)");
+    }
+    Ok(())
 }
 
 /// 维护/标注类动作（5-arm match，V(G)=5）。
@@ -301,14 +310,7 @@ fn run_special_b(op: Op) -> CliResult {
             println!("gc: removed={removed}");
             Ok(())
         }
-        Op::Delete { mem_dir, id } => match crate::memory::delete_case(&mem_dir, &id) {
-            Ok(true) => {
-                println!("delete: removed case={id}");
-                Ok(())
-            }
-            Ok(false) => Err(Failure::message(format!("no such case: {id}"))),
-            Err(e) => Err(Failure::message(format!("delete failed: {e}"))),
-        },
+        Op::Delete { mem_dir, id } => run_delete(&mem_dir, &id),
         Op::Annotate(job) => run_annotate(&job),
         Op::Judge {
             mem_dir: _,
@@ -321,6 +323,17 @@ fn run_special_b(op: Op) -> CliResult {
         | Op::Stats { .. }
         | Op::Rate { .. }
         | Op::Compress(_) => unreachable!("run_special_b called with non-special-b op"),
+    }
+}
+
+fn run_delete(mem_dir: &str, id: &str) -> CliResult {
+    match crate::memory::delete_case(mem_dir, id) {
+        Ok(true) => {
+            println!("delete: removed case={id}");
+            Ok(())
+        }
+        Ok(false) => Err(Failure::message(format!("no such case: {id}"))),
+        Err(e) => Err(Failure::message(format!("delete failed: {e}"))),
     }
 }
 
@@ -437,23 +450,30 @@ fn summary(c: &Case) -> String {
         .map(String::as_str)
         .collect();
     // 单趟找“首个错误行”，找不到再用“首个非空行”；避免对整篇正文扫两遍。
-    let mut first_nonempty = None;
-    let mut first_error = None;
-    for line in c.text.lines().map(str::trim).filter(|t| !t.is_empty()) {
-        if first_nonempty.is_none() {
-            first_nonempty = Some(line);
-        }
-        if is_err_text(line) {
-            first_error = Some(line);
-            break;
-        }
-    }
-    let line = first_error.or(first_nonempty);
-    if let Some(line) = line {
+    if let Some(line) = first_summary_line(&c.text) {
         parts.push(line);
     }
     let s = parts.join(" | ");
     // 只数到截断点：超长日志行不应为“是否加省略号”再扫一遍剩余字符。
+    truncate_summary(&s)
+}
+
+/// 单趟找“首个错误行”，找不到再用“首个非空行”。
+fn first_summary_line(text: &str) -> Option<&str> {
+    let mut first_nonempty = None;
+    for line in text.lines().map(str::trim).filter(|t| !t.is_empty()) {
+        if first_nonempty.is_none() {
+            first_nonempty = Some(line);
+        }
+        if is_err_text(line) {
+            return Some(line);
+        }
+    }
+    first_nonempty
+}
+
+/// 最多 300 字符，截断处补省略号。
+fn truncate_summary(s: &str) -> String {
     let mut out = String::with_capacity(s.len().min(900));
     for (i, ch) in s.chars().enumerate() {
         if i == 300 {
@@ -544,32 +564,12 @@ fn run_compress(job: &CompressJob) -> CliResult {
     let outcome = compress(&text, &job.query, &job.config);
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    if !job.stat {
-        checked_write(out.write_all(outcome.text.as_bytes()))?;
-        if !outcome.text.is_empty() && !outcome.text.ends_with('\n') {
-            checked_write(out.write_all(b"\n"))?;
-        }
-    }
-
+    write_compressed(&mut out, job, &outcome)?;
     let mut store_rx: Option<StoreReceiver> = None;
     if job.store {
         store_rx = prepare_store(job, &text, &outcome)?;
     }
-    if job.recall > 0 {
-        match crate::memory::recall_cases(&job.mem_dir, &job.query, job.recall, false) {
-            Ok(hits) => {
-                let qualified = crate::memory::l1_hits(&job.mem_dir, hits);
-                checked_write(write_mem_lines(
-                    &mut out,
-                    &qualified,
-                    &job.mem_dir,
-                    job.recall_detail,
-                    true,
-                ))?;
-            }
-            Err(e) => eprintln!("scx: warning: --recall skipped: {e}"),
-        }
-    }
+    write_recall(&mut out, job)?;
     if !job.no_stats {
         checked_write(writeln!(out, "{}", render_stats(&outcome)))?;
     }
@@ -583,6 +583,41 @@ fn run_compress(job: &CompressJob) -> CliResult {
         report_store(result)?;
     }
     Ok(())
+}
+
+/// 正文输出：`--stat` 跳过；末尾补换行。
+fn write_compressed(out: &mut dyn Write, job: &CompressJob, outcome: &Outcome) -> CliResult {
+    if job.stat {
+        return Ok(());
+    }
+    checked_write(out.write_all(outcome.text.as_bytes()))?;
+    if !outcome.text.is_empty() && !outcome.text.ends_with('\n') {
+        checked_write(out.write_all(b"\n"))?;
+    }
+    Ok(())
+}
+
+/// 召回旁路输出；失败只告警，不改变正文/统计/退出码。
+fn write_recall(out: &mut dyn Write, job: &CompressJob) -> CliResult {
+    if job.recall == 0 {
+        return Ok(());
+    }
+    match crate::memory::recall_cases(&job.mem_dir, &job.query, job.recall, false) {
+        Ok(hits) => {
+            let qualified = crate::memory::l1_hits(&job.mem_dir, hits);
+            checked_write(write_mem_lines(
+                out,
+                &qualified,
+                &job.mem_dir,
+                job.recall_detail,
+                true,
+            ))
+        }
+        Err(e) => {
+            eprintln!("scx: warning: --recall skipped: {e}");
+            Ok(())
+        }
+    }
 }
 
 fn prepare_store(

@@ -95,15 +95,28 @@ fn build_entry_buf(q: &str, hits: &[(String, f64, f64)], recency: u32, gen: u64)
 /// 修复追加前的文件状态：坏 header 重建、残尾截掉、正常则定位到末尾。
 fn repair_append_file(f: &mut fs::File, existing: &[u8], decoded: &Decoded) -> std::io::Result<()> {
     if !decoded.header_ok {
-        f.set_len(0)?;
-        f.seek(SeekFrom::Start(0))?;
-        write_header(f)?;
+        rebuild_header(f)
     } else if decoded.end < existing.len() {
-        f.set_len(decoded.end as u64)?;
-        f.seek(SeekFrom::End(0))?;
+        truncate_to_end(f, decoded.end)
     } else {
-        f.seek(SeekFrom::End(0))?;
+        seek_end(f)
     }
+}
+
+fn rebuild_header(f: &mut fs::File) -> std::io::Result<()> {
+    f.set_len(0)?;
+    f.seek(SeekFrom::Start(0))?;
+    write_header(f)
+}
+
+fn truncate_to_end(f: &mut fs::File, end: usize) -> std::io::Result<()> {
+    f.set_len(end as u64)?;
+    f.seek(SeekFrom::End(0))?;
+    Ok(())
+}
+
+fn seek_end(f: &mut fs::File) -> std::io::Result<()> {
+    f.seek(SeekFrom::End(0))?;
     Ok(())
 }
 
@@ -143,22 +156,11 @@ pub(crate) fn append(
     // append-only 文件也必须串行：两个进程同时写 header/记录会让读者看到交错段。
     let _g = crate::memory::lock::acquire(root, "qmap.lock")?;
     let p = qmap_path(root);
-    if let Some(dir) = p.parent() {
-        crate::memory::lock::create_dir_all(dir)?;
-    }
     // 读-修复-追加都在 qmap.lock 内完成。上次进程若在 write_all 中途退出，
     // 残尾必须截掉再追加；否则 load_all 永远停在第一处残段，后续记录全部不可见。
     // header 损坏则整文件重建（qmap 只是可丢弃缓存）。
-    let mut f = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&p)?;
-    let mut existing = Vec::new();
-    f.read_to_end(&mut existing)?;
-    let decoded = decode(&existing);
-    repair_append_file(&mut f, &existing, &decoded)?;
+    ensure_parent(&p)?;
+    let (mut f, decoded) = prepare_qmap(&p)?;
     // 同一 query/代际已有覆盖当前结果（相同或更大 top-k 且前缀一致）时无需追加：
     // 重复 CLI 召回不会让 append-only 文件无限膨胀。分数不同的重算仍会追加，
     // 因而参数或库状态变化不会被跳过。
@@ -168,6 +170,27 @@ pub(crate) fn append(
     }
     f.write_all(&buf)?;
     Ok(())
+}
+
+fn ensure_parent(p: &std::path::Path) -> std::io::Result<()> {
+    if let Some(dir) = p.parent() {
+        crate::memory::lock::create_dir_all(dir)?;
+    }
+    Ok(())
+}
+
+fn prepare_qmap(p: &std::path::Path) -> std::io::Result<(fs::File, Decoded)> {
+    let mut f = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(p)?;
+    let mut existing = Vec::new();
+    f.read_to_end(&mut existing)?;
+    let decoded = decode(&existing);
+    repair_append_file(&mut f, &existing, &decoded)?;
+    Ok((f, decoded))
 }
 
 fn snapshot_covers(existing: &[QHit], incoming: &[(String, f64, f64)]) -> bool {
@@ -201,16 +224,7 @@ struct Decoded {
 /// 容错解码：坏 header 返回 `header_ok=false`；记录残尾返回最后一条完整记录之后
 /// 的位置。所有切片都先做边界检查，绝不因外部损坏文件 panic。
 fn decode(buf: &[u8]) -> Decoded {
-    if buf.len() < HEADER_LEN {
-        return Decoded {
-            entries: Vec::new(),
-            end: 0,
-            header_ok: false,
-        };
-    }
-    let magic = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-    let ver = u16::from_le_bytes(buf[4..6].try_into().unwrap());
-    if magic != QMAP_MAGIC || ver != QMAP_VER {
+    if !header_ok(buf) {
         return Decoded {
             entries: Vec::new(),
             end: 0,
@@ -221,62 +235,74 @@ fn decode(buf: &[u8]) -> Decoded {
     let mut i = HEADER_LEN;
     while i < buf.len() {
         let rec_start = i;
-        if i + 2 > buf.len() {
-            break;
-        }
-        let qlen = u16::from_le_bytes(buf[i..i + 2].try_into().unwrap()) as usize;
-        i += 2;
-        if i + qlen > buf.len() {
+        if let Some(entry) = parse_entry(buf, &mut i) {
+            out.push(entry);
+        } else {
             i = rec_start;
             break;
         }
-        let q = String::from_utf8_lossy(&buf[i..i + qlen]).into_owned();
-        i += qlen;
-        if i + 2 > buf.len() {
-            i = rec_start;
-            break;
-        }
-        let n = u16::from_le_bytes(buf[i..i + 2].try_into().unwrap()) as usize;
-        i += 2;
-        let mut hits = Vec::with_capacity(n.min(64));
-        let mut ok = true;
-        for _ in 0..n {
-            if i >= buf.len() {
-                ok = false;
-                break;
-            }
-            let ilen = buf[i] as usize;
-            i += 1;
-            if i + ilen + 8 > buf.len() {
-                ok = false;
-                break;
-            }
-            let id = String::from_utf8_lossy(&buf[i..i + ilen]).into_owned();
-            i += ilen;
-            let score = f32::from_le_bytes(buf[i..i + 4].try_into().unwrap());
-            let sim = f32::from_le_bytes(buf[i + 4..i + 8].try_into().unwrap());
-            i += 8;
-            hits.push(QHit { id, score, sim });
-        }
-        if !ok || i + 12 > buf.len() {
-            i = rec_start;
-            break;
-        }
-        let recency = u32::from_le_bytes(buf[i..i + 4].try_into().unwrap());
-        let gen = u64::from_le_bytes(buf[i + 4..i + 12].try_into().unwrap());
-        i += 12;
-        out.push(QEntry {
-            q,
-            hits,
-            recency,
-            gen,
-        });
     }
     Decoded {
         entries: out,
         end: i,
         header_ok: true,
     }
+}
+
+fn header_ok(buf: &[u8]) -> bool {
+    if buf.len() < HEADER_LEN {
+        return false;
+    }
+    let magic = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+    let ver = u16::from_le_bytes(buf[4..6].try_into().unwrap());
+    magic == QMAP_MAGIC && ver == QMAP_VER
+}
+
+fn parse_entry(buf: &[u8], i: &mut usize) -> Option<QEntry> {
+    if *i + 2 > buf.len() {
+        return None;
+    }
+    let qlen = u16::from_le_bytes(buf[*i..*i + 2].try_into().unwrap()) as usize;
+    *i += 2;
+    if *i + qlen > buf.len() {
+        return None;
+    }
+    let q = String::from_utf8_lossy(&buf[*i..*i + qlen]).into_owned();
+    *i += qlen;
+    if *i + 2 > buf.len() {
+        return None;
+    }
+    let n = u16::from_le_bytes(buf[*i..*i + 2].try_into().unwrap()) as usize;
+    *i += 2;
+    let mut hits = Vec::with_capacity(n.min(64));
+    for _ in 0..n {
+        if *i >= buf.len() {
+            return None;
+        }
+        let ilen = buf[*i] as usize;
+        *i += 1;
+        if *i + ilen + 8 > buf.len() {
+            return None;
+        }
+        let id = String::from_utf8_lossy(&buf[*i..*i + ilen]).into_owned();
+        *i += ilen;
+        let score = f32::from_le_bytes(buf[*i..*i + 4].try_into().unwrap());
+        let sim = f32::from_le_bytes(buf[*i + 4..*i + 8].try_into().unwrap());
+        *i += 8;
+        hits.push(QHit { id, score, sim });
+    }
+    if *i + 12 > buf.len() {
+        return None;
+    }
+    let recency = u32::from_le_bytes(buf[*i..*i + 4].try_into().unwrap());
+    let gen = u64::from_le_bytes(buf[*i + 4..*i + 12].try_into().unwrap());
+    *i += 12;
+    Some(QEntry {
+        q,
+        hits,
+        recency,
+        gen,
+    })
 }
 
 /// 归一化 query（保留数字：qmap 是精确键，8080/9090 不能共用快照）。

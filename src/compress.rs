@@ -129,24 +129,28 @@ fn parse_forces(forces: &[String]) -> Vec<ForcePat> {
     for f in forces {
         for part in f.split('|') {
             let p = part.trim().to_lowercase();
-            if p.is_empty() {
-                continue;
-            }
-            if let Some(rest) = p.strip_prefix("re:") {
-                match crate::regex::parse_regex(rest) {
-                    Ok(node) => pats.push(ForcePat::Re(crate::regex::compile_nfa(&node))),
-                    Err(e) => {
-                        // CLI（args::parse_force）已前置校验；库内核绕过 CLI
-                        // 直接构造 Config 时，非法模式不参与匹配（debug 断言提示）。
-                        debug_assert!(false, "invalid re: force pattern: {e}");
-                    }
-                }
-            } else {
-                pats.push(ForcePat::Sub(p));
+            if !p.is_empty() {
+                push_force_part(&mut pats, p);
             }
         }
     }
     pats
+}
+
+/// 单个 `--force` 片段：`re:` 正则或字面子串。
+fn push_force_part(pats: &mut Vec<ForcePat>, p: String) {
+    if let Some(rest) = p.strip_prefix("re:") {
+        match crate::regex::parse_regex(rest) {
+            Ok(node) => pats.push(ForcePat::Re(crate::regex::compile_nfa(&node))),
+            Err(e) => {
+                // CLI（args::parse_force）已前置校验；库内核绕过 CLI
+                // 直接构造 Config 时，非法模式不参与匹配（debug 断言提示）。
+                debug_assert!(false, "invalid re: force pattern: {e}");
+            }
+        }
+    } else {
+        pats.push(ForcePat::Sub(p));
+    }
 }
 
 /// 逐行 × 逐词位掩码扫描结果：命中掩码、错误/标记/守卫/force 判定与 token 估算。
@@ -218,7 +222,6 @@ fn fold_dups(
     force: &[bool],
 ) -> (Vec<bool>, usize) {
     let total = lines.len();
-    let has_hit = |i: usize| (0..words).any(|w| mask[i * words + w] != 0);
     let mut seen_count: fx::FxHashMap<String, usize> =
         fx::FxHashMap::with_capacity_and_hasher(total, Default::default());
     let mut dup = vec![false; total];
@@ -228,17 +231,12 @@ fn fold_dups(
     for i in 0..total {
         key.clear();
         norm_into(lines[i], &mut key, &mut run);
-        let key_len = if key.is_ascii() {
-            key.len()
-        } else {
-            key.chars().count()
-        };
-        if key_len < 6 {
+        if short_key(&key) {
             continue;
         }
         if let Some(n) = seen_count.get_mut(key.as_str()) {
             *n += 1;
-            if *n > 2 && !has_hit(i) && !err[i] && !force[i] {
+            if foldable_run(n, mask, words, i, err, force) {
                 dup[i] = true;
                 dup_n += 1;
             }
@@ -247,6 +245,33 @@ fn fold_dups(
         }
     }
     (dup, dup_n)
+}
+
+/// 归一化键是否过短（短键不参与折叠，保持与 v0.4.1 一致）。
+fn short_key(key: &str) -> bool {
+    let key_len = if key.is_ascii() {
+        key.len()
+    } else {
+        key.chars().count()
+    };
+    key_len < 6
+}
+
+/// 某行是否命中任意查询词（仅用于重复折叠的豁免判定）。
+fn line_has_hit(mask: &[u64], words: usize, i: usize) -> bool {
+    (0..words).any(|w| mask[i * words + w] != 0)
+}
+
+/// 第 3 次起的重复行是否可折叠（无查询命中、无错误、无 force）。
+fn foldable_run(
+    n: &usize,
+    mask: &[u64],
+    words: usize,
+    i: usize,
+    err: &[bool],
+    force: &[bool],
+) -> bool {
+    *n > 2 && !line_has_hit(mask, words, i) && !err[i] && !force[i]
 }
 
 /// 词频（df）与 IDF 权重：只统计非折叠行。
@@ -324,22 +349,7 @@ fn seed_marks(
             continue;
         }
         let base = i * words;
-        let mut h = 0usize;
-        let mut sw = 0.0f64;
-        let mut lone = usize::MAX;
-        for w in 0..words {
-            let mut bits = mask[base + w];
-            while bits != 0 {
-                let k = w * 64 + bits.trailing_zeros() as usize;
-                bits &= bits - 1;
-                if k >= df.len() {
-                    continue;
-                }
-                h += 1;
-                sw += weights[k];
-                lone = if h == 1 { k } else { usize::MAX };
-            }
-        }
+        let (h, sw, lone) = count_hits(mask, base, words, df.len(), weights);
         let fm = force[i];
         force_any |= fm;
         hits[i] = h;
@@ -356,6 +366,33 @@ fn seed_marks(
         hit_lines,
         force_any,
     }
+}
+
+/// 单行的命中计数：词位掩码展开为（命中数、权重和、唯一稀有词）。
+fn count_hits(
+    mask: &[u64],
+    base: usize,
+    words: usize,
+    df_len: usize,
+    weights: &[f64],
+) -> (usize, f64, usize) {
+    let mut h = 0usize;
+    let mut sw = 0.0f64;
+    let mut lone = usize::MAX;
+    for w in 0..words {
+        let mut bits = mask[base + w];
+        while bits != 0 {
+            let k = w * 64 + bits.trailing_zeros() as usize;
+            bits &= bits - 1;
+            if k >= df_len {
+                continue;
+            }
+            h += 1;
+            sw += weights[k];
+            lone = if h == 1 { k } else { usize::MAX };
+        }
+    }
+    (h, sw, lone)
 }
 
 /// 种子区域：±window 扩展，间隔 <= window*3 合并；区域外素材不参与可选预算。
@@ -498,17 +535,21 @@ fn scan_structures(lines: &[&str]) -> StructMap {
             continue;
         }
         let kind = struct_line_kind(line);
-        let continuing = match (cur, kind) {
-            (Some((_, k)), Some(k2)) => k == k2,
-            _ => false,
-        };
-        if !continuing {
+        if !continues(cur, kind) {
             close_segment(&mut regions, cur, i.saturating_sub(1));
             cur = kind.map(|k2| (i, k2));
         }
     }
     close_segment(&mut regions, cur, lines.len().saturating_sub(1));
     StructMap { regions }
+}
+
+/// 相邻行是否同属一段（同类结构且段未关闭）。
+fn continues(cur: Option<(usize, RegionKind)>, kind: Option<RegionKind>) -> bool {
+    match (cur, kind) {
+        (Some((_, k)), Some(k2)) => k == k2,
+        _ => false,
+    }
 }
 
 /// 单行结构种类：import 块 / 堆栈链行。
@@ -544,29 +585,50 @@ fn score_line(
     let total = lines.len();
     let line = lines[i];
     let mut sc = sumw[i] * tbl.sumw_mul;
-    if hits[i] >= 2 {
+    sc += state_bonus(hits[i], err[i], force[i], i, total, tbl);
+    sc += structure_bonus(line, hits[i], tbl);
+    sc
+}
+
+/// 状态类加分（命中数 / 错误 / force / 首尾身份行）。
+fn state_bonus(
+    hits: usize,
+    err: bool,
+    force: bool,
+    i: usize,
+    total: usize,
+    tbl: &ScoreTable,
+) -> f64 {
+    let mut sc = 0.0;
+    if hits >= 2 {
         sc += tbl.pair_bonus;
     }
-    if err[i] {
+    if err {
         sc += tbl.error_bonus;
     }
+    if force {
+        sc += tbl.force_bonus;
+    }
+    if edge_line(i, total, tbl) {
+        sc += tbl.edge_bonus;
+    }
+    sc
+}
+
+/// 结构类加分（标题 / diff 元信息 / diff 命中 / 堆栈帧）。
+fn structure_bonus(line: &str, hits: usize, tbl: &ScoreTable) -> f64 {
+    let mut sc = 0.0;
     if is_heading(line) {
         sc += tbl.heading_bonus;
     }
     if is_diffmeta(line) {
         sc += tbl.diffmeta_bonus;
     }
-    if diff_hit(line, hits[i]) {
+    if diff_hit(line, hits) {
         sc += tbl.diffline_hit_bonus;
     }
     if frame_hint(line) {
         sc += tbl.frame_bonus;
-    }
-    if force[i] {
-        sc += tbl.force_bonus;
-    }
-    if edge_line(i, total, tbl) {
-        sc += tbl.edge_bonus;
     }
     sc
 }
@@ -733,9 +795,16 @@ fn kept_tokens(lines: &[&str], keep: &[bool]) -> f64 {
 
 /// 风险审计：统计被丢弃的失败级错误行与命中行，按 `keep_count` 归一化得出 risk_raw。
 fn audit_risk(keep: &[bool], err: &[bool], hits: &[usize], tbl: &RiskTable) -> Risk {
+    let (err_dropped, hit_dropped) = count_dropped(keep, err, hits);
+    let keep_count = keep.iter().filter(|&&k| k).count();
+    let risk_raw = (err_dropped + hit_dropped * tbl.hit_drop_w) as f64 / keep_count.max(1) as f64;
+    risk_level(risk_raw, tbl)
+}
+
+/// 统计未保留行中被丢弃的失败级错误行与命中行。
+fn count_dropped(keep: &[bool], err: &[bool], hits: &[usize]) -> (usize, usize) {
     let mut err_dropped = 0usize;
     let mut hit_dropped = 0usize;
-    let keep_count = keep.iter().filter(|&&k| k).count();
     for i in 0..keep.len() {
         if keep[i] {
             continue;
@@ -747,10 +816,14 @@ fn audit_risk(keep: &[bool], err: &[bool], hits: &[usize], tbl: &RiskTable) -> R
             hit_dropped += 1;
         }
     }
-    let risk_raw = (err_dropped + hit_dropped * tbl.hit_drop_w) as f64 / keep_count.max(1) as f64;
-    if risk_raw >= tbl.high {
+    (err_dropped, hit_dropped)
+}
+
+/// 归一化风险 → 风险档。
+fn risk_level(raw: f64, tbl: &RiskTable) -> Risk {
+    if raw >= tbl.high {
         Risk::High
-    } else if risk_raw >= tbl.med {
+    } else if raw >= tbl.med {
         Risk::Medium
     } else {
         Risk::Low
@@ -804,6 +877,73 @@ fn render(lines: &[&str], keep: &[bool], elide: bool, lineno: bool) -> (String, 
         out_text.push_str("...\n");
     }
     (out_text, kept_lno)
+}
+
+/// 结构感知邻域表：`--structure 1` 时先扫描结构区域再并入种子邻域。
+fn build_regions(
+    cfg: &Config,
+    seed: &[bool],
+    window: usize,
+    total: usize,
+    lines: &[&str],
+) -> Regions {
+    if cfg.structure {
+        let map = scan_structures(lines);
+        expand_regions(seed, window, total, Some(&map))
+    } else {
+        expand_regions(seed, window, total, None)
+    }
+}
+
+/// 语义增强加分（仅 feature=semantic 且显式加载权重时生效）。
+#[cfg(feature = "semantic")]
+fn apply_semantic_boost(
+    cfg: &Config,
+    lines: &[&str],
+    uniq_terms: &[String],
+    total: usize,
+    dup: &[bool],
+    scores: &mut [f64],
+) {
+    if let Some(w) = &cfg.semantic {
+        for i in 0..total {
+            if dup[i] {
+                continue;
+            }
+            scores[i] += w.score(&crate::semantic::feats(lines[i], uniq_terms, w.dim));
+        }
+    }
+}
+
+#[cfg(not(feature = "semantic"))]
+fn apply_semantic_boost(
+    _cfg: &Config,
+    _lines: &[&str],
+    _uniq_terms: &[String],
+    _total: usize,
+    _dup: &[bool],
+    _scores: &mut [f64],
+) {
+}
+
+/// 可选预算填充：`--context 0` 或已进入 overflow 时跳过。
+fn maybe_fill(
+    sel: &Select,
+    cfg: &FillCfg,
+    context: i64,
+    overflow: Option<Mode>,
+    keep: &mut [bool],
+    keep_count: &mut usize,
+) {
+    if context == 0 || overflow.is_some() {
+        return;
+    }
+    fill_budget(sel, cfg, keep, keep_count);
+}
+
+/// 风险守卫触发条件（HIGH 且未关闭 `--risk-gate`）。
+fn should_guard(risk: Risk, cfg: &Config) -> bool {
+    risk == Risk::High && cfg.risk_gate
 }
 
 /// 对 `text` 按 `query` 做证据筛选压缩。纯函数：无文件、环境与进程 I/O。
@@ -926,12 +1066,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     // 结构感知邻域（--structure 1）：fence/import/堆栈区域整段并入种子区域。
-    let regions = if cfg.structure {
-        let map = scan_structures(&lines);
-        expand_regions(&seeds.seed, window as usize, total, Some(&map))
-    } else {
-        expand_regions(&seeds.seed, window as usize, total, None)
-    };
+    let regions = build_regions(cfg, &seeds.seed, window as usize, total, &lines);
     #[cfg_attr(not(feature = "semantic"), allow(unused_mut))]
     let mut scores = score_lines(
         &lines,
@@ -944,15 +1079,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     );
     // 语义增强（可选）：feature=semantic 且显式加载权重时，对非 dup 候选行
     // 叠加 sigmoid 打分作为排序加分；不启用时与 v0.4.1 逐字节一致。
-    #[cfg(feature = "semantic")]
-    if let Some(w) = &cfg.semantic {
-        for i in 0..total {
-            if dup[i] {
-                continue;
-            }
-            scores[i] += w.score(&crate::semantic::feats(lines[i], &uniq_terms, w.dim));
-        }
-    }
+    apply_semantic_boost(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
     let boost = neighborhood_boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     let (mut keep, mut keep_count) = seed_floor(&seeds.seed, context, total);
 
@@ -963,31 +1090,30 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let mut overflow = cap_floor(tok_floor, cfg.max_tokens);
 
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
-    if context != 0 && overflow.is_none() {
-        let remaining = cap_remaining(tok_floor, cfg.max_tokens);
-        fill_budget(
-            &Select {
-                lines: &lines,
-                scores: &scores,
-                boost: &boost,
-                dup: &dup,
-                in_region: &regions.in_region,
-            },
-            &FillCfg {
-                region_gate: regions.gate,
-                total_tok: masks.total_tok,
-                ratio,
-                edge_head: DEFAULT_SCORES.edge_head,
-                remaining,
-            },
-            &mut keep,
-            &mut keep_count,
-        );
-    }
+    maybe_fill(
+        &Select {
+            lines: &lines,
+            scores: &scores,
+            boost: &boost,
+            dup: &dup,
+            in_region: &regions.in_region,
+        },
+        &FillCfg {
+            region_gate: regions.gate,
+            total_tok: masks.total_tok,
+            ratio,
+            edge_head: DEFAULT_SCORES.edge_head,
+            remaining: cap_remaining(tok_floor, cfg.max_tokens),
+        },
+        context,
+        overflow,
+        &mut keep,
+        &mut keep_count,
+    );
 
     let risk = audit_risk(&keep, &masks.err_v, &seeds.hits, &DEFAULT_RISK);
     let mut guarded = 0u8;
-    if risk == Risk::High && cfg.risk_gate {
+    if should_guard(risk, cfg) {
         guarded = guard_high(
             &mut keep,
             &mut keep_count,
@@ -1132,29 +1258,26 @@ fn drop_runs(keep: &[bool], overflow: bool) -> Vec<crate::Dropped> {
                 start = Some(i);
             }
         } else if let Some(s) = start.take() {
-            out.push(crate::Dropped {
-                start: s + 1,
-                end: i,
-                reason: if overflow {
-                    crate::DropReason::MaxTokens
-                } else {
-                    crate::DropReason::Budget
-                },
-            });
+            push_drop_run(&mut out, s, i, overflow);
         }
     }
     if let Some(s) = start {
-        out.push(crate::Dropped {
-            start: s + 1,
-            end: keep.len(),
-            reason: if overflow {
-                crate::DropReason::MaxTokens
-            } else {
-                crate::DropReason::Budget
-            },
-        });
+        push_drop_run(&mut out, s, keep.len(), overflow);
     }
     out
+}
+
+/// 追加一段未保留区间（1-based 闭区间）与原因。
+fn push_drop_run(out: &mut Vec<crate::Dropped>, start: usize, end: usize, overflow: bool) {
+    out.push(crate::Dropped {
+        start: start + 1,
+        end,
+        reason: if overflow {
+            crate::DropReason::MaxTokens
+        } else {
+            crate::DropReason::Budget
+        },
+    });
 }
 
 /// 输出统计：字符数（去掉尾随换行）与压减率。

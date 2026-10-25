@@ -351,21 +351,13 @@ fn item_counts(cases: &[EvalCase], human: bool) -> (usize, usize, usize, usize) 
         let mut complete = !c.rel.is_empty();
         for k in c.rel.keys() {
             required += 1;
-            match c.judge_items.get(k) {
-                Some(by)
-                    if (if human {
-                        human_judge_name(by)
-                    } else {
-                        valid_judge(Some(by))
-                    }) =>
-                {
-                    covered += 1
-                }
-                Some(_) => {
+            match classify_item(&c.judge_items, k, human) {
+                ItemVerdict::Covered => covered += 1,
+                ItemVerdict::Bad => {
                     bad_by += 1;
                     complete = false;
                 }
-                None => complete = false,
+                ItemVerdict::Missing => complete = false,
             }
         }
         if complete {
@@ -373,6 +365,23 @@ fn item_counts(cases: &[EvalCase], human: bool) -> (usize, usize, usize, usize) 
         }
     }
     (required, covered, bad_by, complete_cases)
+}
+
+/// 单候选裁决分类：covered / bad_by / missing。
+enum ItemVerdict {
+    Covered,
+    Bad,
+    Missing,
+}
+
+fn classify_item(items: &HashMap<String, String>, k: &str, human: bool) -> ItemVerdict {
+    match items.get(k) {
+        Some(by) if human_judge_name(by) || (!human && valid_judge(Some(by))) => {
+            ItemVerdict::Covered
+        }
+        Some(_) => ItemVerdict::Bad,
+        None => ItemVerdict::Missing,
+    }
 }
 
 /// 逐候选溯源行：每个 rel 键都有真人 per-item 条目。
@@ -420,27 +429,33 @@ fn control_counts(cases: &[EvalCase], layers: &[String]) -> (usize, usize, usize
     let mut rel0 = 0usize;
     let mut control_layers = 0usize;
     for layer in layers {
-        let mut weak = 0usize;
-        let mut negative = 0usize;
-        for c in cases.iter().filter(|c| &c.layer == layer) {
-            for v in c.rel.values() {
-                if *v >= 2.0 {
-                    continue;
-                }
-                if *v >= 1.0 {
-                    rel1 += 1;
-                    weak += 1;
-                } else {
-                    rel0 += 1;
-                    negative += 1;
-                }
-            }
-        }
+        let (weak, negative) = count_layer_controls(cases, layer);
+        rel1 += weak;
+        rel0 += negative;
         if weak > 0 && negative > 0 {
             control_layers += 1;
         }
     }
     (rel1, rel0, control_layers)
+}
+
+/// 单层的弱相关/负例标签计数。
+fn count_layer_controls(cases: &[EvalCase], layer: &str) -> (usize, usize) {
+    let mut weak = 0usize;
+    let mut negative = 0usize;
+    for c in cases.iter().filter(|c| c.layer == layer) {
+        for v in c.rel.values() {
+            if *v >= 2.0 {
+                continue;
+            }
+            if *v >= 1.0 {
+                weak += 1;
+            } else {
+                negative += 1;
+            }
+        }
+    }
+    (weak, negative)
 }
 
 /// 逐层 NDCG@10 相对非劣（人工闭环证据）。

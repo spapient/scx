@@ -70,36 +70,53 @@ fn error_flags_ascii(ll: &str) -> (bool, bool) {
     let bytes = ll.as_bytes();
     let mut err = false;
     for i in 0..bytes.len() {
-        let rest = &bytes[i..];
-        match bytes[i] {
-            b'e' if rest.starts_with(b"error") || rest.starts_with(b"exception") => {
-                return (true, true);
+        for &(needle, fatal) in ERR_NEEDLES_BY_FIRST[bytes[i] as usize] {
+            if bytes[i..].starts_with(needle) {
+                if fatal {
+                    return (true, true);
+                }
+                err = true;
             }
-            b'p' if rest.starts_with(b"panic") => return (true, true),
-            b'a' if rest.starts_with(b"assert") => return (true, true),
-            b'd' if rest.starts_with(b"denied") => return (true, true),
-            b'r' if rest.starts_with(b"refused") => return (true, true),
-            b't' if rest.starts_with(b"timeout")
-                || rest.starts_with(b"timed out")
-                || rest.starts_with(b"traceback") =>
-            {
-                return (true, true);
-            }
-            b'c' if rest.starts_with(b"cannot") => return (true, true),
-            b'u' if rest.starts_with(b"unable") || rest.starts_with(b"undefined") => {
-                return (true, true);
-            }
-            b's' if rest.starts_with(b"segfault") => return (true, true),
-            b'f' if rest.starts_with(b"fail") || rest.starts_with(b"fatal") => {
-                return (true, true);
-            }
-            b'n' if rest.starts_with(b"npm err") => return (true, true),
-            b'w' if rest.starts_with(b"warn") => err = true,
-            _ => {}
         }
     }
     (err, false)
 }
+
+/// 首字节 → 该字节可能命中的 ASCII 错误词表；`error_flags_ascii` 的单趟分派表。
+/// 词序与原 match 分支一致，保证 `warn` 仅置 err、其余命中即失败级返回。
+const ERR_EMPTY: &[(&[u8], bool)] = &[];
+const ERR_E: &[(&[u8], bool)] = &[(b"error", true), (b"exception", true)];
+const ERR_P: &[(&[u8], bool)] = &[(b"panic", true)];
+const ERR_A: &[(&[u8], bool)] = &[(b"assert", true)];
+const ERR_D: &[(&[u8], bool)] = &[(b"denied", true)];
+const ERR_R: &[(&[u8], bool)] = &[(b"refused", true)];
+const ERR_T: &[(&[u8], bool)] = &[
+    (b"timeout", true),
+    (b"timed out", true),
+    (b"traceback", true),
+];
+const ERR_C: &[(&[u8], bool)] = &[(b"cannot", true)];
+const ERR_U: &[(&[u8], bool)] = &[(b"unable", true), (b"undefined", true)];
+const ERR_S: &[(&[u8], bool)] = &[(b"segfault", true)];
+const ERR_F: &[(&[u8], bool)] = &[(b"fail", true), (b"fatal", true)];
+const ERR_N: &[(&[u8], bool)] = &[(b"npm err", true)];
+const ERR_W: &[(&[u8], bool)] = &[(b"warn", false)];
+const ERR_NEEDLES_BY_FIRST: [&[(&[u8], bool)]; 256] = {
+    let mut table = [ERR_EMPTY; 256];
+    table[b'e' as usize] = ERR_E;
+    table[b'p' as usize] = ERR_P;
+    table[b'a' as usize] = ERR_A;
+    table[b'd' as usize] = ERR_D;
+    table[b'r' as usize] = ERR_R;
+    table[b't' as usize] = ERR_T;
+    table[b'c' as usize] = ERR_C;
+    table[b'u' as usize] = ERR_U;
+    table[b's' as usize] = ERR_S;
+    table[b'f' as usize] = ERR_F;
+    table[b'n' as usize] = ERR_N;
+    table[b'w' as usize] = ERR_W;
+    table
+};
 
 pub(crate) fn is_err(ll: &str) -> bool {
     error_flags(ll).0
@@ -141,51 +158,64 @@ pub(crate) fn is_frame(s: &str) -> bool {
     if t.len() == s.len() {
         return false;
     }
-    if t.starts_with("at ") || t.starts_with("File \"") {
-        return true;
-    }
-    let hashes = t.chars().take_while(|&c| c == '#').count();
-    if hashes >= 1
-        && t.chars().nth(hashes).is_some_and(|c| c.is_ascii_digit())
-        && t.chars().skip(hashes).any(|c| c.is_whitespace())
-    {
+    if is_frame_prefix(t) {
         return true;
     }
     if !t.as_bytes().contains(&b'.') {
         return false;
     }
-    // 仅为 "." 开头的 ASCII 扩展名扫描。按字节定位 "."，但扩展名用
-    // char_indices 截取，避免在多字节 UTF-8 字符中间切片触发 panic。
+    frame_dot_scan(t)
+}
+
+/// `at `/`File "` 前缀或 `#N` 编号帧（如 `#3 foo`）。
+fn is_frame_prefix(t: &str) -> bool {
+    if t.starts_with("at ") || t.starts_with("File \"") {
+        return true;
+    }
+    let hashes = t.chars().take_while(|&c| c == '#').count();
+    hashes >= 1
+        && t.chars().nth(hashes).is_some_and(|c| c.is_ascii_digit())
+        && t.chars().skip(hashes).any(|c| c.is_whitespace())
+}
+
+/// 仅为 "." 开头的 ASCII 扩展名扫描。按字节定位 "."，但扩展名用
+/// char_indices 截取，避免在多字节 UTF-8 字符中间切片触发 panic。
+fn frame_dot_scan(t: &str) -> bool {
     let bytes = t.as_bytes();
     for i in 1..bytes.len() {
         let prev_is_space =
             bytes[i] == b'.' && t[..i].chars().next_back().is_some_and(char::is_whitespace);
-        if bytes[i] == b'.' && !prev_is_space {
-            let rest = &t[i + 1..];
-            let mut colon = None;
-            for (off, ch) in rest.char_indices().take(MAX_FRAME_EXT_CHARS + 1) {
-                if ch == ':' {
-                    colon = Some(off);
-                    break;
-                }
-                if ch.is_whitespace() {
-                    break;
-                }
-            }
-            if let Some(off) = colon {
-                let ext = &rest[..off];
-                if EXTS.contains(&ext)
-                    && rest[off + 1..]
-                        .chars()
-                        .next()
-                        .is_some_and(|c| c.is_ascii_digit())
-                {
-                    return true;
-                }
-            }
+        if bytes[i] == b'.' && !prev_is_space && frame_dot_match(t, i) {
+            return true;
         }
     }
     false
+}
+
+/// 判定第 `i` 个字节处的 `.` 是否为 `path.ext:digits` 帧后缀。
+fn frame_dot_match(t: &str, i: usize) -> bool {
+    let rest = &t[i + 1..];
+    let mut colon = None;
+    for (off, ch) in rest.char_indices().take(MAX_FRAME_EXT_CHARS + 1) {
+        if ch == ':' {
+            colon = Some(off);
+            break;
+        }
+        if ch.is_whitespace() {
+            break;
+        }
+    }
+    match colon {
+        Some(off) => {
+            let ext = &rest[..off];
+            EXTS.contains(&ext)
+                && rest[off + 1..]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_digit())
+        }
+        None => false,
+    }
 }
 pub(crate) fn is_lineref(s: &str) -> bool {
     let mut it = s.chars().rev();
@@ -217,52 +247,68 @@ fn norm_generic(s: &str, out: &mut String, run: &mut String) {
     let mut it = s.chars().peekable();
     while let Some(c) = it.next() {
         if c.is_ascii_hexdigit() {
-            run.clear();
-            run.push(c);
-            while it.peek().is_some_and(|&n| n.is_ascii_hexdigit()) {
-                run.push(it.next().unwrap());
-            }
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
-            if run.len() >= 8 {
-                out.push('#');
-            } else {
-                let mut ri = run.chars().peekable();
-                while let Some(rc) = ri.next() {
-                    if rc.is_ascii_digit() {
-                        while ri.peek().is_some_and(|&n| n.is_ascii_digit()) {
-                            ri.next();
-                        }
-                        out.push('#');
-                    } else {
-                        out.push(rc);
-                    }
-                }
-            }
+            collect_hex_run(&mut it, c, run);
+            push_pending_space(&mut pending_space, out);
+            push_hex_run(run, out);
         } else if c.is_ascii_digit() {
-            while it.peek().is_some_and(|&n| n.is_ascii_digit()) {
-                it.next();
-            }
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
+            skip_while(&mut it, |c| c.is_ascii_digit());
+            push_pending_space(&mut pending_space, out);
             out.push('#');
         } else if c.is_whitespace() {
-            while it.peek().is_some_and(|&n| n.is_whitespace()) {
-                it.next();
-            }
+            skip_while(&mut it, |c| c.is_whitespace());
             pending_space = true;
         } else {
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
+            push_pending_space(&mut pending_space, out);
             out.push(c);
         }
     }
+}
+
+/// 收集一段连续十六进制 run（首字符已消费）。
+fn collect_hex_run(
+    it: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    first: char,
+    run: &mut String,
+) {
+    run.clear();
+    run.push(first);
+    while it.peek().is_some_and(|&n| n.is_ascii_hexdigit()) {
+        run.push(it.next().unwrap());
+    }
+}
+
+/// 跳过满足谓词的连续字符。
+fn skip_while(it: &mut std::iter::Peekable<std::str::Chars<'_>>, pred: impl Fn(char) -> bool) {
+    while it.peek().is_some_and(|&n| pred(n)) {
+        it.next();
+    }
+}
+
+/// 十六进制 run < 8 位时，数字段折叠为 `#`，字母保留（`0x1f` → `#x#`）。
+fn push_hex_run(run: &str, out: &mut String) {
+    if run.len() >= 8 {
+        out.push('#');
+        return;
+    }
+    let mut ri = run.chars().peekable();
+    while let Some(rc) = ri.next() {
+        if rc.is_ascii_digit() {
+            while ri.peek().is_some_and(|&n| n.is_ascii_digit()) {
+                ri.next();
+            }
+            out.push('#');
+        } else {
+            out.push(rc);
+        }
+    }
+}
+
+/// 在非空输出前补写悬空的单空格，并复位标志。
+fn push_pending_space(pending: &mut bool, out: &mut String) {
+    if *pending && !out.is_empty() {
+        out.push(' ');
+    }
+    *pending = false;
 }
 
 /// ASCII 快路径：与通用路径语义一致，跳过 Unicode 解码与临时十六进制缓冲。
@@ -277,39 +323,37 @@ fn norm_ascii(s: &[u8], out: &mut String) {
             while i < s.len() && s[i].is_ascii_hexdigit() {
                 i += 1;
             }
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
-            let run = &s[start..i];
-            if run.len() >= 8 {
-                out.push('#');
-            } else {
-                let mut j = 0usize;
-                while j < run.len() {
-                    if run[j].is_ascii_digit() {
-                        while j < run.len() && run[j].is_ascii_digit() {
-                            j += 1;
-                        }
-                        out.push('#');
-                    } else {
-                        out.push(run[j] as char);
-                        j += 1;
-                    }
-                }
-            }
+            push_pending_space(&mut pending_space, out);
+            push_hex_run_ascii(&s[start..i], out);
         } else if is_space_byte(c) {
             while i < s.len() && is_space_byte(s[i]) {
                 i += 1;
             }
             pending_space = true;
         } else {
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
+            push_pending_space(&mut pending_space, out);
             out.push(c as char);
             i += 1;
+        }
+    }
+}
+
+/// 十六进制 run < 8 位时按字节折叠（数字→`#`，其余保留）。
+fn push_hex_run_ascii(run: &[u8], out: &mut String) {
+    if run.len() >= 8 {
+        out.push('#');
+        return;
+    }
+    let mut j = 0usize;
+    while j < run.len() {
+        if run[j].is_ascii_digit() {
+            while j < run.len() && run[j].is_ascii_digit() {
+                j += 1;
+            }
+            out.push('#');
+        } else {
+            out.push(run[j] as char);
+            j += 1;
         }
     }
 }
@@ -381,32 +425,7 @@ pub(crate) fn push_analysis_lower(s: &str, out: &mut String) {
     let mut it = s.chars().peekable();
     while let Some(c) = it.next() {
         if c == '\u{1b}' {
-            match it.peek().copied() {
-                Some('[') => {
-                    it.next();
-                    for esc in it.by_ref() {
-                        if ('@'..='~').contains(&esc) {
-                            break;
-                        }
-                    }
-                }
-                Some(']') => {
-                    it.next();
-                    while let Some(esc) = it.next() {
-                        if esc == '\u{7}' {
-                            break;
-                        }
-                        if esc == '\u{1b}' && it.peek() == Some(&'\\') {
-                            it.next();
-                            break;
-                        }
-                    }
-                }
-                Some(_) => {
-                    it.next();
-                }
-                None => {}
-            }
+            skip_ansi_escape(&mut it);
             continue;
         }
         if c == '\r' {
@@ -415,6 +434,42 @@ pub(crate) fn push_analysis_lower(s: &str, out: &mut String) {
         }
         for lc in c.to_lowercase() {
             out.push(lc);
+        }
+    }
+}
+
+/// 消费一个已见 `ESC` 的 ANSI 序列（CSI / OSC / 单字符）。
+fn skip_ansi_escape(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    match it.peek().copied() {
+        Some('[') => skip_csi(it),
+        Some(']') => skip_osc(it),
+        Some(_) => {
+            it.next();
+        }
+        None => {}
+    }
+}
+
+/// CSI 序列：`ESC [ ... 终止字节 @..~`。
+fn skip_csi(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    it.next();
+    for esc in it.by_ref() {
+        if ('@'..='~').contains(&esc) {
+            break;
+        }
+    }
+}
+
+/// OSC 序列：`ESC ] ... BEL` 或 `ESC ] ... ESC \`。
+fn skip_osc(it: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    it.next();
+    while let Some(esc) = it.next() {
+        if esc == '\u{7}' {
+            break;
+        }
+        if esc == '\u{1b}' && it.peek() == Some(&'\\') {
+            it.next();
+            break;
         }
     }
 }

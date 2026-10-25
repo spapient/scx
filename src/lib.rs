@@ -1,4 +1,7 @@
 #![forbid(unsafe_code)]
+#![warn(clippy::cognitive_complexity)]
+// 测试代码是数据驱动的断言清单，按行拆分反而降低可读性；认知复杂度门禁只约束生产代码。
+#![cfg_attr(test, allow(clippy::cognitive_complexity))]
 
 //! scx 引擎：本地查询感知证据筛选压缩（纯函数、无 I/O、零依赖、确定性）。
 //!
