@@ -88,7 +88,7 @@ Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技
 scx --version                                  # 已将入口加入 PATH 时
 ```
 
-三条命令都应输出版本号（当前为 `scx 0.4.1`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
+三条命令都应输出版本号（当前为 `scx 0.5.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
 
 只对实际安装过的入口执行上述检查；未安装的路径报“不存在”不代表工具本身异常。
 
@@ -126,8 +126,20 @@ compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence
 # 针尖模式：不填充可选内容
 ./bin/run --query "panic overflow index" --context 0 app.log
 
-# 强制保留指定子串（可重复或使用 | 分隔）
+# 强制保留指定子串（可重复或使用 | 分隔；大小写不敏感）
 ./bin/run --query "deploy failed" --force "rollback" --force "Region=eu-west-1" app.log
+
+# 正则子集：re: 前缀进入有限正则（交替/字符类/量词，Thompson NFA，无回溯灾难）
+./bin/run --query "oom crash" --force "re:ERROR|FATAL" --force "re:(panic|assert) in" app.log
+
+# 硬 token 上限：证据地板优先，超限如实报告 overflow:evidence/fill，绝不静默丢证据
+./bin/run --query "db timeout" --max-tokens 2000 app.log
+
+# 结构感知邻域：fence 代码块 / import/use 块 / 堆栈 at 链整体并入（默认关，显式开启）
+./bin/run --query "conn broken" --structure 1 app.log
+
+# 策略文件覆盖默认值：CLI 显式参数 > 文件 > DEFAULT
+./bin/run --query "oom crash" --policy-file policy.toml app.log
 ```
 
 ## 工作原理
@@ -137,9 +149,12 @@ query + input
       │
       ├─ 1. 计算 IDF 加权词面命中，确定证据行
       ├─ 2. 无条件保留证据行及其 ±context 邻域
-      ├─ 3. 只在种子邻域内，用剩余预算填充可选行
-      ├─ 4. HIGH 风险时启用错误行 / 事故标记守卫
-      └─ 5. 输出原文行子集与统计，不重写、不截断保留行
+      ├─ 3. 可选：--structure 1 把 fence 代码块 / import/use 块 / 堆栈 at 链
+      │        作为结构区间整段并入邻域（默认关，关闭时与 v0.4.1 逐字节一致）
+      ├─ 4. 只在种子邻域内，用剩余预算填充可选行
+      ├─ 5. --max-tokens N 硬上限：证据地板优先，超限报 overflow:evidence/fill
+      ├─ 6. HIGH 风险时启用错误行 / 事故标记守卫
+      └─ 7. 输出原文行子集与统计，不重写、不截断保留行
 ```
 
 核心参数：
@@ -151,7 +166,10 @@ query + input
 | `--window` | `2` | 种子区域扩展与邻域排序半径，范围 `0..=8`；`0` 规范化为 `1` |
 | `--risk-gate` | `1` | 风险为 HIGH 时保护失败级错误行和事故标记行 |
 | `--lineno` | `0` | 为筛选输出添加 `N: ` 原文行号前缀 |
-| `--force` | 无 | 强制保留匹配行；大小写不敏感的字面子串 |
+| `--force` | 无 | 强制保留匹配行；大小写不敏感的字面子串；`re:` 前缀进入有限正则子集 |
+| `--max-tokens` | 无 | 输出 token 硬上限；证据行及其最小邻域优先，超限报 `overflow:evidence`/`overflow:fill`，绝不静默丢弃证据 |
+| `--structure` | `0` | `1` 时启用结构感知邻域：fence 代码块、`import`/`use`/`#include` 块、堆栈 `at` 链整体并入 |
+| `--policy-file` | 无 | 策略文本覆盖默认值（`ratio`/`context`/`window`/`elide`/`risk_gate`/`lineno`/`max_tokens`/`structure`）；优先级 CLI 显式 > 文件 > DEFAULT |
 
 ### 四条行为保证
 
@@ -166,8 +184,11 @@ query + input
 |---|---|
 | `sieve` | 已执行证据筛选 |
 | `passthrough:small` | 输入同时少于 40 行且少于约 1200 token，直接返回原文 |
+| `passthrough:longline` | 输入包含超长行（> 约 5000 字符）无法安全切块，直接返回原文 |
 | `passthrough:no-kept` | 预算或 `--context 0` 下没有可保留行，返回原文 |
 | `failopen:zero-signal` | 查询没有命中，返回原文 |
+| `overflow:evidence` | `--max-tokens` 下限：证据行 + 最小邻域本身已超限，保留全部证据并如实报告 |
+| `overflow:fill` | `--max-tokens` 上限：预算填充后仍超限，按硬上限裁剪并报告 |
 
 查询词与输入存在词面重叠时效果最佳。`scx` 不生成 embedding，也不承诺解决完全无共享词的语义检索问题。
 
@@ -187,7 +208,12 @@ scx --query "..." [OPTIONS] [file...]
 | `file...` | 一个或多个输入文件；省略时读取 stdin；单次输入总计上限 64 MiB |
 | `... --stat` | 只输出统计行 |
 | `... --no-stats` | 只输出正文，不输出统计行 |
-| `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计 |
+| `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计；含 `dropped` 区间明细（`--max-tokens`/预算裁剪）与 `max_tokens`/`tok_est` 字段 |
+| `--max-tokens <N>` | 输出 token 硬上限；证据地板最高优先，超限报 `overflow:evidence`/`overflow:fill` |
+| `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
+| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`lineno`/`max_tokens`/`structure`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--force <P>` | 强制保留匹配行；字面子串（大小写不敏感）；`re:` 前缀进入有限正则子集（`\|` 交替、`[...]` 字符类、`*` `+` `?` 量词，Thompson NFA，非法模式报错并提示支持子集） |
+| `--semantic <WEIGHTS>` | 可选神经重打分（需 `cargo build --features semantic` 构建）；权重文件自描述 JSON `{schema,dim,weights,sha256}`，SHA256 校验失败即拒绝运行；不启用时默认路径逐字节不变 |
 | `--help`, `--version` | 显示用法或版本 |
 
 ### 本地记忆库
@@ -252,6 +278,11 @@ scx --query "..." [OPTIONS] [file...]
 
 入库前会对已知的 password、token、Authorization、Bearer 和 URL 用户信息模式做脱敏，但这只是尽力而为的已知模式匹配，**不是通用 DLP**。分享日志或记忆库前请人工复核。
 
+多进程共享同一 `--mem-dir` 受支持：所有跨文件操作通过 `acquire_all` 按固定锁序
+（`cases/{id} → index → meta → qmap → fingerprints`）一次取多锁，避免死锁；
+持锁后的写路径使用 `*_locked` 变体，不自相争锁。并发压力测试覆盖
+store/rate/delete/rebuild 组合。契约全文见 [锁序契约](docs/locking.md)。
+
 设计、存储格式、运维与实现记录统一见 [本地记忆库](docs/memory.md)。
 
 ## Rust 库
@@ -291,17 +322,25 @@ fn main() {
 
 | 路径 | 职责 |
 |---|---|
-| `src/lib.rs` | 公共 API、`Config`、`Outcome` |
-| `src/compress.rs` | 纯函数筛选与预算分配 |
-| `src/analysis.rs`, `src/terms.rs` | 归一化、结构分类、切词与 token 估算 |
-| `src/memory/` | 本地 case 存储、召回、反馈、索引与评估 |
-| `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 编排、记忆输出、参数和文件 I/O |
+| `src/lib.rs` | 公共 API、`Config`、`Outcome`、`Mode`/`Risk` 枚举 |
+| `src/compress.rs` | 纯函数筛选与预算分配（sieve 内核，零 I/O） |
+| `src/analysis.rs`, `src/terms.rs` | 归一化、结构分类（含 fence/import/stack 判定）、切词与 token 估算 |
+| `src/policy.rs` | 默认策略数据表（`ScoreTable`/`RiskTable`/`RegionCfg`/硬常量），不落独立硬编码文件 |
+| `src/conf.rs` | TOML 子集解析（`Entry`/`parse`/`parse_f64`…），供 `--policy-file` 与记忆库 `meta.toml` 复用 |
+| `src/ops.rs` | 操作编排层：`Op` 枚举 + `run` + 纯渲染（统计/JSON），`main.rs` 仅薄壳 |
+| `src/regex.rs` | 手写有限正则子集（交替/字符类/量词，Thompson NFA，零第三方 crate） |
+| `src/semantic.rs` | 可选神经重打分（cargo feature=semantic）：手写 SHA-256、权重加载校验、确定性 sigmoid |
+| `src/json.rs` | 手写 JSON parser（`mcp` 与 `--json` 渲染共用） |
+| `src/contain.rs` | 证据保留（Containment）评测协议实现 |
+| `src/memory/` | 本地 case 存储、召回、反馈、索引与评估（`acquire_all` 固定锁序） |
+| `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
+| `src/mcp.rs` | stdio MCP server（cargo feature=mcp，零第三方 crate）；`bin/scx-mcp` 独立入口 |
 | `bin/run`, `bin/run.cmd` | Unix / Windows 自举构建入口 |
-| `bin/scx-eval` | 评测语料回放、盲审与配对统计（仅标准库） |
+| `bin/scx-eval` | 评测语料回放、盲审与配对统计（仅标准库；含 `contain` 证据保留子命令） |
 | `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
-| `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门 |
-| `eval/` | 可重建语料、冻结标签、盲审包与统一评估工具 |
-| `docs/` | 设计、评测协议与证据报告 |
+| `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门（37 例） |
+| `eval/` | 可重建语料、冻结标签、盲审包与统一评估工具（`confirm5.*`/`contain5.*`） |
+| `docs/` | 设计、评测协议、锁序契约与证据报告 |
 
 `src/memory/` 保持扁平、单一职责的布局：`mod.rs` 是唯一公开门面，存储
 （`store`/`meta`/`ingest`/`lock`/`json`/`util`）、召回
@@ -318,18 +357,20 @@ cargo test \
 
 ## 质量与证据
 
-每次变更通过以下门禁：
+每次变更通过以下门禁（P1–P3 起为「默认 + semantic + mcp」三轨，可选 feature 均需编译与测试全绿）：
 
 - `cargo fmt -- --check`
-- `cargo clippy --locked --all-targets -- -D warnings`
+- `cargo clippy --locked --all-targets -- -D warnings`（另跑 `--features semantic` 与 `--features mcp` 双轨）
 - `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps`
-- 单元、CLI 集成、并发和金标测试
+- 单元、CLI 集成、并发、金标与评测协议测试（`golden` 37 例逐字节零漂移为硬红线；新行为只走新测试例）
+- `cargo test --locked --features mcp`（含 MCP stdio 冒烟）与 `--features semantic`（含权重校验/确定性）
 - `cargo build --release --locked`
 - Rust 1.82 声明 MSRV 实编译
 - 50k 行压缩基准
 - 10k case 倒排召回 p50 < 5 ms 性能门
 - Ubuntu、macOS、Windows 三平台 CI
 - confirm5 冻结语料上的质量回归门，以及“policy/AI 标签不得冒充人工闭环”的负向测试
+- `contain5` 证据保留协议（自测、非第三方独立评测；见 [证据保留报告](eval/CONTAINMENT.md)）
 
 ### 压缩质量
 
@@ -339,15 +380,25 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 
 逐候选人工门在 hao 的 384 项标签上通过点估计，但这些标签也参与了配置校准，因此它是**事后验收，不是新的独立 holdout**；NDCG 差值的配对 bootstrap CI 仍跨 0，不能表述为“NDCG 显著优于基线”。
 
+**证据保留（contain5，P1 新增协议）**：25 个合成噪音切片（build/stack/diff/log/test 各 5，
+1787 行、70 条必需证据行，含日志/堆栈/diff 混合），在 `ratio=0.35` 默认配置下
+**scx 证据保留率 70/70 = 100%**（truncation 头部截断基线 0/70），平均字符压减
+**82.01%**、token 估算压减 79.93%。这是作者侧合成语料**自测，非第三方独立评测**，
+口径仿 SuperCompress evidence-containment；冻结语料 SHA256 见
+[eval/CONTAINMENT.md](eval/CONTAINMENT.md)。
+
 完整协议、结果与限制见：
 
 - [评估结果与证据边界](docs/evaluation-results.md)
 - [盲审预注册](docs/eval-blind40-preregistration.md)
+- [证据保留协议](eval/CONTAINMENT.md)
 - [评估工具与复现命令](eval/README.md)
 
 ### 性能快照
 
-以下数据来自本机 release 构建，用于量级参考，不是跨机器性能承诺：
+以下数据来自本机 release 构建，用于量级参考，不是跨机器性能承诺。P1–P3 默认路径
+逐字节不变（golden 37 例零漂移），上述快照仍有效；可选 feature（semantic 重打分、
+structure 结构并入）未在此快照内。
 
 | 工作负载 | 结果 | 条件 |
 |---|---|---|
@@ -396,11 +447,16 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 
 - **词面相关优先**：查询没有词面命中时会 fail-open；完全释义、无共享词的查询不在保证范围内。
 - **压缩率不固定**：保留全部证据的语义决定了输出存在“证据地板”；`--ratio` 不是硬性字符上限。
+- **`--max-tokens` 是上限不是下限**：证据地板最高优先；下限（`overflow:evidence`）保留全部证据并如实报告，上限（`overflow:fill`）按硬上限裁剪——两者都绝不静默丢弃证据行。
+- **结构感知是叠加不是替代**：`--structure 1` 的结构区间并入默认邻域；默认关闭时输出与 v0.4.1 逐字节一致。
+- **正则子集有限**：`re:` 支持交替/字符类/量词，不支持 `.`、捕获组、锚点与简写类；非法模式报错并提示支持子集。
+- **`--semantic` 可选且默认关闭**：需 `--features semantic` 构建；权重文件 SHA256 校验失败即拒绝运行，不启用时默认路径逐字节不变。
+- **MCP 是可选层**：`--features mcp` 构建的 `scx-mcp` 走 stdio，只调库内核与 JSON 渲染；默认构建不含 MCP 代码。
 - **token 为估算值**：按字符与 CJK 启发式估算，不是特定模型的 BPE 计数。
 - **单机本地工具**：记忆库是本地目录，不是多租户服务或分布式数据库。
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。
 - **输入有上限**：CLI 单次输入总计 64 MiB；更大的输入需要分段。
-- **pre-1.0 状态**：当前版本 `0.4.1`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
+- **pre-1.0 状态**：当前版本 `0.5.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
 
 ## 贡献与安全
 
