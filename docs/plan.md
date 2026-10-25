@@ -1,4 +1,4 @@
-# scx 架构优化路线图与阶段交付记录（P1–P2）
+# scx 架构优化路线图与阶段交付记录（P1–P3）
 
 > 本文档记录整体架构优化方案的阶段化落地状态（P1–P4）与每阶段的完成证据。
 > 方案正文为消息交付（不落盘）；本文档只维护可执行的路线与状态。
@@ -10,7 +10,7 @@
 |---|---|---|---|
 | P1 | 内核重构 + 评测协议 | compress 阶段拆分、Outcome 枚举化、args 声明式、conf 提取、--max-tokens、Containment 协议与基准资产 | ✅ 完成（见下） |
 | P2 | 结构感知与 MCP 集成层 | fence/import/at 链邻域、bin/scx-mcp（可选层，不破坏纯内核）、conf 策略文件接线 | ✅ 完成（见下） |
-| P3 | 配置化驱动深化 | policy 表文件化（--policy-file，conf::parse 消费）、语义增强 feature-gate 可选路径 | 未开始 |
+| P3 | 配置化驱动深化 | policy 表文件化（--policy-file）、语义增强 feature-gate 可选路径、词面召回增强、--force 正则子集 | ✅ 完成（见下） |
 | P4 | 记忆库协议演进 | 多进程写实测、L1 直答评测协议、与压缩内核解耦收尾 | 未开始 |
 
 红线（每阶段门禁）：`cargo fmt --check` / `cargo clippy --all-targets --locked -- -D warnings` /
@@ -141,4 +141,69 @@ golden **2 passed / 1 ignored（37 用例）** / mcp **1** / concurrency **1** /
    tokenizer（P1 结转，已标注）。
 4. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审，
    P1 结转）。
+5. 既有 `memory/*` 函数圈复杂度 > 10 未拆（用户既有代码，P4 统一处理）。
+
+
+---
+
+## P3 完成记录（2026-10-25）
+
+### 范围与门禁证据
+
+P3 四子项全部完成，每子项独立 commit（全部可回滚）。改动前基线
+HEAD=`ae4c2c2`（P2 收尾）；P3 链结束后 HEAD=`343b221`，工作区干净。
+门禁逐子项全绿：`cargo fmt --check`=0、`cargo clippy --all-targets --locked -- -D warnings`=0
+（默认与 `--features semantic` 双轨）、`cargo build --release --locked`=0；
+**golden 37 例全程逐字节零漂移**；confirm5 机械 hard 层不退化
+（见 3.2 复验数据）。P3 末测试计数：lib **200** / cli 11 / contain 4 /
+golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurrency 1；
+`--features semantic` 另 +5 semantic 单测 +3 semantic 集成 +1 mcp 冒烟。
+
+### 子项状态
+
+| 子项 | 完成 | commit | 新增测试 | 说明 |
+|---|---|---|---|---|
+| 3.1 semantic feature | ✅ | `ebc1a67`（前置 `9bd59c9` json 提取；补漏 `faabfad`） | +5 单测 +3 集成 | 手写 SHA-256/权重自描述 JSON/确定性 sigmoid；feature 关时 cfg 排除、golden 零漂移 |
+| 3.2 词面召回增强 | ✅ | `5d33229` | +1 单测 | RECALL_PAIRS +fmt/msg 2 对（无字面交集纪律；param/parameter 前缀交集弃用）；synonyms_enable [params] 开关既有（默认开）；confirm5 复验 ΔMRR literal 0 / paraphrase +0.005 / semantic +0.162，CI 下界 ≥0 |
+| 3.3 --force 正则 | ✅ | `0b519fd` | +7 单测 +4 集成 | 手写有限子集（`\|` 交替/字符类/`*+?`/转义），Thompson NFA 无回溯灾难；re: 前缀显式开启，非法报错含子集提示；字面子串行为逐字节保持 |
+| 3.4 --policy-file | ✅ | `343b221` | +5 集成 | 文本覆盖 DEFAULT（ratio/context/window/elide/risk_gate/lineno/max_tokens/structure）；CLI 显式 > 文件 > DEFAULT；非法文件报错含行号 |
+
+### commit 链（P3，接 P2 链之后）
+
+| commit | 说明 |
+|---|---|
+| `9bd59c9` | refactor(json): extract minimal JSON parser from mcp into src/json.rs |
+| `ebc1a67` | feat(semantic): optional hand-written scoring under cargo feature=semantic（3.1） |
+| `faabfad` | chore(semantic): commit json.rs allow(dead_code) + mcp import order missed in ebc1a67 |
+| `5d33229` | feat(terms): conservative high-precision recall pairs fmt/msg + confirm5 re-run（3.2） |
+| `0b519fd` | feat(force): re: prefix enters hand-written finite regex subset（3.3） |
+| `343b221` | feat(policy): --policy-file text override with CLI > file > DEFAULT priority（3.4） |
+
+### 关键语义（与方案偏差以代码为准）
+
+- **3.1 semantic**：`--semantic <weights.json>`（feature=semantic 下可用）；权重
+  文件自描述 `{schema:"scx-sem-1", dim, weights, sha256}`，sha256 = hex(SHA256(
+  weights 每 f64 大端 8 字节拼接))，校验失败即报错拒绝运行；`sigmoid(w·x)`
+  确定性；不启用时默认路径逐字节不变。
+- **3.2 词面召回增强**：实际为既有 `RECALL_PAIRS`（22 对）+ `synonyms_enable`
+  [params] 开关机制的**保守增量**（+fmt/msg 2 对）。词表纪律：只收无字面交集
+  的领域释义对，宽泛→具体单向；`param/parameter` 因前缀交集弃用。
+- **3.3 --force 正则**：`re:` 前缀进入手写子集（`\|` 交替 / `[...]` 字符类
+  `^` 取反 / `*` `+` `?` / `\` 转义；不支持 `.` `()` 锚点 `{}` `\d` 等简写）；
+  Thompson NFA 编译 + ε-closure 单趟模拟（O(行字符×状态) 无回溯灾难）；
+  非锚定搜索（含空匹配，标准语义）；字面子串条目行为与 v0.4.1 逐字节一致；
+  CLI 层非法 re: 报错含支持子集提示；库内核绕过 CLI 的非法模式不参与匹配
+  （debug 断言提示，文档化取舍）。
+- **3.4 --policy-file**：TOML 子集文本覆盖 DEFAULT；优先级 **CLI 显式参数
+  > 文件 > DEFAULT**（`s.seen` 判定，`into_opts` 仅在 CLI 显式 `--max-tokens`
+  时覆盖，修复了 None 冲掉文件设置的缺陷）；非法键/节/类型/范围报错含行号；
+  不传时零影响（golden 37 零漂移）。
+
+### 遗留 / 待 P4（P3 新增 + P1/P2 结转）
+
+1. P4「记忆库协议演进」：多进程写实测、L1 直答评测协议、与压缩内核解耦收尾。
+2. `--help/usage()` 未加 `[--max-tokens N]` / `[--structure 1]`（保 golden
+   字节取舍，文档待补；`--semantic` 属 cfg-gated 亦需注意）。
+3. `bin/scx-eval contain` 的 token 压减为确定性正则估算，非真实 LLM tokenizer。
+4. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审）。
 5. 既有 `memory/*` 函数圈复杂度 > 10 未拆（用户既有代码，P4 统一处理）。
