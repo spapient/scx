@@ -150,7 +150,6 @@ fn fold_dups(
 struct TermStat {
     df: Vec<usize>,
     weights: Vec<f64>,
-    live: usize,
     rare_thr: usize,
 }
 
@@ -183,7 +182,6 @@ fn term_weights(mask: &[u64], words: usize, dup: &[bool], n_terms: usize) -> Ter
     TermStat {
         df,
         weights,
-        live,
         rare_thr,
     }
 }
@@ -293,20 +291,21 @@ fn expand_regions(seed: &[bool], window: usize, total: usize) -> Regions {
 
 /// 单行结构加分：`tbl` 表驱动，判定顺序与 v0.4.1 硬编码 if 链一致（浮点加法顺序不变）。
 fn score_line(
+    lines: &[&str],
+    hits: &[usize],
+    sumw: &[f64],
+    err: &[bool],
+    force: &[bool],
     i: usize,
-    total: usize,
-    line: &str,
-    hits: usize,
-    sumw: f64,
-    err: bool,
-    force: bool,
     tbl: &ScoreTable,
 ) -> f64 {
-    let mut sc = sumw * tbl.sumw_mul;
-    if hits >= 2 {
+    let total = lines.len();
+    let line = lines[i];
+    let mut sc = sumw[i] * tbl.sumw_mul;
+    if hits[i] >= 2 {
         sc += tbl.pair_bonus;
     }
-    if err {
+    if err[i] {
         sc += tbl.error_bonus;
     }
     if is_heading(line) {
@@ -315,13 +314,13 @@ fn score_line(
     if is_diffmeta(line) {
         sc += tbl.diffmeta_bonus;
     }
-    if is_diffline(line) && hits > 0 {
+    if is_diffline(line) && hits[i] > 0 {
         sc += tbl.diffline_hit_bonus;
     }
     if is_frame(line) || is_lineref(line) {
         sc += tbl.frame_bonus;
     }
-    if force {
+    if force[i] {
         sc += tbl.force_bonus;
     }
     if i < tbl.edge_head || i >= total.saturating_sub(tbl.edge_tail) {
@@ -346,16 +345,7 @@ fn score_lines(
         if dup[i] {
             continue;
         }
-        scores[i] = score_line(
-            i,
-            total,
-            lines[i],
-            hits[i],
-            sumw[i],
-            err[i],
-            force[i],
-            tbl,
-        );
+        scores[i] = score_line(lines, hits, sumw, err, force, i, tbl);
     }
     scores
 }
@@ -412,35 +402,45 @@ fn budget_eligible(
 }
 
 /// 预算选择：种子区域门控（首两行身份行除外）；独立入选须真实得分（scores > 0）。
-/// 排序按 `scores + boost` 降序、行号升序（确定性 tie-break）。
-fn fill_budget(
-    lines: &[&str],
-    scores: &[f64],
-    boost: &[f64],
-    dup: &[bool],
-    keep: &mut Vec<bool>,
-    keep_count: &mut usize,
-    in_region: &[bool],
+/// 预算填充的只读切片上下文（slice 借用归组，避免超长参数表）。
+struct Select<'a> {
+    lines: &'a [&'a str],
+    scores: &'a [f64],
+    boost: &'a [f64],
+    dup: &'a [bool],
+    in_region: &'a [bool],
+}
+
+/// 预算填充的标量配置。
+struct FillCfg {
     region_gate: bool,
     total_tok: f64,
     ratio: f64,
     edge_head: usize,
-) {
-    let total = lines.len();
-    let budget = (total_tok * ratio).max(crate::policy::BUDGET_MIN);
+    remaining: f64,
+}
+
+/// 预算选择：种子区域门控（首两行身份行除外）；独立入选须真实得分（scores > 0）。
+/// 排序按 `scores + boost` 降序、行号升序（确定性 tie-break）。
+/// `remaining` 为 `--max-tokens` 下可选填充的可分配余量（无上限时 +∞）；
+/// 填充总量受 `min(budget, remaining)` 双重约束。
+fn fill_budget(sel: &Select, cfg: &FillCfg, keep: &mut [bool], keep_count: &mut usize) {
+    let total = sel.lines.len();
+    let budget = (cfg.total_tok * cfg.ratio).max(crate::policy::BUDGET_MIN);
+    let cap = budget.min(cfg.remaining);
     let mut order: Vec<(usize, f64)> = (0..total)
         .filter(|&i| {
             budget_eligible(
                 i,
-                edge_head,
-                dup,
+                cfg.edge_head,
+                sel.dup,
                 keep,
-                scores,
-                region_gate,
-                in_region,
+                sel.scores,
+                cfg.region_gate,
+                sel.in_region,
             )
         })
-        .map(|i| (i, scores[i] + boost[i]))
+        .map(|i| (i, sel.scores[i] + sel.boost[i]))
         .collect();
     order.sort_unstable_by(|&(a, sa), &(b, sb)| {
         if sb != sa {
@@ -451,8 +451,8 @@ fn fill_budget(
     });
     let mut used = 0.0f64;
     for &(i, _) in &order {
-        let t = token_est(lines[i]);
-        if used + t > budget {
+        let t = token_est(sel.lines[i]);
+        if used + t > cap {
             continue;
         }
         if !keep[i] {
@@ -461,6 +461,17 @@ fn fill_budget(
         }
         used += t;
     }
+}
+
+/// 已保留行的 token 估算总和（`--max-tokens` 记账口径）。
+fn kept_tokens(lines: &[&str], keep: &[bool]) -> f64 {
+    let mut sum = 0.0f64;
+    for (i, &k) in keep.iter().enumerate() {
+        if k {
+            sum += token_est(lines[i]);
+        }
+    }
+    sum
 }
 
 /// 风险审计：统计被丢弃的失败级错误行与命中行，按 `keep_count` 归一化得出 risk_raw。
@@ -491,7 +502,7 @@ fn audit_risk(keep: &[bool], err: &[bool], hits: &[usize], tbl: &RiskTable) -> R
 
 /// 风险守卫：HIGH 时保护失败级错误行与事故标记行（warn/警告 级除外）。
 fn guard_high(
-    keep: &mut Vec<bool>,
+    keep: &mut [bool],
     keep_count: &mut usize,
     dup: &[bool],
     guard: &[bool],
@@ -581,7 +592,9 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
               guarded: u8,
               regions: usize,
               kept_lno: Vec<usize>,
-              mode: Mode|
+              mode: Mode,
+              max_tokens: Option<usize>,
+              tok_est: f64|
      -> Outcome {
         Outcome {
             text: text_owned,
@@ -601,6 +614,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             terms: uniq_terms.len(),
             forced: force_subs.len(),
             mode,
+            max_tokens,
+            tok_est,
         }
     };
 
@@ -617,14 +632,15 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             0,
             Vec::new(),
             Mode::PassSmall,
+            cfg.max_tokens,
+            0.0,
         );
     }
     // 100k 字符的行必然至少 100k 字节；先做 O(1) 字节检查，只有超长行才
     // 付 Unicode 字符计数成本（避免对每行都扫描一遍 chars）。
-    if lines
-        .iter()
-        .any(|s| s.len() > crate::policy::LONGLINE_BYTES && s.chars().count() > crate::policy::LONGLINE_CHARS)
-    {
+    if lines.iter().any(|s| {
+        s.len() > crate::policy::LONGLINE_BYTES && s.chars().count() > crate::policy::LONGLINE_CHARS
+    }) {
         return mk(
             original.to_string(),
             total,
@@ -637,12 +653,20 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             0,
             Vec::new(),
             Mode::PassLongline,
+            cfg.max_tokens,
+            0.0,
         );
     }
 
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
     let masks = scan_masks(&lines, &uniq_terms, &force_subs, small_tok, do_tok);
-    let (dup, dup_n) = fold_dups(&lines, &masks.mask_v, masks.words, &masks.err_v, &masks.force_v);
+    let (dup, dup_n) = fold_dups(
+        &lines,
+        &masks.mask_v,
+        masks.words,
+        &masks.err_v,
+        &masks.force_v,
+    );
     let stat = term_weights(&masks.mask_v, masks.words, &dup, uniq_terms.len());
     let seeds = seed_marks(
         &masks.mask_v,
@@ -669,6 +693,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             0,
             Vec::new(),
             Mode::FailOpenZeroSignal,
+            cfg.max_tokens,
+            0.0,
         );
     }
 
@@ -685,27 +711,63 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let boost = neighborhood_boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     let (mut keep, mut keep_count) = seed_floor(&seeds.seed, context, total);
 
+    // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
+    // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
+    // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
+    let tok_floor = kept_tokens(&lines, &keep);
+    let mut overflow: Option<Mode> = None;
+    if let Some(max) = cfg.max_tokens {
+        if tok_floor > max as f64 {
+            overflow = Some(Mode::OverflowEvidence);
+        }
+    }
+
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
-    if context != 0 {
+    if context != 0 && overflow.is_none() {
+        let remaining = cfg
+            .max_tokens
+            .map(|m| m as f64 - tok_floor)
+            .unwrap_or(f64::INFINITY);
         fill_budget(
-            &lines,
-            &scores,
-            &boost,
-            &dup,
+            &Select {
+                lines: &lines,
+                scores: &scores,
+                boost: &boost,
+                dup: &dup,
+                in_region: &regions.in_region,
+            },
+            &FillCfg {
+                region_gate: regions.gate,
+                total_tok: masks.total_tok,
+                ratio,
+                edge_head: DEFAULT_SCORES.edge_head,
+                remaining,
+            },
             &mut keep,
             &mut keep_count,
-            &regions.in_region,
-            regions.gate,
-            masks.total_tok,
-            ratio,
-            DEFAULT_SCORES.edge_head,
         );
     }
 
     let risk = audit_risk(&keep, &masks.err_v, &seeds.hits, &DEFAULT_RISK);
     let mut guarded = 0u8;
     if risk == Risk::High && cfg.risk_gate {
-        guarded = guard_high(&mut keep, &mut keep_count, &dup, &masks.guard_v, &masks.marker_v);
+        guarded = guard_high(
+            &mut keep,
+            &mut keep_count,
+            &dup,
+            &masks.guard_v,
+            &masks.marker_v,
+        );
+    }
+
+    // 守卫后最终检查：填充受上限约束，但风险守卫可能追加证据性行；如实报告 OverflowFill。
+    let final_tok = kept_tokens(&lines, &keep);
+    if overflow.is_none() {
+        if let Some(max) = cfg.max_tokens {
+            if final_tok > max as f64 {
+                overflow = Some(Mode::OverflowFill);
+            }
+        }
     }
 
     // 预算过紧或只有高频单查询命中时可能选不出任何行；此时回退原文，不返回静默空结果。
@@ -722,6 +784,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             regions.count,
             Vec::new(),
             Mode::PassNoKept,
+            cfg.max_tokens,
+            0.0,
         );
     }
 
@@ -747,6 +811,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         guarded,
         regions.count,
         kept_lno,
-        Mode::Sieve,
+        overflow.unwrap_or(Mode::Sieve),
+        cfg.max_tokens,
+        final_tok,
     )
 }

@@ -705,6 +705,44 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         String::new(),
     ));
 
+    // 30) --max-tokens：证据地板（证据 + 最小邻域）超限 → overflow:evidence，
+    //     证据行仍全保留，统计行追加 max_tokens/tok_est 记账字段。
+    let mut mt1: Vec<String> = (0..200)
+        .map(|i| format!("INFO heartbeat seq={} ok pool=3 latency=1ms", i))
+        .collect();
+    mt1[100] = "conn 9f2a broken db crash".to_string();
+    v.push((
+        "max_tokens_overflow_evidence".into(),
+        vec!["--query", "alpha conn broken", "--max-tokens", "5"],
+        mt1.join(&lf),
+    ));
+
+    // 31) --max-tokens：风险守卫追加证据性错误行后总估算超限 → overflow:fill。
+    let mut mt2: Vec<String> = (0..200)
+        .map(|i| format!("pad alpha line {} beta gamma", i))
+        .collect();
+    mt2[5] = "conn 9f2a broken".to_string();
+    mt2[6] = "error alpha pipe burst 7a1c now".to_string();
+    v.push((
+        "max_tokens_overflow_fill".into(),
+        vec![
+            "--query",
+            "alpha conn broken",
+            "--max-tokens",
+            "5",
+            "--context",
+            "0",
+        ],
+        mt2.join(&lf),
+    ));
+
+    // 32) --max-tokens：上限充足 → 正常 sieve，统计行与默认格式逐字节一致。
+    v.push((
+        "max_tokens_sieve_capped".into(),
+        vec!["--query", "alpha conn broken", "--max-tokens", "1000"],
+        mt1.join(&lf),
+    ));
+
     v
 }
 

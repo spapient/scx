@@ -137,17 +137,35 @@ fn run_recall(mem_dir: &str, query: &str, k: usize, detail: bool) -> io::Result<
 }
 
 fn stats_line(r: &Outcome) -> String {
-    format!(
+    let base = format!(
         "compressed: kept={}/{} lines chars={}->{} ({:.1}% cut) dup={} seeds={} evidence={} risk={} guarded={} regions={} window={} terms={} forced={} mode={}",
         r.kept, r.total, r.chars_in, r.chars_out, r.cut_pct, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode
-    )
+    );
+    // 硬上限溢出时追加可解析的记账字段；正常模式统计行格式保持不变（golden 零漂移）。
+    match r.mode {
+        Mode::OverflowEvidence | Mode::OverflowFill => format!(
+            "{base} max_tokens={} tok_est={:.0}",
+            r.max_tokens.unwrap_or(0),
+            r.tok_est
+        ),
+        _ => base,
+    }
 }
 
 fn json_line(r: &Outcome) {
-    eprintln!(
-        "scxjson: {{\"kept\":{},\"total\":{},\"chars_in\":{},\"chars_out\":{},\"cut_pct\":{:.1},\"dup\":{},\"seeds\":{},\"evidence\":{},\"risk\":\"{}\",\"guarded\":{},\"regions\":{},\"window\":{},\"terms\":{},\"forced\":{},\"mode\":\"{}\"}}",
+    let mut out = format!(
+        "scxjson: {{\"kept\":{},\"total\":{},\"chars_in\":{},\"chars_out\":{},\"cut_pct\":{:.1},\"dup\":{},\"seeds\":{},\"evidence\":{},\"risk\":\"{}\",\"guarded\":{},\"regions\":{},\"window\":{},\"terms\":{},\"forced\":{},\"mode\":\"{}\"",
         r.kept, r.total, r.chars_in, r.chars_out, r.cut_pct, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode
     );
+    // --json 新增字段向后兼容：仅启用 --max-tokens 时附加，默认输出逐字节不变。
+    if let Some(m) = r.max_tokens {
+        out.push_str(&format!(
+            ",\"max_tokens\":{},\"tok_est\":{:.0}",
+            m, r.tok_est
+        ));
+    }
+    out.push('}');
+    eprintln!("{out}");
 }
 
 fn checked_write(result: io::Result<()>) -> CliResult {

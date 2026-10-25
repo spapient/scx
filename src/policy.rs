@@ -6,9 +6,7 @@
 
 pub const DEFAULT_RATIO: f64 = 0.35;
 pub const MIN_RATIO: f64 = 0.02;
-pub const DEFAULT_CONTEXT: i64 = 1;
 pub const MAX_CONTEXT: i64 = 4;
-pub const DEFAULT_WINDOW: i64 = 2;
 pub const MIN_WINDOW: i64 = 1;
 pub const MAX_WINDOW: i64 = 8;
 

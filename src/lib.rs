@@ -39,6 +39,10 @@ pub struct Config {
     pub lineno: bool,
     /// `--force` 值按 `|` 拆分后的原始子串（大小写不敏感字面匹配）。
     pub forces: Vec<String>,
+    /// 绝对 token 硬上限（估算口径，非真实 tokenizer；`None` = 现状行为不变）。
+    /// 证据地板最高优先：证据行与最小邻域无条件保留，超限时输出
+    /// `mode=overflow:evidence` / `overflow:fill` 并如实报告，绝不静默丢弃证据。
+    pub max_tokens: Option<usize>,
 }
 
 impl Config {
@@ -61,6 +65,7 @@ impl Default for Config {
             risk_gate: true,
             lineno: false,
             forces: Vec::new(),
+            max_tokens: None,
         }
     }
 }
@@ -78,6 +83,12 @@ pub enum Mode {
     PassNoKept,
     /// 正常筛选（sieve）。
     Sieve,
+    /// 证据地板（证据行 + 最小邻域）已超 `--max-tokens` 上限；证据仍全保留，
+    /// 如实报告（绝不静默丢弃证据）。
+    OverflowEvidence,
+    /// 削减可选填充后输出仍超 `--max-tokens` 上限（如风险守卫追加行）；
+    /// 如实报告，不丢弃已保留的证据性内容。
+    OverflowFill,
 }
 
 impl Mode {
@@ -89,6 +100,8 @@ impl Mode {
             Mode::FailOpenZeroSignal => "failopen:zero-signal",
             Mode::PassNoKept => "passthrough:no-kept",
             Mode::Sieve => "sieve",
+            Mode::OverflowEvidence => "overflow:evidence",
+            Mode::OverflowFill => "overflow:fill",
         }
     }
 }
@@ -147,6 +160,10 @@ pub struct Outcome {
     pub terms: usize,
     pub forced: usize,
     pub mode: Mode,
+    /// 生效的 `--max-tokens` 上限（`None` = 未启用）。
+    pub max_tokens: Option<usize>,
+    /// 输出文本的 token 估算（`terms::token_est` 口径）；passthrough/fail-open 不保证。
+    pub tok_est: f64,
 }
 
 // 零分配 u64→十进制行号写入（`N: ` 前缀，grep -n 风格；供 --lineno 使用）。
@@ -582,5 +599,76 @@ mod tests {
         assert_eq!(o2.mode, Mode::PassSmall);
         assert_eq!(o2.text, s);
         assert!(!o2.text.contains("1: line 0"), "passthrough 不附加行号");
+    }
+
+    #[test]
+    fn max_tokens_overflow_evidence_keeps_evidence() {
+        // 证据地板（证据 + 最小邻域）已超 --max-tokens：证据仍全保留，如实报告。
+        let mut lines: Vec<String> = (0..200).map(|_| filler()).collect();
+        lines[100] = "conn 9f2a broken db crash".to_string();
+        let text = lines.join("\n");
+        let cfg = Config {
+            max_tokens: Some(3),
+            ..cfg()
+        };
+        let o = compress(&text, "alpha conn broken", &cfg);
+        assert_eq!(o.mode, Mode::OverflowEvidence);
+        assert_eq!(o.max_tokens, Some(3));
+        assert!(
+            o.text.contains("conn 9f2a"),
+            "证据行必须保留（绝不静默丢证据）"
+        );
+        assert!(o.tok_est > 3.0, "tok_est 应如实报告超限后的估算");
+    }
+
+    #[test]
+    fn max_tokens_overflow_fill_after_guard() {
+        // 证据地板未超限，但风险守卫追加证据性错误行后总估算超限：OverflowFill。
+        let mut lines: Vec<String> = (0..200)
+            .map(|i| format!("pad alpha line {} beta gamma", i))
+            .collect();
+        lines[5] = "conn 9f2a broken".to_string();
+        lines[6] = "error alpha pipe burst 7a1c now".to_string();
+        let text = lines.join("\n");
+        let cfg = Config {
+            ratio: 0.35,
+            context: 0,
+            max_tokens: Some(5),
+            ..cfg()
+        };
+        let o = compress(&text, "alpha conn broken", &cfg);
+        assert_eq!(o.mode, Mode::OverflowFill);
+        assert_eq!(o.guarded, 1, "HIGH 风险守卫必须仍生效");
+        assert!(o.text.contains("conn 9f2a"), "证据行保留");
+        assert!(o.text.contains("error alpha pipe burst"), "守卫行保留");
+        assert!(o.tok_est > 5.0, "tok_est 如实报告超限");
+    }
+
+    #[test]
+    fn max_tokens_normal_sieve_respects_cap() {
+        // 上限足够时：可选填充受 min(budget, max - floor) 约束，最终估算不超过上限。
+        let mut lines: Vec<String> = (0..200).map(|_| filler()).collect();
+        lines[100] = "conn 9f2a broken db crash".to_string();
+        let text = lines.join("\n");
+        let cfg = Config {
+            max_tokens: Some(1000),
+            ..cfg()
+        };
+        let o = compress(&text, "alpha conn broken", &cfg);
+        assert_eq!(o.mode, Mode::Sieve);
+        assert_eq!(o.max_tokens, Some(1000));
+        assert!(o.tok_est <= 1000.0 + 1e-9, "正常模式下输出估算不得超上限");
+        assert!(o.text.contains("conn 9f2a"));
+    }
+
+    #[test]
+    fn max_tokens_default_none_keeps_legacy_shape() {
+        // 默认 None = 现状行为不变：Outcome 不携带上限字段语义。
+        let mut lines: Vec<String> = (0..200).map(|_| filler()).collect();
+        lines[100] = "conn 9f2a broken db crash".to_string();
+        let text = lines.join("\n");
+        let o = compress(&text, "alpha conn broken", &cfg());
+        assert_eq!(o.mode, Mode::Sieve);
+        assert_eq!(o.max_tokens, None);
     }
 }
