@@ -1092,6 +1092,187 @@ def cmd_blind(args):
 
 
 # ---------------------------------------------------------------------------
+# Evidence containment (contain5): query-aware compression vs head truncation
+# ---------------------------------------------------------------------------
+
+
+def contain_token_count(text):
+    """Deterministic word-volume estimate (NOT a real LLM tokenizer).
+
+    ASCII words/numbers delimited by non-word chars, plus one count per CJK
+    codepoint. Used only for the token-side reduction estimate; no randomness.
+    """
+    count = len(re.findall(r"[A-Za-z0-9][A-Za-z0-9_.\-]*", text))
+    count += len(re.findall(r"[\u4e00-\u9fff]", text))
+    return count
+
+
+def validate_contain_corpus(corpus):
+    slices = corpus.get("slices") or []
+    kinds = ("build", "stack", "diff", "log", "test")
+    if not 20 <= len(slices) <= 30:
+        sys.exit(f"contain: slices={len(slices)} must be 20..30")
+    seen = set()
+    kind_counts = {k: 0 for k in kinds}
+    for index, slc in enumerate(slices):
+        ident = str(slc.get("id") or "").strip()
+        kind = str(slc.get("kind") or "").strip()
+        query = str(slc.get("query") or "").strip()
+        text = str(slc.get("full_text") or "")
+        evidence = slc.get("evidence") or []
+        note = str(slc.get("note") or "").strip()
+        if not ident or ident in seen:
+            sys.exit(f"contain: bad/duplicate slice id: {ident!r}")
+        seen.add(ident)
+        if kind not in kind_counts:
+            sys.exit(f"contain: slice {ident} bad kind {kind!r}")
+        if not query or not text or not evidence:
+            sys.exit(f"contain: slice {ident} empty query/text/evidence")
+        if not note:
+            sys.exit(f"contain: slice {ident} missing note")
+        kind_counts[kind] += 1
+        for ev in evidence:
+            if ev not in text:
+                sys.exit(
+                    f"contain: slice {ident} evidence line not verbatim in full_text:\n{ev!r}"
+                )
+    missing = [k for k, v in kind_counts.items() if v == 0]
+    if missing:
+        sys.exit(f"contain: corpus missing kinds: {missing}")
+    return slices, kind_counts
+
+
+def run_contain_slice(binary, slc, ratio, context, work):
+    ident = slc["id"]
+    query = slc["query"]
+    text = slc["full_text"]
+    path = work / f"{ident}.txt"
+    path.write_text(text, encoding="utf-8", newline="\n")
+    proc = subprocess.run(
+        [binary, "--query", query, "--ratio", str(ratio),
+         "--context", str(context), "--json", str(path)],
+        capture_output=True,
+    )
+    out = proc.stdout.decode("utf-8", "replace")
+    err = proc.stderr.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        raise RuntimeError(f"contain: scx failed for {ident} rc={proc.returncode}\n{out}{err}")
+    stats = None
+    for line in err.splitlines():
+        if line.startswith("scxjson: "):
+            stats = json.loads(line[len("scxjson: "):])
+            break
+    if stats is None:
+        raise RuntimeError(f"contain: no scxjson line for {ident}\n{err}")
+    body_lines = [l for l in out.splitlines() if not l.startswith("compressed:")]
+    body_text = "\n".join(body_lines)
+    if body_text:
+        body_text += "\n"
+    ev_total = len(slc["evidence"])
+    kept_ev = [ev for ev in slc["evidence"] if ev in body_text]
+    missed = [ev for ev in slc["evidence"] if ev not in body_text]
+    # Head-truncation baseline: spend the exact same byte budget scx spent.
+    budget = len(body_text.encode("utf-8"))
+    prefix = text.encode("utf-8")[:budget].decode("utf-8", "replace")
+    trunc_kept = sum(1 for ev in slc["evidence"] if ev in prefix)
+    in_chars = len(text)
+    out_chars = len(body_text)
+    in_tokens = contain_token_count(text)
+    out_tokens = contain_token_count(body_text)
+    return {
+        "id": ident,
+        "kind": slc["kind"],
+        "query": query,
+        "mode": stats.get("mode", ""),
+        "risk": stats.get("risk", ""),
+        "kept": stats.get("kept"),
+        "total": stats.get("total"),
+        "seeds": stats.get("seeds"),
+        "evidence_seeds": stats.get("evidence"),
+        "chars_in": in_chars,
+        "chars_out": out_chars,
+        "token_in": in_tokens,
+        "token_out": out_tokens,
+        "char_cut": 1.0 - out_chars / in_chars if in_chars else 0.0,
+        "token_cut": 1.0 - out_tokens / in_tokens if in_tokens else 0.0,
+        "ev_total": ev_total,
+        "ev_kept": len(kept_ev),
+        "ev_missed": missed,
+        "trunc_ev_kept": trunc_kept,
+        "trunc_budget_chars": budget,
+    }
+
+
+def cmd_contain(args):
+    corpus = load_json(args.corpus)
+    slices, kind_counts = validate_contain_corpus(corpus)
+    binary = args.binary or default_binary()
+    if not binary or not Path(binary).is_file():
+        sys.exit("contain: missing release binary; run `cargo build --release --locked` first")
+    rows = []
+    with tempfile.TemporaryDirectory(prefix="scx-contain-") as tmp:
+        work = Path(tmp)
+        for slc in slices:
+            rows.append(run_contain_slice(binary, slc, args.ratio, args.context, work))
+    # aggregate
+    n = len(rows)
+    ev_sum = sum(r["ev_total"] for r in rows)
+    ev_kept = sum(r["ev_kept"] for r in rows)
+    trunc_kept = sum(r["trunc_ev_kept"] for r in rows)
+    char_cut = sum(r["char_cut"] for r in rows) / n
+    token_cut = sum(r["token_cut"] for r in rows) / n
+    modes = {}
+    for r in rows:
+        modes[r["mode"]] = modes.get(r["mode"], 0) + 1
+    print(f"contain: slices={n} kinds={kind_counts} binary={binary}")
+    print(f"contain: ratio={args.ratio} context={args.context} modes={modes}")
+    print()
+    hdr = (f"{'id':10s} {'kind':6s} {'mode':18s} {'kept':>7s} "
+           f"{'char_cut':>9s} {'tok_cut':>8s} {'scx_ev':>7s} {'trunc_ev':>9s}")
+    print(hdr)
+    for r in rows:
+        print(f"{r['id']:10s} {r['kind']:6s} {r['mode']:18s} "
+              f"{str(r['kept'])+'/'+str(r['total']):>7s} "
+              f"{r['char_cut']*100:8.1f}% {r['token_cut']*100:7.1f}% "
+              f"{r['ev_kept']}/{r['ev_total']:>3d} {r['trunc_ev_kept']:>4d}/{r['ev_total']}")
+    print()
+    print(f"contain: scx   evidence retention = {ev_kept}/{ev_sum} = "
+          f"{ev_kept/ev_sum*100:.2f}%")
+    print(f"contain: trunc evidence retention = {trunc_kept}/{ev_sum} = "
+          f"{trunc_kept/ev_sum*100:.2f}%")
+    print(f"contain: mean char cut   = {char_cut*100:.2f}%")
+    print(f"contain: mean token cut  = {token_cut*100:.2f}%")
+    misses = [(r["id"], m) for r in rows for m in r["ev_missed"]]
+    if misses:
+        print("contain: MISSED evidence lines:")
+        for ident, line in misses:
+            print(f"  {ident}: {line}")
+    by_kind = {}
+    for r in rows:
+        k = by_kind.setdefault(r["kind"], [0, 0, 0.0, 0.0])
+        k[0] += r["ev_kept"]; k[1] += r["ev_total"]
+        k[2] += r["char_cut"]; k[3] += r["token_cut"]
+    print("contain: per-kind (scx_ev / char_cut / token_cut):")
+    for kind in sorted(by_kind):
+        ke, tot, cc, tc = by_kind[kind]
+        cnt = sum(1 for r in rows if r["kind"] == kind)
+        print(f"  {kind:6s} ev={ke}/{tot} char={cc/cnt*100:5.1f}% tok={tc/cnt*100:5.1f}%")
+    if args.out:
+        dump_json(args.out, {
+            "binary": binary, "ratio": args.ratio, "context": args.context,
+            "aggregate": {
+                "slices": n, "kinds": kind_counts, "modes": modes,
+                "scx_evidence_retention": ev_kept / ev_sum,
+                "trunc_evidence_retention": trunc_kept / ev_sum,
+                "mean_char_cut": char_cut, "mean_token_cut": token_cut,
+            },
+            "rows": rows,
+        })
+        print(f"contain: wrote {args.out}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Verification and self-test
 # ---------------------------------------------------------------------------
 
@@ -1277,6 +1458,16 @@ def build_parser():
     verify.add_argument("--packet", required=True)
     verify.add_argument("--sha256")
     verify.set_defaults(func=cmd_verify)
+
+    contain = sub.add_parser(
+        "contain", help="evidence containment vs head-truncation baseline"
+    )
+    contain.add_argument("corpus", help="contain*.corpus.json")
+    contain.add_argument("--binary", default="")
+    contain.add_argument("--ratio", type=float, default=0.35)
+    contain.add_argument("--context", type=int, default=1)
+    contain.add_argument("--out", help="write per-slice detail JSON")
+    contain.set_defaults(func=cmd_contain)
 
     test = sub.add_parser("selftest")
     test.set_defaults(func=lambda _args: selftest())

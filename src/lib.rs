@@ -18,6 +18,7 @@ use std::fmt;
 mod analysis;
 mod compress;
 mod conf;
+pub mod contain;
 mod policy;
 mod terms;
 
