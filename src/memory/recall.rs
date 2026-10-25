@@ -3,7 +3,7 @@
 //! 库小于 1 万 case 时线性扫描并现算 df/avgdl；达到 10k 或
 //! `meta [params] index_force=1` 时使用 `index/postings.bin` 倒排候选，
 //! df/avgdl 为全库口径。
-//! 零依赖、无随机源、确定性：同 query 同库同输出。
+//! 零依赖、无随机源；固定时钟 `now_s` 时，同 query 同库同输出。
 //!
 //! 公式：bm25(t,d)=idf·tf·(k1+1)/(tf+k1·(1−b+b·dl/avgdl))；idf=ln(1+(N−df+0.5)/(df+0.5))
 //! score=Σ bm25+Σ 字段命中×权重；decay=1/(1+age/τ)（τ:90/solved 180/regressed 30）；sim=score·decay/score_max
