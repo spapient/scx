@@ -881,6 +881,14 @@ fn parse_force(
     if v.split('|').all(|p| p.trim().is_empty()) {
         return Err(format!("{} {}", f.name, f.err_empty));
     }
+    // `re:` 前缀条目：CLI 层前置校验手写正则子集，非法即报错拒绝运行；
+    // 其余条目保持字面子串（大小写不敏感）行为不变。
+    for part in v.split('|') {
+        let p = part.trim();
+        if let Some(rest) = p.strip_prefix("re:") {
+            crate::regex::parse_regex(rest).map_err(|e| format!("{}: {e}", f.name))?;
+        }
+    }
     s.config.forces.push(v);
     Ok(())
 }

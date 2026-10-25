@@ -412,7 +412,10 @@ mod tests {
             "双向扩展必须去重"
         );
         // 字面前缀交集对（param/parameter）不加入词表。
-        assert_eq!(expand_recall_terms(&["param".into()]), vec!["param".to_string()]);
+        assert_eq!(
+            expand_recall_terms(&["param".into()]),
+            vec!["param".to_string()]
+        );
     }
 
     #[test]

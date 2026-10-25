@@ -42,18 +42,41 @@ fn split_lines<'b, 'a: 'b>(text: &'a str, buf: &'b mut Option<String>) -> Vec<&'
     lines
 }
 
-/// 解析 `--force`：按 `|` 拆分的原始子串，trim + 小写，跳过空项。
-fn parse_forces(forces: &[String]) -> Vec<String> {
-    let mut force_subs: Vec<String> = Vec::new();
+/// `--force` 条目：默认字面子串，或 `re:` 前缀进入手写有限正则子集
+/// （`|` 交替 / 字符类 / `*` `+` `?` 量词 / `\` 转义，见 `crate::regex`）。
+/// `re:` 正则先于字面子串匹配；命中即证据。
+#[derive(Debug)]
+pub(crate) enum ForcePat {
+    /// 字面子串（大小写不敏感，对小写缓冲匹配）。
+    Sub(String),
+    /// 手写正则（已解析；非法模式不参与匹配，CLI 层解析时已报错）。
+    Re(crate::regex::Node),
+}
+
+/// 解析 `--force`：按 `|` 拆分，trim + 小写，跳过空项；`re:` 前缀进正则。
+fn parse_forces(forces: &[String]) -> Vec<ForcePat> {
+    let mut pats: Vec<ForcePat> = Vec::new();
     for f in forces {
         for part in f.split('|') {
             let p = part.trim().to_lowercase();
-            if !p.is_empty() {
-                force_subs.push(p);
+            if p.is_empty() {
+                continue;
+            }
+            if let Some(rest) = p.strip_prefix("re:") {
+                match crate::regex::parse_regex(rest) {
+                    Ok(node) => pats.push(ForcePat::Re(node)),
+                    Err(e) => {
+                        // CLI（args::parse_force）已前置校验；库内核绕过 CLI
+                        // 直接构造 Config 时，非法模式不参与匹配（debug 断言提示）。
+                        debug_assert!(false, "invalid re: force pattern: {e}");
+                    }
+                }
+            } else {
+                pats.push(ForcePat::Sub(p));
             }
         }
     }
-    force_subs
+    pats
 }
 
 /// 逐行 × 逐词位掩码扫描结果：命中掩码、错误/标记/守卫/force 判定与 token 估算。
@@ -72,7 +95,7 @@ struct Masks {
 fn scan_masks(
     lines: &[&str],
     terms: &[String],
-    forces: &[String],
+    forces: &[ForcePat],
     small_tok: f64,
     do_tok: bool,
 ) -> Masks {
@@ -94,7 +117,10 @@ fn scan_masks(
         let ll = low.as_str();
         (err_v[i], guard_v[i]) = error_flags(ll);
         marker_v[i] = is_incident_marker(ll);
-        force_v[i] = forces.iter().any(|p| ll.contains(p.as_str()));
+        force_v[i] = forces.iter().any(|p| match p {
+            ForcePat::Sub(s) => ll.contains(s.as_str()),
+            ForcePat::Re(n) => crate::regex::compile_nfa(n).matches(ll),
+        });
         let base = i * words;
         for (k, t) in terms.iter().enumerate() {
             if ll.contains(t.as_str()) {
@@ -709,7 +735,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let mut nl_buf: Option<String> = None;
     let lines = split_lines(original, &mut nl_buf);
     let uniq_terms = build_terms(query);
-    let force_subs = parse_forces(&cfg.forces);
+    let force_pats = parse_forces(&cfg.forces);
     let total = lines.len();
     // token 估算只服务小输入直通与可选预算；针尖档大盘无需整份扫描。
     // 小输入先算一次即可（随后可能直接 passthrough）；大输入把估算并入
@@ -748,7 +774,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             regions,
             window,
             terms: uniq_terms.len(),
-            forced: force_subs.len(),
+            forced: force_pats.len(),
             mode,
             max_tokens,
             tok_est,
@@ -777,7 +803,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
-    let masks = scan_masks(&lines, &uniq_terms, &force_subs, small_tok, do_tok);
+    let masks = scan_masks(&lines, &uniq_terms, &force_pats, small_tok, do_tok);
     let (dup, dup_n) = fold_dups(
         &lines,
         &masks.mask_v,

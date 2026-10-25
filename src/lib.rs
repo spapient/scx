@@ -40,6 +40,8 @@ pub mod mcp;
 #[cfg(feature = "semantic")]
 pub mod semantic;
 
+pub mod regex;
+
 pub use compress::compress;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
