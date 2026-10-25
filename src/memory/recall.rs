@@ -56,6 +56,7 @@ struct QueryTerm<'a> {
 }
 
 /// 单轮打分的只读上下文；集中传参避免函数参数膨胀。
+#[derive(Clone, Copy)]
 struct PassCtx<'a> {
     k: usize,
     meta: &'a Meta,
@@ -186,71 +187,38 @@ fn recall_inner(
     let cand = candidate_buckets(query);
     // 消融开关（默认全开）：bucket_enable/prf_enable 只服务可复现的 A−组件对拍，
     // 不改变默认检索行为。
-    let mut use_buckets = !cand.is_empty() && meta.param("bucket_enable") > 0.0;
+    let use_buckets = !cand.is_empty() && meta.param("bucket_enable") > 0.0;
     let high_sim = meta.param("confidence_high_sim");
     let plan = QueryPlan::new(query, meta);
-    let mut hits = score_pass(
-        root,
-        &plan,
-        &PassCtx {
-            k,
-            meta,
-            now_s,
-            idx: idx.as_deref(),
-            cand: &cand,
-            use_buckets,
-            qf_weight: 0.0,
-            qf_exact_only: false,
-        },
-    )?;
+    let ctx = PassCtx {
+        k,
+        meta,
+        now_s,
+        idx: idx.as_deref(),
+        cand: &cand,
+        use_buckets,
+        qf_weight: 0.0,
+        qf_exact_only: false,
+    };
+    let hits = score_pass(root, &plan, &ctx)?;
     // 低置信查询不能继续用场景桶硬筛：词面弱时，query 的桶证据可能只来自
     // 一个通用词（例如 thread→runtime），而目标 case 的主桶是 db。硬筛会
     // 在排序前直接删掉目标，任何字段重排都救不回来。此时退回无桶候选，
     // 保留 BM25 全量排序；高置信查询仍走桶过滤以控制扫描范围。
-    let (hits, use_buckets) = recall_bucket_bypass(
-        root,
-        &plan,
-        k,
-        now_s,
-        meta,
-        idx.as_deref(),
-        &cand,
-        use_buckets,
-        hits,
-    );
+    let (hits, use_buckets) = recall_bucket_bypass(root, &plan, &ctx, hits);
+    let ctx = PassCtx { use_buckets, ..ctx };
     // case-query 字段加权只在两种情况下启用：①低/中置信释义查询
     // （top1.sim<query_field_trigger_sim，默认 0.30）；
     // ②top1/top2 都是满分、但排序按正文长度/字段打破时（同事故兄弟 case 竞争）。
     // 高置信且无并列的 query 不改排序，避免把同域候选抬上来。
-    let (hits, qf_strength, qf_exact_only, use_qf) = recall_qf_rerank(
-        root,
-        &plan,
-        k,
-        now_s,
-        meta,
-        idx.as_deref(),
-        &cand,
-        use_buckets,
-        hits,
-    );
+    let (hits, qf_strength, qf_exact_only, _) = recall_qf_rerank(root, &plan, &ctx, hits);
     // PRF：低置信（top1.sim < confidence_high_sim）时粗召回 top-K 扩展查询再召一轮。
     // 扩展轮严格补漏，不覆盖首轮顺序（见下方合并逻辑）。
     let low_conf = meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
     if low_conf {
-        if let Some(merged) = recall_prf_extend(
-            root,
-            query,
-            &plan,
-            k,
-            now_s,
-            meta,
-            idx.as_deref(),
-            &cand,
-            use_buckets,
-            qf_strength,
-            qf_exact_only,
-            &hits,
-        ) {
+        if let Some(merged) =
+            recall_prf_extend(root, query, &ctx, qf_strength, qf_exact_only, &hits)
+        {
             return Ok(merged);
         }
     }
@@ -264,36 +232,25 @@ fn recall_inner(
 fn recall_bucket_bypass(
     root: &str,
     plan: &QueryPlan,
-    k: usize,
-    now_s: u64,
-    meta: &Meta,
-    idx: Option<&Index>,
-    cand: &[String],
-    use_buckets: bool,
+    ctx: &PassCtx<'_>,
     mut hits: Vec<RecallHit>,
 ) -> (Vec<RecallHit>, bool) {
     let first_sim = hits.first().map(|h| h.sim).unwrap_or(0.0);
-    let bucket_bypass_sim = meta.param("bucket_bypass_sim");
-    if use_buckets && first_sim < bucket_bypass_sim {
+    let bucket_bypass_sim = ctx.meta.param("bucket_bypass_sim");
+    if ctx.use_buckets && first_sim < bucket_bypass_sim {
         if let Ok(full_hits) = score_pass(
             root,
             plan,
             &PassCtx {
-                k,
-                meta,
-                now_s,
-                idx,
-                cand,
                 use_buckets: false,
-                qf_weight: 0.0,
-                qf_exact_only: false,
+                ..*ctx
             },
         ) {
             hits = full_hits;
             return (hits, false);
         }
     }
-    (hits, use_buckets)
+    (hits, ctx.use_buckets)
 }
 
 /// case-query 字段重排：exact tie / 低置信 CJK 触发时按 `query_field_strength`
@@ -302,14 +259,10 @@ fn recall_bucket_bypass(
 fn recall_qf_rerank(
     root: &str,
     plan: &QueryPlan,
-    k: usize,
-    now_s: u64,
-    meta: &Meta,
-    idx: Option<&Index>,
-    cand: &[String],
-    use_buckets: bool,
+    ctx: &PassCtx<'_>,
     hits: Vec<RecallHit>,
 ) -> (Vec<RecallHit>, f64, bool, bool) {
+    let meta = ctx.meta;
     let qf_weight = meta.param("query_field_weight");
     let qf_trigger = meta.param("query_field_trigger_sim");
     let high_sim = meta.param("confidence_high_sim");
@@ -344,14 +297,9 @@ fn recall_qf_rerank(
             root,
             plan,
             &PassCtx {
-                k,
-                meta,
-                now_s,
-                idx,
-                cand,
-                use_buckets,
                 qf_weight: qf_strength,
                 qf_exact_only,
+                ..*ctx
             },
         ) {
             if !qf_hits.is_empty() {
@@ -378,33 +326,22 @@ fn query_terms_has_cjk(plan: &QueryPlan) -> bool {
 fn recall_prf_extend(
     root: &str,
     query: &str,
-    plan: &QueryPlan,
-    k: usize,
-    now_s: u64,
-    meta: &Meta,
-    idx: Option<&Index>,
-    cand: &[String],
-    use_buckets: bool,
+    ctx: &PassCtx<'_>,
     qf_strength: f64,
     qf_exact_only: bool,
     hits: &[RecallHit],
 ) -> Option<Vec<RecallHit>> {
-    if let Ok(ext) = crate::memory::ranking::expand(root, hits, query, meta, idx) {
+    if let Ok(ext) = crate::memory::ranking::expand(root, hits, query, ctx.meta, ctx.idx) {
         if !ext.is_empty() {
             let q2 = format!("{query} {}", ext.join(" "));
-            let q2_plan = QueryPlan::new(&q2, meta);
+            let q2_plan = QueryPlan::new(&q2, ctx.meta);
             if let Ok(hits2) = score_pass(
                 root,
                 &q2_plan,
                 &PassCtx {
-                    k,
-                    meta,
-                    now_s,
-                    idx,
-                    cand,
-                    use_buckets,
                     qf_weight: if qf_strength > 1e-9 { qf_strength } else { 0.0 },
                     qf_exact_only,
+                    ..*ctx
                 },
             ) {
                 if !hits2.is_empty() {
@@ -414,7 +351,7 @@ fn recall_prf_extend(
                             merged.push(h);
                         }
                     }
-                    merged.truncate(k);
+                    merged.truncate(ctx.k);
                     return Some(merged);
                 }
             }
@@ -503,7 +440,6 @@ fn score_pass(root: &str, plan: &QueryPlan, ctx: &PassCtx<'_>) -> std::io::Resul
         Some(i) => collect_docs_idx(i, qterms, use_buckets, cand, allow_other, q_ent_list)?,
         None => collect_docs_scan(
             root,
-            plan,
             qterms,
             use_buckets,
             cand,
@@ -669,7 +605,6 @@ fn extend_entity_edges(idx: &Index, q_ent_list: &[String], chosen: &mut Vec<(usi
 /// （score_pass 提取段，行为不变）
 fn collect_docs_scan(
     root: &str,
-    plan: &QueryPlan,
     qterms: &[String],
     use_buckets: bool,
     cand: &[String],
