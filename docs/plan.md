@@ -294,6 +294,12 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   `haofei.ni@outlook.com`（Verified）完成发布前置。发布经 API 验证：max_version 0.5.0、
   downloads 初始 0、yanked false。
 
+- **0.5.1 二次发布（2026-10-26）**：外部会话布局重组 `8b4b5ee`（tools/ + config/ 重组、
+  fx 折叠进 compress、新增 tools/scx 四合一入口）经验证后发布。门禁全绿：fmt/clippy 三轨
+  （默认/semantic/mcp）0 告警、test 默认 227 / semantic 235 / mcp 228 全过、golden_gate 零漂移、
+  doc/release 通过。版本 bump `0a7bdf4` + lock 同步 `7dc0f91`，`cargo publish --locked` 成功
+  （196 文件），crates.io max_version=0.5.1、num_versions=2。main 已同步 origin/main=7dc0f91。
+
 ### 遗留 / 发布后检查单
 
 1. **merge / push / crates.io 发布均已执行**：main = origin/main = `1b89398`；
