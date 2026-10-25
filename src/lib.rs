@@ -52,6 +52,11 @@ pub struct Config {
     /// 证据地板最高优先：证据行与最小邻域无条件保留，超限时输出
     /// `mode=overflow:evidence` / `overflow:fill` 并如实报告，绝不静默丢弃证据。
     pub max_tokens: Option<usize>,
+    /// 结构感知邻域（`--structure 1`）：fence 配对 / import·use·#include 块 /
+    /// 堆栈 at 链 + `Caused by:` 延续整段并入种子区域（超长区域按
+    /// `REGION_DEFAULT.max_span` 裁剪为种子邻域窗口）。默认 `false` =
+    /// 行为与 v0.4.1 逐字节一致。
+    pub structure: bool,
 }
 
 impl Config {
@@ -75,6 +80,7 @@ impl Default for Config {
             lineno: false,
             forces: Vec::new(),
             max_tokens: None,
+            structure: false,
         }
     }
 }

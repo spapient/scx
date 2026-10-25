@@ -7,7 +7,8 @@
 //! 不在函数体内硬编码。独立成文件以维持 crate 根 <500 行门禁。
 
 use crate::analysis::{
-    error_flags, is_diffline, is_diffmeta, is_frame, is_heading, is_incident_marker, is_lineref,
+    error_flags, is_diffline, is_diffmeta, is_fence_close, is_fence_open, is_frame, is_heading,
+    is_import_line, is_incident_marker, is_lineref, is_stack_line,
 };
 use crate::analysis::{norm_into, push_analysis_lower};
 use crate::policy::{RiskTable, ScoreTable, DEFAULT_RISK, DEFAULT_SCORES};
@@ -250,42 +251,175 @@ fn seed_marks(
 }
 
 /// 种子区域：±window 扩展，间隔 <= window*3 合并；区域外素材不参与可选预算。
+/// `structs` 为结构感知区域（`--structure 1`）：含种子的结构区域整段并入，
+/// 超长区域按 `REGION_DEFAULT.max_span` 裁剪为种子邻域窗口。
 struct Regions {
     in_region: Vec<bool>,
     count: usize,
     gate: bool,
 }
 
-fn expand_regions(seed: &[bool], window: usize, total: usize) -> Regions {
-    let w = window;
-    let maxgap = (w * crate::policy::GAP_RATIO).max(2);
-    let seed_idx: Vec<usize> = (0..total).filter(|&i| seed[i]).collect();
+fn expand_regions(
+    seed: &[bool],
+    window: usize,
+    total: usize,
+    structs: Option<&StructMap>,
+) -> Regions {
     let mut in_region = vec![false; total];
-    let mut count = 0usize;
-    if !seed_idx.is_empty() {
-        let mut a = seed_idx[0].saturating_sub(w);
-        let mut b = (seed_idx[0] + w).min(total - 1);
-        for &s in &seed_idx[1..] {
-            if s <= b + maxgap {
-                b = (s + w).min(total - 1);
-            } else {
-                for slot in in_region.iter_mut().take(b + 1).skip(a) {
-                    *slot = true;
-                }
-                count += 1;
-                a = s.saturating_sub(w);
-                b = (s + w).min(total - 1);
-            }
-        }
-        for slot in in_region.iter_mut().take(b + 1).skip(a) {
-            *slot = true;
-        }
-        count += 1;
-    }
+    let seed_idx: Vec<usize> = (0..total).filter(|&i| seed[i]).collect();
+    // 结构并入是“叠加”而非“替代”：基础种子邻域（±window + gap 合并）先行，
+    // 含种子的结构区域整段并入其上；count 以合并后的 mask 重算。
+    let count = if let Some(map) = structs {
+        mark_windows(&seed_idx, window, total, &mut in_region);
+        merge_structural(seed, window, total, map, &mut in_region);
+        count_regions(&in_region)
+    } else {
+        mark_windows(&seed_idx, window, total, &mut in_region)
+    };
     Regions {
         in_region,
         count,
-        gate: !seed_idx.is_empty(),
+        gate: (0..total).any(|i| seed[i]),
+    }
+}
+
+/// 对给定种子索引做 ±w 扩展 + gap 合并，返回区间数（原 expand_regions 主体）。
+fn mark_windows(seed_idx: &[usize], w: usize, total: usize, in_region: &mut [bool]) -> usize {
+    let maxgap = (w * crate::policy::GAP_RATIO).max(2);
+    if seed_idx.is_empty() {
+        return 0;
+    }
+    let mut count = 0usize;
+    let mut a = seed_idx[0].saturating_sub(w);
+    let mut b = (seed_idx[0] + w).min(total - 1);
+    for &s in &seed_idx[1..] {
+        if s <= b + maxgap {
+            b = (s + w).min(total - 1);
+        } else {
+            for slot in in_region.iter_mut().take(b + 1).skip(a) {
+                *slot = true;
+            }
+            count += 1;
+            a = s.saturating_sub(w);
+            b = (s + w).min(total - 1);
+        }
+    }
+    for slot in in_region.iter_mut().take(b + 1).skip(a) {
+        *slot = true;
+    }
+    count + 1
+}
+
+/// 结构区域并入：含种子的区域整段进入候选；超长区域裁剪为种子 ± half 窗口。
+fn merge_structural(
+    seed: &[bool],
+    window: usize,
+    total: usize,
+    map: &StructMap,
+    in_region: &mut [bool],
+) {
+    for r in &map.regions {
+        if !(r.start..=r.end).any(|i| seed[i]) {
+            continue;
+        }
+        if r.end - r.start < crate::policy::REGION_DEFAULT.max_span {
+            for slot in in_region.iter_mut().take(r.end + 1).skip(r.start) {
+                *slot = true;
+            }
+        } else {
+            let half = crate::policy::REGION_DEFAULT.max_span / 2;
+            let idx: Vec<usize> = (r.start..=r.end).filter(|&i| seed[i]).collect();
+            mark_windows(&idx, half.max(window), total, in_region);
+        }
+    }
+}
+
+/// 统计 in_region 中连续区段数（结构并入后 count 与 mask 一致）。
+fn count_regions(in_region: &[bool]) -> usize {
+    let mut count = 0usize;
+    let mut prev = false;
+    for &b in in_region {
+        if b && !prev {
+            count += 1;
+        }
+        prev = b;
+    }
+    count
+}
+
+/// 连续段结构种类（fence 配对独立处理，不进入此枚举）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RegionKind {
+    Import,
+    Stack,
+}
+
+/// 单个结构区域（含起止行，闭区间）。
+struct StructRegion {
+    start: usize,
+    end: usize,
+}
+
+/// 结构区域表（`--structure 1` 时由 `scan_structures` 预扫描生成）。
+struct StructMap {
+    regions: Vec<StructRegion>,
+}
+
+/// 单趟状态机：fence 配对（``` / ~~~ 含后缀开启、纯标记闭合）、
+/// 连续 import/use/#include 块、连续堆栈链（at 帧 + Caused by: 延续）。
+/// fence 内行不参与 import/stack 判定；未闭合 fence 不并入（保守）。
+fn scan_structures(lines: &[&str]) -> StructMap {
+    let mut regions: Vec<StructRegion> = Vec::new();
+    let mut fence: Option<usize> = None;
+    let mut cur: Option<(usize, RegionKind)> = None;
+    for (i, line) in lines.iter().enumerate() {
+        if let Some(open) = fence {
+            if is_fence_close(line) {
+                regions.push(StructRegion {
+                    start: open,
+                    end: i,
+                });
+                fence = None;
+                cur = None;
+            }
+            continue;
+        }
+        if is_fence_open(line) {
+            fence = Some(i);
+            cur = None;
+            continue;
+        }
+        let kind = struct_line_kind(line);
+        let continuing = match (cur, kind) {
+            (Some((_, k)), Some(k2)) => k == k2,
+            _ => false,
+        };
+        if !continuing {
+            close_segment(&mut regions, cur, i.saturating_sub(1));
+            cur = kind.map(|k2| (i, k2));
+        }
+    }
+    close_segment(&mut regions, cur, lines.len().saturating_sub(1));
+    StructMap { regions }
+}
+
+/// 单行结构种类：import 块 / 堆栈链行。
+fn struct_line_kind(line: &str) -> Option<RegionKind> {
+    if is_import_line(line) {
+        Some(RegionKind::Import)
+    } else if is_stack_line(line) {
+        Some(RegionKind::Stack)
+    } else {
+        None
+    }
+}
+
+/// 收尾当前 import/stack 段（空段忽略）。
+fn close_segment(regions: &mut Vec<StructRegion>, cur: Option<(usize, RegionKind)>, end: usize) {
+    if let Some((start, _)) = cur {
+        if end >= start {
+            regions.push(StructRegion { start, end });
+        }
     }
 }
 
@@ -679,7 +813,13 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         );
     }
 
-    let regions = expand_regions(&seeds.seed, window as usize, total);
+    // 结构感知邻域（--structure 1）：fence/import/堆栈区域整段并入种子区域。
+    let regions = if cfg.structure {
+        let map = scan_structures(&lines);
+        expand_regions(&seeds.seed, window as usize, total, Some(&map))
+    } else {
+        expand_regions(&seeds.seed, window as usize, total, None)
+    };
     let scores = score_lines(
         &lines,
         &dup,
@@ -866,4 +1006,100 @@ fn cut_stats(out_text: &str, chars_a: usize) -> (usize, f64) {
         0.0
     };
     (chars_b, cut_pct)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_lines<'a>(v: &[&'a str]) -> Vec<&'a str> {
+        v.to_vec()
+    }
+
+    #[test]
+    fn scan_structures_fence_pairing() {
+        let lines = sample_lines(&["```", "import os", "conn 9f2a", "```", "x"]);
+        let map = scan_structures(&lines);
+        assert_eq!(map.regions.len(), 1);
+        assert_eq!((map.regions[0].start, map.regions[0].end), (0, 3));
+    }
+
+    #[test]
+    fn scan_structures_import_block() {
+        let lines = sample_lines(&["import os", "import sys", "import conn_pool", "x"]);
+        let map = scan_structures(&lines);
+        assert_eq!(map.regions.len(), 1);
+        assert_eq!((map.regions[0].start, map.regions[0].end), (0, 2));
+    }
+
+    #[test]
+    fn scan_structures_stack_chain_with_caused_by() {
+        let lines = sample_lines(&[
+            "  at com.a.Pool.acquire(Pool.java:214)",
+            "Caused by: java.sql.SQLException: db crash conn 9f2a",
+            "  at com.c.Conn.open(Conn.java:9)",
+            "x",
+        ]);
+        let map = scan_structures(&lines);
+        assert_eq!(map.regions.len(), 1);
+        assert_eq!((map.regions[0].start, map.regions[0].end), (0, 2));
+    }
+
+    #[test]
+    fn scan_structures_fence_shields_inner_import() {
+        // fence 内行不参与 import/stack 判定。
+        let lines = sample_lines(&["```", "import os", "```", "import sys"]);
+        let map = scan_structures(&lines);
+        assert_eq!(map.regions.len(), 2, "fence 区域 + fence 外 import 区域");
+        let mut spans: Vec<(usize, usize)> = map.regions.iter().map(|r| (r.start, r.end)).collect();
+        spans.sort();
+        assert_eq!(spans, vec![(0, 2), (3, 3)]);
+    }
+
+    #[test]
+    fn use_strict_not_import() {
+        assert!(!is_import_line("use strict"));
+        assert!(!is_import_line("use of"));
+        assert!(is_import_line("use crate::policy::DEFAULT_RATIO"));
+        assert!(is_import_line("#include <stdio.h>"));
+        assert!(is_import_line("import os"));
+    }
+
+    #[test]
+    fn structure_default_off_region_shape_unchanged() {
+        // --structure 默认关：expand_regions 与 v0.4.1 完全一致（区间数与 mask）。
+        let seed = vec![false, false, true, false, false, false];
+        let a = expand_regions(&seed, 2, 6, None);
+        let b = expand_regions(
+            &seed,
+            2,
+            6,
+            Some(&StructMap {
+                regions: Vec::new(),
+            }),
+        );
+        assert_eq!(a.in_region, b.in_region);
+        assert_eq!(a.count, b.count);
+        assert_eq!(a.gate, b.gate);
+    }
+
+    #[test]
+    fn structure_fence_merges_region_into_candidate() {
+        // 结构并入是叠加：种子邻域基础窗 + 含种子的 fence 区域整段进入候选。
+        let lines: Vec<&str> = vec![
+            "```",
+            "import os",
+            "conn 9f2a broken db crash",
+            "return pool",
+            "```",
+            "INFO filler",
+        ];
+        let seed = vec![false, false, true, false, false, false];
+        let _base = expand_regions(&seed, 1, lines.len(), None);
+        let map = scan_structures(&lines);
+        let merged = expand_regions(&seed, 1, lines.len(), Some(&map));
+        assert!(merged.in_region[0], "fence 开启行并入");
+        assert!(merged.in_region[4], "fence 闭合行并入");
+        assert!(!merged.in_region[5], "fence 外行不并入");
+    }
 }

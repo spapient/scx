@@ -743,6 +743,48 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         mt1.join(&lf),
     ));
 
+    // 33) --structure 1：markdown fence 配对块整段并入种子区域（块内上下文随预算填充）。
+    let mut sf: Vec<String> = vec!["```".to_string()];
+    sf.push("def run():".to_string());
+    sf.push("    conn 9f2a broken db crash".to_string());
+    sf.push("    return pool".to_string());
+    sf.push("```".to_string());
+    sf.extend((0..150).map(|i| format!("INFO heartbeat seq={} ok pool=3 latency=1ms", i)));
+    v.push((
+        "structure_fence".into(),
+        vec!["--query", "alpha conn broken", "--structure", "1"],
+        sf.join(&lf),
+    ));
+
+    // 34) --structure 1：连续 import 块整段并入（块内含证据行，import 前缀连续）。
+    let mut si: Vec<String> = vec![
+        "import os".to_string(),
+        "import sys".to_string(),
+        "import conn_pool".to_string(),
+        "import threading".to_string(),
+    ];
+    si.extend((0..150).map(|i| format!("INFO heartbeat seq={} ok pool=3 latency=1ms", i)));
+    v.push((
+        "structure_import".into(),
+        vec!["--query", "alpha conn", "--structure", "1"],
+        si.join(&lf),
+    ));
+
+    // 35) --structure 1：堆栈 at 链 + Caused by: 延续整段并入
+    //     （query 用唯一稀有词 sqlexception 触发证据种子，演示区域并入）。
+    let mut ss: Vec<String> = vec![
+        "  at com.a.Pool.acquire(Pool.java:214)".to_string(),
+        "  at com.b.Runner.main(Runner.java:88)".to_string(),
+        "Caused by: java.sql.SQLException: db crash conn 9f2a".to_string(),
+        "  at com.c.Conn.open(Conn.java:9)".to_string(),
+    ];
+    ss.extend((0..150).map(|i| format!("INFO heartbeat seq={} ok pool=3 latency=1ms", i)));
+    v.push((
+        "structure_stack".into(),
+        vec!["--query", "alpha conn sqlexception", "--structure", "1"],
+        ss.join(&lf),
+    ));
+
     v
 }
 

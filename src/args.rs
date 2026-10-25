@@ -238,6 +238,15 @@ static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
+        name: "--structure",
+        once: true,
+        kind: Kind::Bool01,
+        what: "",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
         name: "--force",
         once: false,
         kind: Kind::Force,
@@ -823,6 +832,7 @@ fn parse_bool01_kind(
         "--elide" => s.config.elide = b,
         "--risk-gate" => s.config.risk_gate = b,
         "--lineno" => s.config.lineno = b,
+        "--structure" => s.config.structure = b,
         _ => s.store = b,
     }
     Ok(())

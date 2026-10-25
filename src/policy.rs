@@ -80,3 +80,13 @@ pub const DEFAULT_RISK: RiskTable = RiskTable {
     med: 0.1,
     hit_drop_w: 3,
 };
+
+/// 结构感知邻域配置（`--structure 1` 开启时的判定参数；默认关闭时全部失效，
+/// 行为与 v0.4.1 逐字节一致）。判定规则为数据表，不落独立硬编码文件。
+pub struct RegionCfg {
+    /// 结构区域并入上限：区域超过该行数时只保留区域内种子 ± half（max_span/2）
+    /// 的窗口（其余行按 Budget 原因裁剪，不进入可选填充候选）。
+    pub max_span: usize,
+}
+
+pub const REGION_DEFAULT: RegionCfg = RegionCfg { max_span: 200 };

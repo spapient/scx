@@ -419,6 +419,32 @@ pub(crate) fn push_analysis_lower(s: &str, out: &mut String) {
     }
 }
 
+/// markdown fence 开启行：trim 后以三个反引号/波浪号开头（`rust` 等后缀视为开启）。
+pub(crate) fn is_fence_open(s: &str) -> bool {
+    let t = s.trim_start();
+    t.starts_with("```") || t.starts_with("~~~")
+}
+
+/// markdown fence 纯闭合行：trim 后恰为三个反引号/波浪号。
+pub(crate) fn is_fence_close(s: &str) -> bool {
+    let t = s.trim_start();
+    t == "```" || t == "~~~"
+}
+
+/// import/use/#include 块行（连续此类行构成导入块区域；`use strict`/`use of` 除外）。
+pub(crate) fn is_import_line(s: &str) -> bool {
+    let t = s.trim_start();
+    if t.starts_with("import ") || t.starts_with("#include") {
+        return true;
+    }
+    t.starts_with("use ") && !t.starts_with("use strict") && !t.starts_with("use of")
+}
+
+/// 堆栈链行：at 帧或 `Caused by:` 延续（大小写不敏感）。
+pub(crate) fn is_stack_line(s: &str) -> bool {
+    is_frame(s) || s.to_ascii_lowercase().contains("caused by:")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
