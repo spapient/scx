@@ -4,22 +4,26 @@ One tool, three corpora, and the frozen labels needed to reproduce the published
 claims. Generated memory directories, verbose logs, rank-diff CSVs, and
 significance CSVs are **outputs**, not tracked inputs.
 
+Run `./bin/scx-eval` from the repository root on macOS/Linux, or
+`python bin/scx-eval` on Windows. The evaluator uses only the Python standard
+library; retrieval and gates remain the single Rust implementation under `src/`.
+
 ## Layout
 
 | Path | Role |
 |---|---|
-| `scx_eval.py` | corpus seeding, baseline construction, blind review, paired statistics, packet verification |
-| `corpora/confirm5.json` | confirm5 corpus: 30 public incidents, 150 stored cases |
-| `corpora/v2.json` | v2 discriminative corpus: 30 public incidents, 150 stored cases |
-| `corpora/real.json` | real-incident corpus: 40 cases from 11 public postmortems |
-| `labels/confirm5-policy.json` | policy-materialized weak/negative control set (not human) |
-| `labels/confirm5-ai.json` | 384/384 AI per-candidate labels (`per-item-ai-v1`) |
-| `labels/confirm5-hao.json` | 384/384 human per-candidate labels (`per-item-human-v1`) |
-| `labels/v2.json` | v2 final human-adopted labels (`judge.by=fei+hao`) |
-| `labels/real.json` | real-incident case-level labels (`judge.by=fei+hao`) |
-| `blind/confirm5-40-packet.tsv` | frozen blind packet, 40 cases / 384 candidates |
-| `blind/confirm5-40-ai-filled.tsv` | AI input packet retained for provenance |
-| `blind/confirm5-40-hao-corrected.tsv` | human input packet after the literal invariant correction |
+| `../bin/scx-eval` | corpus seeding, baseline construction, blind review, paired statistics, packet verification |
+| `confirm5.corpus.json` | confirm5 corpus: 30 public incidents, 150 stored cases |
+| `v2.corpus.json` | v2 discriminative corpus: 30 public incidents, 150 stored cases |
+| `real.corpus.json` | real-incident corpus: 40 cases from 11 public postmortems |
+| `confirm5-policy.labels.json` | policy-materialized weak/negative control set (not human) |
+| `confirm5-ai.labels.json` | 384/384 AI per-candidate labels (`per-item-ai-v1`) |
+| `confirm5-hao.labels.json` | 384/384 human per-candidate labels (`per-item-human-v1`) |
+| `v2.labels.json` | v2 final human-adopted labels (`judge.by=fei+hao`) |
+| `real.labels.json` | real-incident case-level labels (`judge.by=fei+hao`) |
+| `confirm5-40.packet.tsv` | frozen blind packet, 40 cases / 384 candidates |
+| `confirm5-40-ai.tsv` | AI input packet retained for provenance |
+| `confirm5-40-hao.tsv` | human input packet after the literal invariant correction |
 
 The corpus JSON schema is deliberately benchmark-neutral:
 
@@ -85,9 +89,9 @@ controls, or a single annotator as independent human evidence.
 ## Reproduce confirm5
 
 ```bash
-python3 eval/scx_eval.py seed eval/corpora/confirm5.json \
+./bin/scx-eval seed eval/confirm5.corpus.json \
   --mem-dir /tmp/scx-confirm5 --csv /tmp/scx-confirm5.csv --force
-python3 eval/scx_eval.py baseline --csv /tmp/scx-confirm5.csv \
+./bin/scx-eval baseline --csv /tmp/scx-confirm5.csv \
   --out /tmp/scx-confirm5-mechanical.json \
   --judge-by mechanical-target-confirm5-v1 \
   --judge-date 2026-10-23T00:00:00Z
@@ -99,10 +103,10 @@ The human and policy gates consume the frozen labels against the same rebuilt
 memory:
 
 ```bash
-./bin/run --eval eval/labels/confirm5-hao.json --gate-human --eval-verbose \
+./bin/run --eval eval/confirm5-hao.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-confirm5
-./bin/run --eval eval/labels/confirm5-ai.json --gate-items --mem-dir /tmp/scx-confirm5
-./bin/run --eval eval/labels/confirm5-policy.json --gate-human --mem-dir /tmp/scx-confirm5
+./bin/run --eval eval/confirm5-ai.labels.json --gate-items --mem-dir /tmp/scx-confirm5
+./bin/run --eval eval/confirm5-policy.labels.json --gate-human --mem-dir /tmp/scx-confirm5
 ```
 
 Expected outcomes: human `PASS / exit 0`; AI `--gate-items PASS` but
@@ -116,10 +120,10 @@ are computed from the memory case query when `--mem-dir` is supplied; a
 `case_index,tier` CSV can be passed instead.
 
 ```bash
-./bin/run --eval eval/labels/confirm5-hao.json --gate-human --eval-verbose \
+./bin/run --eval eval/confirm5-hao.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-confirm5 > /tmp/scx-confirm5-hao.txt
-python3 eval/scx_eval.py stats \
-  --baseline eval/labels/confirm5-hao.json \
+./bin/scx-eval stats \
+  --baseline eval/confirm5-hao.labels.json \
   --verbose /tmp/scx-confirm5-hao.txt \
   --mem-dir /tmp/scx-confirm5 \
   --cluster-size 5 \
@@ -133,20 +137,20 @@ case-level primary analysis.
 ## Blind review
 
 ```bash
-python3 eval/scx_eval.py blind make \
-  --baseline eval/labels/confirm5-policy.json --mem-dir /tmp/scx-confirm5 \
+./bin/scx-eval blind make \
+  --baseline eval/confirm5-policy.labels.json --mem-dir /tmp/scx-confirm5 \
   --out /tmp/packet.tsv --manifest /tmp/manifest.json
-python3 eval/scx_eval.py blind progress --packet /tmp/packet.tsv
-python3 eval/scx_eval.py blind import \
-  --baseline eval/labels/confirm5-policy.json --packet /tmp/packet.tsv \
+./bin/scx-eval blind progress --packet /tmp/packet.tsv
+./bin/scx-eval blind import \
+  --baseline eval/confirm5-policy.labels.json --packet /tmp/packet.tsv \
   --out /tmp/human.json --judge <name> --date 2026-10-25T00:00:00Z
-python3 eval/scx_eval.py blind check --baseline /tmp/human.json
-python3 eval/scx_eval.py blind agree \
+./bin/scx-eval blind check --baseline /tmp/human.json
+./bin/scx-eval blind agree \
   --a /tmp/first-reviewer.json --b /tmp/second-reviewer.json
 ```
 
 The `make` command is deterministic. Rebuilding the frozen confirm5 packet from
-`labels/confirm5-policy.json` and a freshly seeded memory reproduces SHA256
+`confirm5-policy.labels.json` and a freshly seeded memory reproduces SHA256
 `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f`.
 `agree` reports common per-candidate grades, raw agreement, Cohen's kappa, and
 the disagreement list; use it for the two-reviewer arbitration loop.
@@ -156,17 +160,17 @@ packet by its recorded `judge.packet_sha256`, not by that string.
 ## Reproduce v2 and real
 
 ```bash
-python3 eval/scx_eval.py seed eval/corpora/v2.json \
+./bin/scx-eval seed eval/v2.corpus.json \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
-./bin/run --eval eval/labels/v2.json --gate --mem-dir /tmp/scx-v2
+./bin/run --eval eval/v2.labels.json --gate --mem-dir /tmp/scx-v2
 
-python3 eval/scx_eval.py seed eval/corpora/real.json \
+./bin/scx-eval seed eval/real.corpus.json \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
-./bin/run --eval eval/labels/real.json --gate-human --mem-dir /tmp/scx-real
+./bin/run --eval eval/real.labels.json --gate-human --mem-dir /tmp/scx-real
 ```
 
 v2 is a development benchmark; its labels were AI-prefilled and then adopted by
-two reviewers, so it is not an independent blind holdout. `labels/real.json` has only
+two reviewers, so it is not an independent blind holdout. `real.labels.json` has only
 case-level signatures, so `--gate-human` rejects it at the per-item provenance
 check. Those failures are intentional evidence boundaries.
 
@@ -175,7 +179,7 @@ check. Those failures are intentional evidence boundaries.
 - Keep corpora, frozen labels, packets, and preregistrations.
 - Do not commit memory directories, verbose logs, gate logs, rank-diff CSVs,
   strata CSVs, significance CSVs, or draft packets. Any of them can be rebuilt
-  from the retained inputs with `scx_eval.py`.
+  from the retained inputs with `../bin/scx-eval`.
 - A result is quoted only with its corpus, label set, binary/config, gate mode,
   sample size, and statistics command.
 - `eval-real/` was removed in the 2026-10-25 refactor. Historical intermediate

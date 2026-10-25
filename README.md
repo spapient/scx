@@ -59,8 +59,8 @@ Set-Location scx
 
 ```bash
 # macOS / Linux / WSL
-sh build.sh
-./bin/scx --version
+cargo build --release --locked
+./target/release/scx --version
 ```
 
 ```powershell

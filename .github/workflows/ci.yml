@@ -67,15 +67,15 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --locked --no-deps
       - name: Tool selftest
-        run: python eval/scx_eval.py selftest
+        run: python bin/scx-eval selftest
       - name: Rebuild confirm5 corpus
         run: >-
-          python eval/scx_eval.py seed eval/corpora/confirm5.json
+          python bin/scx-eval seed eval/confirm5.corpus.json
           --mem-dir eval/ci-mem --csv eval/ci-cases.csv
           --binary target/release/scx.exe --force
       - name: Build mechanical baseline
         run: >-
-          python eval/scx_eval.py baseline
+          python bin/scx-eval baseline
           --csv eval/ci-cases.csv --out eval/ci-baseline.json
           --judge-by mechanical-target-confirm5-v1
           --judge-date 2026-10-23T00:00:00Z
@@ -99,8 +99,8 @@ jobs:
           $global:LASTEXITCODE = 0
       - name: Frozen blind packet
         run: >-
-          python eval/scx_eval.py verify
-          --packet eval/blind/confirm5-40-packet.tsv
+          python bin/scx-eval verify
+          --packet eval/confirm5-40.packet.tsv
           --sha256 b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f
       - name: AI labels pass items gate, fail human gate
         shell: pwsh
@@ -129,7 +129,7 @@ jobs:
           }
       - name: Confirm5 paired statistics
         run: >-
-          python eval/scx_eval.py stats
+          python bin/scx-eval stats
           --baseline eval/ci-baseline.json
           --verbose eval/ci-verbose.txt
           --mem-dir eval/ci-mem

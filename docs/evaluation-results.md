@@ -43,7 +43,7 @@ provenance 缺失而失败。仓库内仍没有“独立 holdout + 双人逐条�
 
 ### 2.1 policy 控制集
 
-`eval/labels/confirm5-policy.json` 在同一 150 条查询上物化规则：同事故 `rel=2`，
+`eval/confirm5-policy.labels.json` 在同一 150 条查询上物化规则：同事故 `rel=2`，
 同场景桶 `rel=1`，其余 `rel=0`；分布 `2=650 / 1=115 / 0=665`，
 `judge.method=policy-materialized-v1`。
 
@@ -57,9 +57,9 @@ gate: FAIL
 
 ### 2.2 逐候选人工验收（hao，40/150）
 
-- 盲审包：`eval/blind/confirm5-40-packet.tsv`，40 例 / 384 候选，SHA256
+- 盲审包：`eval/confirm5-40.packet.tsv`，40 例 / 384 候选，SHA256
   `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f`。
-- 人工标签：`eval/labels/confirm5-hao.json`，`judge.by=hao`，
+- 人工标签：`eval/confirm5-hao.labels.json`，`judge.by=hao`，
   `method=per-item-human-v1`；rel 分布 `2=142 / 1=130 / 0=112`。
 - `--gate-human`：**PASS / exit 0**；literal 自匹配 0/14 违规；
   provenance 384/384、cases 40/40。
@@ -69,7 +69,7 @@ gate: FAIL
 - NDCG 差值的 semantic bootstrap：+0.0023，CI [-0.0131, 0.0161]；因此不能
   写“NDCG 显著优于 B”。
 
-AI 标签 `eval/labels/confirm5-ai.json`（`per-item-ai-v1`，384/384）只通过
+AI 标签 `eval/confirm5-ai.labels.json`（`per-item-ai-v1`，384/384）只通过
 `--gate-items`，`--gate-human` 必须失败。配置是在 hao 标签上校准的，不能把
 40/150 的结果外推成全量或独立 holdout。
 
@@ -77,27 +77,27 @@ AI 标签 `eval/labels/confirm5-ai.json`（`per-item-ai-v1`，384/384）只通�
 
 | 对象 | SHA256 |
 |---|---|
-| `eval/corpora/confirm5.json` | `B83A3A8C834A6494BDA76777BFD7500488CEDFE097C81D2AFA5E03049E543335` |
-| `eval/labels/confirm5-policy.json` | `EDF6C2083D77F7A39A2DB1DCC8C13614AD55E5D78A832BBC6F93B449E1BD6F33` |
-| `eval/labels/confirm5-ai.json` | `3114B9152835D604BD06F1B1D4E54A327B8857E9650E08111B04F452D965508A` |
-| `eval/labels/confirm5-hao.json` | `C68573E0640EADD29C843F399C986ADB69194285A49AB1A5201D9D408A83498C` |
-| `eval/blind/confirm5-40-packet.tsv` | `B8EEBF2FCB78D0FB745C9760B55DD34D832A9BB976B377F3DFB8C7CEA264093F` |
-| `eval/blind/confirm5-40-ai-filled.tsv` | `6A5319C546FE68C20F3D4D7FFD38437B3736EA301E1319AFB3C374ECA9AC9B18` |
-| `eval/blind/confirm5-40-hao-corrected.tsv` | `1F6CD83576DD3872635C2317131F8CE7858301E7AFE88D490B8CE46E1B9240B5` |
+| `eval/confirm5.corpus.json` | `B83A3A8C834A6494BDA76777BFD7500488CEDFE097C81D2AFA5E03049E543335` |
+| `eval/confirm5-policy.labels.json` | `EDF6C2083D77F7A39A2DB1DCC8C13614AD55E5D78A832BBC6F93B449E1BD6F33` |
+| `eval/confirm5-ai.labels.json` | `3114B9152835D604BD06F1B1D4E54A327B8857E9650E08111B04F452D965508A` |
+| `eval/confirm5-hao.labels.json` | `C68573E0640EADD29C843F399C986ADB69194285A49AB1A5201D9D408A83498C` |
+| `eval/confirm5-40.packet.tsv` | `B8EEBF2FCB78D0FB745C9760B55DD34D832A9BB976B377F3DFB8C7CEA264093F` |
+| `eval/confirm5-40-ai.tsv` | `6A5319C546FE68C20F3D4D7FFD38437B3736EA301E1319AFB3C374ECA9AC9B18` |
+| `eval/confirm5-40-hao.tsv` | `1F6CD83576DD3872635C2317131F8CE7858301E7AFE88D490B8CE46E1B9240B5` |
 
 复现入口：
 
 ```bash
-python3 eval/scx_eval.py seed eval/corpora/confirm5.json \
+./bin/scx-eval seed eval/confirm5.corpus.json \
   --mem-dir /tmp/scx-confirm5 --csv /tmp/scx-confirm5.csv --force
-./bin/run --eval eval/labels/confirm5-hao.json --gate-human --eval-verbose \
+./bin/run --eval eval/confirm5-hao.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-confirm5
 ```
 
 ## 3. v2：开发集
 
 v2 有 30 起公开事故、150 条查询（60/60/30），最终标签
-`eval/labels/v2.json` 为 `judge.by=fei+hao`，案例级签名；分布
+`eval/v2.labels.json` 为 `judge.by=fei+hao`，案例级签名；分布
 `rel 2=432 / 1=312 / 0=77`。312 条弱相关由 AI 按具体故障机制预填，fei/hao
 两份审核全盘采纳；因缺少逐候选 `judge_items`，`--gate-human` 在
 `human per-item provenance` 处 0/821 FAIL。
@@ -112,16 +112,16 @@ v2 有 30 起公开事故、150 条查询（60/60/30），最终标签
 hard 数值达到门槛，但 v2 参与调参，不能写成独立确认。复现：
 
 ```bash
-python3 eval/scx_eval.py seed eval/corpora/v2.json \
+./bin/scx-eval seed eval/v2.corpus.json \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
-./bin/run --eval eval/labels/v2.json --gate --mem-dir /tmp/scx-v2
+./bin/run --eval eval/v2.labels.json --gate --mem-dir /tmp/scx-v2
 ```
 
 ## 4. real：真实事故案例级证据
 
 40 条 case 来自 11 起公开复盘（literal 14 / paraphrase 13 / semantic 13）；
 来源清单见 [`real-incident-sources.md`](real-incident-sources.md)，逐条 URL 在
-`eval/corpora/real.json`。标签 `eval/labels/real.json` 为 `judge.by=fei+hao`，
+`eval/real.corpus.json`。标签 `eval/real.labels.json` 为 `judge.by=fei+hao`，
 分布 `2=147 / 1=151 / 0=46`；弱相关是场景桶规则物化，不是逐条盲审。
 
 当前默认配置：三层 r@5/r@10 与 MRR 均为 A=B；NDCG A>B 但 CI 重叠；
@@ -129,9 +129,9 @@ python3 eval/scx_eval.py seed eval/corpora/v2.json \
 不是指标回归。复现：
 
 ```bash
-python3 eval/scx_eval.py seed eval/corpora/real.json \
+./bin/scx-eval seed eval/real.corpus.json \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
-./bin/run --eval eval/labels/real.json --gate-human --mem-dir /tmp/scx-real
+./bin/run --eval eval/real.labels.json --gate-human --mem-dir /tmp/scx-real
 ```
 
 ## 5. 已成立与必须拒绝

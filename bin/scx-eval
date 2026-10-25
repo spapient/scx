@@ -30,7 +30,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-EVAL_DIR = Path(__file__).resolve().parent
+EVAL_DIR = ROOT / "eval"
 LAYERS = ("literal", "paraphrase", "semantic")
 GRADE_HELP = "2=同事故/同根因或直接修复  1=同故障族/部分有用  0=无关"
 STOP = {
@@ -131,7 +131,10 @@ def clean(text, limit=220):
 
 def default_binary():
     names = ("scx.exe", "scx")
-    for base in (ROOT / "target" / "release", ROOT / "bin"):
+    # The bootstrap install is the user-facing binary; the Cargo output is the
+    # fallback for a build-only checkout. Prefer one source to avoid replaying
+    # evidence with a stale duplicate.
+    for base in (ROOT / "bin", ROOT / "target" / "release"):
         for name in names:
             path = base / name
             if path.is_file():
@@ -211,7 +214,7 @@ def seed_corpus(corpus, mem_dir, binary, force):
     layers = validate_corpus(corpus)
     binary = binary or default_binary()
     if not binary or not Path(binary).is_file():
-        sys.exit("seed: missing release binary; run `cargo build --release --locked`")
+        sys.exit("seed: missing release binary; run `./bin/run --version` first")
     mem_dir = prepare_mem_dir(mem_dir, force)
     rows = []
     with tempfile.TemporaryDirectory(prefix="scx-eval-") as tmp:
@@ -958,7 +961,7 @@ def selftest():
     )
     assert cluster["A_ndcg"] == 0.5 and "A_mrr" not in cluster
     for name, cases in (("confirm5", 150), ("v2", 150), ("real", 40)):
-        corpus = load_json(EVAL_DIR / "corpora" / f"{name}.json")
+        corpus = load_json(EVAL_DIR / f"{name}.corpus.json")
         layers = validate_corpus(corpus)
         assert sum(layers.values()) == cases
     print("selftest: PASS")

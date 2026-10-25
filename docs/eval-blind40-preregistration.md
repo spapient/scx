@@ -6,10 +6,10 @@
 
 > 重构说明（2026-10-25）：本文是冻结的预注册记录，裁决口径与验收条件未改；
 > 仅把命令中的旧路径/工具名替换为当前等价物。`eval-real/` 原始文件可从
-> git commit `5ada90d` 恢复。源基线为 `eval/labels/confirm5-policy.json`，盲审包为
-> `eval/blind/confirm5-40-packet.tsv`，人工/AI 标签为
-> `eval/labels/confirm5-hao.json` / `eval/labels/confirm5-ai.json`；工具为
-> `python3 eval/scx_eval.py blind`。包哈希 `b8eebf2f...` 可由 `blind make`
+> git commit `5ada90d` 恢复。源基线为 `eval/confirm5-policy.labels.json`，盲审包为
+> `eval/confirm5-40.packet.tsv`，人工/AI 标签为
+> `eval/confirm5-hao.labels.json` / `eval/confirm5-ai.labels.json`；工具为
+> `./bin/scx-eval blind`。包哈希 `b8eebf2f...` 可由 `blind make`
 > 从当前语料确定性重建。
 
 ## 1. 要解决的问题
@@ -27,12 +27,12 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 | 项 | 值 |
 |---|---|
-| 源基线 | `eval/labels/confirm5-policy.json` |
+| 源基线 | `eval/confirm5-policy.labels.json` |
 | 源基线 SHA256 | 见 manifest `baseline_sha256` |
 | 抽样 | 种子 `confirm5-blind-v1` 的 SHA-256 排序，按层抽 14 literal / 13 paraphrase / 13 semantic |
 | 样本量 | 40 / 150（26.7%） |
 | 裁决项 | 样本内每个 case 的全部候选（384 项） |
-| 盲审包 | `eval/blind/confirm5-40-packet.tsv` |
+| 盲审包 | `eval/confirm5-40.packet.tsv` |
 | 包 SHA256 | `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f` |
 | 清单 | 由 `blind make --manifest` 生成（不入库） |
 
@@ -53,14 +53,14 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 只看 `query` 与候选摘要（候选 query + fix）。拿不准时按 1，不按 2。
 
 **机器可判的不变量**：literal 层的 query 与目标 case 原文逐字相同，目标必须判 2。
-导入时若出现 0/1，`scx_eval.py blind import` 直接拒绝，不写文件；`--gate-human`
+导入时若出现 0/1，`bin/scx-eval blind import` 直接拒绝，不写文件；`--gate-human`
 也会输出 `human literal self-match rel=2 bad=N` 并 FAIL。这条不替代人工，
 只拦截“分数与行错位 / 整包乱填”。
 
 ## 4. 验收条件
 
 1. 384 行全部填 0/1/2，无空行；
-2. `scx_eval.py blind import` 输出 `cases=40 items=384`，`check` 报 `incomplete=0`；
+2. `bin/scx-eval blind import` 输出 `cases=40 items=384`，`check` 报 `incomplete=0`；
 3. `--gate-human` exit 0，且出现
    `human per-item provenance items=384/384 cases=40/40`；
 4. 报告主指标用这 40 例配对比较（bootstrap 10,000 次，seed 20261023），
@@ -70,15 +70,15 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 ```bash
 # 1a) 逐行提示（推荐：按回车逐条，避免表格批量粘贴错位）
-python3 eval/scx_eval.py blind review --packet eval/blind/confirm5-40-packet.tsv
+./bin/scx-eval blind review --packet eval/confirm5-40.packet.tsv
 
 # 1b) 或直接在表格里填 grade 列（0/1/2），随时看进度
-python3 eval/scx_eval.py blind progress --packet eval/blind/confirm5-40-packet.tsv
+./bin/scx-eval blind progress --packet eval/confirm5-40.packet.tsv
 
 # 2) 导入（date 用真实 UTC 时间）
-python3 eval/scx_eval.py blind import \
-  --baseline eval/labels/confirm5-policy.json \
-  --packet eval/blind/confirm5-40-packet.tsv \
+./bin/scx-eval blind import \
+  --baseline eval/confirm5-policy.labels.json \
+  --packet eval/confirm5-40.packet.tsv \
   --out /tmp/confirm5-blind40-human.json \
   --judge <你的名字> --date 2026-10-24T12:00:00Z
 
@@ -102,8 +102,8 @@ python3 eval/scx_eval.py blind import \
 - 裁决人：`codex`，方法 `per-item-ai-v1`，384/384 项；
 - 分级：rel2=176 / rel1=38 / rel0=170；literal 自匹配 0/14 违规；
 - `--gate-items` PASS / exit 0；`--gate-human` FAIL / exit 2；
-- 产物：`eval/labels/confirm5-ai.json`、`eval/blind/confirm5-40-ai-filled.tsv`；
-  gate 输出与统计 CSV 可由 `--gate-items` 与 `scx_eval.py stats` 重建。
+- 产物：`eval/confirm5-ai.labels.json`、`eval/confirm5-40-ai.tsv`；
+  gate 输出与统计 CSV 可由 `--gate-items` 与 `bin/scx-eval stats` 重建。
 
 边界：同一模型自评、非独立、非人工，证据等级 E3。AI 结果不能单独满足第 4 节
 的“人工”验收条件；人工结果见下一节。
@@ -114,7 +114,7 @@ python3 eval/scx_eval.py blind import \
 8 条 literal 自匹配被判 0/1，与预注册的“literal 目标必须为 2”不变量冲突；
 导入器拒绝后，仅对这 8 条按不变量归一化为 2（原始文件保留为
 原始提交（未入库，见 git 历史），修正版为
-`eval/blind/confirm5-40-hao-corrected.tsv`；这是机械不变量修正，不是额外人工判分）：
+`eval/confirm5-40-hao.tsv`；这是机械不变量修正，不是额外人工判分）：
 
 - provenance：384/384，`judge.by=hao`，`per-item-human-v1`；
 - literal 自匹配：0/14；控制：rel1=130 / rel0=112；

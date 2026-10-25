@@ -1,6 +1,6 @@
 # 真实历史事故语料来源（公开复盘）
 
-本文档是 `eval/corpora/real.json` 真实事故语料库的**来源清单与出处**。
+本文档是 `eval/real.corpus.json` 真实事故语料库的**来源清单与出处**。
 每一份入库 case 都派生自下列公开复盘，改写/引用，不编造事故与原始日志。
 入库文本中标注 `公开复盘, 来源: <URL>`，原始日志不存在于本项目。
 
@@ -30,4 +30,4 @@
 
 语料共 40 条 case，覆盖上表 11 起事故，层分布为
 literal 14 / paraphrase 13 / semantic 13。逐条 query、来源与根因 mapping
-见 `eval/corpora/real.json`；最终案例级标签见 `eval/labels/real.json`。
+见 `eval/real.corpus.json`；最终案例级标签见 `eval/real.labels.json`。
