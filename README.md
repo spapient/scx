@@ -69,6 +69,43 @@ cargo build --release --locked
 .\target\release\scx.exe --version
 ```
 
+### 一键接入 Codex / Cursor / Claude（MCP）
+
+`scx` 内置 MCP stdio server（零第三方 crate、无条件编译进主二进制）。三条命令完成注册：
+
+```bash
+./tools/scx install        # 或把 release 二进制放进 PATH（scx）
+scx setup                  # 一键注册到 Claude / Codex / Cursor
+scx mcp                    # 手动进入 stdio server 模式（agent 会以子进程方式拉起）
+```
+
+`scx setup` 行为契约：
+
+- **注册名统一小写 `scx`**，命令为当前二进制绝对路径 + `mcp` 子命令（stdio）。
+- **Claude**：优先 `claude mcp add scx -- <scx> mcp`；CLI 不可用或失败时兜底写 `~/.claude.json` 的 `mcpServers.scx`。
+- **Codex**：优先 `codex mcp add scx -- <scx> mcp`；兜底写 `~/.codex/config.toml` 的 `[mcp_servers.scx]`。
+- **Cursor**：写 `~/.cursor/mcp.json` 的 `mcpServers.scx`；`--project-cursor` 改写当前项目 `.cursor/mcp.json`。
+- **幂等**：已存在 `scx` 条目则更新 command/args，绝不重复追加；配置内容未变时跳过写入。
+- **写前备份**：原配置复制为 `<path>.scx.bak`（每次覆盖最新一份，可回滚）。
+- **写后自检**：每个 agent 注册后 spawn `scx mcp` 做 initialize + tools/list 握手，验证 `compress_context` 存在并打印结果。
+- **细粒度**：`--claude` / `--codex` / `--cursor` 只注册指定 agent。
+
+只注册某个 agent：
+
+```bash
+scx setup --cursor                # 只写 Cursor 配置
+scx setup --claude --codex        # 只注册 Claude 与 Codex
+```
+
+验证（不依赖配置，直接握手）：
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | scx mcp
+```
+
+`serverInfo.name` 为 `scx`，工具为 `compress_context` / `connect_account` / `usage_summary`。
+
 ### 作为 Codex 技能安装
 
 仓库同时包含 [SKILL.md](SKILL.md)。将仓库放入技能目录后，Codex 可以在处理长日志或大文件时自动发现并使用它：
@@ -272,6 +309,11 @@ scx --query "..." [OPTIONS] [file...]
 
 运行 `./tools/scx --help` 可查看当前构建支持的完整参数。
 
+证据保留同场对照（contain5 合成语料：scx vs 头截断 vs 随机抽样基线，含证据
+存活率/压减率/延迟三指标，作者侧自测、非第三方盲审）见
+[docs/containcmp.md](docs/containcmp.md)，冻结口径见 [docs/containment.md](docs/containment.md)；
+跨机性能量级见 [docs/benchmarks.md](docs/benchmarks.md)。
+
 ## 本地记忆库
 
 记忆库用于保存“哪几行是证据、当时如何修复”，适合重复出现的构建、运维和故障排查问题。它默认关闭、完全本地，并使用无随机源的词面/字段统计召回，而不是 embedding。
@@ -359,7 +401,8 @@ fn main() {
 | `src/contain.rs` | 证据保留（Containment）评测协议实现 |
 | `src/memory/` | 本地 case 存储、召回、反馈、索引与评估（`locks` 固定锁序） |
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
-| `src/mcp.rs` | stdio MCP server（cargo feature=mcp，零第三方 crate）；`tools/scx setup` 构建入口 |
+| `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
+| `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
 | `tools/scx`, `tools/scx.cmd` | Unix / Windows 自举构建入口 |
 | `tools/scx.py` | 评测语料回放、盲审与配对统计（仅标准库；含 `contain` 证据保留子命令） |
 | `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
@@ -382,13 +425,13 @@ cargo test \
 
 ## 质量与证据
 
-每次变更通过以下门禁（P1–P3 起为「默认 + semantic + mcp」三轨，可选 feature 均需编译与测试全绿）：
+每次变更通过以下门禁（0.6.0 起 mcp 已并入默认轨，为「默认 + semantic」双轨；可选 feature 均需编译与测试全绿）：
 
 - `cargo fmt -- --check`
-- `cargo clippy --locked --all-targets -- -D warnings`（另跑 `--features semantic` 与 `--features mcp` 双轨）
+- `cargo clippy --locked --all-targets -- -D warnings`（另跑 `--features semantic` 轨）
 - `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps`
 - 单元、CLI 集成、并发、金标与评测协议测试（`golden` 37 例逐字节零漂移为硬红线；新行为只走新测试例）
-- `cargo test --locked --features mcp`（含 MCP stdio 冒烟）与 `--features semantic`（含权重校验/确定性）
+- `cargo test --locked`（默认轨含 MCP stdio 冒烟）与 `--features semantic`（含权重校验/确定性）
 - `cargo build --release --locked`
 - Rust 1.82 声明 MSRV 实编译
 - 50k 行压缩基准
@@ -476,7 +519,7 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 - **结构感知是叠加不是替代**：`--structure 1` 的结构区间并入默认邻域；默认关闭时输出与 v0.4.1 逐字节一致。
 - **正则子集有限**：`re:` 支持交替/字符类/量词，不支持 `.`、捕获组、锚点与简写类；非法模式报错并提示支持子集。
 - **`--semantic` 可选且默认关闭**：需 `--features semantic` 构建；权重文件 SHA256 校验失败即拒绝运行，不启用时默认路径逐字节不变。
-- **MCP 是可选层**：`--features mcp` 构建的 `scx-mcp` 走 stdio，只调库内核与 JSON 渲染；默认构建不含 MCP 代码。
+- **MCP 并入主二进制**：`scx mcp` 子命令走 stdio，只调库内核与 JSON 渲染；`scx setup` 一键注册到 Claude/Codex/Cursor（幂等、写前备份、写后自检）。
 - **token 为估算值**：按字符与 CJK 启发式估算，不是特定模型的 BPE 计数。
 - **单机本地工具**：记忆库是本地目录，不是多租户服务或分布式数据库。
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。

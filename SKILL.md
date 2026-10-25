@@ -1,9 +1,9 @@
 ---
 name: scx
-description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.5.1+ 记忆库）。对长日志、命令输出、diff、错误堆栈、大文件按当前问题逐行筛选证据；证据行永不丢弃，可选内容只在种子邻域区域内填充，查询无命中时原样保留；保留行可加原文行号前缀；附带本地记忆知识库（--store/--recall/--eval，零依赖离线，L1 直答优先）；输出 compressed: 统计行与风险审计。凡预期输出很大的命令、读大文件、长粘贴、检索结果，先经它再进上下文。
+description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.6.0+ 记忆库；内置 MCP stdio server 与一键注册）。对长日志、命令输出、diff、错误堆栈、大文件按当前问题逐行筛选证据；证据行永不丢弃，可选内容只在种子邻域区域内填充，查询无命中时原样保留；保留行可加原文行号前缀；附带本地记忆知识库（--store/--recall/--eval，零依赖离线，L1 直答优先）；输出 compressed: 统计行与风险审计。凡预期输出很大的命令、读大文件、长粘贴、检索结果，先经它再进上下文。
 ---
 
-# scx — 本地证据筛选压缩（Rust v0.5.1）
+# scx — 本地证据筛选压缩（Rust v0.6.0）
 
 ## 何时用（触发条件）
 - 命令输出预计超过约 200 行：构建、测试、跑批、抓包转储。
@@ -28,6 +28,8 @@ tools/scx --query "问题关键词" --ratio 0.35 /tmp/out.txt
 - `--lineno 1`：筛选输出附原文行号前缀（`N: `）；passthrough/fail-open 返回原文时不附加。
 - `--risk-gate`（默认开）：风险审计为 HIGH 时额外保护失败级错误行与事故标记行（统计行 `guarded=1`）。
 - `--json` / `--stat` / `--no-stats`：统计输出形态（`--json` 含 dropped 区间明细与 max_tokens/tok_est 字段）。
+- `scx mcp`：进入 MCP stdio server 模式（initialize/tools/list/tools/call；`serverInfo.name=scx`，工具 `compress_context`/`connect_account`/`usage_summary`）——供 Claude/Codex/Cursor 以子进程拉起。
+- `scx setup [--claude|--codex|--cursor] [--project-cursor]`：一键注册 MCP 配置到三种 agent（注册名统一小写 `scx`；幂等、写前备份 `<path>.scx.bak`、写后 tools/list 自检；Claude/Codex 优先官方 CLI、兜底写配置文件）。
 
 约束：单次输入上限 64 MiB（多文件合计）；未提供 `--query` 时必须至少一个非空 `--force`；小输入（<40 行且 <1200 token 估算）自动 passthrough。
 
@@ -51,4 +53,4 @@ tools/scx --query "问题关键词" --ratio 0.35 /tmp/out.txt
 - 查询无命中时按原文处理（`mode=failopen:zero-signal`），不自行改写。
 
 ## 构建与来源（自举，零同步）
-Rust 零依赖、离线构建、无平台分支；已复检 macOS arm64 / macOS x86_64 / Linux x86_64。架构：筛选引擎是纯函数库（`scx::compress`，零 I/O），CLI 仅是外壳（`scx::ops` 编排），记忆库独立为 `scx::memory` 模块；可选 feature `mcp`/`semantic` 不引入第三方 crate；任何程序可直接复用库。详细命令见 README.md。
+Rust 零依赖、离线构建、无平台分支；已复检 macOS arm64 / macOS x86_64 / Linux x86_64。架构：筛选引擎是纯函数库（`scx::compress`，零 I/O），CLI 仅是外壳（`scx::ops` 编排），记忆库独立为 `scx::memory` 模块；MCP server 无条件编译进主二进制（`scx mcp`），可选 feature 仅 `semantic`（手写打分器 + SHA256 权重校验），均不引入第三方 crate；任何程序可直接复用库。详细命令见 README.md。
