@@ -121,10 +121,10 @@ fn policy_bench(text: &str, query: &str, repeats: usize) {
     let mut cfg = Config::default();
     for e in &entries {
         match e.key {
-            "ratio" => cfg.ratio = scx::conf::parse_f64(e.value.as_ref()).unwrap(),
-            "context" => cfg.context = scx::conf::parse_usize(e.value.as_ref()).unwrap() as i64,
-            "max_tokens" => cfg.max_tokens = scx::conf::parse_usize(e.value.as_ref()),
-            "structure" => cfg.structure = scx::conf::parse_usize(e.value.as_ref()).unwrap() > 0,
+            "ratio" => cfg.ratio = e.value.parse().unwrap(),
+            "context" => cfg.context = e.value.parse().unwrap(),
+            "max_tokens" => cfg.max_tokens = e.value.parse().ok(),
+            "structure" => cfg.structure = e.value.parse::<usize>().unwrap() > 0,
             _ => {}
         }
     }
