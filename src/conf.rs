@@ -64,7 +64,8 @@ mod tests {
 
     #[test]
     fn parses_sections_and_values() {
-        let src = "# comment\nschema = 2\n\n[params]\nbm25_k1 = 1.2\nbad = nan\n[word_w]\nfoo = 0.5\n";
+        let src =
+            "# comment\nschema = 2\n\n[params]\nbm25_k1 = 1.2\nbad = nan\n[word_w]\nfoo = 0.5\n";
         let entries = parse(src.lines());
         assert_eq!(entries.len(), 4);
         assert_eq!(entries[0].section, "");
