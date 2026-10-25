@@ -45,7 +45,20 @@ golden **2 passed / 1 ignored（32 用例）** / doc 0；全部 `cargo test --lo
 | `368c5ab` | feat(compress): --max-tokens hard cap with evidence-floor-first semantics（1.5） |
 | `7edbe3c` | style(conf): rustfmt wrap in test string（1.5 fmt 收尾） |
 | `99a8a9a` | feat(contain): kernel eval protocol — containment judgment + RBG suite（1.6） |
-| （1.7） | docs(eval): contain5 corpus + CONTAINMENT + plan（1.7） |
+| `968666a` | docs(eval): freeze contain5 corpus + CONTAINMENT + plan（1.7） |
+| `e559c3a` | refactor(ccn): cap P1-rewritten fns below McCabe 10（复杂度收尾） |
+| `（fmt）` | style: rustfmt pass（conf/contain 测试文件，1.5/1.7 收尾） |
+
+### 圈复杂度门禁（P1 改写函数）
+
+- 口径：McCabe（if/else-if/for/while/match-arm + `&&`/`||` 各 +1 判定点）。
+  P1 改写函数全部 ≤ 8：`compress` 编排器（7 点，阶段判定全部下放辅助函数）、
+  `parse_flag`（8-arm 分派器）、`score_line`（8）、`seed_marks`（7）、
+  `validate_annotate`（4）、`conf::parse`（5）、`contain::run`（3）等。
+- 工具说明：`lizard` 对 Rust 的 CCN 系统性高估（如 `score_line` 报 38、实际 8），
+  未用作门禁依据；以人工 McCabe 核算为准。
+- 既有 `memory/*` 函数（ingest/gate/recall/query_cache 等）复杂度 > 10 属
+  用户既有代码，不在 P1 范围；P4「记忆库协议演进」阶段统一处理。
 
 ### 关键语义（--max-tokens，§3.3 落地）
 
