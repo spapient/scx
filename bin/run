@@ -6,12 +6,12 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILL="$(dirname "$DIR")"
 BIN="$DIR/scx"
-MANIFEST="$SKILL/rs/Cargo.toml"
-LOCK="$SKILL/rs/Cargo.lock"
+MANIFEST="$SKILL/Cargo.toml"
+LOCK="$SKILL/Cargo.lock"
 STALE=0
 if [ ! -f "$BIN" ] || [ ! -x "$BIN" ]; then
   STALE=1
-elif find "$SKILL/rs/src" "$MANIFEST" "$LOCK" -newer "$BIN" -print -quit 2>/dev/null | grep -q .; then
+elif find "$SKILL/src" "$MANIFEST" "$LOCK" -newer "$BIN" -print -quit 2>/dev/null | grep -q .; then
   STALE=1
 fi
 if [ "$STALE" -eq 1 ]; then

@@ -15,8 +15,8 @@
 
 use crate::memory::json::{self, Val};
 use crate::memory::store::Case;
-use crate::memory::synonyms::PAIRS as SYN;
 use crate::memory::{recall, store, util::fnv1a};
+use crate::terms::PARAPHRASE_PAIRS as SYN;
 use std::io::{self, BufRead, Write};
 
 /// 一条自动标注（对应 baseline.json 的一个 case 条目 + 证据链）。

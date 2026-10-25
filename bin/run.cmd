@@ -11,7 +11,7 @@ if errorlevel 1 (
   echo scx: cargo not found. Install Rust first: https://rustup.rs 1>&2
   exit /b 3
 )
-cargo build --release --quiet --locked --manifest-path "%SKILL%\rs\Cargo.toml" --target-dir "%TEMP%\scx-cargo-target"
+cargo build --release --quiet --locked --manifest-path "%SKILL%\Cargo.toml" --target-dir "%TEMP%\scx-cargo-target"
 if errorlevel 1 exit /b 3
 copy /y "%TEMP%\scx-cargo-target\release\scx.exe" "%BIN%" >nul
 if errorlevel 1 (

@@ -131,7 +131,7 @@ def clean(text, limit=220):
 
 def default_binary():
     names = ("scx.exe", "scx")
-    for base in (ROOT / "rs" / "target" / "release", ROOT / "bin"):
+    for base in (ROOT / "target" / "release", ROOT / "bin"):
         for name in names:
             path = base / name
             if path.is_file():

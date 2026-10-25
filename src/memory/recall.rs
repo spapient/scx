@@ -15,7 +15,6 @@ use crate::memory::bucket::candidate_buckets;
 use crate::memory::field;
 use crate::memory::index::{self, Index};
 use crate::memory::store::{self, Meta};
-use crate::memory::synonyms;
 use crate::terms::{build_doc_terms, build_mem_terms};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -305,7 +304,7 @@ fn score_pass(root: &str, query: &str, ctx: &PassCtx<'_>) -> std::io::Result<Vec
     let edge_w = meta.param("edge_weight");
     let orig_qterms = build_mem_terms(query);
     let qterms = if meta.param("synonyms_enable") > 0.0 {
-        synonyms::expand_terms(&orig_qterms)
+        crate::terms::expand_recall_terms(&orig_qterms)
     } else {
         orig_qterms.clone()
     };

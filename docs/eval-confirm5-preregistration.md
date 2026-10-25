@@ -83,11 +83,11 @@ Corpus files:
 
 ## Frozen implementation
 
-Binary: `rs/target/release/scx.exe`, SHA256
+Binary: `target/release/scx.exe`, SHA256
 `0469182BD8FED2A32F5288D188728ECCC8852129D7124C38643C4DE18F7D6FCD`.
 
 Source and measurement manifest (historical): `confirm5-source.sha256`, 43 entries
-(`rs/Cargo.toml`, `rs/Cargo.lock`, all `rs/src/**/*.rs`, seed data, and the
+(`Cargo.toml`, `Cargo.lock`, all `src/**/*.rs`, seed data, and the
 build/analysis scripts). Manifest SHA256:
 `9856A9CFE3D69D437A446028DFFF50EE77A41F1E8D0F2845826BD0E279FCCCD7`.
 

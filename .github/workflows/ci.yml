@@ -30,15 +30,15 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Format
-        run: cargo fmt --manifest-path rs/Cargo.toml -- --check
+        run: cargo fmt -- --check
       - name: Clippy
-        run: cargo clippy --manifest-path rs/Cargo.toml --locked --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Test
-        run: cargo test --manifest-path rs/Cargo.toml --locked
+        run: cargo test --locked
       - name: Release build
-        run: cargo build --manifest-path rs/Cargo.toml --release --locked
+        run: cargo build --release --locked
       - name: Bench (compress 50k lines)
-        run: cargo run --manifest-path rs/Cargo.toml --release --locked --example bench
+        run: cargo run --release --locked --example bench
       - name: CLI smoke (Unix)
         if: runner.os != 'Windows'
         run: sh bin/run --version
@@ -61,18 +61,18 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Build release
-        run: cargo build --manifest-path rs/Cargo.toml --release --locked
+        run: cargo build --release --locked
       - name: Rustdoc
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --manifest-path rs/Cargo.toml --locked --no-deps
+        run: cargo doc --locked --no-deps
       - name: Tool selftest
         run: python eval/scx_eval.py selftest
       - name: Rebuild confirm5 corpus
         run: >-
           python eval/scx_eval.py seed eval/corpora/confirm5.json
           --mem-dir eval/ci-mem --csv eval/ci-cases.csv
-          --binary rs/target/release/scx.exe --force
+          --binary target/release/scx.exe --force
       - name: Build mechanical baseline
         run: >-
           python eval/scx_eval.py baseline
@@ -82,7 +82,7 @@ jobs:
       - name: Confirm5 mechanical gate and verbose replay
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval\ci-baseline.json --gate --eval-verbose --mem-dir .\eval\ci-mem 1> .\eval\ci-verbose.txt 2> .\eval\ci-verbose.err
+          .\target\release\scx.exe --eval .\eval\ci-baseline.json --gate --eval-verbose --mem-dir .\eval\ci-mem 1> .\eval\ci-verbose.txt 2> .\eval\ci-verbose.err
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\eval\ci-verbose.txt -Tail 40
             Get-Content .\eval\ci-verbose.err -Tail 40
@@ -91,7 +91,7 @@ jobs:
       - name: Reject policy labels as human closure
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval\labels\confirm5-policy.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-policy-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\labels\confirm5-policy.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-policy-gate.txt 2> $null
           if ($LASTEXITCODE -ne 2) {
             Get-Content .\eval\ci-policy-gate.txt -Tail 40
             throw "policy labels must not pass --gate-human (exit $LASTEXITCODE)"
@@ -105,7 +105,7 @@ jobs:
       - name: AI labels pass items gate, fail human gate
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval\labels\confirm5-ai.json --gate-items --mem-dir .\eval\ci-mem 1> .\eval\ci-ai-items.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\labels\confirm5-ai.json --gate-items --mem-dir .\eval\ci-mem 1> .\eval\ci-ai-items.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\eval\ci-ai-items.txt -Tail 30
             throw "AI per-item gate failed with exit $LASTEXITCODE"
@@ -113,13 +113,13 @@ jobs:
           if ((Get-Content .\eval\ci-ai-items.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
             throw "AI gate must declare non-human adjudication"
           }
-          .\rs\target\release\scx.exe --eval .\eval\labels\confirm5-ai.json --gate-human --mem-dir .\eval\ci-mem 1> $null 2> $null
+          .\target\release\scx.exe --eval .\eval\labels\confirm5-ai.json --gate-human --mem-dir .\eval\ci-mem 1> $null 2> $null
           if ($LASTEXITCODE -ne 2) { throw "AI labels must not pass --gate-human (exit $LASTEXITCODE)" }
           $global:LASTEXITCODE = 0
       - name: Human per-item gate
         shell: pwsh
         run: |
-          .\rs\target\release\scx.exe --eval .\eval\labels\confirm5-hao.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-hao-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\eval\labels\confirm5-hao.json --gate-human --mem-dir .\eval\ci-mem 1> .\eval\ci-hao-gate.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\eval\ci-hao-gate.txt -Tail 40
             throw "human per-item gate failed with exit $LASTEXITCODE"
@@ -162,4 +162,4 @@ jobs:
         with:
           toolchain: 1.82.0
       - name: Check declared MSRV
-        run: cargo check --manifest-path rs/Cargo.toml --locked --all-targets
+        run: cargo check --locked --all-targets

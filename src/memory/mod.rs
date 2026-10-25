@@ -25,7 +25,6 @@ mod query_cache;
 pub(crate) mod ranking;
 mod recall;
 mod store;
-pub(crate) mod synonyms;
 mod util;
 
 pub use recall::RecallHit;

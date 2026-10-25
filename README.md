@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/spapient/scx/actions/workflows/ci.yml/badge.svg)](https://github.com/spapient/scx/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust 1.82+](https://img.shields.io/badge/rust-1.82%2B-orange.svg)](rs/Cargo.toml)
+[![Rust 1.82+](https://img.shields.io/badge/rust-1.82%2B-orange.svg)](Cargo.toml)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **面向 AI 上下文的本地、确定性证据筛选器。**
@@ -65,8 +65,8 @@ sh build.sh
 
 ```powershell
 # Windows
-cargo build --release --locked --manifest-path rs\Cargo.toml
-.\rs\target\release\scx.exe --version
+cargo build --release --locked
+.\target\release\scx.exe --version
 ```
 
 ### 作为 Codex 技能安装
@@ -279,17 +279,17 @@ fn main() {
 }
 ```
 
-公开类型定义在 [`rs/src/lib.rs`](rs/src/lib.rs)，记忆库入口为 `scx::memory`。筛选引擎与记忆库、CLI I/O 相互隔离。
+公开类型定义在 [`src/lib.rs`](src/lib.rs)，记忆库入口为 `scx::memory`。筛选引擎与记忆库、CLI I/O 相互隔离。
 
 ## 架构
 
 | 路径 | 职责 |
 |---|---|
-| `rs/src/lib.rs` | 公共 API、`Config`、`Outcome` |
-| `rs/src/compress.rs` | 纯函数筛选与预算分配 |
-| `rs/src/analysis.rs`, `rs/src/terms.rs` | 归一化、结构分类、切词与 token 估算 |
-| `rs/src/memory/` | 本地 case 存储、召回、反馈、索引与评估 |
-| `rs/src/main.rs`, `args.rs`, `input.rs` | CLI 编排、记忆输出、参数和文件 I/O |
+| `src/lib.rs` | 公共 API、`Config`、`Outcome` |
+| `src/compress.rs` | 纯函数筛选与预算分配 |
+| `src/analysis.rs`, `src/terms.rs` | 归一化、结构分类、切词与 token 估算 |
+| `src/memory/` | 本地 case 存储、召回、反馈、索引与评估 |
+| `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 编排、记忆输出、参数和文件 I/O |
 | `bin/run`, `bin/run.cmd` | 跨平台自举入口 |
 | `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门 |
 | `eval/` | 可重建语料、冻结标签、盲审包与统一评估工具 |
@@ -298,7 +298,7 @@ fn main() {
 有意修改 CLI 语义时，需要运行冻结基线更新并逐项审查差异：
 
 ```bash
-cargo test --manifest-path rs/Cargo.toml \
+cargo test \
   --test golden update_baselines -- --ignored --nocapture
 ```
 
@@ -344,9 +344,9 @@ confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard
 
 ```bash
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
-cargo test --manifest-path rs/Cargo.toml --locked
-cargo run --release --locked --manifest-path rs/Cargo.toml --example bench
-cargo run --release --locked --manifest-path rs/Cargo.toml --example mem_bench
+cargo test --locked
+cargo run --release --locked --example bench
+cargo run --release --locked --example mem_bench
 ```
 
 ### 同类工具与可比性
@@ -378,11 +378,11 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 
 ```bash
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
-cargo fmt --manifest-path rs/Cargo.toml -- --check
-cargo clippy --locked --all-targets --manifest-path rs/Cargo.toml -- -D warnings
-RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --manifest-path rs/Cargo.toml
-cargo test --locked --manifest-path rs/Cargo.toml
-cargo build --release --locked --manifest-path rs/Cargo.toml
+cargo fmt -- --check
+cargo clippy --locked --all-targets -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
+cargo test --locked
+cargo build --release --locked
 ```
 
 `main` 受分支保护：常规变更需要 PR、通过的 CI 和维护者评审，直接推送会被拒绝；管理员绕过只用于仓库恢复。不要把真实凭据、客户数据或未公开事故材料放入 issue、日志或测试夹具。

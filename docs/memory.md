@@ -20,7 +20,7 @@
 ## 2. 代码结构
 
 ```
-rs/src/memory/
+src/memory/
 ├── mod.rs          # 唯一公开门面；内部模块不对外暴露
 ├── store.rs        # Case 模型、case.json 读写、目录枚举
 ├── meta.rs         # meta.toml、参数默认值、库代际与 L1 历史
@@ -29,7 +29,6 @@ rs/src/memory/
 ├── bucket.rs       # db/network/disk/build/runtime 场景桶
 ├── recall.rs       # BM25 + 字段/实体加权 + 桶过滤 + PRF + 重排
 ├── ranking.rs      # BM25、PRF 扩展词选择与 MMR 多样性
-├── synonyms.rs     # 中英领域词扩展
 ├── index.rs        # 倒排/实体索引、校验、候选提取与 postings 编解码
 ├── query_cache.rs  # 进程内会话快照 + 持久化 query 记忆图
 ├── edge.rs         # 小库线性路径的结构化实体一跳扩展
@@ -42,6 +41,8 @@ rs/src/memory/
 ├── lock.rs         # 跨进程锁与原子写
 └── util.rs         # FNV/UTC/编辑距离/脱敏/控制字符转义
 ```
+
+切词、停用词、CJK 判定与中英领域同义词表统一归 `src/terms.rs`（压缩与记忆库共享）。
 
 公开 API 只从 `scx::memory` 导出：`store_case`、`recall_cases`、`rate_case`、
 `read_case`、`rebuild`、`gc`、`delete_case`、`eval_cases` 以及少量查询与
@@ -139,8 +140,8 @@ Apple M5 Pro、release、零第三方依赖，2026-10-25 本机采样：
 复现：
 
 ```bash
-cargo run --release --locked --manifest-path rs/Cargo.toml --example bench
-cargo run --release --locked --manifest-path rs/Cargo.toml --example mem_bench
+cargo run --release --locked --example bench
+cargo run --release --locked --example mem_bench
 ```
 
 数字用于同机回归，不是跨机器承诺。`mem_bench` 同时报告线性冷启动、倒排召回与

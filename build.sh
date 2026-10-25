@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")"
 TD="${SCX_TARGET_DIR:-${TMPDIR:-/tmp}/scx-cargo-target}"
-cargo build --release --locked --manifest-path rs/Cargo.toml --target-dir "$TD"
+cargo build --release --locked --target-dir "$TD"
 mkdir -p bin
 cp "$TD/release/scx" bin/scx
 chmod +x bin/scx
