@@ -204,3 +204,18 @@ v2 参与调参，且标签由 AI 预填后人工采纳，因此不是独立 hol
 - CI 会在冻结语料上重建记忆库，并分别执行机械门、人工门、AI 逐项门、policy
   负向门和预注册优势断言；移动或重命名评测输入时，必须同步工作流路径。
 - 旧 `eval-real/` 中间产物已删除，可从 git commit `5ada90d` 恢复。
+
+## Evidence containment（contain5）
+
+`contain5` 是独立的合成噪音语料评测，对标 SuperCompress 的 evidence containment：
+压缩输出必须逐字保留"必需证据行"，并同场对比同等字节预算的头部截断基线。
+
+```bash
+cargo build --release --locked
+./bin/scx-eval contain eval/contain5.corpus.json --out /tmp/contain5-detail.json
+```
+
+- 语料：`contain5.corpus.json`（25 切片，build/stack/diff/log/test 各 5，全 synthetic）。
+- 入口：`bin/scx-eval contain`（新增 subcommand，标准库、无随机源）。
+- 口径、复现命令、实测数字与 SHA256 见 [`CONTAINMENT.md`](CONTAINMENT.md)。
+- **自测性质**：作者侧合成语料自测，非第三方独立评测。
