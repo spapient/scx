@@ -12,6 +12,7 @@
 //! 跨模块行为测试。
 mod analysis;
 mod compress;
+mod policy;
 mod terms;
 
 /// 记忆知识库（旁路，默认不启用）：I/O 侧模块，与纯函数 `compress` 完全隔离。
