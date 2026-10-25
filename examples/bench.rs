@@ -74,10 +74,14 @@ fn bench_median(text: &str, query: &str, cfg: &Config, label: &str, repeats: usi
 fn structure_bench(repeats: usize) {
     let text = structure_text();
     let query = "compute module";
-    let mut off = Config::default();
-    off.structure = false;
-    let mut on = Config::default();
-    on.structure = true;
+    let off = Config {
+        structure: false,
+        ..Config::default()
+    };
+    let on = Config {
+        structure: true,
+        ..Config::default()
+    };
     bench_median(&text, query, &off, "structure:off", repeats);
     bench_median(&text, query, &on, "structure:on", repeats);
 }
@@ -85,8 +89,10 @@ fn structure_bench(repeats: usize) {
 /// --max-tokens 硬上限路径：默认语料 + `max_tokens=2000`，报告模式（应为
 /// overflow 或 sieve，取决于证据地板与预算交互）。
 fn max_tokens_bench(text: &str, query: &str, repeats: usize) {
-    let mut cfg = Config::default();
-    cfg.max_tokens = Some(2000);
+    let cfg = Config {
+        max_tokens: Some(2000),
+        ..Config::default()
+    };
     let _ = compress(text, query, &cfg);
     let mut samples: Vec<u128> = Vec::with_capacity(repeats);
     for _ in 0..repeats {
@@ -115,10 +121,10 @@ fn policy_bench(text: &str, query: &str, repeats: usize) {
     let mut cfg = Config::default();
     for e in &entries {
         match e.key {
-            "ratio" => cfg.ratio = scx::conf::parse_f64(&e.value).unwrap(),
-            "context" => cfg.context = scx::conf::parse_usize(&e.value).unwrap() as i64,
-            "max_tokens" => cfg.max_tokens = scx::conf::parse_usize(&e.value),
-            "structure" => cfg.structure = scx::conf::parse_usize(&e.value).unwrap() > 0,
+            "ratio" => cfg.ratio = scx::conf::parse_f64(e.value.as_ref()).unwrap(),
+            "context" => cfg.context = scx::conf::parse_usize(e.value.as_ref()).unwrap() as i64,
+            "max_tokens" => cfg.max_tokens = scx::conf::parse_usize(e.value.as_ref()),
+            "structure" => cfg.structure = scx::conf::parse_usize(e.value.as_ref()).unwrap() > 0,
             _ => {}
         }
     }
