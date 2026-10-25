@@ -26,3 +26,4 @@
 - `main` 仅接受经过评审与 CI 的变更。
 - GitHub Actions 使用最小 `contents: read` 权限，并对第三方 action 固定 commit SHA。
 - 公开仓库启用 secret scanning 与 push protection；发现泄露应先撤销凭据，再清理历史。
+- 库与 CLI 根模块使用 `#![forbid(unsafe_code)]`；引入 `unsafe` 会在编译期失败。

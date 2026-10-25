@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 // scx CLI：参数解析在 args，输入读取在 input，记忆输出接线在本文件；
 // 筛选逻辑全在库 crate（scx::compress）。本文件只做命令编排与输出。
 mod args;
