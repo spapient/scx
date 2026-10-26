@@ -38,6 +38,20 @@ impl ContentType {
     }
 }
 
+impl std::str::FromStr for ContentType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "static-contract" => Ok(ContentType::StaticContract),
+            "system-definition" => Ok(ContentType::SystemDefinition),
+            "session-message" => Ok(ContentType::SessionMessage),
+            "tool-output" => Ok(ContentType::ToolOutput),
+            _ => Err(format!("unknown content type: {s}")),
+        }
+    }
+}
+
 /// 单桶计量。
 #[derive(Debug, Clone, Copy)]
 pub struct Bucket {
@@ -75,13 +89,15 @@ pub fn compress_parts(parts: &[(ContentType, &str)], query: &str, cfg: &Config) 
         let mut c = cfg.clone();
         c.ratio = ty.default_ratio();
         let o = compress(text, query, &c);
+        // passthrough/fail-open 时 `o.tokens` 不保证，重新估算输出（与 ops 渲染同口径）。
+        let tout_part = crate::terms::estimate(&o.text);
         tin += o.tokens_in;
-        tout += o.tokens;
+        tout += tout_part;
         buckets.push(Bucket {
             ty: *ty,
             tokens_in: o.tokens_in,
-            tokens_out: o.tokens,
-            cut_pct: pct(o.tokens_in, o.tokens),
+            tokens_out: tout_part,
+            cut_pct: pct(o.tokens_in, tout_part),
             kept: o.kept,
             total: o.total,
             mode: o.mode,
@@ -118,6 +134,91 @@ pub fn render(s: &Snapshot) -> String {
     }
     out.push_str("]}");
     out
+}
+
+/// `scx bucket` 入口：读 stdin 类型化载荷 JSON，压缩输出快照；`--record` 追加收益记录。
+pub fn run(args: &[String]) -> i32 {
+    let mut record_path: Option<&str> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--record" => {
+                i += 1;
+                record_path = args.get(i).map(|s| s.as_str());
+            }
+            other => {
+                eprintln!("scx bucket: unknown argument {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let mut input = String::new();
+    if std::io::Read::read_to_string(&mut std::io::stdin(), &mut input).is_err() {
+        eprintln!("scx bucket: read stdin failed");
+        return 2;
+    }
+    let (query, parts) = match parse_manifest(&input) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("scx bucket: {e}");
+            return 2;
+        }
+    };
+    let refs: Vec<(ContentType, &str)> = parts.iter().map(|(t, s)| (*t, s.as_str())).collect();
+    let snap = compress_parts(&refs, &query, &crate::Config::default());
+    println!("{}", render(&snap));
+    if let Some(path) = record_path {
+        append_record(path, &query, &snap);
+    }
+    0
+}
+
+/// 解析 stdin 类型化载荷 JSON：`{query, parts:[{type,text}]}`。
+fn parse_manifest(input: &str) -> Result<(String, Vec<(ContentType, String)>), String> {
+    let v = crate::json::parse(input).map_err(|e| format!("parse: {e}"))?;
+    let query = v
+        .get("query")
+        .and_then(crate::json::Json::str)
+        .unwrap_or("")
+        .to_string();
+    let arr = v.get("parts").ok_or("missing parts array")?;
+    let crate::json::Json::Arr(arr) = arr else {
+        return Err("missing parts array".to_string());
+    };
+    let mut parts = Vec::with_capacity(arr.len());
+    for p in arr {
+        let ty = p
+            .get("type")
+            .and_then(crate::json::Json::str)
+            .and_then(|s| s.parse().ok())
+            .ok_or("bad part type")?;
+        let text = p.get("text").and_then(crate::json::Json::str).unwrap_or("");
+        parts.push((ty, text.to_string()));
+    }
+    Ok((query, parts))
+}
+
+/// 追加一条收益记录（JSONL：`{ts, query, snapshot}`），失败静默（账本是旁路，不影响压缩）。
+fn append_record(path: &str, query: &str, snap: &Snapshot) {
+    use std::io::Write;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let line = format!(
+        "{{\"ts\":{},\"query\":{},\"snapshot\":{}}}\n",
+        ts,
+        crate::json::string(query),
+        render(snap)
+    );
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = f.write_all(line.as_bytes());
+    }
 }
 
 #[cfg(test)]

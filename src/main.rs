@@ -64,19 +64,22 @@ fn run(args: &[String]) -> ops::Reply {
     if wants_mcp(args, env_mcp) {
         std::process::exit(scx::mcp::serve());
     }
-    if let Some(sub) = args.first() {
-        if sub == "setup" {
-            std::process::exit(scx::setup::run(&args[1..]));
-        }
-        if sub == "wrap" {
-            std::process::exit(scx::wrap::run(&args[1..]));
-        }
-        if sub == "hook" {
-            std::process::exit(scx::hook::run());
-        }
-    }
+    subcommand(args);
     let opts = parse(args).map_err(Failure::Usage)?;
     ops::run(ops::parse(&opts))
+}
+
+/// 子命令分派：setup / wrap / hook / bucket；无匹配时返回继续主流程。
+fn subcommand(args: &[String]) {
+    let Some(sub) = args.first() else { return };
+    let code = match sub.as_str() {
+        "setup" => scx::setup::run(&args[1..]),
+        "wrap" => scx::wrap::run(&args[1..]),
+        "hook" => scx::hook::run(),
+        "bucket" => scx::bucket::run(&args[1..]),
+        _ => return,
+    };
+    std::process::exit(code);
 }
 
 /// 是否进入 MCP server 模式：显式子命令 `mcp`，或环境变量 `SCX_MCP=1`

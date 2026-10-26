@@ -46,8 +46,8 @@ fn render_hook(resp: &Json, stdout: &str) -> String {
     let is_image = matches!(resp.get("isImage"), Some(Json::Bool(true)));
     format!(
         "{{\"hookSpecificOutput\":{{\"updatedToolOutput\":{{\"stdout\":{},\"stderr\":{},\"interrupted\":{},\"isImage\":{}}}}}}}",
-        esc(stdout),
-        esc(stderr),
+        crate::json::string(stdout),
+        crate::json::string(stderr),
         interrupted,
         is_image
     )
@@ -71,25 +71,6 @@ pub fn run() -> i32 {
         }
         None => passthrough(),
     }
-}
-
-/// 最小 JSON 字符串转义（stdout/stderr 可能含控制字符与引号）。
-fn esc(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }
 
 #[cfg(test)]
@@ -135,8 +116,8 @@ mod tests {
     }
 
     #[test]
-    fn esc_round_trips_control_chars() {
-        assert_eq!(esc("a\"b\nc"), "\"a\\\"b\\nc\"");
-        assert_eq!(esc("tab\tend"), "\"tab\\tend\"");
+    fn string_round_trips_control_chars() {
+        assert_eq!(crate::json::string("a\"b\nc"), "\"a\\\"b\\nc\"");
+        assert_eq!(crate::json::string("tab\tend"), "\"tab\\tend\"");
     }
 }

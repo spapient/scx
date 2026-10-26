@@ -330,7 +330,7 @@ fn write_node(v: &Json, out: &mut String, indent: usize) {
         Json::Null => out.push_str("null"),
         Json::Bool(b) => out.push_str(bool_lit(*b)),
         Json::Num(n) => write_num(*n, out),
-        Json::Str(s) => out.push_str(&json_str(s)),
+        Json::Str(s) => out.push_str(&crate::json::string(s)),
         Json::Arr(items) => write_arr(items, out, indent),
         Json::Obj(kv) => write_obj(kv, out, indent),
     }
@@ -378,7 +378,7 @@ fn write_obj(kv: &[(String, Json)], out: &mut String, indent: usize) {
     out.push_str("{\n");
     for (i, (k, val)) in kv.iter().enumerate() {
         pad(out, indent + 1);
-        out.push_str(&json_str(k));
+        out.push_str(&crate::json::string(k));
         out.push_str(": ");
         write_node(val, out, indent + 1);
         if i + 1 < kv.len() {
@@ -394,24 +394,6 @@ fn pad(out: &mut String, indent: usize) {
     for _ in 0..indent {
         out.push_str("  ");
     }
-}
-
-fn json_str(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }
 
 // ---------- 文件安全 ----------

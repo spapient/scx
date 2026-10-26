@@ -38,6 +38,25 @@ impl Json {
     }
 }
 
+/// JSON 字符串转义（唯一实现，供各序列化点复用，避免重复）。
+pub fn string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// 最大嵌套深度：递归下降解析器在更深处直接报错，防恶意深嵌套触发栈溢出。
 const MAX_DEPTH: usize = 128;
 
