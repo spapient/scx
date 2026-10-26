@@ -75,7 +75,7 @@ def embed_rank(query_emb, order, emb_by_id):
     return [cid for _, cid in scored]
 
 
-def rrf_rank(rank_b, rank_embed, order):
+def rrf_rank(rank_b, rank_embed, order, w=1.0):
     scored = []
     for cid in order:
         key = str(cid)[-8:]
@@ -83,7 +83,7 @@ def rrf_rank(rank_b, rank_embed, order):
         if key in rank_b:
             s += 1.0 / (RRF_K + rank_b[key])
         if key in rank_embed:
-            s += 1.0 / (RRF_K + rank_embed[key])
+            s += w * 1.0 / (RRF_K + rank_embed[key])
         scored.append((s, cid))
     scored.sort(key=lambda x: (-x[0], x[1]))
     return [cid for _, cid in scored]
@@ -109,6 +109,10 @@ def main():
     ap.add_argument("--perm", type=int, default=10000)
     ap.add_argument("--seed", type=int, default=20261023)
     ap.add_argument("--mde", type=float, default=0.05)
+    ap.add_argument("--fused-weight", type=float, default=1.0,
+                    help="fused 的 embedding 权重（RRF）")
+    ap.add_argument("--sweep", action="store_true",
+                    help="扫描 embedding 权重，输出整体/分层 MRR 摘要")
     ap.add_argument("--out", help="输出 JSON 路径（可选）")
     args = ap.parse_args()
 
@@ -144,7 +148,8 @@ def main():
         a_ids = verbose[i]["A"]  # tail8 序
         b_ids = verbose[i]["B"]
         e_ids = embed_rank(q_embs[i], order, emb_by_id)
-        h_ids = rrf_rank(rank_map(b_ids), rank_map(e_ids), order)
+        h_ids = rrf_rank(rank_map(b_ids), rank_map(e_ids), order)  # 朴素 BM25 + embed
+        f_ids = rrf_rank(rank_map(a_ids), rank_map(e_ids), order, args.fused_weight)
         rows.append(
             {
                 "i": int(case.get("case_index", i)),
@@ -153,6 +158,7 @@ def main():
                 "B": metric_value(args.metric, b_ids, target),
                 "embed": metric_value(args.metric, e_ids, target),
                 "hybrid": metric_value(args.metric, h_ids, target),
+                "fused": metric_value(args.metric, f_ids, target),
             }
         )
 
@@ -162,7 +168,7 @@ def main():
           f"cases={len(rows)} rrf_k={RRF_K:.0f}")
     print("")
     print(f"{'layer':12s} {'n':>4s} {'scx':>8s} {'bm25':>8s} "
-          f"{'embed':>8s} {'hybrid':>8s}")
+          f"{'embed':>8s} {'hybrid':>8s} {'fused':>8s}")
     for layer in layers:
         group = rows if layer == "all" else [r for r in rows if r["layer"] == layer]
         if not group:
@@ -170,33 +176,59 @@ def main():
         n = len(group)
         mean = lambda k: sum(r[k] for r in group) / n  # noqa: E731
         print(f"{layer:12s} {n:4d} {mean('A'):8.4f} {mean('B'):8.4f} "
-              f"{mean('embed'):8.4f} {mean('hybrid'):8.4f}")
+              f"{mean('embed'):8.4f} {mean('hybrid'):8.4f} {mean('fused'):8.4f}")
 
-    # 配对统计：scx(A) vs embed，scx(A) vs hybrid，按层。
-    def paired(group, bkey):
-        sub = [
-            {"a": r["A"], "b": r[bkey]}
-            for r in group
-        ]
+    # 配对统计：按层，Δ=A−B，Δ>0 表示 A 占优。fused=scx 全管线+embed 的 RRF。
+    def paired(group, akey, bkey):
+        sub = [{"a": r[akey], "b": r[bkey]} for r in group]
         return scx.analyze(
-            "scx-vs-" + bkey, sub, args.boot, args.perm, args.seed, args.mde, args.metric
+            f"{akey}-vs-{bkey}", sub, args.boot, args.perm, args.seed, args.mde, args.metric
         )
 
     print("")
-    print("配对（scx 为 A，另一方法为 B；Δ=A−B，Δ>0 表示 scx 占优）：")
+    print("配对（Δ=A−B，Δ>0 表示 A 占优；scx=完整管线 A 列）：")
+    pairs = (("fused", "A"), ("fused", "embed"), ("fused", "hybrid"),
+             ("A", "embed"), ("A", "hybrid"))
     for layer in layers:
         group = rows if layer == "all" else [r for r in rows if r["layer"] == layer]
         if not group:
             continue
-        for bkey in ("embed", "hybrid"):
-            res = paired(group, bkey)
+        for akey, bkey in pairs:
+            res = paired(group, akey, bkey)
             if res:
                 print(
-                    f"{layer:12s} vs {bkey:6s} n={res['n']:3d} "
+                    f"{layer:12s} {akey:>5s}vs{bkey:<6s} n={res['n']:3d} "
                     f"A={res[f'A_{args.metric}']:.4f} B={res[f'B_{args.metric}']:.4f} "
                     f"d={res['delta']:+.4f} CI=[{res['ci_lo']:+.4f},{res['ci_hi']:+.4f}] "
                     f"p={res['perm_p']:.4f}"
                 )
+
+    if args.sweep:
+        print("")
+        print("权重扫描（fused = RRF(scx A, embed)，embedding 权重 w；vs_embed 为正=反超）：")
+        weights = [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0]
+        embed_all = sum(r["embed"] for r in rows) / len(rows)
+        print(f"{'w':>7s} {'all':>8s} {'literal':>8s} {'paraphr':>8s} "
+              f"{'semantic':>8s} {'vs_embed':>9s}")
+        best = None
+        for w in weights:
+            acc = {k: [] for k in ("literal", "paraphrase", "semantic", "all")}
+            for i, case in enumerate(baseline):
+                target = str(case["expected"][0])
+                layer = case.get("layer", "")
+                a_ids = verbose[i]["A"]
+                e_ids = embed_rank(q_embs[i], order, emb_by_id)
+                f_ids = rrf_rank(rank_map(a_ids), rank_map(e_ids), order, w)
+                v = metric_value(args.metric, f_ids, target)
+                acc[layer].append(v)
+                acc["all"].append(v)
+            m = {k: sum(v) / len(v) for k, v in acc.items()}
+            vs = m["all"] - embed_all
+            print(f"{w:7.2f} {m['all']:8.4f} {m['literal']:8.4f} {m['paraphrase']:8.4f} "
+                  f"{m['semantic']:8.4f} {vs:+9.4f}")
+            if best is None or m["all"] > best[1]:
+                best = (w, m["all"])
+        print(f"最优 w={best[0]:.2f}（overall MRR={best[1]:.4f}，embed 整体={embed_all:.4f}）")
 
     if args.out:
         payload = {
