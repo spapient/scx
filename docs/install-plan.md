@@ -1,6 +1,6 @@
 # scx 发布与接入总览（v9 · 全渠道）
 
-> 版本 v9 · 2026-10-26 · 状态：**v0.6.7 全渠道发布完成（crates/GitHub/Homebrew/npm）**
+> 版本 v9 · 2026-10-26 · 状态：**v0.7.0 全渠道发布完成（crates/GitHub/Homebrew/npm）**
 > 变更（v9）：**v0.6.7 边界安全加固与行为修复**——P0 `--delete` 路径穿越、P1 `re:` 交替/
 > MCP ratio/MCP JSON 转义、P2/P3 边界加固（JSON 深度、脱敏 JSON 形式、setup 权限、行数上限、
 > semantic 权重校验、recall 回显转义）；normalize 纯字母 hex 保留、移除未接线 ext_hit；SMALL_TOK 1200→600。
@@ -34,17 +34,17 @@
 
 | 渠道 | 命名 | 版本 | 状态 | 关键证据 |
 |---|---|---|---|---|
-| crates.io | `scx`（账户 `apex`） | **0.6.7**（10 版，未 yanked） | ✅ 已发布 | 邮箱已验证（haofei.ni@outlook.com）；`cargo install scx` 可用，本机已实测 0.6.7 |
-| GitHub Release | `spapient/scx` | v0.6.7 | ✅ 已发布 | 三平台资产（tar.gz/zip + sha256 已核对）：darwin-arm64 / linux-x86_64（musl 静态）/ windows-x86_64 |
-| Homebrew | tap `spapient/homebrew-scx` | 0.6.7 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → `/opt/homebrew/bin/scx` 0.6.7 可运行 |
-| npm | `@spapient/scx`（scoped） | **0.6.7** | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.7）；包内置 0.6.7 三平台二进制。历史：0.6.2 包误内置 0.6.1 二进制，已重发修复 |
+| crates.io | `scx`（账户 `apex`） | **0.7.0**（11 版，未 yanked） | ✅ 已发布 | 邮箱已验证（haofei.ni@outlook.com）；`cargo install scx` 可用，本机已实测 0.6.7 |
+| GitHub Release | `spapient/scx` | v0.7.0 | ✅ 已发布 | 三平台资产（tar.gz/zip + sha256 已核对）：darwin-arm64 / linux-x86_64（musl 静态）/ windows-x86_64 |
+| Homebrew | tap `spapient/homebrew-scx` | 0.7.0 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → `/opt/homebrew/bin/scx` 0.6.7 可运行 |
+| npm | `@spapient/scx`（scoped） | **0.7.0** | ✅ 已发布 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.7）；包内置 0.6.7 三平台二进制。历史：0.6.2 包误内置 0.6.1 二进制，已重发修复 |
 | npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 年空壳包（tu123dou）占用；申请已发 npm 官方（落款 spapient / haofei.ni@outlook.com） |
 | winget | `Spapient.Scx` | 0.6.1 | ⏳ PR 审核中 | PR **#461786**（microsoft/winget-pkgs，portable 三 yaml） |
 | Scoop | `scx` | 0.6.4 | ⏳ PR 审核中 | package request **#8767** 已提；PR **#8768**（ScoopInstaller/Main，manifest 0.6.4，bot 检查中）。注：旧 PR #8766 因缺 package request 被官方关闭（`not-meet-criteria`），已按流程重提 |
 | PyPI | `scx` | — | ✗ 被占 | 现存 v1.3.0 "MIT Supply Chain Python Package"，未注册 |
 | AUR | `scx` | — | ✗ 放弃 | 官网被反爬（Anubis）拦截；按用户指示放弃 |
 
-**版本一致性**：crates 0.6.7 = GitHub Release v0.6.7 = Homebrew 0.6.7 = npm 内置二进制 0.6.7 = 豆包/千问连接器 0.6.7（winget/Scoop PR 仍为 0.6.1/0.6.4，待合并时对齐）。
+**版本一致性**：crates 0.7.0 = GitHub Release v0.7.0 = Homebrew 0.7.0 = npm 内置二进制 0.7.0 = 豆包/千问连接器 0.7.0（winget/Scoop PR 仍为 0.6.1/0.6.4，待合并时对齐）。
 
 ---
 
