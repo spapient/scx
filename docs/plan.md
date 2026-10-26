@@ -16,7 +16,7 @@
 红线（每阶段门禁）：`cargo fmt --check` / `cargo clippy --all-targets --locked -- -D warnings` /
 `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked` / `cargo test --locked` /
 `cargo build --release --locked`；golden 逐字节零漂移（新行为走新增 golden 例）；
-confirm5 不退化；每函数圈复杂度 < 10；`#![forbid(unsafe_code)]` 与零第三方 crate 保持。
+Gauge 不退化；每函数圈复杂度 < 10；`#![forbid(unsafe_code)]` 与零第三方 crate 保持。
 
 ## P1 交付状态（2026-10-25）
 
@@ -85,7 +85,7 @@ golden **2 passed / 1 ignored（32 用例）** / doc 0；全部 `cargo test --lo
 
 1. MCP server 集成层（`src/mcp.rs`，二进制名 `scx-mcp`）未实施——设计见架构方案 §2.4，属 P2。
 2. 结构感知邻域（fence/import/at 链）未实施——属 P2，与既有
-   `frame_bonus`/`diffmeta_bonus` 评分表正交，改默认表须过 golden + confirm5。
+   `frame_bonus`/`diffmeta_bonus` 评分表正交，改默认表须过 golden + Gauge。
 3. 语义增强 feature-gate 可选路径未实施——属 P3；默认路径承诺逐字节不变。
 4. 与 SuperCompress 的同场独立对照实验未做（需真实事故语料 + 第三方盲审）。
 5. `tools/scx.py` 的 `contain` 输出 token 压减为确定性正则估算，非真实
@@ -154,7 +154,7 @@ P3 四子项全部完成，每子项独立 commit（全部可回滚）。改动�
 HEAD=`ae4c2c2`（P2 收尾）；P3 链结束后 HEAD=`343b221`，工作区干净。
 门禁逐子项全绿：`cargo fmt --check`=0、`cargo clippy --all-targets --locked -- -D warnings`=0
 （默认与 `--features semantic` 双轨）、`cargo build --release --locked`=0；
-**golden 37 例全程逐字节零漂移**；confirm5 机械 hard 层不退化
+**golden 37 例全程逐字节零漂移**；Gauge 机械 hard 层不退化
 （见 3.2 复验数据）。P3 末测试计数：lib **200** / cli 11 / contain 4 /
 golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurrency 1；
 `--features semantic` 另 +5 semantic 单测 +3 semantic 集成 +1 mcp 冒烟。
@@ -164,7 +164,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 | 子项 | 完成 | commit | 新增测试 | 说明 |
 |---|---|---|---|---|
 | 3.1 semantic feature | ✅ | `ebc1a67`（前置 `9bd59c9` json 提取；补漏 `faabfad`） | +5 单测 +3 集成 | 手写 SHA-256/权重自描述 JSON/确定性 sigmoid；feature 关时 cfg 排除、golden 零漂移 |
-| 3.2 词面召回增强 | ✅ | `5d33229` | +1 单测 | RECALL_PAIRS +fmt/msg 2 对（无字面交集纪律；param/parameter 前缀交集弃用）；synonyms_enable [params] 开关既有（默认开）；confirm5 复验 ΔMRR literal 0 / paraphrase +0.005 / semantic +0.162，CI 下界 ≥0 |
+| 3.2 词面召回增强 | ✅ | `5d33229` | +1 单测 | RECALL_PAIRS +fmt/msg 2 对（无字面交集纪律；param/parameter 前缀交集弃用）；synonyms_enable [params] 开关既有（默认开）；Gauge 复验 ΔMRR literal 0 / paraphrase +0.005 / semantic +0.162，CI 下界 ≥0 |
 | 3.3 --force 正则 | ✅ | `0b519fd` | +7 单测 +4 集成 | 手写有限子集（`\|` 交替/字符类/`*+?`/转义），Thompson NFA 无回溯灾难；re: 前缀显式开启，非法报错含子集提示；字面子串行为逐字节保持 |
 | 3.4 --policy-file | ✅ | `343b221` | +5 集成 | 文本覆盖 DEFAULT（ratio/context/window/elide/risk_gate/lineno/max_tokens/structure）；CLI 显式 > 文件 > DEFAULT；非法文件报错含行号 |
 
@@ -175,7 +175,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 | `9bd59c9` | refactor(json): extract minimal JSON parser from mcp into src/json.rs |
 | `ebc1a67` | feat(semantic): optional hand-written scoring under cargo feature=semantic（3.1） |
 | `faabfad` | chore(semantic): commit json.rs allow(dead_code) + mcp import order missed in ebc1a67 |
-| `5d33229` | feat(terms): conservative high-precision recall pairs fmt/msg + confirm5 re-run（3.2） |
+| `5d33229` | feat(terms): conservative high-precision recall pairs fmt/msg + Gauge re-run（3.2） |
 | `0b519fd` | feat(force): re: prefix enters hand-written finite regex subset（3.3） |
 | `343b221` | feat(policy): --policy-file text override with CLI > file > DEFAULT priority（3.4） |
 
@@ -304,7 +304,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   （serverInfo.name=`scx`）+ `scx setup` 一键注册 Codex/Cursor/Claude（幂等+备份+握手自检，
   隔离 HOME 实测三路径）；② contain 同场对照 `docs/containcmp.md`（scx 70/70=100% vs 头截断
   0/70 vs 随机 8/70，三指标+种子可复现，明确"自测非第三方"）；③ feature-gate 词干化
-  （默认轨 228/0 逐位不变、semantic 239/0、confirm5 hard 层 Δ+0.0608 零退化、zero-signal
+  （默认轨 228/0 逐位不变、semantic 239/0、Gauge hard 层 Δ+0.0608 零退化、zero-signal
   4/5→0/5）。门禁双轨全绿、golden 37 零漂移；commit 链 634fcc7→…→ee5ce4c + `f725515`
   （.gitignore 草稿留本地）；`cargo publish --locked` 成功（201 文件），crates.io
   max_version=0.6.0、num_versions=3。main 已同步 origin/main=f725515。
@@ -425,7 +425,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 |---|---|---|
 | 事项 1：MCP 并入默认轨 + `scx setup` 一键注册 | ✅ | `scx mcp` 手动握手返回 tools/list（serverInfo.name=scx）；`scx setup` 在隔离 HOME 下三配置文件实测：写入正确、二次运行内容逐字节不变（幂等）、`.scx.bak` 备份存在、每 agent 写后 tools/list 握手 PASS；tools/scx setup/doctor 对齐实测通过 |
 | 事项 2：contain 同场对照（scx vs 头截断 vs 随机抽样） | ✅ | `docs/containcmp.md`：scx 70/70=100.00% / 82.01% / 4.19ms；头截断 0/70；随机抽样 8/70=11.43%（种子 `contain-rand-v1`，逐字节可复现）；逐片明细 `docs/contain5-compare.json`；自测非第三方标注；SuperCompress 待第三方盲审（node 存在但 compiler 未 vendor，不虚构数字） |
-| 事项 3：feature-gate 语义增强（英文屈折词干化） | ✅ | 默认轨 228/0 逐位不变（golden 37 零漂移）；semantic 轨 239/0；confirm5 三层 MRR 逐位一致（1.000/0.247/0.836，tier:hard Δ+0.0608 CI [+0.0200,+0.1069]）；新探针语料 `config/stem.corpus.json`：zero-signal 4/5→0/5、paraphrase MRR 0.200→0.600、literal 无退化 |
+| 事项 3：feature-gate 语义增强（英文屈折词干化） | ✅ | 默认轨 228/0 逐位不变（golden 37 零漂移）；semantic 轨 239/0；Gauge 三层 MRR 逐位一致（1.000/0.247/0.836，tier:hard Δ+0.0608 CI [+0.0200,+0.1069]）；新探针语料 `config/stem.corpus.json`：zero-signal 4/5→0/5、paraphrase MRR 0.200→0.600、literal 无退化 |
 
 ### commit 链（v0.6.0，接 58ca051 之后）
 
@@ -441,7 +441,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 - 事项 1 偏差：无。CLI 向后兼容——`mcp`/`setup` 作为 args[0] 子命令在现有 parse 前拦截，未提供时原路径逐字节不变；`scx-mcp` 二进制删除，`CARGO_BIN_EXE_scx-mcp` 测试改为 `CARGO_BIN_EXE_scx` + `mcp` 参数。
 - 事项 2 偏差：仓库实际布局为 `tools/scx.py` + `config/`（外部会话重组），对照资产落在 `docs/containcmp.md` + `docs/contain5-compare.json`；延迟口径不对称已显著标注（scx=子进程端到端、基线=进程内 Python）。
-- 事项 3 偏差：选择方向 1（词干化）+ 加性扩展挂载点（复用 P3 synonym_weight 半权机制），未动 RECALL_PAIRS 既有全表（勘察确认 confirm5 miss 多为真转述，词干化收益在屈折变体）；`stem_enable` 登记入 `DEFAULT_PARAMS`（param() debug_assert 要求）；词干代码位于 `src/semantic.rs`（feature 编译期排除）+ 运行期开关。
+- 事项 3 偏差：选择方向 1（词干化）+ 加性扩展挂载点（复用 P3 synonym_weight 半权机制），未动 RECALL_PAIRS 既有全表（勘察确认 Gauge miss 多为真转述，词干化收益在屈折变体）；`stem_enable` 登记入 `DEFAULT_PARAMS`（param() debug_assert 要求）；词干代码位于 `src/semantic.rs`（feature 编译期排除）+ 运行期开关。
 - 曾出现一次 semantic 轨锁测试 flake（`locks_fixed_order_and_failure_releases`），重跑全绿；根因与 P4 golden 假红同类（并行测试 /tmp 残留干扰），已清理，非代码回归。
 
 ### 遗留 / 待后续（不阻塞 0.6.0 本地使用）
@@ -481,8 +481,8 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 - 行为实测（release 二进制）：39 行 × 66 字符（token≈640，旧阈值下透传）→
   `mode=sieve`，13/39 行，字符削减 66.7%；10 行 "line N"（token<<600）→
   `mode=passthrough:small` 原样保留。600 边界行为符合需求。
-- confirm5 机械复核（**实跑**，`tools/scx.py seed + baseline + --eval --gate + stats`，
-  150 查询，mem=/tmp/scx-confirm5-066）：三层 MRR 与冻结基线逐位一致——
+- Gauge 机械复核（**实跑**，`tools/scx.py seed + baseline + --eval --gate + stats`，
+  150 查询，mem=/tmp/scx-gauge-066）：三层 MRR 与冻结基线逐位一致——
   literal **1.0000**、paraphrase **0.2467**（基线 0.247）、semantic **0.8361**
   （基线 0.836）；tier:hard ΔMRR **+0.0608** CI [+0.0202,+0.1095]（p=0.0029，
   显著为正）——无退化。EVAL_RC=0，`--gate` 通过。
@@ -495,3 +495,43 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 - 版本：Cargo.toml 保持 **0.6.6**（未发布；仅策略常量微调，发布动作需用户授权）。
 - 遗留：无阻塞项；后续若需更低透传门槛可再下调 `SMALL_TOK`（文案随常量自动同步）。
+
+---
+
+## Gauge 改名记录（2026-10-26，confirm5 → Gauge）
+
+### 命名
+
+- 用户定名 **Gauge**（量规 / 精密度量）：评测协议 = 对事故记忆检索质量的
+  精密度量；单单词、无前后缀，对齐项目命名铁律（候选曾含 Probe / Ark / Sigma）。
+
+### 改动范围
+
+- 文件重命名（6）：`config/gauge.{corpus,policy.labels,human.labels,ai.labels}.json`、
+  `config/gauge.blind40.packet.tsv`、`docs/eval-gauge-preregistration.md`。
+- 内容替换（18 文件）：docs×8（eval / evaluation-results / memory / plan /
+  comparison-v051 / blind40 / gauge-preregistration / README）+ src×3
+  （policy / recall / gate，注释与 judge-by 字符串）+ `tools/scx.py` +
+  `.github/workflows/ci.yml` + `config/stem.corpus.json` + 标签数据×4。
+- 标签迁移：`mechanical-target-confirm5-v1` → `mechanical-target-gauge-v1`
+  （gate.rs 默认值 + 标签文件 400+ 处 + CI 参数）。
+- **保留**：`confirm2/3/4` 历史确认集专名（非本次对象，勿再替换）。
+
+### 门禁证据
+
+- `cargo test --locked` = **228 / 0**；golden 37 例零漂移；`tools/scx.py
+  selftest` PASS；`cargo build --release --locked` = 0；`confirm5` / `Confirm5`
+  全仓残留 = 0（含 `.github/workflows` 步骤名）。
+- Gauge 全链路复跑（seed + baseline + eval --gate + stats，150 查询）：
+  指标与改名前**逐位一致**——literal 1.0000 / paraphrase 0.2467 / semantic
+  0.8361，tier:hard Δ+0.0608 CI [+0.0202,+0.1095] p=0.0029。改名纯无损。
+- 文档优化：`eval.md`「复现 Gauge」补齐配对统计命令与断言阈值
+  （Δ≥0.05 / CI 下界>0 / p<0.05，对齐 CI `Enforce pre-registered advantage`）；
+  临时路径统一小写 `scx-gauge`。
+
+### 后续可选路线（待用户确认，未开始）
+
+1. 压缩保真评测：压缩后文本 → 下游回答 → 与原文对照（scx 独有缺口）。
+2. 第二故障域语料（数据库/网络/硬件），测跨域泛化。
+3. stats 增补 Recall@k；留一事故泛化；人工标注一致性 κ。
+

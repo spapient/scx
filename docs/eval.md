@@ -19,15 +19,15 @@ python tools/scx.py --help     # Windows
 | 路径 | 用途 |
 |---|---|
 | `../tools/scx.py` | 语料播种、基线构造、盲审、配对统计、包校验 |
-| `config/confirm5.corpus.json` | confirm5：30 起公开事故，150 条存储 case |
+| `config/gauge.corpus.json` | Gauge：30 起公开事故，150 条存储 case |
 | `config/v2.corpus.json` | v2 开发集：30 起公开事故，150 条存储 case |
 | `config/real.corpus.json` | 真实事故集：11 起公开复盘，40 条 case |
-| `config/confirm5.policy.labels.json` | 规则物化控制集，**不是人工标签** |
-| `config/confirm5.ai.labels.json` | 384/384 AI 逐候选标签（`per-item-ai-v1`） |
-| `config/confirm5.human.labels.json` | 384/384 人工逐候选标签（`per-item-human-v1`） |
+| `config/gauge.policy.labels.json` | 规则物化控制集，**不是人工标签** |
+| `config/gauge.ai.labels.json` | 384/384 AI 逐候选标签（`per-item-ai-v1`） |
+| `config/gauge.human.labels.json` | 384/384 人工逐候选标签（`per-item-human-v1`） |
 | `config/v2.labels.json` | v2 案例级标签，AI 预填后由两位审核者采纳 |
 | `config/real.labels.json` | real 案例级标签（`judge.by=fei+hao`） |
-| `config/confirm5.blind40.packet.tsv` | 冻结盲审包：40 case / 384 候选 |
+| `config/gauge.blind40.packet.tsv` | 冻结盲审包：40 case / 384 候选 |
 
 AI/人工 reviewer 填写后的 TSV 是 `packet + labels` 的派生视图，不再单独入库；
 `blind check --packet ... --out ...` 可无损重建并校验历史 SHA256。
@@ -64,7 +64,7 @@ AI/人工 reviewer 填写后的 TSV 是 `packet + labels` 的派生视图，不�
 根因: <root_cause>
 ```
 
-2026-10-25 复验：三个归一化语料分别生成 confirm5 150/150、v2 150/150、
+2026-10-25 复验：三个归一化语料分别生成 Gauge 150/150、v2 150/150、
 real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响标签匹配。
 
 ## 标注契约
@@ -91,18 +91,33 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 自动标注、policy 物化、AI 预填、案例级签名都不能冒充独立人工证据。
 逐候选盲审使用 `blind`；表格转 CSV 路径只用于机械目标标签。
 
-## 复现 confirm5
+## 复现 Gauge
 
 ```bash
-./tools/scx.py seed config/confirm5.corpus.json \
-  --mem-dir /tmp/scx-confirm5 --csv /tmp/scx-confirm5.csv --force
-./tools/scx.py baseline --csv /tmp/scx-confirm5.csv \
-  --out /tmp/scx-confirm5-mechanical.json \
-  --judge-by mechanical-target-confirm5-v1 \
+./tools/scx.py seed config/gauge.corpus.json \
+  --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
+./tools/scx.py baseline --csv /tmp/scx-gauge.csv \
+  --out /tmp/scx-gauge-mechanical.json \
+  --judge-by mechanical-target-gauge-v1 \
   --judge-date 2026-10-23T00:00:00Z
-./tools/scx --eval /tmp/scx-confirm5-mechanical.json --gate --eval-verbose \
-  --mem-dir /tmp/scx-confirm5
+./tools/scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
+  --mem-dir /tmp/scx-gauge
 ```
+
+配对统计与预注册断言（与 CI `Enforce pre-registered advantage` 一致）：
+
+```bash
+./tools/scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
+  --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-verbose.txt
+./tools/scx.py stats --baseline /tmp/scx-gauge-mechanical.json \
+  --verbose /tmp/scx-gauge-verbose.txt --mem-dir /tmp/scx-gauge \
+  --out /tmp/scx-gauge-stats.csv
+```
+
+主指标为 `tier:hard` 的配对 MRR 差值：必须满足 Δ≥0.05、bootstrap 95% CI
+下界 >0、permutation p<0.05（10,000 次，seed 20261023）；`--metric ndcg`
+输出同构的 nDCG 报告。stats CSV 由 CI 直接消费，阈值冻结在
+`.github/workflows/ci.yml`。
 
 `seed` 默认使用 4 个并发 store 进程，`--jobs` 取 `1..=32`；超过 32 只会加剧
 进程启动与跨进程锁竞争。case 文本以 UTF-8 字节经 stdin 写入，不生成逐 case
@@ -123,10 +138,10 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 人工、AI 与 policy 门禁复用同一记忆库：
 
 ```bash
-./tools/scx --eval config/confirm5.human.labels.json --gate-human --eval-verbose \
-  --mem-dir /tmp/scx-confirm5
-./tools/scx --eval config/confirm5.ai.labels.json --gate-items --mem-dir /tmp/scx-confirm5
-./tools/scx --eval config/confirm5.policy.labels.json --gate-human --mem-dir /tmp/scx-confirm5
+./tools/scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+  --mem-dir /tmp/scx-gauge
+./tools/scx --eval config/gauge.ai.labels.json --gate-items --mem-dir /tmp/scx-gauge
+./tools/scx --eval config/gauge.policy.labels.json --gate-human --mem-dir /tmp/scx-gauge
 ```
 
 预期：human `PASS / exit 0`；AI 只通过 `--gate-items`，`--gate-human` 必须
@@ -140,14 +155,14 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 都会被拒绝，避免静默漏算 hard 层。
 
 ```bash
-./tools/scx --eval config/confirm5.human.labels.json --gate-human --eval-verbose \
-  --mem-dir /tmp/scx-confirm5 > /tmp/scx-confirm5-hao.txt
+./tools/scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+  --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-hao.txt
 ./tools/scx.py stats \
-  --baseline config/confirm5.human.labels.json \
-  --verbose /tmp/scx-confirm5-hao.txt \
-  --mem-dir /tmp/scx-confirm5 \
+  --baseline config/gauge.human.labels.json \
+  --verbose /tmp/scx-gauge-hao.txt \
+  --mem-dir /tmp/scx-gauge \
   --cluster-size 5 \
-  --out /tmp/scx-confirm5-hao-stats.csv
+  --out /tmp/scx-gauge-hao-stats.csv
 ```
 
 `--cluster-size 5` 生成事故聚类敏感性行，不能替代 case 级预注册主分析。
@@ -156,11 +171,11 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 
 ```bash
 ./tools/scx.py blind make \
-  --baseline config/confirm5.policy.labels.json --mem-dir /tmp/scx-confirm5 \
+  --baseline config/gauge.policy.labels.json --mem-dir /tmp/scx-gauge \
   --out /tmp/packet.tsv --manifest /tmp/manifest.json
 ./tools/scx.py blind progress --packet /tmp/packet.tsv
 ./tools/scx.py blind import \
-  --baseline config/confirm5.policy.labels.json --packet /tmp/packet.tsv \
+  --baseline config/gauge.policy.labels.json --packet /tmp/packet.tsv \
   --out /tmp/human.json --judge <name> --date 2026-10-25T00:00:00Z
 ./tools/scx.py blind check --baseline /tmp/human.json
 ./tools/scx.py blind check --baseline /tmp/human.json \
@@ -169,7 +184,7 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
   --a /tmp/first-reviewer.json --b /tmp/second-reviewer.json
 ```
 
-`blind make` 是确定性的。用 `confirm5.policy.labels.json` 和新播种记忆库重建
+`blind make` 是确定性的。用 `gauge.policy.labels.json` 和新播种记忆库重建
 冻结包，应得到 SHA256
 `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f`。
 `blind agree` 报告共同裁决项、原始一致率、Cohen's kappa 与分歧列表。

@@ -1,7 +1,7 @@
 //! 声明式策略表：压缩内核的全部可调参数与结构加分权重。
 //!
 //! 算子与策略只以配置声明存在，不落独立硬编码文件；`DEFAULT_*` 逐项等于
-//! v0.4.1 硬编码现状，改动默认值必须同时通过 golden 门与 confirm5 门。
+//! v0.4.1 硬编码现状，改动默认值必须同时通过 golden 门与 Gauge 门。
 //! 本模块是纯数据层（零 I/O、零分配逻辑），被 `compress` 内核消费。
 
 pub const DEFAULT_RATIO: f64 = 0.35;
@@ -25,7 +25,7 @@ pub const BUDGET_MIN: f64 = 200.0;
 pub const GAP_RATIO: usize = 3;
 
 /// 结构加分与排序权重表：评分 if 链的声明式等价物。
-/// 全部默认值来自 v0.4.1 硬编码；改写任何一项必须重跑 golden + confirm5。
+/// 全部默认值来自 v0.4.1 硬编码；改写任何一项必须重跑 golden + Gauge。
 pub struct Weights {
     /// 基础分 = IDF 加权命中之和 × `sumw_mul`。
     pub sumw_mul: f64,

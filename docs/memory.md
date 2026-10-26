@@ -185,7 +185,7 @@ cargo run --release --locked --example bench -- memory
 - 召回 query 的切词、同义扩展、结构化字段与实体键归并为单次 `QueryPlan`；
   候选只保存文档下标、排序后再物化前 k 个 id，索引快照预解析 `updated_at`。
   10k 全候选宽查询从约 2.23 ms 降至约 1.17 ms；该轮稀疏路径为 172–177 µs
-  （后续部分选择再降至 71–73 µs）。confirm5、v2、real 的线性与索引 A/B
+  （后续部分选择再降至 71–73 µs）。Gauge、v2、real 的线性与索引 A/B
   输出均逐字节不变。
 - qmap 与会话快照按请求的 `k` 复用：条数不足 `k` 的快照一律回退完整召回，
   修复“先用 `--recall 1` 暖缓存、再用 `--recall 5` 只得到 1 条”的截断缺陷；
@@ -227,20 +227,20 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
 - **直答命中率**：触发直答的查询中，top1 的 case id 与冻结标签的
   expected tail16 匹配（指纹匹配）或人工 rel=2 判中的比例。**分子/分母
   均只统计触发直答的查询**；未触发直答的查询不计入（避免稀释口径）。
-- **MRR 回归下界**：confirm5 机械 hard 层 ΔMRR ≥ 0（相对基线不为负），
+- **MRR 回归下界**：Gauge 机械 hard 层 ΔMRR ≥ 0（相对基线不为负），
   CI 下界不为负——L1 直答不得让词面召回退化（直答只删弱候选，不改排序）。
 
 ### 复现（命令与 eval.md 同构）
 
 ```bash
-# 1) 建库并灌入 confirm5 语料（fix 标签在 corpus 内，随 case 入库）
-./tools/scx.py seed config/confirm5.corpus.json --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
+# 1) 建库并灌入 Gauge 语料（fix 标签在 corpus 内，随 case 入库）
+./tools/scx.py seed config/gauge.corpus.json --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
 # 2) 机械 hard 层目标基线（judge-by 由确认轮次决定，照抄 eval.md 写法）
-./tools/scx.py baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-confirm5-v1
+./tools/scx.py baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-gauge-v1
 # 3) 显著性统计（mrr 为主指标；--mem-dir 用于分层）
 ./tools/scx.py stats --baseline /tmp/l1-mechanical.json   --verbose /tmp/l1-verbose.csv --out /tmp/l1-stats.csv
 # 4) fix 覆盖率：库内 fix 非空 case 占比（scx --stats 或直接统计 mem-dir）
-# 5) 直答触发/命中：对 confirm5 查询逐条跑 --recall 并核对 top1 tail16
+# 5) 直答触发/命中：对 Gauge 查询逐条跑 --recall 并核对 top1 tail16
 ```
 
 > 直答触发率 / 命中率没有独立 CLI 汇总入口，用 `scx --recall 5 --recall-detail`

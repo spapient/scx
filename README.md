@@ -472,7 +472,7 @@ fn main() {
 | `tools/scx.py` | 评测语料回放、盲审与配对统计（仅标准库；含 `contain` 证据保留子命令） |
 | `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
 | `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门（37 例） |
-| `config/` | 可重建语料、冻结标签、盲审包与语义权重（`confirm5.*`/`contain5.*`/`real.*`/`v2.*`） |
+| `config/` | 可重建语料、冻结标签、盲审包与语义权重（`Gauge.*`/`contain5.*`/`real.*`/`v2.*`） |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
 
 `src/memory/` 保持扁平、单一职责的布局：`mod.rs` 是唯一公开门面，存储
@@ -502,12 +502,12 @@ cargo test \
 - 50k 行压缩基准
 - 10k case 倒排召回 p50 < 5 ms 性能门
 - Ubuntu、macOS、Windows 三平台 CI
-- confirm5 冻结语料上的质量回归门，以及“policy/AI 标签不得冒充人工闭环”的负向测试
+- Gauge 冻结语料上的质量回归门，以及“policy/AI 标签不得冒充人工闭环”的负向测试
 - `contain5` 证据保留协议（自测、非第三方独立评测；见 [证据保留报告](docs/containment.md)）
 
 ### 压缩质量
 
-confirm5 使用 30 起公开事故和 150 条查询，预注册主指标为 hard 层 MRR@10。在机械目标标签上，完整管线的 hard 层 MRR@10 相对朴素词面基线提升 **+0.0669**，paired bootstrap 95% CI **[0.0238, 0.1176]**，permutation `p=0.0020`，literal 层没有退化。
+Gauge 使用 30 起公开事故和 150 条查询，预注册主指标为 hard 层 MRR@10。在机械目标标签上，完整管线的 hard 层 MRR@10 相对朴素词面基线提升 **+0.0669**，paired bootstrap 95% CI **[0.0238, 0.1176]**，permutation `p=0.0020`，literal 层没有退化。
 
 当前默认配置经过后续校准，在同一语料上为 **ΔMRR +0.0608**，95% CI **[0.0202, 0.1095]**，`p=0.0029`。这证明的是目标排序优于该词面基线，不是对 embedding、混合检索或任意 RAG 系统的普遍优势。
 

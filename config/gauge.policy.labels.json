@@ -1,6 +1,6 @@
 {
- "name": "confirm5-human-policy-v1",
- "provenance": "pooled A/B top-10 from the archived confirm5 verbose run; labels are deterministic materialization of the frozen fei+hao rubric (not per-item human review)",
+ "name": "Gauge-human-policy-v1",
+ "provenance": "pooled A/B top-10 from the archived Gauge verbose run; labels are deterministic materialization of the frozen fei+hao rubric (not per-item human review)",
  "cases": [
   {
    "query": "bintray jcenter malicious maven packages impersonation",
@@ -23,7 +23,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "android dependencies pulled malware from jcenter",
@@ -45,7 +45,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "an attacker impersonated a vendor and planted malicious maven artifacts in jcenter",
@@ -70,7 +70,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "android apps included malware after resolving dependencies from the poisoned jcenter repository",
@@ -95,7 +95,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "冒充发布的 Maven 包在 JCenter 待了一年多，Android 项目依赖后带进了恶意代码",
@@ -120,7 +120,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "bitly source repository leaked backup credentials",
@@ -142,7 +142,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "hashed passwords exposed through code repo secrets",
@@ -166,7 +166,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "secrets committed to a code repository exposed hashed passwords from bitly backups",
@@ -191,7 +191,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the leaked repository credentials allowed access to backups containing password hashes",
@@ -216,7 +216,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "代码托管仓库里放了能读备份的密钥，用户密码哈希随备份一起暴露",
@@ -241,7 +241,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "browserstack old prototype shellshock production breach",
@@ -263,7 +263,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "shellshock vulnerable machine held secret keys",
@@ -283,7 +283,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the forgotten prototype with shellshock exposed keys that led to a production breach",
@@ -308,7 +308,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "a prototype host missed patching and its secret keys compromised production",
@@ -331,7 +331,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "一台忘记下线的旧测试机带着 Shellshock 漏洞和密钥，最终让生产系统被攻破",
@@ -356,7 +356,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "chef supermarket low health check timeout crash",
@@ -381,7 +381,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "health check timeout killed supermarket after launch",
@@ -404,7 +404,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the new recipe site failed because health checks timed out too aggressively",
@@ -430,7 +430,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "supermarket went down after launch when its low timeout settings failed healthy nodes",
@@ -455,7 +455,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "Chef 的新社区站点刚上线，健康检查阈值太短把正常实例判死，服务很快挂了",
@@ -480,7 +480,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "mars climate orbiter metric english unit mismatch",
@@ -501,7 +501,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "navigation software used wrong thrust units",
@@ -522,7 +522,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "a unit mismatch between ground software and the spacecraft destroyed the mission",
@@ -543,7 +543,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the orbiter entered the atmosphere because navigation burned the wrong amount of fuel",
@@ -568,7 +568,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "地面软件按错单位算推力，火星气候探测器进入大气层烧毁",
@@ -593,7 +593,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "mozilla firefox addons certificate expired outage",
@@ -618,7 +618,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "expired intermediate certificate disabled all addons",
@@ -637,7 +637,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "firefox could no longer validate extensions and almost all add-ons stopped working",
@@ -662,7 +662,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "add-ons returned only after a new valid certificate chain was injected",
@@ -687,7 +687,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复",
@@ -712,7 +712,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "stack exchange regex backtracking health check outage",
@@ -737,7 +737,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "expensive regex caused health checks to fail",
@@ -762,7 +762,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the expensive regular expression made health checks fail and took stack exchange down",
@@ -787,7 +787,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "load balancers removed instances after the regex stalled health checks",
@@ -812,7 +812,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "一篇帖子触发正则灾难性回溯，健康检查全超时，Stack Exchange 实例被摘掉",
@@ -837,7 +837,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "discord flapping service reconnection thundering herd",
@@ -860,7 +860,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "frontend memory exhausted by reconnect queues",
@@ -885,7 +885,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "millions of clients reconnected at once and filled frontend queues until memory ran out",
@@ -913,7 +913,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "frontend services ran out of memory because queued reconnects grew without bound",
@@ -939,7 +939,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "一个服务反复抖动后恢复，客户端同时重连把前端队列塞满，Discord 前端 OOM",
@@ -969,7 +969,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "duo request queue overloaded database capacity",
@@ -996,7 +996,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "insufficient db capacity caused cascading failure",
@@ -1022,7 +1022,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "database capacity was too small for the queue and failures spread across the service",
@@ -1049,7 +1049,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "insufficient capacity planning and monitoring turned a request spike into a cascading outage",
@@ -1075,7 +1075,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "Duo 的请求队列越积越多，数据库容量和监控都不够，最后整个服务级联失败",
@@ -1100,7 +1100,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "elastic cloud aws eu west region degradation",
@@ -1120,7 +1120,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "aws ireland outage degraded elastic clusters",
@@ -1145,7 +1145,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "clusters in ireland became unavailable for twenty minutes during the regional incident",
@@ -1171,7 +1171,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "elastic cloud customers in eu west one saw degraded access and a brief full outage",
@@ -1196,7 +1196,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用",
@@ -1221,7 +1221,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "eslint npm maintainer account malicious packages",
@@ -1244,7 +1244,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "compromised npm account published malware",
@@ -1266,7 +1266,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the hijacked npm account pushed malware into the eslint package stream",
@@ -1291,7 +1291,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "developers installing eslint dependencies received packages published by the attacker",
@@ -1316,7 +1316,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "ESLint 维护者的 npm 账号被盗，攻击者用官方名义发了带恶意代码的包",
@@ -1341,7 +1341,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "etsy deploy upgraded live database int32 id overflow",
@@ -1366,7 +1366,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "signed 32 bit id overflow forced site shutdown",
@@ -1391,7 +1391,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the unexpected database upgrade and int32 overflow made etsy stop serving traffic",
@@ -1416,7 +1416,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "etsy took the site down for integrity checks after the deploy and id overflow",
@@ -1441,7 +1441,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "一次小修复上线时顺手升级了生产库，ID 又超过 32 位有符号上限，Etsy 只能停站做完整性检查",
@@ -1466,7 +1466,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "flowdock covid work from home load database hang",
@@ -1491,7 +1491,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "sudden remote work traffic caused db hang",
@@ -1518,7 +1518,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "flowdock could not handle the work from home load and lost some user data",
@@ -1543,7 +1543,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the service was unavailable for twenty four hours and some data was permanently lost",
@@ -1569,7 +1569,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据",
@@ -1594,7 +1594,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "foursquare mongodb out of memory low locality reads",
@@ -1620,7 +1620,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "checkin history query read entire user data",
@@ -1645,7 +1645,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "mongodb ran out of memory under the inefficient checkin query pattern",
@@ -1670,7 +1670,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "monitoring missed the growing load and the outage lasted seventeen hours",
@@ -1697,7 +1697,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时",
@@ -1722,7 +1722,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "github aggregation switch mlag failover stonith",
@@ -1752,7 +1752,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "pacemaker drbd nodes fenced each other",
@@ -1774,7 +1774,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the network freeze made pacemaker and drbd pairs stonith each other",
@@ -1799,7 +1799,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "recovery required identifying the previously active node for every fenced pair",
@@ -1822,7 +1822,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电",
@@ -1847,7 +1847,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "github ddos 1.35 tbps traffic flood",
@@ -1872,7 +1872,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "massive volumetric attack saturated github",
@@ -1897,7 +1897,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the volumetric flood saturated github's edge and took the site offline",
@@ -1922,7 +1922,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "github mitigated the record breaking ddos after a brief outage",
@@ -1948,7 +1948,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用",
@@ -1973,7 +1973,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "mandrill postgres transaction id wraparound",
@@ -1998,7 +1998,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "txid wraparound caused day and a half outage",
@@ -2023,7 +2023,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "postgres exhausted its transaction id space and mandrill stopped serving some requests",
@@ -2048,7 +2048,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "recovery from the transaction id wraparound took roughly thirty six hours",
@@ -2073,7 +2073,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "Postgres 的事务 ID 用完了，Mandrill 进入回卷保护，部分功能停了一天半",
@@ -2098,7 +2098,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "mars pathfinder priority inversion system resets",
@@ -2119,7 +2119,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "vxworks priority inversion watchdog reboot",
@@ -2139,7 +2139,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the low priority weather task held a lock and blocked the high priority bus task",
@@ -2166,7 +2166,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "nasa remotely enabled priority inheritance to stop the resets",
@@ -2192,7 +2192,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启",
@@ -2217,7 +2217,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "apollo 11 rendezvous radar cpu overload restarts",
@@ -2242,7 +2242,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "radar design flaw caused computer alarms",
@@ -2267,7 +2267,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the guidance computer restarted during lunar descent because radar interrupts consumed its cycles",
@@ -2292,7 +2292,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the landing continued after the computer recovered from repeated overload",
@@ -2316,7 +2316,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "登月舱雷达不停占用计算资源，阿波罗 11 的计算机过载报警并反复重启",
@@ -2341,7 +2341,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "openai chatgpt redis queue corruption data leak",
@@ -2366,7 +2366,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "out of order responses exposed other users data",
@@ -2391,7 +2391,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "responses went out of sequence and exposed app activity and billing information",
@@ -2414,7 +2414,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "openai took chatgpt offline to repair the queue corruption and patch the data exposure",
@@ -2439,7 +2439,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "ChatGPT 的 Redis 请求响应队列乱了，返回内容串到别人账号，暴露活动和账单数据",
@@ -2464,7 +2464,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "okta third party support engineer laptop compromise",
@@ -2484,7 +2484,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "support laptop access led to okta breach",
@@ -2509,7 +2509,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "a compromised support laptop let the intruders reach okta systems",
@@ -2531,7 +2531,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "okta investigated after attackers accessed systems from the support provider",
@@ -2556,7 +2556,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "攻击者先拿下第三方支持人员的电脑，再借它的访问进入 Okta",
@@ -2581,7 +2581,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "platform sh zookeeper too much data boot failure",
@@ -2606,7 +2606,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "maintenance outage because zookeeper could not start",
@@ -2631,7 +2631,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "a scheduled maintenance outage extended when zookeeper failed to come up",
@@ -2656,7 +2656,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "platform sh stayed down while engineers reduced the zookeeper dataset",
@@ -2681,7 +2681,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理",
@@ -2706,7 +2706,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "roblox consul streaming boltdb seventy three hour outage",
@@ -2731,7 +2731,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "consul and boltdb issues kept roblox down",
@@ -2753,7 +2753,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the service stayed down for three days while consul and storage recovery failed",
@@ -2778,7 +2778,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "roblox returned after engineers repaired consul and the boltdb state",
@@ -2803,7 +2803,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "Consul 流式复制和 BoltDB 存储一起出问题，Roblox 停了三天才恢复",
@@ -2828,7 +2828,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "salesforce datacenter power failure database failover",
@@ -2853,7 +2853,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "power loss cascaded into cross datacenter failover",
@@ -2877,7 +2877,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the outage spread across datacenters when failover could not reconcile database state",
@@ -2903,7 +2903,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "salesforce recovered after restoring power and reconciling data across sites",
@@ -2928,7 +2928,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "一个机房断电后数据库和文件状态对不上，Salesforce 跨机房切换也失败",
@@ -2953,7 +2953,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "linux leap second printk deadlock xtime lock",
@@ -2974,7 +2974,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "timer interrupt deadlock during leap second",
@@ -2997,7 +2997,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "klogd tried to read time, waited on xtime lock, and deadlocked the kernel",
@@ -3023,7 +3023,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the leap second handler deadlocked the timer interrupt and hung systems",
@@ -3044,7 +3044,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁",
@@ -3069,7 +3069,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "stackdriver cassandra crash queue blocking",
@@ -3094,7 +3094,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "message bus producers blocked on cassandra",
@@ -3119,7 +3119,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "queue inserts stalled and the failure spread to the whole application",
@@ -3146,7 +3146,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "stackdriver recovered after the cassandra cluster and message pipeline were restored",
@@ -3171,7 +3171,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉",
@@ -3197,7 +3197,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "stack exchange sql server bugcheck read only",
@@ -3222,7 +3222,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "primary sql server bugcheck forced read only",
@@ -3247,7 +3247,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "a sql server bugcheck made the sites reject writes and then go fully offline",
@@ -3272,7 +3272,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "stack exchange recovered after restarting the sql server and restoring writes",
@@ -3297,7 +3297,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "主 SQL Server 进程触发 bugcheck，Stack Exchange 先变只读，后来整个站都打不开",
@@ -3322,7 +3322,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "tarsnap batch log filled filesystem",
@@ -3342,7 +3342,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "unbounded log growth stopped backup service",
@@ -3366,7 +3366,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "failed block cleanup retries wrote endless logs and tarsnap could not write data",
@@ -3392,7 +3392,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "removing the oversized log file restored the tarsnap service",
@@ -3417,7 +3417,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了",
@@ -3442,7 +3442,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "trivago azure ad security group removal github access",
@@ -3467,7 +3467,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "manual task deleted group controlling github org",
@@ -3492,7 +3492,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "all engineers lost github organization access after the group was deleted",
@@ -3517,7 +3517,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "trivago restored access after recreating the group and its memberships",
@@ -3542,7 +3542,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库",
@@ -3567,7 +3567,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "zerodha order management system million unit order overload",
@@ -3592,7 +3592,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "penny stock order split into hundred thousand trades",
@@ -3613,7 +3613,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "the unexpected trade count collapsed the order management system",
@@ -3636,7 +3636,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "zerodha and refinitiv restored order processing after the oms collapse",
@@ -3660,7 +3660,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   },
   {
    "query": "一笔百万股的仙股订单被拆成十几万笔，Zerodha 的 OMS 从没见过这种量，直接崩了",
@@ -3680,7 +3680,7 @@
     "date": "2026-10-24T00:00:00Z",
     "method": "policy-materialized-v1: same-incident=2, same-nonother-bucket=1, cross=0; pooled A/B top-10"
    },
-   "note": "source=confirm5; pool=union(A,B top-10); no per-item human review"
+   "note": "source=Gauge; pool=union(A,B top-10); no per-item human review"
   }
  ]
 }

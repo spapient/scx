@@ -1,5 +1,5 @@
 {
- "name": "confirm5-blind40-hao",
+ "name": "gauge-blind40-hao",
  "provenance": "per-item-blind-v1",
  "cases": [
   {
@@ -24,7 +24,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "337ecde86ee61f26": {
@@ -60,7 +60,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "android dependencies pulled malware from jcenter",
@@ -83,7 +83,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "a5e442f2d02a32de": {
@@ -115,7 +115,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "an attacker impersonated a vendor and planted malicious maven artifacts in jcenter",
@@ -141,7 +141,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "9e7947edb32b8a78": {
@@ -185,7 +185,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "android apps included malware after resolving dependencies from the poisoned jcenter repository",
@@ -211,7 +211,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "b45dd0323300995e": {
@@ -255,7 +255,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "hashed passwords exposed through code repo secrets",
@@ -280,7 +280,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "e51d6af1ed3acb04": {
@@ -320,7 +320,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "the leaked repository credentials allowed access to backups containing password hashes",
@@ -346,7 +346,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "a4569e4ba25a2a14": {
@@ -390,7 +390,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "a prototype host missed patching and its secret keys compromised production",
@@ -414,7 +414,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "84a290002aa94d7a": {
@@ -450,7 +450,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "health check timeout killed supermarket after launch",
@@ -474,7 +474,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "2b571b4dce733a36": {
@@ -510,7 +510,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "地面软件按错单位算推力，火星气候探测器进入大气层烧毁",
@@ -536,7 +536,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "f656d7086c8af78e": {
@@ -580,7 +580,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "expired intermediate certificate disabled all addons",
@@ -600,7 +600,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "0f3e5a41ef8fb3cf": {
@@ -620,7 +620,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "firefox could no longer validate extensions and almost all add-ons stopped working",
@@ -646,7 +646,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "d21b81412680ce43": {
@@ -690,7 +690,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "Firefox 校验扩展的证书到期，全部插件被禁用，Mozilla 只能紧急推修复",
@@ -716,7 +716,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "cd218b6a82ae0ef9": {
@@ -760,7 +760,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "expensive regex caused health checks to fail",
@@ -786,7 +786,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "50f0cfe7971ce964": {
@@ -830,7 +830,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "frontend memory exhausted by reconnect queues",
@@ -856,7 +856,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "77b4fb9c3bd138ff": {
@@ -900,7 +900,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "insufficient capacity planning and monitoring turned a request spike into a cascading outage",
@@ -927,7 +927,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "5ae7d84ee5c4770d": {
@@ -975,7 +975,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "aws ireland outage degraded elastic clusters",
@@ -1001,7 +1001,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "0f1ad8bbcb716966": {
@@ -1045,7 +1045,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "AWS 爱尔兰区域出问题，Elastic Cloud 客户集群访问受影响，其中二十分钟完全不可用",
@@ -1071,7 +1071,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "a3d4283f8084561c": {
@@ -1115,7 +1115,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "developers installing eslint dependencies received packages published by the attacker",
@@ -1141,7 +1141,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "8cfc0f1aea4e39f1": {
@@ -1185,7 +1185,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "etsy took the site down for integrity checks after the deploy and id overflow",
@@ -1211,7 +1211,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "87e485f1f6abc88f": {
@@ -1255,7 +1255,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "the service was unavailable for twenty four hours and some data was permanently lost",
@@ -1282,7 +1282,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "c24a57092d2202c9": {
@@ -1330,7 +1330,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "疫情让 Flowdock 用量暴涨，机器 CPU 打满后数据库卡死，服务停了约一天还丢了数据",
@@ -1356,7 +1356,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "f0fe4836ea026e13": {
@@ -1400,7 +1400,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "每次签到都扫用户全部历史，MongoDB 内存被无效页耗尽，监控又没告警，宕机十七小时",
@@ -1426,7 +1426,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "6498e19067c571ec": {
@@ -1470,7 +1470,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "交换机升级时 MLAG 切到非平滑路径，网络卡了九十秒，心跳超时后主备机互相断电",
@@ -1496,7 +1496,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "0c0cf2ab8482553b": {
@@ -1540,7 +1540,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "GitHub 被 1.35 Tbps 的 DDoS 流量淹没，入口带宽撑不住，站点短暂不可用",
@@ -1566,7 +1566,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "b8491275622d1811": {
@@ -1610,7 +1610,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "the low priority weather task held a lock and blocked the high priority bus task",
@@ -1638,7 +1638,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "274346d4a28c73a8": {
@@ -1690,7 +1690,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "火星车上的低优先级任务占着锁，高优先级总线任务跑不了，看门狗不停重启",
@@ -1716,7 +1716,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "cbb81edec0cff176": {
@@ -1760,7 +1760,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "radar design flaw caused computer alarms",
@@ -1786,7 +1786,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "9cf99d2f94bb8af8": {
@@ -1830,7 +1830,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "support laptop access led to okta breach",
@@ -1856,7 +1856,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "138a3cfd46e66dc5": {
@@ -1900,7 +1900,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "维护时 ZooKeeper 因为数据太多起不来，Platform.sh 只能延长停机清理",
@@ -1926,7 +1926,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "effec5631bd99aa8": {
@@ -1970,7 +1970,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "salesforce datacenter power failure database failover",
@@ -1996,7 +1996,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "0ff2e145486470c4": {
@@ -2040,7 +2040,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "闰秒时定时器中断里拿锁又调用 printk，klogd 反过来等同一把锁，Linux 内核死锁",
@@ -2066,7 +2066,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "cfe0ec748606e177": {
@@ -2110,7 +2110,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "stackdriver recovered after the cassandra cluster and message pipeline were restored",
@@ -2136,7 +2136,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "13a0222f4c1d995e": {
@@ -2180,7 +2180,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "Cassandra 崩了以后消息总线写不进去，Stackdriver 各服务队列堵死，整个应用挂掉",
@@ -2207,7 +2207,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "416fe10c4316ace8": {
@@ -2255,7 +2255,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "tarsnap batch log filled filesystem",
@@ -2276,7 +2276,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "84ddd95da8a9b142": {
@@ -2300,7 +2300,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "清理任务一直重试并狂写日志，磁盘被塞满，Tarsnap 连正常文件都写不了",
@@ -2326,7 +2326,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "350afa7138f79e2c": {
@@ -2370,7 +2370,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "trivago azure ad security group removal github access",
@@ -2396,7 +2396,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "064202bcfb968b36": {
@@ -2440,7 +2440,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "manual task deleted group controlling github org",
@@ -2466,7 +2466,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "f1f29f6a59f4d2ac": {
@@ -2510,7 +2510,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "all engineers lost github organization access after the group was deleted",
@@ -2536,7 +2536,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "61e12c2718550630": {
@@ -2580,7 +2580,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "trivago restored access after recreating the group and its memberships",
@@ -2606,7 +2606,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "646e65df5e5a7962": {
@@ -2650,7 +2650,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   },
   {
    "query": "重复性手工操作把控制 GitHub 权限的 Azure AD 组删了，trivago 所有工程师都进不了代码库",
@@ -2676,7 +2676,7 @@
     "date": "2026-10-24T10:30:00Z",
     "method": "per-item-human-v1",
     "packet_sha256": "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5",
-    "packet": "config/confirm5-blind40-hao-corrected.tsv"
+    "packet": "config/gauge-blind40-hao-corrected.tsv"
    },
    "judge_items": {
     "3e9b594775cafc56": {
@@ -2720,7 +2720,7 @@
      "date": "2026-10-24T10:30:00Z"
     }
    },
-   "note": "per-item blind review; packet=confirm5-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in confirm5-blind40-hao-raw.tsv)"
+   "note": "per-item blind review; packet=gauge-blind40-hao-corrected.tsv; raw submission had 8 literal self-match grades 0/1; normalized to 2 (raw kept in gauge-blind40-hao-raw.tsv)"
   }
  ]
 }

@@ -57,7 +57,7 @@ jobs:
         run: tools\scx.cmd --version
 
   quality:
-    # Rebuild the confirm5 corpus from the tracked incident JSON, then enforce
+    # Rebuild the Gauge corpus from the tracked incident JSON, then enforce
     # the mechanical, human, AI, and policy evidence boundaries plus the
     # pre-registered advantage rule.
     timeout-minutes: 45
@@ -77,14 +77,14 @@ jobs:
         run: cargo doc --locked --no-deps
       - name: Tool selftest
         run: python tools/scx.py selftest
-      - name: Rebuild confirm5 corpus
+      - name: Rebuild Gauge corpus
         run: >-
-          python tools/scx.py seed config/confirm5.corpus.json
+          python tools/scx.py seed config/gauge.corpus.json
           --mem-dir config/ci-mem --csv config/ci-cases.csv
           --binary target/release/scx.exe --force
-      - name: Rebuild confirm5 corpus serially
+      - name: Rebuild Gauge corpus serially
         run: >-
-          python tools/scx.py seed config/confirm5.corpus.json
+          python tools/scx.py seed config/gauge.corpus.json
           --mem-dir config/ci-mem-serial --csv config/ci-cases-serial.csv
           --binary target/release/scx.exe --force --jobs 1
       - name: Compare parallel and serial seed output
@@ -99,21 +99,21 @@ jobs:
         run: >-
           python tools/scx.py baseline
           --csv config/ci-cases.csv --out config/ci-baseline.json
-          --judge-by mechanical-target-confirm5-v1
+          --judge-by mechanical-target-gauge-v1
           --judge-date 2026-10-23T00:00:00Z
-      - name: Confirm5 mechanical gate and verbose replay
+      - name: Gauge mechanical gate and verbose replay
         shell: pwsh
         run: |
           .\target\release\scx.exe --eval .\config\ci-baseline.json --gate --eval-verbose --mem-dir .\config\ci-mem 1> .\config\ci-verbose.txt 2> .\config\ci-verbose.err
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\config\ci-verbose.txt -Tail 40
             Get-Content .\config\ci-verbose.err -Tail 40
-            throw "confirm5 gate failed with exit $LASTEXITCODE"
+            throw "Gauge gate failed with exit $LASTEXITCODE"
           }
       - name: Reject policy labels as human closure
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\config\confirm5.policy.labels.json --gate-human --mem-dir .\config\ci-mem 1> .\config\ci-policy-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\config\gauge.policy.labels.json --gate-human --mem-dir .\config\ci-mem 1> .\config\ci-policy-gate.txt 2> $null
           if ($LASTEXITCODE -ne 2) {
             Get-Content .\config\ci-policy-gate.txt -Tail 40
             throw "policy labels must not pass --gate-human (exit $LASTEXITCODE)"
@@ -122,12 +122,12 @@ jobs:
       - name: Frozen blind packet
         run: >-
           python tools/scx.py verify
-          --packet config/confirm5.blind40.packet.tsv
+          --packet config/gauge.blind40.packet.tsv
           --sha256 b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f
       - name: AI labels pass items gate, fail human gate
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\config\confirm5.ai.labels.json --gate-items --mem-dir .\config\ci-mem 1> .\config\ci-ai-items.txt 2> $null
+          .\target\release\scx.exe --eval .\config\gauge.ai.labels.json --gate-items --mem-dir .\config\ci-mem 1> .\config\ci-ai-items.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\config\ci-ai-items.txt -Tail 30
             throw "AI per-item gate failed with exit $LASTEXITCODE"
@@ -135,13 +135,13 @@ jobs:
           if ((Get-Content .\config\ci-ai-items.txt -Raw) -notmatch 'non-human \(evidence: per-item AI') {
             throw "AI gate must declare non-human adjudication"
           }
-          .\target\release\scx.exe --eval .\config\confirm5.ai.labels.json --gate-human --mem-dir .\config\ci-mem 1> $null 2> $null
+          .\target\release\scx.exe --eval .\config\gauge.ai.labels.json --gate-human --mem-dir .\config\ci-mem 1> $null 2> $null
           if ($LASTEXITCODE -ne 2) { throw "AI labels must not pass --gate-human (exit $LASTEXITCODE)" }
           $global:LASTEXITCODE = 0
       - name: Human per-item gate
         shell: pwsh
         run: |
-          .\target\release\scx.exe --eval .\config\confirm5.human.labels.json --gate-human --mem-dir .\config\ci-mem 1> .\config\ci-hao-gate.txt 2> $null
+          .\target\release\scx.exe --eval .\config\gauge.human.labels.json --gate-human --mem-dir .\config\ci-mem 1> .\config\ci-hao-gate.txt 2> $null
           if ($LASTEXITCODE -ne 0) {
             Get-Content .\config\ci-hao-gate.txt -Tail 40
             throw "human per-item gate failed with exit $LASTEXITCODE"
@@ -149,7 +149,7 @@ jobs:
           if ((Get-Content .\config\ci-hao-gate.txt -Raw) -notmatch 'gate: PASS') {
             throw "human per-item gate did not print PASS"
           }
-      - name: Confirm5 paired statistics
+      - name: Gauge paired statistics
         run: >-
           python tools/scx.py stats
           --baseline config/ci-baseline.json
@@ -163,14 +163,14 @@ jobs:
         run: |
           $rows = @(Import-Csv .\config\ci-stats.csv)
           $hard = @($rows | Where-Object { $_.group -eq 'tier:hard' })
-          if ($hard.Count -ne 1) { throw "confirm5 hard result missing" }
+          if ($hard.Count -ne 1) { throw "Gauge hard result missing" }
           if ([double]$hard[0].delta -lt 0.05 -or [double]$hard[0].ci_lo -le 0 -or [double]$hard[0].perm_p -ge 0.05) {
             $hard | Format-List | Out-String | Write-Host
-            throw "confirm5 quality advantage not established"
+            throw "Gauge quality advantage not established"
           }
           $cluster = @($rows | Where-Object { $_.group -eq 'tier:hard:cluster' })
           if ($cluster.Count -ne 1 -or [double]$cluster[0].ci_lo -le 0) {
-            throw "confirm5 cluster sensitivity failed"
+            throw "Gauge cluster sensitivity failed"
           }
 
   msrv:

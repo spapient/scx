@@ -959,14 +959,14 @@ fn anchor(hits: &[Rank], order: &[usize], min_sim: f64) -> bool {
     order.first().is_some_and(|&i| hits[i].sim >= min_sim)
 }
 
-/// 同族阈值：confirm5 同事故兄弟整篇词表 Jaccard 为 0.64–0.67，跨事故为
+/// 同族阈值：Gauge 同事故兄弟整篇词表 Jaccard 为 0.64–0.67，跨事故为
 /// 0.06–0.07；0.35 位于两者之间，留足跨语料余量。
 const SIBLING_JACCARD: f64 = 0.35;
 /// 同族候选的最低相对分：低于 top1 的 40% 视为“同根因但更弱”，不抬升。
 const SIBLING_SCORE_RATIO: f64 = 0.40;
 
 /// 把 top1 的同族候选稳定地移到 top1 之后（保持各自原有先后），其余顺序不变。
-/// 只看前 `3*k` 个候选：同事故兄弟在 confirm5 均落在 top-10 内，避免全库两两比较。
+/// 只看前 `3*k` 个候选：同事故兄弟在 Gauge 均落在 top-10 内，避免全库两两比较。
 fn siblings(order: Vec<usize>, hits: &[Rank], docs: &Docs, k: usize) -> Vec<usize> {
     if order.len() < 2 {
         return order;

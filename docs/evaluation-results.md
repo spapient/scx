@@ -4,7 +4,7 @@
 [`eval.md`](eval.md)。旧 `eval-real/` 中间产物已删除，历史文件可从
 git commit `5ada90d` 恢复。
 
-结论先行：**confirm5 的预注册机械目标排序优势成立；confirm5 的 40/150 逐候选人工
+结论先行：**Gauge 的预注册机械目标排序优势成立；Gauge 的 40/150 逐候选人工
 子集在当前配置下通过 `--gate-human`，但这是同一批标签上的事后校准，不是独立
 holdout，且 NDCG 差值 CI 跨 0。v2 是开发集；real 主指标 A=B，逐候选人工门因
 provenance 缺失而失败。仓库内仍没有“独立 holdout + 双人逐条盲审 + 预注册配置”
@@ -18,11 +18,11 @@ provenance 缺失而失败。仓库内仍没有“独立 holdout + 双人逐条�
 | 合成 40 组 | 真实感夹具 + 案例级人工标签 | 机械门可用、弱相关/负例工具链 | 真实事故分布、独立盲审 |
 | v2 | 30 起公开事故，150 查询；AI 预填后双人采纳 | 机械门 PASS；开发集 hard Δ+0.0514 | 独立确认；逐候选人工闭环 |
 | confirm2–4 | 历史确认集 | confirm4 暴露低置信桶硬筛缺陷 | confirm4 确认资格（修复由它触发） |
-| confirm5 | 30 起新事故，150 查询 | hard 层 MRR 优势（机械 target） | 弱相关/负例人工闭环（机械 target 全 2） |
-| confirm5 + hao | 40/150 逐候选人工标签 | 当前 `--gate-human` 点估计 PASS | 独立 holdout；NDCG 显著优势 |
+| Gauge | 30 起新事故，150 查询 | hard 层 MRR 优势（机械 target） | 弱相关/负例人工闭环（机械 target 全 2） |
+| Gauge + hao | 40/150 逐候选人工标签 | 当前 `--gate-human` 点估计 PASS | 独立 holdout；NDCG 显著优势 |
 | real | 40 条、11 起公开事故 | 案例级双人标签、NDCG 方向 | 逐候选人工门（0/344） |
 
-## 2. confirm5：预注册机械确认
+## 2. Gauge：预注册机械确认
 
 语料为 30 起公开事故、150 条查询（literal 60 / paraphrase 60 / semantic 30），
 每起事故 5 条兄弟 case。使用 150 条 target-only 机械标签，`rel=2` 为 target，
@@ -43,7 +43,7 @@ provenance 缺失而失败。仓库内仍没有“独立 holdout + 双人逐条�
 
 ### 2.1 policy 控制集
 
-`config/confirm5.policy.labels.json` 在同一 150 条查询上物化规则：同事故 `rel=2`，
+`config/gauge.policy.labels.json` 在同一 150 条查询上物化规则：同事故 `rel=2`，
 同场景桶 `rel=1`，其余 `rel=0`；分布 `2=650 / 1=115 / 0=665`，
 `judge.method=policy-materialized-v1`。
 
@@ -57,9 +57,9 @@ gate: FAIL
 
 ### 2.2 逐候选人工验收（hao，40/150）
 
-- 盲审包：`config/confirm5.blind40.packet.tsv`，40 例 / 384 候选，SHA256
+- 盲审包：`config/gauge.blind40.packet.tsv`，40 例 / 384 候选，SHA256
   `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f`。
-- 人工标签：`config/confirm5.human.labels.json`，`judge.by=hao`，
+- 人工标签：`config/gauge.human.labels.json`，`judge.by=hao`，
   `method=per-item-human-v1`；rel 分布 `2=142 / 1=130 / 0=112`。
 - `--gate-human`：**PASS / exit 0**；literal 自匹配 0/14 违规；
   provenance 384/384、cases 40/40。
@@ -69,7 +69,7 @@ gate: FAIL
 - NDCG 差值的 semantic bootstrap：+0.0023，CI [-0.0131, 0.0161]；因此不能
   写“NDCG 显著优于 B”。
 
-AI 标签 `config/confirm5.ai.labels.json`（`per-item-ai-v1`，384/384）只通过
+AI 标签 `config/gauge.ai.labels.json`（`per-item-ai-v1`，384/384）只通过
 `--gate-items`，`--gate-human` 必须失败。配置是在 hao 标签上校准的，不能把
 40/150 的结果外推成全量或独立 holdout。
 
@@ -77,11 +77,11 @@ AI 标签 `config/confirm5.ai.labels.json`（`per-item-ai-v1`，384/384）只通
 
 | 对象 | SHA256 |
 |---|---|
-| `config/confirm5.corpus.json` | `B83A3A8C834A6494BDA76777BFD7500488CEDFE097C81D2AFA5E03049E543335` |
-| `config/confirm5.policy.labels.json` | `EDF6C2083D77F7A39A2DB1DCC8C13614AD55E5D78A832BBC6F93B449E1BD6F33` |
-| `config/confirm5.ai.labels.json` | `3114B9152835D604BD06F1B1D4E54A327B8857E9650E08111B04F452D965508A` |
-| `config/confirm5.human.labels.json` | `C68573E0640EADD29C843F399C986ADB69194285A49AB1A5201D9D408A83498C` |
-| `config/confirm5.blind40.packet.tsv` | `B8EEBF2FCB78D0FB745C9760B55DD34D832A9BB976B377F3DFB8C7CEA264093F` |
+| `config/gauge.corpus.json` | `B83A3A8C834A6494BDA76777BFD7500488CEDFE097C81D2AFA5E03049E543335` |
+| `config/gauge.policy.labels.json` | `EDF6C2083D77F7A39A2DB1DCC8C13614AD55E5D78A832BBC6F93B449E1BD6F33` |
+| `config/gauge.ai.labels.json` | `3114B9152835D604BD06F1B1D4E54A327B8857E9650E08111B04F452D965508A` |
+| `config/gauge.human.labels.json` | `C68573E0640EADD29C843F399C986ADB69194285A49AB1A5201D9D408A83498C` |
+| `config/gauge.blind40.packet.tsv` | `B8EEBF2FCB78D0FB745C9760B55DD34D832A9BB976B377F3DFB8C7CEA264093F` |
 | 派生 AI 填写版（packet + ai labels） | `6A5319C546FE68C20F3D4D7FFD38437B3736EA301E1319AFB3C374ECA9AC9B18` |
 | 派生人工填写版（packet + hao labels） | `1F6CD83576DD3872635C2317131F8CE7858301E7AFE88D490B8CE46E1B9240B5` |
 
@@ -91,10 +91,10 @@ AI 标签 `config/confirm5.ai.labels.json`（`per-item-ai-v1`，384/384）只通
 复现入口：
 
 ```bash
-./tools/scx.py seed config/confirm5.corpus.json \
-  --mem-dir /tmp/scx-confirm5 --csv /tmp/scx-confirm5.csv --force
-./tools/scx --eval config/confirm5.human.labels.json --gate-human --eval-verbose \
-  --mem-dir /tmp/scx-confirm5
+./tools/scx.py seed config/gauge.corpus.json \
+  --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
+./tools/scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+  --mem-dir /tmp/scx-gauge
 ```
 
 `seed` 默认 4 个并发 store 进程；CI 同时串行重建，归一化日期前缀后对比整个
@@ -171,17 +171,17 @@ hard 数值达到门槛，但 v2 参与调参，不能写成独立确认。复�
 - Recall/MRR/NDCG、分层聚合与 bootstrap 可重放；
 - `--gate`、`--gate-human`、`--gate-items` 把样本、provenance、控制标签和
   指标门槛变成可执行门；
-- confirm5 机械 target 的 hard 层优势满足预注册条件；
-- confirm5 hao 子集通过当前人工门，但只支持事后验收。
+- Gauge 机械 target 的 hard 层优势满足预注册条件；
+- Gauge hao 子集通过当前人工门，但只支持事后验收。
 
 必须拒绝的表述：
 
 - “A 对所有 RAG/embedding 系统有优势”：B 只是朴素词面基线；
-- “confirm5 机械 target 已通过人工弱相关/负例门”：rel 全 2；
+- “Gauge 机械 target 已通过人工弱相关/负例门”：rel 全 2；
 - “policy 控制集等于逐条人工盲审”：规则物化，gate 以 provenance FAIL；
 - “v2 独立确认质量优势”：v2 参与调参，标签为 AI 预填后人工采纳；
 - “real 建立 Recall/MRR 优势”：三层 A=B；
-- “confirm5 hao 是独立 holdout”：同一批标签参与配置校准；
+- “Gauge hao 是独立 holdout”：同一批标签参与配置校准；
 - “NDCG 显著优于 B”：semantic NDCG CI 跨 0；
 - “AI 标签可以冒充人工”：AI 只能过 `--gate-items`。
 
@@ -191,5 +191,5 @@ hard 数值达到门槛，但 v2 参与调参，不能写成独立确认。复�
 2. 主指标、MDE、CI 方法和 seed 必须在看结果前冻结。
 3. 按层/tier/cluster 反复看会引入多重比较；报告全部组并区分预注册与敏感性。
 4. 机械 target、policy 物化、AI 预填、案例级签名、逐候选真人是五种不同证据。
-5. confirm5 的 5 条兄弟 case 相关，case 级 bootstrap 应同时报告事故聚类敏感性。
+5. Gauge 的 5 条兄弟 case 相关，case 级 bootstrap 应同时报告事故聚类敏感性。
 6. 配置校准集不能当确认集；任何优势声明都要新的独立语料与逐候选人工标签。

@@ -1,5 +1,5 @@
 {
- "name": "confirm5",
+ "name": "Gauge",
  "description": "30 public incidents; five sibling cases each.",
  "expected_incidents": 30,
  "expected_cases": 150,

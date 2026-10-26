@@ -1,6 +1,6 @@
 {
   "name": "stem-probe",
-  "description": "Tiny deterministic probe corpus for the optional English inflectional stemmer (feature=semantic, stem_enable=1). Each probe eval_query shares NO literal content token with its target store_query; the only bridges are regular-plural stems (restarts->restart, timeouts->timeout, dependencies->dependency, rollbacks->rollback, configs->config). root_cause/fix use neutral words so they create no accidental literal overlap. Not a confirm5 gate replacement; zero-signal recall probe only.",
+  "description": "Tiny deterministic probe corpus for the optional English inflectional stemmer (feature=semantic, stem_enable=1). Each probe eval_query shares NO literal content token with its target store_query; the only bridges are regular-plural stems (restarts->restart, timeouts->timeout, dependencies->dependency, rollbacks->rollback, configs->config). root_cause/fix use neutral words so they create no accidental literal overlap. Not a Gauge gate replacement; zero-signal recall probe only.",
   "expected_incidents": 5,
   "expected_cases": 10,
   "incidents": [

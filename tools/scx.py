@@ -1463,7 +1463,7 @@ def selftest():
         "ndcg",
     )
     assert cluster["A_ndcg"] == 0.5 and "A_mrr" not in cluster
-    for name, cases in (("confirm5", 150), ("v2", 150), ("real", 40)):
+    for name, cases in (("gauge", 150), ("v2", 150), ("real", 40)):
         corpus = load_json(CONFIG_DIR / f"{name}.corpus.json")
         layers = validate_corpus(corpus)
         assert sum(layers.values()) == cases
@@ -1479,8 +1479,8 @@ def selftest():
         ("ai", "6a5319c546fe68c20f3d4d7ffd38437b3736ea301e1319afb3c374eca9ac9b18"),
         ("human", "1f6cd83576dd3872635c2317131f8ce7858301e7afe88d490b8ce46e1b9240b5"),
     ):
-        head, rows = read_tsv(CONFIG_DIR / "confirm5.blind40.packet.tsv")
-        labels = load_json(CONFIG_DIR / f"confirm5.{judge}.labels.json")
+        head, rows = read_tsv(CONFIG_DIR / "gauge.blind40.packet.tsv")
+        labels = load_json(CONFIG_DIR / f"gauge.{judge}.labels.json")
         assert sha256_text(filled_packet(head, rows, labels["cases"])) == expected
     print("selftest: PASS")
 
@@ -1530,8 +1530,8 @@ def build_parser():
     make.add_argument("--mem-dir", required=True)
     make.add_argument("--out", required=True)
     make.add_argument("--manifest", required=True)
-    make.add_argument("--name", default="confirm5-blind40")
-    make.add_argument("--seed", default="confirm5-blind-v1")
+    make.add_argument("--name", default="gauge-blind40")
+    make.add_argument("--seed", default="gauge-blind-v1")
     make.add_argument(
         "--per-layer", default="literal=14,paraphrase=13,semantic=13"
     )
@@ -1542,7 +1542,7 @@ def build_parser():
     imp.add_argument("--out", required=True)
     imp.add_argument("--judge", required=True)
     imp.add_argument("--date", required=True)
-    imp.add_argument("--name", default="confirm5-blind40")
+    imp.add_argument("--name", default="gauge-blind40")
     imp.add_argument("--method", default="per-item-blind-v1")
     imp.add_argument("--note", default="")
     imp.add_argument("--allow-partial", action="store_true")

@@ -19,7 +19,7 @@ pub(crate) const MIN_LAYER: usize = 10;
 /// 浮点比较容差：指标是整数计数除以 n，1e-9 足以吸收除法误差。
 const EPS: f64 = 1e-9;
 /// 绝对地板：拒绝"全部 miss / 基线退化"仍因相对非劣而 PASS。
-/// 取值低于 confirm5 各层实测最差值（paraphrase r@5 0.567、MRR 0.242），
+/// 取值低于 Gauge 各层实测最差值（paraphrase r@5 0.567、MRR 0.242），
 /// 只拦截退化到不可用区间的结果，不替代相对非劣判定。
 pub(crate) const MIN_RECALL: f64 = 0.20;
 pub(crate) const MIN_MRR: f64 = 0.10;
@@ -731,7 +731,7 @@ mod tests {
     fn human_gate_rejects_mechanical_target_labels() {
         let mut cases = corpus();
         for c in &mut cases {
-            c.judged_by = Some("mechanical-target-confirm5-v1".to_string());
+            c.judged_by = Some("mechanical-target-gauge-v1".to_string());
             c.rel.insert("a".to_string(), 2.0);
         }
         let layers = vec![

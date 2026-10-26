@@ -1,12 +1,12 @@
-# Confirmatory benchmark 5 — pre-registration
+# Gauge benchmark — pre-registration
 
-Frozen before the corpus is built and before any confirm5 A/B result is produced.
+Frozen before the corpus is built and before any Gauge A/B result is produced.
 Date: 2026-10-23.
 
 > **Refactor note (2026-10-25).** The decision rule and corpus protocol in this
 > frozen preregistration are unchanged; only artifact paths/commands were
 > updated. Historical `eval-real/` files remain recoverable from git commit
-> `5ada90d`. Current equivalents: corpus `config/confirm5.corpus.json`, seed command
+> `5ada90d`. Current equivalents: corpus `config/gauge.corpus.json`, seed command
 > `./tools/scx.py seed ...`, baseline
 > `./tools/scx.py baseline ...`, and statistics
 > `./tools/scx.py stats ...`. The frozen input hashes below are
@@ -32,8 +32,8 @@ response before the result is archived.
   lexical confidence is below 0.30. confirm4 then passed as a diagnostic, but
   confirm4 is no longer a confirmation set because the fix was motivated by its
   observed failures.
-- confirm5 uses 30 different incidents and was constructed after the fix,
-  without running any confirm5 A/B or inspecting any confirm5 ranking result.
+- Gauge uses 30 different incidents and was constructed after the fix,
+  without running any Gauge A/B or inspecting any Gauge ranking result.
 
 ## Corpus construction
 
@@ -66,17 +66,17 @@ Pre-build integrity audit:
 
 Corpus files:
 
-- `config/confirm5.corpus.json` (current normalized corpus; historical incident JSON
+- `config/gauge.corpus.json` (current normalized corpus; historical incident JSON
   SHA256 `E12FDD3C62E6E5C4B192BE423DC6F3070097DE033D41D0426E95E6E543765704`)
-- Seed via `./tools/scx.py seed config/confirm5.corpus.json ...`
-  (historical `seed-confirm5.ps1` SHA256
+- Seed via `./tools/scx.py seed config/gauge.corpus.json ...`
+  (historical `seed-Gauge.ps1` SHA256
   `AA7D90BDA0251E8E1D34AE8E7B8834310481785690E3297B64F16DE830792BDC`)
 
 ## Labels and evidence level
 
 - Target-only mechanical labels: the derived case has `rel=2`; other candidates
   are unlabelled and count as 0.
-- `judge.by=mechanical-target-confirm5-v1` marks the labels as mechanical rather
+- `judge.by=mechanical-target-gauge-v1` marks the labels as mechanical rather
   than human blind adjudication.
 - This benchmark tests target-ranking generalization. It does not replace M4
   human relevance evidence.
@@ -86,7 +86,7 @@ Corpus files:
 Binary: `target/release/scx.exe`, SHA256
 `0469182BD8FED2A32F5288D188728ECCC8852129D7124C38643C4DE18F7D6FCD`.
 
-Source and measurement manifest (historical): `confirm5-source.sha256`, 43 entries
+Source and measurement manifest (historical): `Gauge-source.sha256`, 43 entries
 (`Cargo.toml`, `Cargo.lock`, all `src/**/*.rs`, seed data, and the
 build/analysis scripts). Manifest SHA256:
 `9856A9CFE3D69D437A446028DFFF50EE77A41F1E8D0F2845826BD0E279FCCCD7`.
@@ -140,14 +140,14 @@ Pre-freeze verification evidence:
 3. Run A/B with:
 
    ```bash
-   ./tools/scx.py seed config/confirm5.corpus.json \
-     --mem-dir /tmp/scx-confirm5 --csv /tmp/scx-confirm5.csv --force
-   ./tools/scx.py baseline --csv /tmp/scx-confirm5.csv \
-     --out /tmp/scx-confirm5-mechanical.json \
-     --judge-by mechanical-target-confirm5-v1 \
+   ./tools/scx.py seed config/gauge.corpus.json \
+     --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
+   ./tools/scx.py baseline --csv /tmp/scx-gauge.csv \
+     --out /tmp/scx-gauge-mechanical.json \
+     --judge-by mechanical-target-gauge-v1 \
      --judge-date 2026-10-23T00:00:00Z
-   ./tools/scx --eval /tmp/scx-confirm5-mechanical.json --gate --eval-verbose \
-     --mem-dir /tmp/scx-confirm5
+   ./tools/scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
+     --mem-dir /tmp/scx-gauge
    ```
 
 4. Derive rank-diff and strata from that single verbose run.

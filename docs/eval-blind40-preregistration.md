@@ -1,4 +1,4 @@
-# confirm5 逐候选盲审预注册（40/150 分层样本）
+# Gauge 逐候选盲审预注册（40/150 分层样本）
 
 日期：2026-10-24
 状态：**预注册已冻结；hao 已逐条提交 384 项人工分数并通过 `--gate-human`。
@@ -6,15 +6,15 @@
 
 > 重构说明（2026-10-25）：本文是冻结的预注册记录，裁决口径与验收条件未改；
 > 仅把命令中的旧路径/工具名替换为当前等价物。`eval-real/` 原始文件可从
-> git commit `5ada90d` 恢复。源基线为 `config/confirm5.policy.labels.json`，盲审包为
-> `config/confirm5.blind40.packet.tsv`，人工/AI 标签为
-> `config/confirm5.human.labels.json` / `config/confirm5.ai.labels.json`；工具为
+> git commit `5ada90d` 恢复。源基线为 `config/gauge.policy.labels.json`，盲审包为
+> `config/gauge.blind40.packet.tsv`，人工/AI 标签为
+> `config/gauge.human.labels.json` / `config/gauge.ai.labels.json`；工具为
 > `./tools/scx.py blind`。包哈希 `b8eebf2f...` 可由 `blind make`
 > 从当前语料确定性重建。
 
 ## 1. 要解决的问题
 
-confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
+Gauge 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 - 机械 target 基线：`rel` 全为 2、只有目标候选，`--gate-human` FAIL；
 - policy 控制集：弱相关/负例由人工规则确定性物化，`--gate-human` 以
@@ -27,12 +27,12 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 | 项 | 值 |
 |---|---|
-| 源基线 | `config/confirm5.policy.labels.json` |
+| 源基线 | `config/gauge.policy.labels.json` |
 | 源基线 SHA256 | 见 manifest `baseline_sha256` |
-| 抽样 | 种子 `confirm5-blind-v1` 的 SHA-256 排序，按层抽 14 literal / 13 paraphrase / 13 semantic |
+| 抽样 | 种子 `gauge-blind-v1` 的 SHA-256 排序，按层抽 14 literal / 13 paraphrase / 13 semantic |
 | 样本量 | 40 / 150（26.7%） |
 | 裁决项 | 样本内每个 case 的全部候选（384 项） |
-| 盲审包 | `config/confirm5.blind40.packet.tsv` |
+| 盲审包 | `config/gauge.blind40.packet.tsv` |
 | 包 SHA256 | `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f` |
 | 清单 | 由 `blind make --manifest` 生成（不入库） |
 
@@ -70,21 +70,21 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 ```bash
 # 1a) 逐行提示（推荐：按回车逐条，避免表格批量粘贴错位）
-./tools/scx.py blind review --packet config/confirm5.blind40.packet.tsv
+./tools/scx.py blind review --packet config/gauge.blind40.packet.tsv
 
 # 1b) 或直接在表格里填 grade 列（0/1/2），随时看进度
-./tools/scx.py blind progress --packet config/confirm5.blind40.packet.tsv
+./tools/scx.py blind progress --packet config/gauge.blind40.packet.tsv
 
 # 2) 导入（date 用真实 UTC 时间）
 ./tools/scx.py blind import \
-  --baseline config/confirm5.policy.labels.json \
-  --packet config/confirm5.blind40.packet.tsv \
-  --out /tmp/confirm5-blind40-human.json \
+  --baseline config/gauge.policy.labels.json \
+  --packet config/gauge.blind40.packet.tsv \
+  --out /tmp/gauge-blind40-human.json \
   --judge <你的名字> --date 2026-10-24T12:00:00Z
 
 # 3) 门禁
-./tools/scx --eval /tmp/confirm5-blind40-human.json --gate-human \
-  --mem-dir /tmp/scx-confirm5
+./tools/scx --eval /tmp/gauge-blind40-human.json --gate-human \
+  --mem-dir /tmp/scx-gauge
 ```
 
 未完成前，正确表述是：**逐候选人工弱相关/负例闭环仍未建立**。
@@ -102,7 +102,7 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 - 裁决人：`codex`，方法 `per-item-ai-v1`，384/384 项；
 - 分级：rel2=176 / rel1=38 / rel0=170；literal 自匹配 0/14 违规；
 - `--gate-items` PASS / exit 0；`--gate-human` FAIL / exit 2；
-- 产物：`config/confirm5.ai.labels.json`；填写版 TSV 是派生视图，不单独入库，
+- 产物：`config/gauge.ai.labels.json`；填写版 TSV 是派生视图，不单独入库，
   gate 输出与统计 CSV 可由 `--gate-items` 与 `tools/scx.py stats` 重建。
 
 边界：同一模型自评、非独立、非人工，证据等级 E3。AI 结果不能单独满足第 4 节
@@ -113,7 +113,7 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 用户确认 384 个分数由本人（hao）逐条给出，仅由工具执行导入。原始提交中
 8 条 literal 自匹配被判 0/1，与预注册的“literal 目标必须为 2”不变量冲突；
 导入器拒绝后，仅对这 8 条按不变量归一化为 2。原始提交未入库；修正结果在
-`config/confirm5.human.labels.json`，填写视图可由 packet + labels 重建。这是机械
+`config/gauge.human.labels.json`，填写视图可由 packet + labels 重建。这是机械
 不变量修正，不是额外人工判分。
 
 - provenance：384/384，`judge.by=hao`，`per-item-human-v1`；
@@ -127,8 +127,8 @@ confirm5 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 ```bash
 ./tools/scx.py blind check \
-  --baseline config/confirm5.human.labels.json \
-  --packet config/confirm5.blind40.packet.tsv --out /tmp/confirm5-hao.tsv
+  --baseline config/gauge.human.labels.json \
+  --packet config/gauge.blind40.packet.tsv --out /tmp/Gauge-hao.tsv
 ```
 
 结论：第 4 节的质量验收已通过；但配置是在同一批标签上校准的，NDCG 差值
