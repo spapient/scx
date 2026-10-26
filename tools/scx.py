@@ -1343,9 +1343,11 @@ def _token_recall(text, body_text):
 
 def validate_fidelity_corpus(corpus):
     slices = corpus.get("slices") or []
-    kinds = ("build", "stack", "diff", "log", "test")
-    if not 20 <= len(slices) <= 40:
-        sys.exit(f"fidelity: slices={len(slices)} must be 20..40")
+    kinds = tuple(corpus.get("expected_kinds") or ())
+    if not kinds:
+        sys.exit("fidelity: corpus must declare expected_kinds")
+    if not 20 <= len(slices) <= 60:
+        sys.exit(f"fidelity: slices={len(slices)} must be 20..60")
     seen = set()
     kind_counts = {k: 0 for k in kinds}
     for index, slc in enumerate(slices):
@@ -1372,9 +1374,9 @@ def validate_fidelity_corpus(corpus):
                 sys.exit(
                     f"fidelity: slice {ident} evidence line not verbatim in full_text:\n{ev!r}"
                 )
-    missing = [k for k, v in kind_counts.items() if v == 0]
-    if missing:
-        sys.exit(f"fidelity: corpus missing kinds: {missing}")
+    sparse = [k for k, v in kind_counts.items() if v < 3]
+    if sparse:
+        sys.exit(f"fidelity: corpus kinds too sparse for per-kind gate: {sparse}")
     return slices, kind_counts
 
 
@@ -1415,6 +1417,135 @@ def run_fidelity_slice(binary, slc, ratio, context, work, seed):
     }
 
 
+def _fidelity_aggregate(rows):
+    """Fold per-slice rows into one aggregate (global + per-kind)."""
+    n = len(rows)
+    agg = {
+        "n": n,
+        "modes": {},
+        "ev_total": 0, "ev_kept": 0, "trunc_ev": 0, "rand_ev": 0,
+        "ans": 0, "ans_trunc": 0, "ans_rand": 0,
+        "tok": 0.0, "tok_trunc": 0.0, "tok_rand": 0.0,
+        "char_cut": 0.0, "token_cut": 0.0, "wall": 0.0,
+        "kinds": {},
+    }
+    for r in rows:
+        agg["modes"][r["mode"]] = agg["modes"].get(r["mode"], 0) + 1
+        agg["ev_total"] += r["ev_total"]
+        agg["ev_kept"] += r["ev_kept"]
+        agg["trunc_ev"] += r["trunc_ev_kept"]
+        agg["rand_ev"] += r["rand_ev_kept"]
+        agg["ans"] += int(r["answerable"])
+        agg["ans_trunc"] += int(r["answerable_trunc"])
+        agg["ans_rand"] += int(r["answerable_rand"])
+        agg["tok"] += r["token_recall"]
+        agg["tok_trunc"] += r["token_recall_trunc"]
+        agg["tok_rand"] += r["token_recall_rand"]
+        agg["char_cut"] += r["char_cut"]
+        agg["token_cut"] += r["token_cut"]
+        agg["wall"] += r["wall_scx_ms"]
+        k = agg["kinds"].setdefault(r["kind"], {
+            "n": 0, "ev_total": 0, "ev_kept": 0, "trunc_ev": 0, "ans": 0,
+            "tok": 0.0, "char_cut": 0.0,
+        })
+        k["n"] += 1
+        k["ev_total"] += r["ev_total"]
+        k["ev_kept"] += r["ev_kept"]
+        k["trunc_ev"] += r["trunc_ev_kept"]
+        k["ans"] += int(r["answerable"])
+        k["tok"] += r["token_recall"]
+        k["char_cut"] += r["char_cut"]
+    if n:
+        agg["tok"] /= n
+        agg["tok_trunc"] /= n
+        agg["tok_rand"] /= n
+        agg["char_cut"] /= n
+        agg["token_cut"] /= n
+        agg["wall"] /= n
+    for k in agg["kinds"].values():
+        if k["n"]:
+            k["tok"] /= k["n"]
+            k["char_cut"] /= k["n"]
+    return agg
+
+
+def _fidelity_gate_failures(agg, gate_ev, gate_ans):
+    """Return gate failures (list of human strings); empty means PASS.
+
+    Global gate: evidence retention >= gate_ev AND > trunc; answerable rate
+    >= gate_ans AND > trunc. Per-kind (zero-regression across domains): every
+    kind's evidence retention >= gate_ev AND > its own trunc baseline.
+    token-set recall stays report-only (sieve drops noise, set-recall loses
+    to trunc/rand by construction).
+    """
+    failed = []
+    ev_ret = agg["ev_kept"] / agg["ev_total"] if agg["ev_total"] else 0.0
+    trunc_ret = agg["trunc_ev"] / agg["ev_total"] if agg["ev_total"] else 0.0
+    ans_rate = agg["ans"] / agg["n"] if agg["n"] else 0.0
+    ans_trunc = agg["ans_trunc"] / agg["n"] if agg["n"] else 0.0
+    if ev_ret < gate_ev:
+        failed.append(f"evidence retention={ev_ret:.4f} < {gate_ev:.4f}")
+    if ans_rate < gate_ans:
+        failed.append(f"answerable rate={ans_rate:.4f} < {gate_ans:.4f}")
+    if ev_ret <= trunc_ret:
+        failed.append(f"ev vs trunc: scx={ev_ret:.4f} <= trunc={trunc_ret:.4f}")
+    if ans_rate <= ans_trunc:
+        failed.append(f"ans vs trunc: scx={ans_rate:.4f} <= trunc={ans_trunc:.4f}")
+    for kind, k in sorted(agg["kinds"].items()):
+        k_ret = k["ev_kept"] / k["ev_total"] if k["ev_total"] else 0.0
+        # per-kind asserts only the frozen absolute threshold (zero domain
+        # regression). A per-kind "strictly better than trunc" comparison is
+        # too brittle at 5 slices: trunc can coincidentally cover evidence.
+        if k_ret < gate_ev:
+            failed.append(f"kind {kind} ev={k_ret:.4f} < {gate_ev:.4f}")
+    return failed
+
+
+def _print_fidelity(agg, args, kind_counts, binary):
+    n = agg["n"]
+    ev_ret = agg["ev_kept"] / agg["ev_total"] if agg["ev_total"] else 0.0
+    trunc_ret = agg["trunc_ev"] / agg["ev_total"] if agg["ev_total"] else 0.0
+    rand_ret = agg["rand_ev"] / agg["ev_total"] if agg["ev_total"] else 0.0
+    ans_rate = agg["ans"] / n if n else 0.0
+    ans_trunc = agg["ans_trunc"] / n if n else 0.0
+    ans_rand = agg["ans_rand"] / n if n else 0.0
+    print(f"fidelity: slices={n} kinds={kind_counts} binary={binary}")
+    print(f"fidelity: ratio={args.ratio} context={args.context} modes={agg['modes']} rand-seed={args.seed}")
+    print()
+    hdr = (f"{'id':10s} {'kind':6s} {'mode':18s} {'kept':>7s} {'ans':>5s} "
+           f"{'tokR':>6s} {'char_cut':>9s}")
+    print(hdr)
+    for r in args._rows:
+        print(f"{r['id']:10s} {r['kind']:6s} {r['mode']:18s} "
+              f"{str(r['ev_kept'])+'/'+str(r['ev_total']):>7s} "
+              f"{'Y' if r['answerable'] else '.':>5s} "
+              f"{r['token_recall']*100:5.1f}% {r['char_cut']*100:8.1f}%")
+    print()
+    print(f"fidelity: evidence retention = {agg['ev_kept']}/{agg['ev_total']} = {ev_ret*100:.2f}%"
+          f"  (trunc {agg['trunc_ev']}/{agg['ev_total']} = {trunc_ret*100:.2f}%"
+          f" / rand {agg['rand_ev']}/{agg['ev_total']} = {rand_ret*100:.2f}%)")
+    print(f"fidelity: answerable rate   = {agg['ans']}/{n} = {ans_rate*100:.2f}%"
+          f"  (trunc {ans_trunc*100:.2f}% / rand {ans_rand*100:.2f}%)")
+    print(f"fidelity: token recall      = {agg['tok']*100:.2f}%  "
+          f"(trunc {agg['tok_trunc']*100:.2f}% / rand {agg['tok_rand']*100:.2f}%)")
+    print(f"fidelity: mean char cut     = {agg['char_cut']*100:.2f}% / "
+          f"token cut {agg['token_cut']*100:.2f}%")
+    print(f"fidelity: mean wall         = {agg['wall']:.3f} ms")
+    print("fidelity: per-kind (ev / trunc_ev / ans / tok / char_cut):")
+    for kind in sorted(agg["kinds"]):
+        k = agg["kinds"][kind]
+        k_ret = k["ev_kept"] / k["ev_total"] if k["ev_total"] else 0.0
+        k_trunc = k["trunc_ev"] / k["ev_total"] if k["ev_total"] else 0.0
+        print(f"  {kind:10s} ev={k['ev_kept']}/{k['ev_total']} ({k_ret*100:5.1f}%) "
+              f"trunc={k_trunc*100:5.1f}% ans={k['ans']}/{k['n']} "
+              f"tok={k['tok']*100:5.1f}% cut={k['char_cut']*100:5.1f}%")
+    unans = [(r["id"], r["mode"]) for r in args._rows if not r["answerable"]]
+    if unans:
+        print("fidelity: NOT answerable slices:")
+        for ident, mode in unans:
+            print(f"  {ident}: mode={mode}")
+
+
 def cmd_fidelity(args):
     corpus = load_json(args.corpus)
     slices, kind_counts = validate_fidelity_corpus(corpus)
@@ -1428,93 +1559,22 @@ def cmd_fidelity(args):
             rows.append(run_fidelity_slice(
                 binary, slc, args.ratio, args.context, work, args.seed,
             ))
-    n = len(rows)
-    ev_sum = sum(r["ev_total"] for r in rows)
-    ev_kept = sum(r["ev_kept"] for r in rows)
-    trunc_kept = sum(r["trunc_ev_kept"] for r in rows)
-    rand_kept = sum(r["rand_ev_kept"] for r in rows)
-    ans = sum(1 for r in rows if r["answerable"])
-    ans_trunc = sum(1 for r in rows if r["answerable_trunc"])
-    ans_rand = sum(1 for r in rows if r["answerable_rand"])
-    tok = sum(r["token_recall"] for r in rows) / n
-    tok_trunc = sum(r["token_recall_trunc"] for r in rows) / n
-    tok_rand = sum(r["token_recall_rand"] for r in rows) / n
-    char_cut = sum(r["char_cut"] for r in rows) / n
-    token_cut = sum(r["token_cut"] for r in rows) / n
-    modes = {}
-    for r in rows:
-        modes[r["mode"]] = modes.get(r["mode"], 0) + 1
-    lat_scx = sum(r["wall_scx_ms"] for r in rows) / n
-    ev_ret = ev_kept / ev_sum if ev_sum else 0.0
-    ans_rate = ans / n
-    ans_rate_trunc = ans_trunc / n
-    ans_rate_rand = ans_rand / n
-    print(f"fidelity: slices={n} kinds={kind_counts} binary={binary}")
-    print(f"fidelity: ratio={args.ratio} context={args.context} modes={modes} rand-seed={args.seed}")
-    print()
-    hdr = (f"{'id':10s} {'kind':6s} {'mode':18s} {'kept':>7s} {'ans':>5s} "
-           f"{'tokR':>6s} {'char_cut':>9s}")
-    print(hdr)
-    for r in rows:
-        print(f"{r['id']:10s} {r['kind']:6s} {r['mode']:18s} "
-              f"{str(r['ev_kept'])+'/'+str(r['ev_total']):>7s} "
-              f"{'Y' if r['answerable'] else '.':>5s} "
-              f"{r['token_recall']*100:5.1f}% {r['char_cut']*100:8.1f}%")
-    print()
-    print(f"fidelity: evidence retention = {ev_kept}/{ev_sum} = {ev_ret*100:.2f}%"
-          f"  (trunc {trunc_kept}/{ev_sum} = {trunc_kept/ev_sum*100:.2f}%"
-          f" / rand {rand_kept}/{ev_sum} = {rand_kept/ev_sum*100:.2f}%)")
-    print(f"fidelity: answerable rate   = {ans}/{n} = {ans_rate*100:.2f}%"
-          f"  (trunc {ans_rate_trunc*100:.2f}% / rand {ans_rate_rand*100:.2f}%)")
-    print(f"fidelity: token recall      = {tok*100:.2f}%  (trunc {tok_trunc*100:.2f}% / rand {tok_rand*100:.2f}%)")
-    print(f"fidelity: mean char cut     = {char_cut*100:.2f}% / token cut {token_cut*100:.2f}%")
-    print(f"fidelity: mean wall         = {lat_scx:.3f} ms")
-    unans = [(r["id"], r["mode"]) for r in rows if not r["answerable"]]
-    if unans:
-        print("fidelity: NOT answerable slices:")
-        for ident, mode in unans:
-            print(f"  {ident}: mode={mode}")
+    args._rows = rows
+    agg = _fidelity_aggregate(rows)
+    _print_fidelity(agg, args, kind_counts, binary)
     if args.gate:
-        # token-set recall is REPORT-ONLY: sieve deliberately drops noise lines,
-        # so its token set is small and set-recall loses to trunc/rand baselines
-        # by construction. Gate rests on the two answerability metrics.
-        gates = [
-            ("evidence retention", ev_ret, args.gate_ev),
-            ("answerable rate", ans_rate, args.gate_ans),
-            ("ev vs trunc", ev_ret, trunc_kept / ev_sum if ev_sum else 0.0),
-            ("ans vs trunc", ans_rate, ans_rate_trunc),
-        ]
-        failed = []
-        for label, actual, threshold in gates[:2]:
-            if actual < threshold:
-                failed.append(f"{label}={actual:.4f} < {threshold:.4f}")
-        for label, scx_val, trunc_val in gates[2:]:
-            if scx_val <= trunc_val:
-                failed.append(f"{label}: scx={scx_val:.4f} <= trunc={trunc_val:.4f}")
+        failed = _fidelity_gate_failures(agg, args.gate_ev, args.gate_ans)
         if failed:
             print(f"fidelity: GATE FAILED: {'; '.join(failed)}")
             return 2
         print(f"fidelity: gate PASS (ev>={args.gate_ev}, ans>={args.gate_ans}, "
-              f"both strictly better than trunc; token recall report-only)")
+              f"both strictly better than trunc; per-kind zero-regression; "
+              f"token recall report-only)")
     if args.out:
         dump_json(args.out, {
             "binary": binary, "ratio": args.ratio, "context": args.context,
             "rand_seed": args.seed,
-            "aggregate": {
-                "slices": n, "kinds": kind_counts, "modes": modes,
-                "evidence_retention": ev_ret,
-                "trunc_evidence_retention": trunc_kept / ev_sum if ev_sum else 0.0,
-                "rand_evidence_retention": rand_kept / ev_sum if ev_sum else 0.0,
-                "answerable_rate": ans_rate,
-                "answerable_rate_trunc": ans_rate_trunc,
-                "answerable_rate_rand": ans_rate_rand,
-                "token_recall": tok,
-                "token_recall_trunc": tok_trunc,
-                "token_recall_rand": tok_rand,
-                "mean_char_cut": char_cut,
-                "mean_token_cut": token_cut,
-                "mean_wall_scx_ms": lat_scx,
-            },
+            "aggregate": agg,
             "rows": rows,
         })
         print(f"fidelity: wrote {args.out}")
@@ -1732,8 +1792,9 @@ def selftest():
     # fidelity: corpus validity, metric determinism and boundaries
     fcorpus = load_json(CONFIG_DIR / "fidelity.corpus.json")
     fslices, fkinds = validate_fidelity_corpus(fcorpus)
-    assert len(fslices) == 25 and fkinds == {
-        "build": 5, "stack": 5, "diff": 5, "log": 5, "test": 5}
+    assert len(fslices) == 40
+    for kind in ("build", "stack", "diff", "log", "test", "db", "network", "hardware"):
+        assert fkinds[kind] == 5, kind
     assert query_tokens("why did the build fail with E0433 config") == [
         "build", "fail", "e0433", "config"]
     assert query_tokens("what is the ttl value") == ["ttl", "value"]

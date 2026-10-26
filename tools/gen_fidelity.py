@@ -19,7 +19,7 @@ SEED = 20261026
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "config" / "fidelity.corpus.json"
 
-KINDS = ("build", "stack", "diff", "log", "test")
+KINDS = ("build", "stack", "diff", "log", "test", "db", "network", "hardware")
 
 BUILD_CODES = [
     ("E0433", "use of undeclared crate or module `config`",
@@ -71,6 +71,39 @@ TEST_CASES = [
     ("store::tests::perm_restore", "assertion failed: mode & 0o002 == 0", "left: 0o666"),
 ]
 
+DB_CASES = [
+    ("postgres", "db.internal", 5432, "connection pool exhausted (pool_size=50)",
+     "max_connections reached"),
+    ("mysql", "db.internal", 3306, "replication stopped: sync_binlog error 1236",
+     "slave_io_running=No"),
+    ("postgres", "tx.internal", 5432, "deadlock detected: processes 42 and 77 wait forever",
+     "rollback in progress"),
+    ("mysql", "db.internal", 3306, "lock wait timeout exceeded; try restarting transaction",
+     "innodb_lock_wait_timeout=50"),
+]
+
+NET_CASES = [
+    ("dns", "api.internal", 53, "NXDOMAIN: api.internal not found",
+     "unbound resolver, query timeout 5000ms"),
+    ("tcp", "edge.internal", 443, "connection timed out after 30000ms",
+     "traceroute stops at 10.20.0.1"),
+    ("tls", "gw.internal", 443, "certificate has expired",
+     "openssl verify return code 10"),
+    ("route", "core.internal", 0, "Destination Net Unreachable",
+     "no route to host via 172.16.0.1"),
+]
+
+HW_CASES = [
+    ("disk", "sda", "I/O error, dev sda, sector 1126400 op 0x0:(READ)",
+     "EXT4-fs error (device sda1)"),
+    ("memory", "DIMM_A2", "Uncorrected memory error at DIMM_A2 rank 1",
+     "EDAC MC0: UE row 7"),
+    ("nvme", "nvme0n1", "nvme0: I/O Cmd 0x2a (READ) timed out",
+     "nvme nvme0: controller is down"),
+    ("link", "eth0", "eth0: link down (carrier lost)",
+     "bond0: link status definitely down"),
+]
+
 
 def _token_est(lines):
     """Rough token estimate (words + CJK codepoints), mirrors contain_token_count."""
@@ -86,6 +119,7 @@ def build_large(idx: int) -> dict:
     # 4 crates; two error blocks each (indices wrap to keep 5 codes in play)
     crates = ["core", "util", "io", "db"]
     blocks = []
+    focus_code, focus_msg, _, _, _ = BUILD_CODES[idx % len(BUILD_CODES)]
     ev = []
     start = idx * 2
     for ci, crate in enumerate(crates):
@@ -98,16 +132,16 @@ def build_large(idx: int) -> dict:
             blocks.append("   |")
             blocks.append(f"{fname:>8} |     {line}")
             blocks.append(f"   |     {'^' * max(2, len(line.split(';')[0]))}")
-            if len(ev) < 4 and code not in [e.split("]")[0] for e in ev]:
+            # only the query-focus error line is evidence for THIS slice's query
+            if code == focus_code:
                 ev.append(f"error[{code}]: {msg}")
     blocks.append("error: could not compile `app` due to previous errors")
-    code, msg, line, loc, sym = BUILD_CODES[idx % len(BUILD_CODES)]
     return {
         "kind": "build",
         "full_text": "\n".join(blocks) + "\n",
         "evidence": ev,
-        "query": f"why did the build fail with {code} {msg.split('`')[1] if '`' in msg else sym}",
-        "note": f"synthetic multi-crate rust build failure (large, sieve path) focus {code}",
+        "query": f"why did the build fail with {focus_code} {focus_msg.split('`')[1] if '`' in focus_msg else sym}",
+        "note": f"synthetic multi-crate rust build failure (large, sieve path) focus {focus_code}",
     }
 
 
@@ -225,6 +259,100 @@ def test_large(idx: int) -> dict:
     }
 
 
+# --- second failure domains: database / network / hardware (P2) ---
+
+
+def db_large(idx: int) -> dict:
+    svc, host, port, msg, extra = DB_CASES[idx % len(DB_CASES)]
+    lines = [
+        f"[2026-10-26T09:00:00Z] INFO  starting {svc} connection supervisor",
+        f"[2026-10-26T09:00:01Z] DEBUG configured host={host} port={port}",
+        "[2026-10-26T09:00:02Z] INFO  acquired 48/50 slots",
+    ]
+    for i in range(20):
+        t = 3 + i * 4
+        lines.append(f"[2026-10-26T09:{t // 60:02d}:{t % 60:02d}Z] ERROR {msg}")
+        lines.append(f"[2026-10-26T09:{t // 60:02d}:{(t + 2) % 60:02d}Z] WARN  {extra}")
+    lines.append(f"[2026-10-26T09:02:00Z] ERROR supervisor gave up after 20 alerts")
+    lines.append("[2026-10-26T09:02:01Z] INFO  entering read-only fallback mode")
+    ev = [f"[2026-10-26T09:00:03Z] ERROR {msg}"]
+    return {
+        "kind": "db",
+        "full_text": "\n".join(lines) + "\n",
+        "evidence": [ev[0]],
+        "query": f"why did {svc} report {msg.split(':')[0].split('(')[0].strip()}",
+        "note": f"synthetic database failure domain: {msg}",
+    }
+
+
+def network_large(idx: int) -> dict:
+    tool, target, port, err, detail = NET_CASES[idx % len(NET_CASES)]
+    blocks = []
+    if tool == "dns":
+        blocks += [f"dig @10.0.0.53 {target}",
+                   "; <<>> DiG 9.18 <<>> @10.0.0.53 {target}",
+                   f"; (1 server found)", f";; ->>HEADER<<- opcode: QUERY, status: {err.split(':')[0].strip()}",
+                   f";; QUESTION SECTION:", f";{target}.\tIN\tA", f";; ANSWER SECTION:",
+                   f";; AUTHORITY SECTION:", f"internal.\t3600\tIN\tSOA\tns1.internal.", f";; query time: 5023 msec"]
+        blocks += [f";; {err}" for _ in range(20)]
+    elif tool == "tcp":
+        blocks += [f"traceroute to {target} ({target}), 30 hops max, 60 byte packets",
+                   " 1  10.20.0.1  0.4 ms  0.3 ms  0.4 ms"]
+        for h in range(2, 22):
+            blocks.append(f" {h:2d}  172.16.{h}.1  15.2 ms  14.9 ms  15.4 ms")
+        for h in range(22, 31):
+            blocks.append(f" {h:2d}  * * *")
+        blocks += [f"connect: {err}", f"; {detail}"]
+    elif tool == "tls":
+        blocks += [f"openssl s_client -connect {target}:{port} -servername {target}",
+                   "CONNECTED(00000003)", "depth=0 CN = " + target,
+                   "verify error:num=10:" + err,
+                   "verify return:1", "verify return:0",
+                   f"; {detail}"]
+        blocks += [f"; {err}" for _ in range(30)]
+    else:
+        blocks += [f"ip route get {target}",
+                   f"RTNETLINK answers: {err}",
+                   f"; {detail}",
+                   f"ping {target}",
+                   "PING " + target + " (" + target + ") 56(84) bytes of data."]
+        for i in range(5):
+            blocks.append(f"{i * 10 + 1:5d} bytes from {target}: icmp_seq={i + 1} ttl=64 time=0.4 ms")
+        blocks += ["--- " + target + " ping statistics ---", "5 packets transmitted, 5 received, 0% packet loss"]
+        blocks += [f"; {err}" for _ in range(25)]
+    while len(blocks) < 48:
+        blocks.append(f"; {err}")
+    return {
+        "kind": "network",
+        "full_text": "\n".join(blocks) + "\n",
+        "evidence": [err],
+        "query": f"what caused {err}",
+        "note": f"synthetic network failure domain: {tool} {err}",
+    }
+
+
+def hardware_large(idx: int) -> dict:
+    dev, slot, msg, extra = HW_CASES[idx % len(HW_CASES)]
+    lines = ["[   12.441002] Linux version 6.6.10-amd64 (builder@kbuild) (gcc-12) #1 SMP"]
+    for i in range(42):
+        t = 12 + i
+        lines.append(f"[{t:7d}.{i * 37 % 100:06d}] {msg}")
+        if i % 3 == 0:
+            lines.append(f"[{t + 1:7d}.{i * 53 % 100:06d}] {extra}")
+    while len(lines) < 48:
+        lines.append(f"[   58.00000{i}1] {extra}")
+    lines.append(f"[   59.000001] systemd[1]: Failed to mount /dev/{dev}1 on /data")
+    lines.append("[   58.000021] systemd[1]: Dependency failed for /data mount")
+    ev = [msg, extra]
+    return {
+        "kind": "hardware",
+        "full_text": "\n".join(lines) + "\n",
+        "evidence": ev,
+        "query": f"what {dev} failure caused {msg.split(':')[0].strip()}",
+        "note": f"synthetic hardware failure domain: {dev} {slot}",
+    }
+
+
 # --- small slices (passthrough path) ---
 
 
@@ -320,10 +448,53 @@ def test_small(idx: int) -> dict:
             "query": f"which test failed with {msg.split(':')[0]}"}
 
 
+def db_small(idx: int) -> dict:
+    svc, host, port, msg, extra = DB_CASES[idx % len(DB_CASES)]
+    lines = [
+        f"[2026-10-26T10:00:00Z] INFO  starting {svc} supervisor",
+        f"[2026-10-26T10:00:01Z] ERROR {msg}",
+        f"[2026-10-26T10:00:02Z] WARN  {extra}",
+        "[2026-10-26T10:00:03Z] INFO  retry in 5s",
+    ]
+    return {"kind": "db", "full_text": "\n".join(lines) + "\n",
+            "evidence": [lines[1]],
+            "note": f"synthetic small database failure {msg}",
+            "query": f"why did {svc} report {msg.split(':')[0].split('(')[0].strip()}"}
+
+
+def network_small(idx: int) -> dict:
+    tool, target, port, err, detail = NET_CASES[idx % len(NET_CASES)]
+    lines = [
+        f"; {err}",
+        f"; {detail}",
+        f"service health check: GET https://{target}/healthz -> connection failed",
+        "alert: upstream unreachable, entering degraded mode",
+    ]
+    return {"kind": "network", "full_text": "\n".join(lines) + "\n",
+            "evidence": [lines[0]],
+            "note": f"synthetic small network failure {tool}",
+            "query": f"what caused {err}"}
+
+
+def hardware_small(idx: int) -> dict:
+    dev, slot, msg, extra = HW_CASES[idx % len(HW_CASES)]
+    lines = [
+        f"[   12.441002] {msg}",
+        f"[   12.441110] {extra}",
+        f"[   12.442001] systemd[1]: Failed to mount /dev/{dev}1 on /data",
+    ]
+    return {"kind": "hardware", "full_text": "\n".join(lines) + "\n",
+            "evidence": [lines[0]],
+            "note": f"synthetic small hardware failure {dev}",
+            "query": f"what {dev} failure caused {msg.split(':')[0].strip()}"}
+
+
 LARGE = {"build": build_large, "stack": stack_large, "diff": diff_large,
-         "log": log_large, "test": test_large}
+         "log": log_large, "test": test_large, "db": db_large,
+         "network": network_large, "hardware": hardware_large}
 SMALL = {"build": build_small, "stack": stack_small, "diff": diff_small,
-         "log": log_small, "test": test_small}
+         "log": log_small, "test": test_small, "db": db_small,
+         "network": network_small, "hardware": hardware_small}
 
 
 def main() -> int:

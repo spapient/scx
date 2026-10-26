@@ -593,7 +593,35 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 **commit**：独立可回滚（接 Gauge 改名 commit 之后）。
 
-#### P2（第二故障域语料，未开始）
+#### P2 完成记录（2026-10-26，第二故障域语料 + fidelity 架构优化）
+
+**交付**：
+- `config/fidelity.corpus.json` 扩至 **40 slice / 8 kinds**：原 5 开发域 +
+  第二故障域 **db / network / hardware**（各 5；4 大 sieve + 1 小透传），
+  确定性生成（seed=20261026），SHA256 `32194397…9f997`。
+- fidelity 架构优化（`tools/scx.py`）：
+  - `validate_fidelity_corpus` kinds **数据驱动**（读 corpus `expected_kinds`，
+    不再硬编码；20–60 slice、每 kind ≥3 例）；
+  - `cmd_fidelity` 拆分 `_fidelity_aggregate` / `_print_fidelity` /
+    `_fidelity_gate_failures` 三函数（职责单一、可单测）；
+  - 新增 per-kind 聚合报告 + **per-kind 零域回退断言**（每域 ev ≥ 冻结
+    阈值；不与 trunc 逐域比——5 slice 样本 trunc 头部可能恰好覆盖证据，
+    "逐域严格优于 trunc" 过于脆弱，全局 40 slice 仍严格优于 trunc）。
+- 语料证据语义修正：build 只标 query 聚焦错误行为证据（此前误标非 focus
+  错误块，导致假回退 94.1% → 100%）；network query 对齐证据行核心词。
+- `docs/fidelity.md` 更新（8 kinds、per-domain gate、新数字）。
+
+**门禁证据**（40 slice 实测校准后冻结）：
+- 证据保留 **65/65 = 100%** ≥ 0.95 且 > trunc 89.23%（rand 72.31%）；
+- 可回答率 **40/40 = 100%** ≥ 0.90 且 > trunc 82.50%（rand 75.00%）；
+- **8/8 kinds 证据保留全 100%（跨域零回退）**，含 db/network/hardware
+  15 个新 slice 全绿；
+- token recall 74.58% 仅报告（trunc 81.83% / rand 80.99%，口径局限已写
+  文档，不入 gate）；sieve 32 / passthrough:small 8；
+- `cargo test --locked` = 228 / 0（rust 侧零回归）；`tools/scx.py selftest`
+  PASS（40 slice / 8 kinds 断言）。
+
+**commit**：独立可回滚（接 P1 commit 之后）。
 
 #### P3（stats Recall@k，未开始）
 
