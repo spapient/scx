@@ -1053,6 +1053,32 @@ mod tests {
     }
 
     #[test]
+    fn max_tokens_conservative_bound_caps_fill() {
+        // --max-tokens 保守上界：可选填充按 limit/BUDGET_SAFETY_FACTOR 封顶（证据地板
+        // 仍按诚实 limit 诊断）。构造 seed ±window(8) 区域内大量可填行，使 remaining
+        // 成为约束：若无上界，填充会逼近 limit（≈300），有上界则封顶于 limit/factor。
+        let mut lines: Vec<String> = (0..200)
+            .map(|_| format!("alpha pad {}", "x".repeat(60)))
+            .collect();
+        lines[100] = "alpha beta target conn broken".to_string();
+        let text = lines.join("\n");
+        let cfg = Config {
+            ratio: 0.5,
+            window: 8,
+            limit: Some(300),
+            ..cfg()
+        };
+        let o = compress(&text, "alpha beta", &cfg);
+        assert_eq!(o.mode, Mode::Sieve);
+        assert!(o.text.contains("target conn"));
+        assert!(
+            o.tokens <= 300.0 / crate::terms::BUDGET_SAFETY_FACTOR + 1e-6,
+            "可选填充应被保守上界封顶于 limit/factor，got tokens={:.1}",
+            o.tokens
+        );
+    }
+
+    #[test]
     fn max_tokens_default_none_keeps_legacy_shape() {
         // 默认 None = 现状行为不变：Outcome 不携带上限字段语义。
         let mut lines: Vec<String> = (0..200).map(|_| filler()).collect();

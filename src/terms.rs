@@ -328,9 +328,10 @@ const OTHER_CHARS_PER_TOKEN: f64 = 2.5;
 
 /// `--max-tokens`/预算的保守上界系数：生效上限 = 用户上限 ÷ `BUDGET_SAFETY_FACTOR`，
 /// 即 `estimate × 系数` 作为上界，宁高估勿低估，避免启发式在 CJK/emoji/other 脚本上
-/// 低估导致超预算。⚠ 当前为占位值，未经留出分位数校准；tiktoken 可用时重跑
-/// `tools/calibrate.py` 冻结真实 P95 比率后再改。
-pub(crate) const BUDGET_SAFETY_FACTOR: f64 = 1.15;
+/// 低估导致超预算。⚠ 当前为临时保守值 2.0：cl100k 对 CJK ≈1 token/字而启发式按 0.6，
+/// 低估 ~1.67×，故取 2.0 覆盖 CJK（emoji ~2.5–7.5× 仍可能超）；未经留出分位数校准，
+/// tiktoken 可用时重跑 `tools/calibrate.py` 冻结真实 P95 比率后再收紧。
+pub(crate) const BUDGET_SAFETY_FACTOR: f64 = 2.0;
 
 pub(crate) fn estimate(s: &str) -> f64 {
     if s.is_ascii() {
