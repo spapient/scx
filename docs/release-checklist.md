@@ -1,6 +1,6 @@
 # scx 发布检查单（crates.io 发布前）
 
-> 状态：**已发布**（0.5.0 → 0.5.1 → 0.6.0 → 0.6.1，crates.io max_version=0.6.1、num_versions=4）。
+> 状态：**已发布**（0.5.0 → 0.5.1 → 0.6.0 → 0.6.1 → 0.6.4 → 0.6.5，crates.io max_version=0.6.5、num_versions=8）。
 > 下节为历次发布前 dry-run 验证证据模板；本节头部已更新为当前状态。
 > 检查日期：2026-10-25 初版；2026-10-26 随 0.6.x 系列更新。
 
@@ -41,9 +41,9 @@
 
 ## 发布后事项（已执行，2026-10-26）
 
-- crates.io `cargo install scx` 路径可用；README 安装章节已更新（含 Homebrew/npm/winget/Scoop）。
-- GitHub Release v0.6.1 + 三平台资产（darwin-arm64 / linux-x86_64 musl / windows-x86_64）。
+- crates.io `cargo install scx` 路径可用；README 安装章节已更新（含 Homebrew/npm/winget/Scoop）。本机 `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已 0.6.5。
+- GitHub Release v0.6.1 + 三平台资产（darwin-arm64 / linux-x86_64 musl / windows-x86_64）。后续 v0.6.4 / v0.6.5 同法发布（三资产 + sha256 核对）。
 - Homebrew tap `spapient/homebrew-scx`（0.6.1）发布并实测。
-- npm `@spapient/scx`（0.6.2，内置 0.6.1 三平台二进制）发布并实测；`scx` 纯名回收申请中。
-- winget PR #461786、Scoop PR #8766 提交，待官方审核。
+- npm `@spapient/scx`（0.6.2，内置 0.6.1 三平台二进制）发布并实测；0.6.5 已发布（内置 0.6.5 二进制）；`scx` 纯名回收申请中（tu123dou 2017 空壳占用）。
+- winget PR #461786 待官方合并；Scoop package request #8767 + 新 PR #8768（旧 #8766 已关：not-meet-criteria）待维护者处理；合并后 manifest 需对齐 0.6.5。
 - 完整矩阵与接入状态见 `docs/install-plan.md`（v3）。
