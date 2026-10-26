@@ -72,7 +72,9 @@ pub(crate) fn fallback(key: &str) -> f64 {
 /// 新库参数模板，也是所有缺省读取的唯一来源。
 pub(crate) const DEFAULT_PARAMS: &[(&str, f64)] = &[
     ("bm25_k1", 1.2),
-    ("bm25_b", 0.75),
+    // b 控制长度归一化强度：日志/事故是短文档，长度与相关性无关，
+    // 0.3 显著优于通用文本默认 0.75（Gauge semantic MRR +0.072，perm p=0.0001）。
+    ("bm25_b", 0.3),
     ("field_weight_error_code", 3.0),
     ("field_weight_file_loc", 2.5),
     ("field_weight_symbol", 2.0),
