@@ -27,8 +27,8 @@ struct Usage {
 const TOOLS: &[(&str, &str, &str)] = &[
     (
         "compress_context",
-        "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1)",
-        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\"]}}},\"required\":[\"query\",\"text\"]}",
+        "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1), kind (str: static-contract/system-definition/session-message/tool-output/auto)",
+        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"},\"kind\":{\"type\":\"string\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\"]}}},\"required\":[\"query\",\"text\"]}",
     ),
     (
         "context_snapshot",
@@ -215,6 +215,7 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
     };
     let mut cfg = crate::Config::default();
     apply(&mut cfg, args);
+    apply_kind(&mut cfg, args, &text);
     let outcome = crate::compress(&text, &query, &cfg);
     usage.compressed += 1;
     usage.input += text.len() as u64;
@@ -244,6 +245,26 @@ fn apply(cfg: &mut crate::Config, args: &Json) {
     }
     cfg.structure = flag(args, "structure");
     evidence(cfg, args);
+}
+
+/// 解析可选 `kind`（内容类型标注；`auto` = 按正文隐式推断）。
+/// 缺省 ratio 用该类型价值梯度默认；显式 `ratio` 参数优先（与 CLI `--kind` 语义一致）。
+fn apply_kind(cfg: &mut crate::Config, args: &Json, text: &str) {
+    let Some(v) = args.get("kind").and_then(Json::str) else {
+        return;
+    };
+    let kind = if v == "auto" {
+        crate::ContentType::infer(text)
+    } else {
+        match v.parse::<crate::ContentType>() {
+            Ok(k) => k,
+            Err(_) => return, // 非法 kind 忽略（fail-open 到现状单桶 ToolOutput）
+        }
+    };
+    cfg.kind = kind;
+    if args.get("ratio").is_none() {
+        cfg.ratio = kind.default_ratio();
+    }
 }
 
 /// 解析可选 `evidence` 数组（元素：正整数 = 原始行号，字符串 = 必须出现的子串）。
@@ -390,6 +411,51 @@ mod tests {
         let mut neg = crate::Config::default();
         apply(&mut neg, &parse(r#"{"ratio":-0.3}"#).unwrap());
         assert_eq!(neg.ratio, 0.0, "负 ratio 应钳到 0.0");
+    }
+
+    #[test]
+    fn apply_kind_tags_and_defaults_ratio() {
+        // 显式类型：kind 落位，缺省 ratio 用该类型价值梯度默认。
+        let mut cfg = crate::Config::default();
+        apply_kind(
+            &mut cfg,
+            &parse(r#"{"kind":"static-contract"}"#).unwrap(),
+            "x",
+        );
+        assert_eq!(cfg.kind, crate::ContentType::StaticContract);
+        assert_eq!(
+            cfg.ratio,
+            crate::ContentType::StaticContract.default_ratio()
+        );
+
+        // 显式 ratio 优先于类型默认（真实流程：apply 先落 ratio，apply_kind 不覆盖）。
+        let mut cfg = crate::Config::default();
+        let args = parse(r#"{"kind":"tool-output","ratio":0.5}"#).unwrap();
+        apply(&mut cfg, &args);
+        apply_kind(&mut cfg, &args, "x");
+        assert_eq!(cfg.kind, crate::ContentType::ToolOutput);
+        assert_eq!(cfg.ratio, 0.5);
+
+        // auto：按正文隐式推断。
+        let mut cfg = crate::Config::default();
+        apply_kind(
+            &mut cfg,
+            &parse(r#"{"kind":"auto"}"#).unwrap(),
+            "{\"type\":\"object\"}",
+        );
+        assert_eq!(cfg.kind, crate::ContentType::StaticContract);
+
+        // 非法 kind 忽略（fail-open 到现状单桶 ToolOutput）。
+        let mut cfg = crate::Config::default();
+        apply_kind(&mut cfg, &parse(r#"{"kind":"bogus"}"#).unwrap(), "x");
+        assert_eq!(cfg.kind, crate::ContentType::ToolOutput);
+        assert_eq!(cfg.ratio, crate::Config::DEFAULT_RATIO);
+
+        // 无 kind：不改任何字段。
+        let mut cfg = crate::Config::default();
+        apply_kind(&mut cfg, &parse(r#"{}"#).unwrap(), "x");
+        assert_eq!(cfg.kind, crate::ContentType::ToolOutput);
+        assert_eq!(cfg.ratio, crate::Config::DEFAULT_RATIO);
     }
 
     #[test]
