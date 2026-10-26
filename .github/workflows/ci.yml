@@ -77,6 +77,10 @@ jobs:
         run: cargo doc --locked --no-deps
       - name: Tool selftest
         run: python tools/scx.py selftest
+      - name: Fidelity gate (compression-fidelity eval)
+        run: >-
+          python tools/scx.py fidelity config/fidelity.corpus.json
+          --binary target/release/scx.exe --gate
       - name: Rebuild Gauge corpus
         run: >-
           python tools/scx.py seed config/gauge.corpus.json

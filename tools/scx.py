@@ -1274,6 +1274,253 @@ def run_contain_slice(binary, slc, ratio, context, work, seed, rounds):
     }
 
 
+def query_tokens(query):
+    """Deterministic query tokenisation, dropping function/wh-question words.
+
+    Case-folded words/numbers delimited by non-word chars. The stop list only
+    removes words that carry no retrieval signal; domain words such as `failed`
+    or `panic` are kept because evidence lines legitimately contain them.
+    """
+    stops = {
+        "a", "an", "the", "and", "or", "of", "in", "to", "for", "with", "on",
+        "at", "from", "by", "be", "been", "being", "is", "are", "was", "were",
+        "do", "does", "did", "not", "no", "it", "its", "that", "this", "these",
+        "those", "as", "can", "could", "would", "should", "will", "why", "what",
+        "which", "how", "when", "where", "who", "whom",
+    }
+    toks = re.findall(r"[A-Za-z0-9][A-Za-z0-9_.\-]*", query.lower())
+    return [t for t in toks if t not in stops]
+
+
+def answerable(slc, body_text):
+    """Answerability proxy: all evidence verbatim kept AND >=50% of the
+    query's substantive tokens appear in the kept evidence lines.
+
+    Both conditions must hold; evidence retention alone is not enough (the
+    kept line may be unrelated to the query), and token overlap alone is not
+    enough (the tokens may sit in a truncated fragment).
+    """
+    kept = [ev for ev in slc["evidence"] if ev in body_text]
+    if len(kept) != len(slc["evidence"]):
+        return False
+    qtoks = query_tokens(slc["query"])
+    if not qtoks:
+        return True
+    kept_lower = " ".join(ev.lower() for ev in kept)
+    hits = sum(1 for t in qtoks if t in kept_lower)
+    return hits / len(qtoks) >= 0.5
+
+
+def token_set_recall(text, body_text):
+    """Fraction of the source's substantive tokens that survive in the output.
+
+    Set-based, case-folded, stop words excluded: measures information
+    retention, not verbatim line survival.
+    """
+    return _token_recall(text, body_text)
+
+
+_STOPWORDS = {
+    "a", "an", "the", "and", "or", "of", "in", "to", "for", "with", "on",
+    "at", "from", "by", "be", "been", "being", "is", "are", "was", "were",
+    "do", "does", "did", "not", "no", "it", "its", "that", "this", "these",
+    "those", "as", "can", "could", "would", "should", "will", "have", "has",
+    "had", "i", "you", "we", "they", "he", "she", "but", "if", "then", "else",
+}
+
+
+def _token_set(text):
+    return set(re.findall(r"[A-Za-z0-9][A-Za-z0-9_.\-]*", text.lower())) - _STOPWORDS
+
+
+def _token_recall(text, body_text):
+    src = _token_set(text)
+    if not src:
+        return 0.0
+    out = _token_set(body_text)
+    return len(src & out) / len(src)
+
+
+def validate_fidelity_corpus(corpus):
+    slices = corpus.get("slices") or []
+    kinds = ("build", "stack", "diff", "log", "test")
+    if not 20 <= len(slices) <= 40:
+        sys.exit(f"fidelity: slices={len(slices)} must be 20..40")
+    seen = set()
+    kind_counts = {k: 0 for k in kinds}
+    for index, slc in enumerate(slices):
+        ident = str(slc.get("id") or "").strip()
+        kind = str(slc.get("kind") or "").strip()
+        query = str(slc.get("query") or "").strip()
+        text = str(slc.get("full_text") or "")
+        evidence = slc.get("evidence") or []
+        note = str(slc.get("note") or "").strip()
+        if not ident or ident in seen:
+            sys.exit(f"fidelity: bad/duplicate slice id: {ident!r}")
+        seen.add(ident)
+        if kind not in kind_counts:
+            sys.exit(f"fidelity: slice {ident} bad kind {kind!r}")
+        if not query or not text or not evidence:
+            sys.exit(f"fidelity: slice {ident} empty query/text/evidence")
+        if not note:
+            sys.exit(f"fidelity: slice {ident} missing note")
+        if not query_tokens(query):
+            sys.exit(f"fidelity: slice {ident} query has no substantive tokens")
+        kind_counts[kind] += 1
+        for ev in evidence:
+            if ev not in text:
+                sys.exit(
+                    f"fidelity: slice {ident} evidence line not verbatim in full_text:\n{ev!r}"
+                )
+    missing = [k for k, v in kind_counts.items() if v == 0]
+    if missing:
+        sys.exit(f"fidelity: corpus missing kinds: {missing}")
+    return slices, kind_counts
+
+
+def run_fidelity_slice(binary, slc, ratio, context, work, seed):
+    """Run one slice: scx vs head-truncation vs random at the same byte budget."""
+    stats, body_text, wall = invoke_scx_once(binary, slc, ratio, context, work)
+    budget = len(body_text.encode("utf-8"))
+    trunc_text = trunc_kept_text(slc["full_text"], budget)
+    rand_text = random_sample_kept_text(slc["full_text"], budget, seed, slc["id"])
+    ev_total = len(slc["evidence"])
+    kept_ev = [ev for ev in slc["evidence"] if ev in body_text]
+    trunc_kept = sum(1 for ev in slc["evidence"] if ev in trunc_text)
+    rand_kept = sum(1 for ev in slc["evidence"] if ev in rand_text)
+    in_chars = len(slc["full_text"])
+    out_chars = len(body_text)
+    in_tokens = contain_token_count(slc["full_text"])
+    out_tokens = contain_token_count(body_text)
+    return {
+        "id": slc["id"],
+        "kind": slc["kind"],
+        "query": slc["query"],
+        "mode": stats.get("mode", ""),
+        "risk": stats.get("risk", ""),
+        "ev_total": ev_total,
+        "ev_kept": len(kept_ev),
+        "trunc_ev_kept": trunc_kept,
+        "rand_ev_kept": rand_kept,
+        "answerable": answerable(slc, body_text),
+        "answerable_trunc": answerable(slc, trunc_text),
+        "answerable_rand": answerable(slc, rand_text),
+        "token_recall": token_set_recall(slc["full_text"], body_text),
+        "token_recall_trunc": token_set_recall(slc["full_text"], trunc_text),
+        "token_recall_rand": token_set_recall(slc["full_text"], rand_text),
+        "char_cut": 1.0 - out_chars / in_chars if in_chars else 0.0,
+        "token_cut": 1.0 - out_tokens / in_tokens if in_tokens else 0.0,
+        "trunc_budget_chars": budget,
+        "wall_scx_ms": wall * 1000.0,
+    }
+
+
+def cmd_fidelity(args):
+    corpus = load_json(args.corpus)
+    slices, kind_counts = validate_fidelity_corpus(corpus)
+    binary = args.binary or default_binary()
+    if not binary or not Path(binary).is_file():
+        sys.exit("fidelity: missing release binary; run `cargo build --release --locked` first")
+    rows = []
+    with tempfile.TemporaryDirectory(prefix="scx-fidelity-") as tmp:
+        work = Path(tmp)
+        for slc in slices:
+            rows.append(run_fidelity_slice(
+                binary, slc, args.ratio, args.context, work, args.seed,
+            ))
+    n = len(rows)
+    ev_sum = sum(r["ev_total"] for r in rows)
+    ev_kept = sum(r["ev_kept"] for r in rows)
+    trunc_kept = sum(r["trunc_ev_kept"] for r in rows)
+    rand_kept = sum(r["rand_ev_kept"] for r in rows)
+    ans = sum(1 for r in rows if r["answerable"])
+    ans_trunc = sum(1 for r in rows if r["answerable_trunc"])
+    ans_rand = sum(1 for r in rows if r["answerable_rand"])
+    tok = sum(r["token_recall"] for r in rows) / n
+    tok_trunc = sum(r["token_recall_trunc"] for r in rows) / n
+    tok_rand = sum(r["token_recall_rand"] for r in rows) / n
+    char_cut = sum(r["char_cut"] for r in rows) / n
+    token_cut = sum(r["token_cut"] for r in rows) / n
+    modes = {}
+    for r in rows:
+        modes[r["mode"]] = modes.get(r["mode"], 0) + 1
+    lat_scx = sum(r["wall_scx_ms"] for r in rows) / n
+    ev_ret = ev_kept / ev_sum if ev_sum else 0.0
+    ans_rate = ans / n
+    ans_rate_trunc = ans_trunc / n
+    ans_rate_rand = ans_rand / n
+    print(f"fidelity: slices={n} kinds={kind_counts} binary={binary}")
+    print(f"fidelity: ratio={args.ratio} context={args.context} modes={modes} rand-seed={args.seed}")
+    print()
+    hdr = (f"{'id':10s} {'kind':6s} {'mode':18s} {'kept':>7s} {'ans':>5s} "
+           f"{'tokR':>6s} {'char_cut':>9s}")
+    print(hdr)
+    for r in rows:
+        print(f"{r['id']:10s} {r['kind']:6s} {r['mode']:18s} "
+              f"{str(r['ev_kept'])+'/'+str(r['ev_total']):>7s} "
+              f"{'Y' if r['answerable'] else '.':>5s} "
+              f"{r['token_recall']*100:5.1f}% {r['char_cut']*100:8.1f}%")
+    print()
+    print(f"fidelity: evidence retention = {ev_kept}/{ev_sum} = {ev_ret*100:.2f}%"
+          f"  (trunc {trunc_kept}/{ev_sum} = {trunc_kept/ev_sum*100:.2f}%"
+          f" / rand {rand_kept}/{ev_sum} = {rand_kept/ev_sum*100:.2f}%)")
+    print(f"fidelity: answerable rate   = {ans}/{n} = {ans_rate*100:.2f}%"
+          f"  (trunc {ans_rate_trunc*100:.2f}% / rand {ans_rate_rand*100:.2f}%)")
+    print(f"fidelity: token recall      = {tok*100:.2f}%  (trunc {tok_trunc*100:.2f}% / rand {tok_rand*100:.2f}%)")
+    print(f"fidelity: mean char cut     = {char_cut*100:.2f}% / token cut {token_cut*100:.2f}%")
+    print(f"fidelity: mean wall         = {lat_scx:.3f} ms")
+    unans = [(r["id"], r["mode"]) for r in rows if not r["answerable"]]
+    if unans:
+        print("fidelity: NOT answerable slices:")
+        for ident, mode in unans:
+            print(f"  {ident}: mode={mode}")
+    if args.gate:
+        # token-set recall is REPORT-ONLY: sieve deliberately drops noise lines,
+        # so its token set is small and set-recall loses to trunc/rand baselines
+        # by construction. Gate rests on the two answerability metrics.
+        gates = [
+            ("evidence retention", ev_ret, args.gate_ev),
+            ("answerable rate", ans_rate, args.gate_ans),
+            ("ev vs trunc", ev_ret, trunc_kept / ev_sum if ev_sum else 0.0),
+            ("ans vs trunc", ans_rate, ans_rate_trunc),
+        ]
+        failed = []
+        for label, actual, threshold in gates[:2]:
+            if actual < threshold:
+                failed.append(f"{label}={actual:.4f} < {threshold:.4f}")
+        for label, scx_val, trunc_val in gates[2:]:
+            if scx_val <= trunc_val:
+                failed.append(f"{label}: scx={scx_val:.4f} <= trunc={trunc_val:.4f}")
+        if failed:
+            print(f"fidelity: GATE FAILED: {'; '.join(failed)}")
+            return 2
+        print(f"fidelity: gate PASS (ev>={args.gate_ev}, ans>={args.gate_ans}, "
+              f"both strictly better than trunc; token recall report-only)")
+    if args.out:
+        dump_json(args.out, {
+            "binary": binary, "ratio": args.ratio, "context": args.context,
+            "rand_seed": args.seed,
+            "aggregate": {
+                "slices": n, "kinds": kind_counts, "modes": modes,
+                "evidence_retention": ev_ret,
+                "trunc_evidence_retention": trunc_kept / ev_sum if ev_sum else 0.0,
+                "rand_evidence_retention": rand_kept / ev_sum if ev_sum else 0.0,
+                "answerable_rate": ans_rate,
+                "answerable_rate_trunc": ans_rate_trunc,
+                "answerable_rate_rand": ans_rate_rand,
+                "token_recall": tok,
+                "token_recall_trunc": tok_trunc,
+                "token_recall_rand": tok_rand,
+                "mean_char_cut": char_cut,
+                "mean_token_cut": token_cut,
+                "mean_wall_scx_ms": lat_scx,
+            },
+            "rows": rows,
+        })
+        print(f"fidelity: wrote {args.out}")
+    return 0
+
+
 def cmd_contain(args):
     corpus = load_json(args.corpus)
     slices, kind_counts = validate_contain_corpus(corpus)
@@ -1482,6 +1729,25 @@ def selftest():
         head, rows = read_tsv(CONFIG_DIR / "gauge.blind40.packet.tsv")
         labels = load_json(CONFIG_DIR / f"gauge.{judge}.labels.json")
         assert sha256_text(filled_packet(head, rows, labels["cases"])) == expected
+    # fidelity: corpus validity, metric determinism and boundaries
+    fcorpus = load_json(CONFIG_DIR / "fidelity.corpus.json")
+    fslices, fkinds = validate_fidelity_corpus(fcorpus)
+    assert len(fslices) == 25 and fkinds == {
+        "build": 5, "stack": 5, "diff": 5, "log": 5, "test": 5}
+    assert query_tokens("why did the build fail with E0433 config") == [
+        "build", "fail", "e0433", "config"]
+    assert query_tokens("what is the ttl value") == ["ttl", "value"]
+    assert answerable({"evidence": ["error[E0433]: use of undeclared `config`"],
+                        "query": "why did the build fail with E0433 config"},
+                       "error[E0433]: use of undeclared `config`")
+    assert not answerable({"evidence": ["error[E0433]: use of undeclared `config`"],
+                           "query": "why did the build fail with E0433 config"},
+                          "error[E0433]: use of undeclared `x`")
+    assert not answerable({"evidence": ["error[E0433]: use of undeclared `config`"],
+                           "query": "why did the test panic on overflow"},
+                          "error[E0433]: use of undeclared `config`")
+    assert token_set_recall("let ttl = ttl_from_env()?;", "let ttl = ttl_from_env()?;") == 1.0
+    assert token_set_recall("let ttl = ttl_from_env()?;", "unrelated text here") < 1.0
     print("selftest: PASS")
 
 
@@ -1585,6 +1851,22 @@ def build_parser():
         help="repeat each method per slice, take median wall time",
     )
     contain.set_defaults(func=cmd_contain)
+
+    fidelity = sub.add_parser(
+        "fidelity", help="compression fidelity: answerability + token retention"
+    )
+    fidelity.add_argument("corpus", help="fidelity*.corpus.json")
+    fidelity.add_argument("--binary", default="")
+    fidelity.add_argument("--ratio", type=float, default=0.35)
+    fidelity.add_argument("--context", type=int, default=1)
+    fidelity.add_argument("--seed", default="fidelity-rand-v1")
+    fidelity.add_argument("--out", help="write per-slice detail JSON")
+    fidelity.add_argument("--gate", action="store_true",
+                         help="enforce frozen thresholds: ev/ans >= thresholds "
+                              "and > trunc; token recall is report-only")
+    fidelity.add_argument("--gate-ev", type=float, default=0.95)
+    fidelity.add_argument("--gate-ans", type=float, default=0.90)
+    fidelity.set_defaults(func=cmd_fidelity)
 
     test = sub.add_parser("selftest")
     test.set_defaults(func=lambda _args: selftest())

@@ -535,3 +535,67 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 2. 第二故障域语料（数据库/网络/硬件），测跨域泛化。
 3. stats 增补 Recall@k；留一事故泛化；人工标注一致性 κ。
 
+---
+
+## Gauge 演进路线（2026-10-26 定稿，P1–P4，目标版本 0.6.8）
+
+### 路线总览
+
+| 阶段 | 主题 | 交付 | 门禁（过门才进下一阶段） |
+| --- | --- | --- | --- |
+| P1 | 压缩保真评测（fidelity） | `tools/scx.py fidelity` + `config/fidelity.corpus.json`（25 slice，5 dev kinds）+ CI 步骤 + `docs/fidelity.md` | selftest 含 fidelity 断言；golden 37 例零漂移不受影响；证据保留 / 可回答率 / token 信息保留三指标均**优于同预算 head-truncation** 且达到实测校准后冻结的绝对阈值 |
+| P2 | 第二故障域语料（跨域泛化） | fidelity 语料扩至 40 slice（+db/network/hardware 15）+ per-kind/per-domain 报告 + CI 断言 | 每个新增域证据保留 ≥ 冻结阈值（零域回退）；全部 40 slice 门禁通过 |
+| P3 | stats 增补 Recall@k | `stats --metric recall@k`（k∈{1,3,5,10}）CSV 新列 + 打印 + CI 断言（recall@1 优势） | selftest PASS；Gauge 复跑 MRR/nDCG 与基线逐位一致（不退化） |
+| P4 | 留一事故泛化 + κ 核对 | `stats --loo`（30 incidents 逐剔除重跑 hard 指标）+ 标注一致性 κ 记录核对（`blind agree` 已输出 kappa） | 剔除任一事故，hard Δ 不翻转（Δ≥0.05 与 CI 下界>0 仍成立）；κ 核对无异常 |
+
+### P1 口径（详设，零依赖 / 确定性 / 无 LLM）
+
+- 可回答性代理：证据行**逐字保留**（contain 语义）且 query 实质 token
+  （去停用词）在保留证据行中的**覆盖率 ≥ 0.5**，两者同时成立判「可回答」。
+- token 信息保留：原文 token 集合出现在压缩输出中的**召回率**（token-set recall）。
+- 基线：与 scx 输出**同字节预算**的 head-truncation（复用 contain 语义）与
+  rand 行采样；主指标（证据保留 / 可回答率）三路对照，**scx 须严格优于 trunc**。
+- **token-set recall 只作报告指标，不作门禁**：sieve 刻意去重去噪，输出 token
+  集合小，集合召回按构造输给 trunc（保留头部密集 token）与 rand（整行采样）——
+  实测 66.99% vs trunc 73.03% / rand 72.12%，如实报告并注明口径局限。
+- 门禁冻结（实测校准）：证据保留 ≥ 0.95（实测 0.9821）且 > trunc（0.9107）；
+  可回答率 ≥ 0.90（实测 0.9200）且 > trunc（0.7600）。
+
+### 阶段记录
+
+#### P1 完成记录（2026-10-26，压缩保真评测 fidelity）
+
+**交付**：
+- `config/fidelity.corpus.json`：25 slice（build/stack/diff/log/test 各 5；
+  每 kind 4 大 45–51 行触发 sieve + 1 小 4–14 行走透传对照）；
+  确定性生成 `tools/gen_fidelity.py`（seed=20261026，逐字节可复现），
+  SHA256 `e89c7f23…3d63`。
+- `tools/scx.py fidelity` subcommand：可回答性代理（证据行全逐字保留 ∧
+  query 实质 token 在保留证据行覆盖率 ≥0.5）+ token-set recall（报告）+
+  同预算 trunc/rand 基线 + `--gate` 冻结门禁 + `--out` 明细 JSON。
+- `.github/workflows/ci.yml`：新增 `Fidelity gate` 步骤（release 二进制 +
+  `--gate`）。
+- `docs/fidelity.md`：口径、命令、实测、门禁、局限。
+
+**门禁证据**（冻结阈值 = 实测校准）：
+- 证据保留 55/56 = **98.21%** ≥ 0.95 且 > trunc 91.07%（rand 58.93%）；
+- 可回答率 23/25 = **92.00%** ≥ 0.90 且 > trunc 76.00%（rand 56.00%）；
+- token recall 66.99% 仅报告（trunc 73.03% / rand 72.12%——sieve 去噪后
+  token 集合小，集合召回按构造输给基线，口径局限已写入文档，不入 gate）；
+- 模式分布 sieve 20 / passthrough:small 5；确定性重跑两次逐位一致；
+- `cargo test --locked` = 228 / 0（rust 侧零回归）；`tools/scx.py selftest`
+  PASS（新增 fidelity 语料合法性 + 度量确定性/边界断言）。
+
+**评测发现**（如实记录）：2 例未回答（build-02/04，均 sieve）——语料每例
+4 条错误证据行、query 只聚焦其一，sieve 证据种子机制按 query 聚焦，
+非 focus 错误块被筛 → 证据行不完整。验证「证据种子是 query 聚焦、非
+全保真」这一既有设计语义，也佐证门禁取 0.95（非 1.0）余量正确。
+
+**commit**：独立可回滚（接 Gauge 改名 commit 之后）。
+
+#### P2（第二故障域语料，未开始）
+
+#### P3（stats Recall@k，未开始）
+
+#### P4（留一事故泛化 + κ，未开始）
+
