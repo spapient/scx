@@ -97,7 +97,7 @@ fn chars(text: &str) -> usize {
 /// 切行：CRLF 归一化到 LF 后按行切分并去掉末尾空行。
 /// 含 CR 时归一化结果暂存于 `buf`（由调用者持有），返回行切片借自 `buf`；
 /// 无 CR 时零拷贝直接借用输入。
-fn lines<'b, 'a: 'b>(text: &'a str, buf: &'b mut Option<String>) -> Vec<&'b str> {
+pub(crate) fn lines<'b, 'a: 'b>(text: &'a str, buf: &'b mut Option<String>) -> Vec<&'b str> {
     let src: &str = if text.contains('\r') {
         buf.replace(text.replace("\r\n", "\n"));
         buf.as_ref().unwrap().as_str()
@@ -722,6 +722,22 @@ fn boost(scores: &[f64], dup: &[bool], window: usize, tbl: &Weights) -> Vec<f64>
     boost
 }
 
+/// 相似度注入（可选）：`--embed-cmd` 预计算的 query×每行相似度叠加到排序分。
+/// 只影响重排（boost 之前），不改变种子判定（seeds==evidence 不变量不变）。
+fn apply_sims(cfg: &Config, scores: &mut [f64], dup: &[bool], total: usize) {
+    let Some(sims) = &cfg.sims else {
+        return;
+    };
+    if cfg.sim_weight == 0.0 {
+        return;
+    }
+    for i in 0..total {
+        if !dup[i] && i < sims.len() {
+            scores[i] += sims[i] * cfg.sim_weight;
+        }
+    }
+}
+
 /// 逐行保留原因编码（`--explain` 用）：0=删除，其余见 `explain` 映射。
 const R_SEED: u8 = 1;
 const R_CONTEXT: u8 = 2;
@@ -1142,6 +1158,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 语义增强（可选）：feature=semantic 且显式加载权重时，对非 dup 候选行
     // 叠加 sigmoid 打分作为排序加分；不启用时与 v0.4.1 逐字节一致。
     semantic(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
+    apply_sims(cfg, &mut scores, &dup, total);
     let boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     // 逐行保留原因（--explain 用）：0=删除，其余见 R_* 常量。
     let mut reason = vec![0u8; total];

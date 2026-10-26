@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -35,6 +35,13 @@ pub fn usage() -> String {
     s.push_str("                       blocks, stack-trace at-chains (default off, byte-identical to v0.4.1)\n");
     s.push_str("  --policy-file PATH   policy text override: ratio/context/window/elide/risk_gate/lineno/\n");
     s.push_str("                       max_tokens/structure; precedence CLI > file > DEFAULT\n");
+    s.push_str(
+        "  --embed-cmd CMD      pluggable similarity backend: sh -c CMD reads Q\\t<query> then\n",
+    );
+    s.push_str("                       L\\t<line> on stdin, emits one score per line (default off, zero-dep)\n");
+    s.push_str(
+        "  --sim-weight F       weight of injected similarity in ranking (default 1.0; >=0)\n",
+    );
     s.push_str("  --force P            keep lines matching substring (case-insensitive); prefix re: enters\n");
     s.push_str("                       a finite regex subset: | alternation, [..] classes, * + ? quantifiers\n");
     s.push_str("  --preserve T         keep lines with builtin entity T (url/ip/email/errno); repeatable\n");
@@ -112,6 +119,8 @@ pub struct Opts {
     pub max_bytes: Option<u64>,
     pub mem_dir: String,
     pub files: Vec<String>,
+    /// 可插拔相似度后端命令（`--embed-cmd <sh 命令>`）；`None` = 不启用。
+    pub embed_cmd: Option<String>,
 }
 
 /// 默认记忆库目录：$SCX_MEM_DIR 优先，否则用户主目录下的 .scx-memory。
@@ -304,6 +313,24 @@ static FLAGS: &[Flag] = &[
         kind: Kind::PolicyFile,
         what: "policy.toml",
         err_empty: "requires a policy file path",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--embed-cmd",
+        once: true,
+        kind: Kind::Value,
+        what: "",
+        err_empty: "requires a command",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--sim-weight",
+        once: true,
+        kind: Kind::F64,
+        what: "a number",
+        err_empty: "",
         err_zero: "",
         min: 0,
     },
@@ -646,6 +673,7 @@ struct ParseState {
     limit: Option<u64>,
     mem_dir: String,
     files: Vec<String>,
+    embed_cmd: Option<String>,
     seen: HashSet<&'static str>,
 }
 
@@ -686,16 +714,18 @@ impl ParseState {
             limit: None,
             mem_dir: home(),
             files: Vec::new(),
+            embed_cmd: None,
             seen: HashSet::new(),
         }
     }
 }
 
-/// 自由字符串字段赋值（query / fix / mem-dir）。
+/// 自由字符串字段赋值（query / fix / mem-dir / embed-cmd）。
 fn free(s: &mut ParseState, f: &Flag, v: String) {
     match f.name {
         "--query" => s.query = Some(v),
         "--fix" => s.fix = v,
+        "--embed-cmd" => s.embed_cmd = Some(v),
         _ => s.mem_dir = v,
     }
 }
@@ -844,7 +874,7 @@ fn word(
         return Err(format!("{} {}", f.name, f.err_empty));
     }
     match f.name {
-        "--query" | "--fix" | "--mem-dir" => free(s, f, v),
+        "--query" | "--fix" | "--mem-dir" | "--embed-cmd" => free(s, f, v),
         _ => path(s, f, v),
     }
     Ok(())
@@ -863,14 +893,28 @@ fn float(
     let parsed: f64 = v
         .parse()
         .map_err(|_| format!("{} expects {}, got {:?}", f.name, f.what, v))?;
-    if !parsed.is_finite() || !(Config::MIN_RATIO..=1.0).contains(&parsed) {
-        return Err(format!(
-            "{} must be a finite number in {}..=1.0",
-            f.name,
-            Config::MIN_RATIO
-        ));
+    if !parsed.is_finite() {
+        return Err(format!("{} expects {}, got {:?}", f.name, f.what, v));
     }
-    s.config.ratio = parsed;
+    match f.name {
+        "--ratio" => {
+            if !(Config::MIN_RATIO..=1.0).contains(&parsed) {
+                return Err(format!(
+                    "{} must be a finite number in {}..=1.0",
+                    f.name,
+                    Config::MIN_RATIO
+                ));
+            }
+            s.config.ratio = parsed;
+        }
+        "--sim-weight" => {
+            if parsed < 0.0 {
+                return Err(format!("{} must be a finite number >= 0", f.name));
+            }
+            s.config.sim_weight = parsed;
+        }
+        _ => unreachable!("F64 flag without arm: {}", f.name),
+    }
     Ok(())
 }
 
@@ -1419,6 +1463,7 @@ fn finish(s: ParseState) -> Opts {
         max_bytes: s.max_bytes,
         mem_dir: s.mem_dir,
         files: s.files,
+        embed_cmd: s.embed_cmd,
     }
 }
 
@@ -1530,6 +1575,30 @@ mod tests {
         assert_eq!(o.config.elide, d.elide);
         assert_eq!(o.config.gate, d.gate);
         assert_eq!(o.config.lineno, d.lineno);
+    }
+
+    #[test]
+    fn embed_cmd_and_sim_weight_parse() {
+        let o = all(args(&[
+            "--query",
+            "q",
+            "--embed-cmd",
+            "python embed.py",
+            "--sim-weight",
+            "2.5",
+        ]))
+        .unwrap();
+        assert_eq!(o.embed_cmd.as_deref(), Some("python embed.py"));
+        assert_eq!(o.config.sim_weight, 2.5);
+        assert_eq!(o.config.sims, None, "sims 由 ops 层填充，arg 解析不设置");
+    }
+
+    #[test]
+    fn sim_weight_rejects_nonfinite_and_negative() {
+        assert!(all(args(&["--query", "q", "--sim-weight", "-1"])).is_err());
+        assert!(all(args(&["--query", "q", "--sim-weight", "abc"])).is_err());
+        let o = all(args(&["--query", "q", "--sim-weight", "0"])).unwrap();
+        assert_eq!(o.config.sim_weight, 0.0);
     }
 
     #[test]

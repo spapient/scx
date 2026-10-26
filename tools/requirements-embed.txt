@@ -1,0 +1,4 @@
+# dev-only 依赖，仅供 tools/embed_baseline.py 使用（不进入 stdlib 评测器 scx.py）。
+# 钉住版本保证可复现；all-MiniLM-L6-v2 由 sentence-transformers 从 HuggingFace 下载。
+sentence-transformers==3.3.1
+numpy>=1.26,<3

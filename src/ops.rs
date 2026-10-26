@@ -52,6 +52,8 @@ pub struct Compress {
     pub explain: bool,
     pub max_bytes: Option<u64>,
     pub mem_dir: String,
+    /// 可插拔相似度后端命令（`--embed-cmd`）；`None` = 不启用。
+    pub embed_cmd: Option<String>,
 }
 
 /// 标注动作入参。
@@ -226,6 +228,7 @@ fn job(opts: &Opts) -> Compress {
         explain: opts.explain,
         max_bytes: opts.max_bytes,
         mem_dir: opts.mem_dir.clone(),
+        embed_cmd: opts.embed_cmd.clone(),
     }
 }
 
@@ -770,9 +773,23 @@ fn annotate(job: &Annotate) -> Reply {
     Ok(())
 }
 
+/// 可插拔相似度后端：在 ops 层（I/O 层）预计算 query×每行的相似度，
+/// 作为数据传入纯核心 `compress`，不破坏其零 I/O 契约。默认 `None` 不触发。
+fn embed_sims(job: &Compress, text: &str) -> Result<Option<Vec<f64>>, Failure> {
+    let Some(cmd) = &job.embed_cmd else {
+        return Ok(None);
+    };
+    let mut buf: Option<String> = None;
+    let lines = crate::compress::lines(text, &mut buf);
+    let sims = crate::sim::compute(Some(cmd), &job.query, &lines).map_err(Failure::message)?;
+    Ok(Some(sims))
+}
+
 fn filter(job: &Compress) -> Reply {
     let text = input(&job.files).map_err(Failure::message)?;
-    let outcome = compress(&text, &job.query, &job.config);
+    let mut config = job.config.clone();
+    config.sims = embed_sims(job, &text)?;
+    let outcome = compress(&text, &job.query, &config);
     let stdout = io::stdout();
     let mut out = stdout.lock();
     output(&mut out, job, &outcome)?;
@@ -817,7 +834,14 @@ fn memory(out: &mut dyn Write, job: &Compress) -> Reply {
     if job.recall == 0 {
         return Ok(());
     }
-    match crate::memory::search(&job.mem_dir, &job.query, job.recall, false) {
+    match crate::memory::search_fused(
+        &job.mem_dir,
+        &job.query,
+        job.recall,
+        false,
+        job.embed_cmd.as_deref(),
+        job.config.sim_weight,
+    ) {
         Ok(hits) => {
             let qualified = crate::memory::hits(&job.mem_dir, hits);
             write(lines(
