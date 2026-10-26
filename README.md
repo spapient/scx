@@ -1,7 +1,7 @@
 # scx
 
 [![CI](https://github.com/spapient/scx/actions/workflows/ci.yml/badge.svg)](https://github.com/spapient/scx/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Rust 1.82+](https://img.shields.io/badge/rust-1.82%2B-orange.svg)](Cargo.toml)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -610,4 +610,4 @@ cargo build --release --locked
 
 ## 许可证
 
-[MIT](LICENSE) © scx contributors
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option. © scx contributors
