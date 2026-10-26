@@ -122,14 +122,22 @@ pub(crate) enum Force {
     Re(crate::regex::Compiled),
 }
 
-/// 解析 `--force`：按 `|` 拆分，trim + 小写，跳过空项；`re:` 前缀进正则。
+/// 解析 `--force`：`re:` 前缀条目整体作为单个正则（`|` 是正则交替，不拆分）；
+/// 其余条目按 `|` 拆分为多个字面子串（v0.4.1 语义不变）。trim + 小写，跳过空项。
 fn forces(forces: &[String]) -> Vec<Force> {
     let mut pats: Vec<Force> = Vec::new();
     for f in forces {
-        for part in f.split('|') {
-            let p = part.trim().to_lowercase();
+        let p = f.trim().to_lowercase();
+        if p.starts_with("re:") {
             if !p.is_empty() {
                 force(&mut pats, p);
+            }
+        } else {
+            for part in f.split('|') {
+                let p = part.trim().to_lowercase();
+                if !p.is_empty() {
+                    force(&mut pats, p);
+                }
             }
         }
     }

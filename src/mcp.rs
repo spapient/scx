@@ -25,7 +25,7 @@ struct Usage {
 const TOOLS: &[(&str, &str, &str)] = &[
     (
         "compress_context",
-        "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio/context/window/max_tokens (num), structure (bool or 0/1)",
+        "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1)",
         "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"}},\"required\":[\"query\",\"text\"]}",
     ),
     (
@@ -120,7 +120,7 @@ fn call(id: Option<Json>, msg: &Json, usage: &mut Usage) -> Option<String> {
 fn wire(id: &Option<Json>) -> String {
     match id {
         Some(Json::Num(n)) => format!("{n}"),
-        Some(Json::Str(s)) => format!("\"{s}\""),
+        Some(Json::Str(s)) => format!("\"{}\"", jesc(s)),
         Some(Json::Null) | None => "null".to_string(),
         Some(_) => "null".to_string(),
     }
@@ -130,7 +130,7 @@ fn error(id: Option<Json>, code: i64, message: &str) -> String {
     format!(
         "{{\"jsonrpc\":\"2.0\",\"id\":{},\"error\":{{\"code\":{code},\"message\":\"{}\"}}}}",
         wire(&id),
-        message.replace('"', "\\\"")
+        jesc(message)
     )
 }
 
@@ -142,8 +142,9 @@ fn result(id: Option<Json>, text: &str) -> String {
     )
 }
 
-/// JSON 字符串转义：反斜杠、引号、换行、回车、制表符。
-/// 效果卡为多行文本，缺少换行转义会使返回帧非法 JSON。
+/// JSON 字符串转义：反斜杠、引号、换行、回车、制表符与全部 C0 控制字符。
+/// 效果卡为多行文本，缺少换行转义会使返回帧非法 JSON；query/text 可能携带
+/// 任意控制字符，未转义会产出非法 JSON 帧。
 fn jesc(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 8);
     for c in s.chars() {
@@ -153,6 +154,7 @@ fn jesc(s: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
             _ => out.push(c),
         }
     }
@@ -162,6 +164,11 @@ fn jesc(s: &str) -> String {
 /// 从 JSON 值取数值参数（整数语义：f64 → usize，负值钳 0）。
 fn number(v: &Json, key: &str) -> Option<usize> {
     v.get(key).and_then(Json::num).map(|n| n.max(0.0) as usize)
+}
+
+/// 从 JSON 值取浮点参数（f64，不截断；`ratio` 等连续参数用）。
+fn float(v: &Json, key: &str) -> Option<f64> {
+    v.get(key).and_then(Json::num)
 }
 
 /// bool 参数：接受 JSON true/false 或 0/1。
@@ -202,8 +209,9 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
 
 /// 数值与开关参数落到压缩配置（缺省即保持 `Config::default()`）。
 fn apply(cfg: &mut crate::Config, args: &Json) {
-    if let Some(r) = number(args, "ratio") {
-        cfg.ratio = r.min(1000) as f64 / 1000.0;
+    // ratio 与 CLI 语义一致：0..=1 小数（可选内容预算比例），不再是千分比。
+    if let Some(r) = float(args, "ratio") {
+        cfg.ratio = r.clamp(0.0, 1.0);
     }
     if let Some(c) = number(args, "context") {
         cfg.context = c.min(crate::Config::MAX_CONTEXT as usize) as i64;
@@ -265,3 +273,52 @@ fn send(writer: &mut impl Write, response: &str) -> bool {
 }
 
 use std::io::{self, BufRead, Write};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apply_ratio_is_a_fraction_not_permille() {
+        // ratio 与 CLI 语义一致：0..=1 小数，不再按千分比缩放。
+        let mut cfg = crate::Config::default();
+        apply(&mut cfg, &parse(r#"{"ratio":0.5}"#).unwrap());
+        assert!(
+            (cfg.ratio - 0.5).abs() < 1e-9,
+            "ratio=0.5 应作为小数生效，而非被截断成 0: {}",
+            cfg.ratio
+        );
+
+        let mut low = crate::Config::default();
+        apply(&mut low, &parse(r#"{"ratio":0.02}"#).unwrap());
+        assert!((low.ratio - 0.02).abs() < 1e-9, "ratio=0.02: {}", low.ratio);
+
+        // 越界钳制：>1 → 1.0，负值 → 0.0。
+        let mut over = crate::Config::default();
+        apply(&mut over, &parse(r#"{"ratio":1.5}"#).unwrap());
+        assert_eq!(over.ratio, 1.0, "ratio>1 应钳到 1.0");
+        let mut neg = crate::Config::default();
+        apply(&mut neg, &parse(r#"{"ratio":-0.3}"#).unwrap());
+        assert_eq!(neg.ratio, 0.0, "负 ratio 应钳到 0.0");
+    }
+
+    #[test]
+    fn jesc_escapes_all_c0_control_chars() {
+        assert_eq!(jesc("a\x01b"), r#"a\u0001b"#, "C0 控制字符须转义");
+        assert_eq!(jesc("a\x1bb"), r#"a\u001bb"#, "ESC 须转义");
+        assert_eq!(jesc("a\nb"), r#"a\nb"#);
+        assert_eq!(jesc("a\"b\\c"), r#"a\"b\\c"#);
+    }
+
+    #[test]
+    fn wire_escapes_string_id() {
+        assert_eq!(wire(&Some(Json::Str("a\"b".into()))), r#""a\"b""#);
+        assert_eq!(wire(&Some(Json::Str("a\\b".into()))), r#""a\\b""#);
+    }
+
+    #[test]
+    fn error_escapes_message_backslash() {
+        let e = error(None, -32601, "method not found: x\\y");
+        assert!(e.contains(r#"x\\y"#), "message 反斜杠应转义: {e}");
+    }
+}

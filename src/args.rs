@@ -1118,16 +1118,16 @@ fn force(
     i: &mut usize,
 ) -> Result<(), String> {
     let v = value(args, i, f.name, inline)?;
-    if v.split('|').all(|p| p.trim().is_empty()) {
-        return Err(format!("{} {}", f.name, f.err_empty));
-    }
-    // `re:` 前缀条目：CLI 层前置校验手写正则子集，非法即报错拒绝运行；
-    // 其余条目保持字面子串（大小写不敏感）行为不变。
-    for part in v.split('|') {
-        let p = part.trim();
-        if let Some(rest) = p.strip_prefix("re:") {
-            crate::regex::parse(rest).map_err(|e| format!("{}: {e}", f.name))?;
+    let trimmed = v.trim();
+    if let Some(rest) = trimmed.strip_prefix("re:") {
+        // `re:` 前缀：整个值是单个正则，`|` 是正则交替不拆分。CLI 层前置
+        // 校验手写正则子集，非法即报错拒绝运行。
+        if rest.is_empty() {
+            return Err(format!("{} {}", f.name, f.err_empty));
         }
+        crate::regex::parse(rest).map_err(|e| format!("{}: {e}", f.name))?;
+    } else if v.split('|').all(|p| p.trim().is_empty()) {
+        return Err(format!("{} {}", f.name, f.err_empty));
     }
     s.config.forces.push(v);
     Ok(())

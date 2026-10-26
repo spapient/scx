@@ -241,7 +241,7 @@ compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence
 ./tools/scx --query "deploy failed" --force "rollback" --force "Region=eu-west-1" app.log
 
 # 正则子集：re: 前缀进入有限正则（交替/字符类/量词，Thompson NFA，无回溯灾难）
-./tools/scx --query "oom crash" --force "re:ERROR|FATAL" --force "re:(panic|assert) in" app.log
+./tools/scx --query "oom crash" --force "re:ERROR|FATAL" --force "re:panic in|assert in" app.log
 
 # 硬 token 上限：证据地板优先，超限如实报告 overflow:evidence/fill，绝不静默丢证据
 ./tools/scx --query "db timeout" --max-tokens 2000 app.log

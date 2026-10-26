@@ -93,14 +93,66 @@ fn re_alt_and_quant_hits_both() {
         &corpus(),
     );
     assert!(ok);
-    assert_eq!(forced(&out), 2, "out: {out}");
-    assert!(out.contains("connX broken db crash"));
+    // re: 是单个正则：| 是正则交替，不拆分为多个 --force 模式。
+    assert_eq!(forced(&out), 1, "out: {out}");
+    assert!(
+        out.contains("conn9f2a broken db crash"),
+        "err[a-z]+ 分支命中 error 行"
+    );
+    assert!(out.contains("connX broken db crash"), "connX 分支命中");
+}
+
+#[test]
+fn re_alt_is_not_split_by_outer_bar() {
+    // 回归：re: 条目整体是单个正则，| 是正则交替，不得被外层拆成多模式
+    // （否则 `panic in|assert in` 会被拆成 `re:panic in` + 字面 `assert in`，
+    // forced 变成 2，交替语义被破坏）。>40 行触发 sieve 而非 passthrough:small。
+    let mut lines: Vec<String> = (0..40)
+        .map(|i| format!("INFO heartbeat seq={i} ok"))
+        .collect();
+    lines.push("assert in policy check".to_string());
+    lines.push("panic in worker thread".to_string());
+    let text = lines.join("\n");
+    let (ok, out, _e) = run(
+        &[
+            "--query",
+            "no-match-zzz",
+            "--force",
+            "re:panic in|assert in",
+        ],
+        &text,
+    );
+    assert!(ok);
+    assert_eq!(forced(&out), 1, "re: 是单个模式: {out}");
+    assert!(out.contains("assert in policy check"), "交替左分支命中");
+    assert!(out.contains("panic in worker thread"), "交替右分支命中");
+}
+
+#[test]
+fn re_class_bar_is_not_split() {
+    // 字符类内的 | 是类成员；re: 不拆分后 `[bc|d]` 是单个类，不再误报未闭合。
+    // --context 0 只保留 force 命中行；>40 行触发 sieve。
+    let mut lines: Vec<String> = (0..40)
+        .map(|i| format!("INFO heartbeat seq={i} ok"))
+        .collect();
+    lines.extend([
+        "ab".to_string(),
+        "ac".to_string(),
+        "ad".to_string(),
+        "ax".to_string(),
+    ]);
+    let text = lines.join("\n");
+    let (ok, out, _e) = run(&["--context", "0", "--force", "re:a[bc|d]"], &text);
+    assert!(ok, "stderr: {_e}");
+    assert_eq!(forced(&out), 1);
+    assert!(out.contains("ab") && out.contains("ac") && out.contains("ad"));
+    assert!(!out.contains("ax"), "ax 不匹配 a[bc|d]");
 }
 
 #[test]
 fn invalid_regex_rejected_with_subset_hint() {
-    // `re:a||b` 合法：顶层 `|` 拆分后每段独立（re:a + b 字面）。
-    for bad in ["re:conn[", "re:[z-a]", "re:a**", "re:"] {
+    // re: 不再按顶层 | 拆分；空交替 `a||b` 现在也是非法（empty alternative）。
+    for bad in ["re:conn[", "re:[z-a]", "re:a**", "re:", "re:a||b"] {
         let (ok, _out, err) = run(&["--query", "x", "--force", bad], "line one\n");
         assert!(!ok, "must reject {bad:?}");
         assert!(
