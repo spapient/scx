@@ -931,6 +931,43 @@ fn guard(
     guarded
 }
 
+/// 信息留存率（0..=1，确定性）。空输入恒 1.0。
+/// - 显式证据：逐项校验（行号 ∈ 保留行号；子串 ∈ 输出文本）后取保留比例。
+/// - 无证据：行保留率 kept/total（默认轻量代理，行级近似）。
+fn ev_retention(
+    evidence: &[crate::Evidence],
+    numbers: &[usize],
+    text: &str,
+    kept: usize,
+    total: usize,
+) -> f64 {
+    if total == 0 {
+        return 1.0;
+    }
+    if evidence.is_empty() {
+        return kept as f64 / total as f64;
+    }
+    let mut hit = 0usize;
+    for e in evidence {
+        let ok = match e {
+            crate::Evidence::Line(n) => {
+                // kept == total 表示未删任何行（passthrough/fail-open/no-kept），
+                // 此时行号 1..=total 全部存活；否则按保留行号集合判定。
+                if kept == total {
+                    *n >= 1 && *n <= total
+                } else {
+                    numbers.contains(n)
+                }
+            }
+            crate::Evidence::Substr(s) => text.contains(s.as_str()),
+        };
+        if ok {
+            hit += 1;
+        }
+    }
+    hit as f64 / evidence.len() as f64
+}
+
 /// 输出：零克隆直装；省略区间以单行 "..." 标记。保留行原始行号同步收集（i+1）。
 fn render(lines: &[&str], keep: &[bool], elide: bool, lineno: bool) -> (String, Vec<usize>) {
     let mut out_text = String::new();
@@ -1039,6 +1076,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 逐行分析循环，避免为同一批行再走一趟缓存。
     let small_tok = survey(&lines, total);
     let chars_a = chars(original);
+    let evidence = &cfg.evidence;
 
     let mk = |text_owned: String,
               kept: usize,
@@ -1055,6 +1093,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
               tokens: f64,
               dropped: Vec<crate::Dropped>|
      -> Outcome {
+        let ev = ev_retention(evidence, &numbers, &text_owned, kept, total);
         Outcome {
             text: text_owned,
             numbers,
@@ -1078,6 +1117,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             tokens_in: estimate(original),
             dropped,
             budget_used_pct: 0.0,
+            ev_retention: ev,
             explain: Vec::new(),
         }
     };

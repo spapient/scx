@@ -1,8 +1,8 @@
 //! 计量与审计层（P3 治理层）：Token 分桶统计、压缩效果指标、预算管控、快照追溯。
 //!
 //! 数据流：分类化载荷 `[(category, text)]` →（复用 [`crate::compress`] 内核逐桶压缩）
-//! → 分桶 token → 聚合全局/占比/效果指标/预算 → [`Snapshot`]（可序列化 JSON，入
-//! [`Ledger`] 追溯）。本层是薄壳，不复制裁剪逻辑；仅复用 [`crate::terms::estimate`]
+//! → 分桶 token → 聚合全局/占比/效果指标/预算 → [`crate::meter::Snapshot`]（可序列化 JSON，入
+//! [`crate::meter::Ledger`] 追溯）。本层是薄壳，不复制裁剪逻辑；仅复用 `crate::terms::estimate`
 //! （全链路唯一计量口径）、`compress`、[`crate::bucket::ContentType`]（核心桶标签
 //! 与价值梯度默认预算）与 [`crate::json`]。
 //!
@@ -14,7 +14,7 @@
 //! - 桶占比 `share = 桶 tokens / 全局 tokens × 100`
 //! - 预算使用率 `used_pct = used / cap × 100`；`level` 按 `used/cap` 越过 warn/over 阈值。
 //!
-//! 高价值桶 = [`ContentType::StaticContract`] + [`ContentType::SystemDefinition`]
+//! 高价值桶 = [`crate::bucket::ContentType::StaticContract`] + [`crate::bucket::ContentType::SystemDefinition`]
 //! （价值梯度最顶）。快照不含 wall-clock：`id`/`round` 由调用方传入，保证同输入
 //! 同配置输出逐字节一致。
 

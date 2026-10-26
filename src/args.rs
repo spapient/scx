@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -48,6 +48,10 @@ pub fn usage() -> String {
     s.push_str("  --force P            keep lines matching substring (case-insensitive); prefix re: enters\n");
     s.push_str("                       a finite regex subset: | alternation, [..] classes, * + ? quantifiers\n");
     s.push_str("  --preserve T         keep lines with builtin entity T (url/ip/email/errno); repeatable\n");
+    s.push_str("  --evidence N|substr  declare must-keep evidence: positive int = line no, else substring;\n");
+    s.push_str(
+        "                       repeatable; only meters ev_retention, never changes trimming\n",
+    );
     #[cfg(feature = "semantic")]
     {
         s.push_str("  --semantic <weights>    optional neural re-score (cargo feature=semantic); weights file\n");
@@ -210,6 +214,8 @@ enum Kind {
     Semantic,
     /// 策略文件（`--policy-file <path>`：文本覆盖 DEFAULT，CLI 显式参数优先）。
     PolicyFile,
+    /// 显式证据声明（`--evidence`，可重复；正整数=行号，其他=子串）。
+    Evidence,
 }
 
 /// 单 flag 声明：解析循环的唯一样板；新增 flag 只改表，不新增分支。
@@ -363,6 +369,15 @@ static FLAGS: &[Flag] = &[
         kind: Kind::Force,
         what: "",
         err_empty: "requires a type (url/ip/email/errno)",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--evidence",
+        once: false,
+        kind: Kind::Evidence,
+        what: "",
+        err_empty: "requires a line number or a substring",
         err_zero: "",
         min: 0,
     },
@@ -816,7 +831,9 @@ fn flag(
     i: &mut usize,
 ) -> Result<(), String> {
     match f.kind {
-        Kind::NoValue | Kind::Value | Kind::Force | Kind::RatePair => raw(s, f, inline, args, i),
+        Kind::NoValue | Kind::Value | Kind::Force | Kind::RatePair | Kind::Evidence => {
+            raw(s, f, inline, args, i)
+        }
         Kind::F64 | Kind::I64 | Kind::U64 | Kind::Bool01 => numeric(s, f, inline, args, i),
         #[cfg(feature = "semantic")]
         Kind::Semantic => weights(s, f, inline, args, i),
@@ -837,6 +854,7 @@ fn raw(
         Kind::Value => word(s, f, inline, args, i),
         Kind::Force => force(s, f, inline, args, i),
         Kind::RatePair => pair(s, f, inline, args, i),
+        Kind::Evidence => evidence(s, f, inline, args, i),
         _ => unreachable!("valueish flag without handler: {}", f.name),
     }
 }
@@ -1256,6 +1274,28 @@ fn force(
         return Err(format!("{} {}", f.name, f.err_empty));
     }
     s.config.forces.push(v);
+    Ok(())
+}
+
+/// 显式证据声明（`--evidence`，可重复）：正整数 = 原始行号（1-based），
+/// 其他 = 输出中必须逐字出现的子串。只计量留存率，不改变裁剪行为。
+fn evidence(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    let v = value(args, i, f.name, inline)?;
+    let trimmed = v.trim();
+    if trimmed.is_empty() {
+        return Err(format!("{} {}", f.name, f.err_empty));
+    }
+    let ev = match trimmed.parse::<usize>() {
+        Ok(n) if n >= 1 => crate::Evidence::Line(n),
+        _ => crate::Evidence::Substr(trimmed.to_string()),
+    };
+    s.config.evidence.push(ev);
     Ok(())
 }
 

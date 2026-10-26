@@ -59,6 +59,17 @@ pub use compress::compress;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// 显式证据声明：压缩后校验其是否被保留，只计量留存率、不改变裁剪行为。
+/// `--evidence N`（正整数 = 原始行号）与 `--evidence <substr>`（其他 = 输出必须
+/// 出现的子串）统一落入本枚举；MCP `evidence` 数组元素同理。
+#[derive(Clone, Debug, PartialEq)]
+pub enum Evidence {
+    /// 必须保留的原始行号（1-based，LF 归一化后的输入行）。
+    Line(usize),
+    /// 输出中必须逐字出现的子串。
+    Substr(String),
+}
+
 /// 引擎配置。`ratio` 为可选内容预算占输入 token 估算的比例；入口会做边界规范化。
 #[derive(Clone)]
 pub struct Config {
@@ -89,6 +100,10 @@ pub struct Config {
     /// 预计算的「query 与每行」相似度（`--embed-cmd` 时由 `ops` 层填充；
     /// 长度须 == 输入行数）。`None` = 不注入，默认路径逐字节不变。
     pub sims: Option<Vec<f64>>,
+    /// 显式证据声明（压缩后校验留存，见 [`Evidence`]）；空 = 走默认行保留率代理。
+    /// 注意与 [`Outcome::evidence`]（证据行计数 = seeds）语义不同：本字段是
+    /// 调用方声明"必须保留"的行号/子串，仅用于计量 [`Outcome::ev_retention`]。
+    pub evidence: Vec<Evidence>,
 }
 
 impl Config {
@@ -117,6 +132,7 @@ impl Default for Config {
             semantic: None,
             sim_weight: 1.0,
             sims: None,
+            evidence: Vec::new(),
         }
     }
 }
@@ -228,6 +244,10 @@ pub struct Outcome {
     /// 可选预算利用率（%）：实际填充的可选内容 token 估算 ÷ 预算上限。仅筛选
     /// 模式有值；passthrough/fail-open/no-kept 为 0。`--json` 消费，默认统计行不输出。
     pub budget_used_pct: f64,
+    /// 信息留存率（0..=1，确定性）：显式证据时 = 保留证据 / 总证据；无证据时 =
+    /// 行保留率 kept/total（轻量代理，非信息留存语义，见 docs/context-governance-plan.md P4）。
+    /// passthrough/fail-open/no-kept 恒 1.0（未删任何行）。`--json` 消费，默认统计行不输出。
+    pub ev_retention: f64,
     /// 逐行决策解释（`--explain`/`--json` 消费）；长度 == total，仅筛选模式有值，
     /// passthrough/fail-open/no-kept 为空。默认统计行不输出（与 v0.4.1 逐字节一致）。
     pub explain: Vec<Explain>,
@@ -842,6 +862,76 @@ mod tests {
         // as_str 映射。
         assert_eq!(Explain::Seed.as_str(), "seed");
         assert_eq!(Explain::Dropped.as_str(), "dropped");
+    }
+
+    #[test]
+    fn ev_retention_default_is_line_retention_ratio() {
+        let mut lines: Vec<String> = (0..200)
+            .map(|i| format!("pad alpha beta line {i}"))
+            .collect();
+        lines[100] = "ERROR db timeout conn_id=9f2a".to_string();
+        let text = lines.join("\n");
+        let o = compress(&text, "db timeout", &cfg());
+        assert_eq!(o.mode, Mode::Sieve);
+        assert!(
+            (o.ev_retention - o.kept as f64 / o.total as f64).abs() < 1e-9,
+            "默认代理 = kept/total，got {} vs {}",
+            o.ev_retention,
+            o.kept as f64 / o.total as f64
+        );
+        assert!(o.ev_retention > 0.0 && o.ev_retention < 1.0);
+    }
+
+    #[test]
+    fn ev_retention_passthrough_and_failopen_are_one() {
+        // 小输入 passthrough：未删任何行。
+        let o = compress("a\nb\nc\n", "a", &cfg());
+        assert_eq!(o.mode, Mode::PassSmall);
+        assert_eq!(o.ev_retention, 1.0);
+        // 零信号 fail-open：原样保留。
+        let text = (0..200)
+            .map(|i| format!("line {i} alpha beta gamma"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let o2 = compress(&text, "zzz_no_such", &cfg());
+        assert_eq!(o2.mode, Mode::FailOpenZeroSignal);
+        assert_eq!(o2.ev_retention, 1.0);
+    }
+
+    #[test]
+    fn ev_retention_explicit_evidence_all_kept() {
+        let mut lines: Vec<String> = (0..200)
+            .map(|i| format!("pad alpha beta line {i}"))
+            .collect();
+        lines[100] = "ERROR db timeout conn_id=9f2a".to_string();
+        let text = lines.join("\n");
+        let mut c = cfg();
+        c.evidence = vec![
+            crate::Evidence::Line(101), // 命中行（1-based）
+            crate::Evidence::Substr("conn_id=9f2a".to_string()),
+        ];
+        let o = compress(&text, "db timeout", &c);
+        assert_eq!(o.mode, Mode::Sieve);
+        assert_eq!(o.ev_retention, 1.0, "声明的证据全部保留");
+    }
+
+    #[test]
+    fn ev_retention_explicit_evidence_reports_dropped() {
+        // 声明一个不会被命中的行号作为证据 → 留存率如实 < 1.0（只校验、不强制保留）。
+        let mut lines: Vec<String> = (0..200)
+            .map(|i| format!("pad alpha beta line {i}"))
+            .collect();
+        lines[100] = "ERROR db timeout conn_id=9f2a".to_string();
+        let text = lines.join("\n");
+        let mut c = cfg();
+        c.context = 0; // 针尖模式：只留 seed + 守卫，纯 filler 必删。
+        c.evidence = vec![
+            crate::Evidence::Line(101), // seed 行保留
+            crate::Evidence::Line(51),  // 纯 filler，远离 seed，必删
+        ];
+        let o = compress(&text, "db timeout", &c);
+        assert_eq!(o.mode, Mode::Sieve);
+        assert_eq!(o.ev_retention, 0.5, "1/2 证据保留");
     }
 
     /// 唯一字母词（base-26），长度不限，避免归一化后相同触发去重。

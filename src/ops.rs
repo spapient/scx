@@ -456,6 +456,8 @@ pub fn render(r: &Outcome) -> String {
     ));
     // 可选预算利用率（%）：--ratio 预算实际填充了多少。
     out.push_str(&format!(",\"budget_used_pct\":{:.1}", r.budget_used_pct));
+    // 信息留存率（0..=1）：显式证据或默认行保留率代理（P4），全模式恒填充。
+    out.push_str(&format!(",\"ev_retention\":{:.4}", r.ev_retention));
     // 逐行决策解释（数组下标 = 行号-1）；仅筛选模式非空。
     out.push_str(&format!(
         ",\"explain\":[{}]",

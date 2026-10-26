@@ -1,6 +1,6 @@
 //! `scx wrap`：包装一个命令，把其 stdout+stderr 合并后按需压缩输出。
 //!
-//! 用法：`scx wrap [--query Q] [--ratio R] [--context N] [--force P] [--preserve T] -- CMD...`
+//! 用法：`scx wrap [--query Q] [--ratio R] [--context N] [--force P] [--preserve T] [--evidence N|substr] -- CMD...`
 //!
 //! 行为：执行 CMD，合并 stdout+stderr；小输出由 `compress` 内核自动 passthrough，
 //! 大输出按 `--query`/`--force`/`--preserve` 压缩（无信号时 fail-open 保留原文）；
@@ -11,7 +11,7 @@ use std::process::Command;
 /// 主入口：解析 `--` 分隔的压缩选项与命令，执行后压缩输出。返回进程退出码。
 pub fn run(args: &[String]) -> i32 {
     let Some(sep) = args.iter().position(|a| a == "--") else {
-        eprintln!("scx wrap: usage: scx wrap [--query Q] [--ratio R] [--context N] [--force P] [--preserve T] -- CMD...");
+        eprintln!("scx wrap: usage: scx wrap [--query Q] [--ratio R] [--context N] [--force P] [--preserve T] [--evidence N|substr] -- CMD...");
         return 2;
     };
     let (opts, cmd) = (&args[..sep], &args[sep + 1..]);
@@ -82,11 +82,22 @@ fn parse_opts(opts: &[String]) -> Result<(crate::Config, String), String> {
                 let ty = next(&mut i)?;
                 crate::args::preserve_into(&mut config, ty)?;
             }
+            "--evidence" => config.evidence.push(evidence(next(&mut i)?)),
             other => return Err(format!("unknown option {other}")),
         }
         i += 1;
     }
     Ok((config, query))
+}
+
+/// 显式证据解析：正整数 = 原始行号（1-based），其他 = 输出必须出现的子串。
+/// 与 `args.rs` 的 `--evidence` 同口径（wrap 与 args 表解耦，故独立实现）。
+fn evidence(v: &str) -> crate::Evidence {
+    let trimmed = v.trim();
+    match trimmed.parse::<usize>() {
+        Ok(n) if n >= 1 => crate::Evidence::Line(n),
+        _ => crate::Evidence::Substr(trimmed.to_string()),
+    }
 }
 
 #[cfg(test)]

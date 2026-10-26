@@ -26,7 +26,7 @@ const TOOLS: &[(&str, &str, &str)] = &[
     (
         "compress_context",
         "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1)",
-        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"}},\"required\":[\"query\",\"text\"]}",
+        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\"]}}},\"required\":[\"query\",\"text\"]}",
     ),
     (
         "connect_account",
@@ -223,6 +223,24 @@ fn apply(cfg: &mut crate::Config, args: &Json) {
         cfg.limit = Some(m);
     }
     cfg.structure = flag(args, "structure");
+    evidence(cfg, args);
+}
+
+/// 解析可选 `evidence` 数组（元素：正整数 = 原始行号，字符串 = 必须出现的子串）。
+fn evidence(cfg: &mut crate::Config, args: &Json) {
+    if let Some(crate::json::Json::Arr(evs)) = args.get("evidence") {
+        for e in evs {
+            match e {
+                crate::json::Json::Num(n) if *n >= 1.0 => {
+                    cfg.evidence.push(crate::Evidence::Line(*n as usize));
+                }
+                crate::json::Json::Str(s) => {
+                    cfg.evidence.push(crate::Evidence::Substr(s.clone()));
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 fn account(id: Option<Json>) -> String {
