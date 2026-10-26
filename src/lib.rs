@@ -45,6 +45,10 @@ pub mod wrap;
 #[cfg(feature = "semantic")]
 pub mod semantic;
 
+/// 类型路由 + 计量桶 + 前后快照（P1 治理层，复用 `compress` 内核）。
+pub mod bucket;
+/// PostToolUse 自动拦截（P0）：压缩 Bash 大输出替换 tool_response。
+pub mod hook;
 pub mod regex;
 /// 可插拔相似度后端（`--embed-cmd`；默认无后端，见 `sim::compute`）。
 pub mod sim;

@@ -71,6 +71,9 @@ fn run(args: &[String]) -> ops::Reply {
         if sub == "wrap" {
             std::process::exit(scx::wrap::run(&args[1..]));
         }
+        if sub == "hook" {
+            std::process::exit(scx::hook::run());
+        }
     }
     let opts = parse(args).map_err(Failure::Usage)?;
     ops::run(ops::parse(&opts))
