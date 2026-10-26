@@ -1,7 +1,7 @@
 //! 冻结的校准密度表（`TokenMode::Calibrated` 口径）。
 //!
-//! 由 tools/gen_token_calib.py 对 cl100k_base 分桶最小二乘回归生成（MAE 校准=1.44 启发式=9.15）。
-//! 改 tokenizer 后重跑 `python3 tools/gen_token_calib.py` 再提交。
+//! 由 tools/calibrate.py 对 cl100k_base 分桶最小二乘回归生成（MAE 校准=1.44 留出=4.66 启发式=9.15 留出启发式=9.84）。
+//! 改 tokenizer 后重跑 `python3 tools/calibrate.py` 再提交。
 
 #![forbid(unsafe_code)]
 

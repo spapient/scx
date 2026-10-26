@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""生成 `src/token_calib.rs` 的冻结校准密度表，并报告 vs 启发式的 MAE。
+"""生成 `src/calib.rs` 的冻结校准密度表，并报告 vs 启发式的 MAE。
 
 对代表性语料采样字符特征（words/ascii_alnum/ascii_punct/newline/cjk/other），用真实
 tokenizer（tiktoken cl100k_base）取真值 token 数，按「长度桶」分片做无截距最小二乘
-回归，得到每桶每特征的密度，写入 `src/token_calib.rs` 的 `CALIB_DENSITY`
+回归，得到每桶每特征的密度，写入 `src/calib.rs` 的 `CALIB_DENSITY`
 （[[f64; 5]; 6]）。同时打印校准 vs 启发式的平均绝对误差（MAE，样本内，偏乐观）。
 
 用法：
-    python3 tools/gen_token_calib.py [corpus.json] [out.rs]
+    python3 tools/calibrate.py [corpus.json] [out.rs]
 
 - corpus.json：JSON 字符串数组（缺省用内置代表性样本）。
 - 依赖：`tiktoken`、`numpy`（离线）。缺失时输出「复现启发式」的占位密度。
@@ -179,7 +179,7 @@ def mae(estimates, ys):
 
 def main():
     corpus_path = sys.argv[1] if len(sys.argv) > 1 else None
-    out_path = sys.argv[2] if len(sys.argv) > 2 else "src/token_calib.rs"
+    out_path = sys.argv[2] if len(sys.argv) > 2 else "src/calib.rs"
     samples = json.load(open(corpus_path, encoding="utf-8")) if corpus_path else default_corpus()
 
     xs = [features(s) for s in samples]
@@ -188,7 +188,7 @@ def main():
 
         enc = tiktoken.get_encoding("cl100k_base")
         ys = [len(enc.encode(s)) for s in samples]
-        note = "由 tools/gen_token_calib.py 对 cl100k_base 分桶最小二乘回归生成"
+        note = "由 tools/calibrate.py 对 cl100k_base 分桶最小二乘回归生成"
     except Exception as exc:  # tiktoken/numpy 缺失 → 占位密度
         ys = None
         note = f"占位密度（复现启发式；未校准：{exc}）"
@@ -200,7 +200,23 @@ def main():
         table = generate_table(xs, ys)
         mae_calib = mae([estimate(f, table) for f in xs], ys)
         mae_heur = mae([heuristic_estimate(s) for s in samples], ys)
-        note += f"（MAE 校准={mae_calib:.2f} 启发式={mae_heur:.2f}）"
+        # 留出评估：80/20 分（固定 seed），拟合训练集、评估测试集，得诚实 MAE。
+        import random
+
+        random.seed(42)
+        idx = list(range(len(samples)))
+        random.shuffle(idx)
+        split = int(len(samples) * 0.8)
+        tr, te = idx[:split], idx[split:]
+        held = generate_table([xs[i] for i in tr], [ys[i] for i in tr])
+        mae_held = mae([estimate(xs[i], held) for i in te], [ys[i] for i in te])
+        mae_held_heur = mae(
+            [heuristic_estimate(samples[i]) for i in te], [ys[i] for i in te]
+        )
+        note += (
+            f"（MAE 校准={mae_calib:.2f} 留出={mae_held:.2f} "
+            f"启发式={mae_heur:.2f} 留出启发式={mae_held_heur:.2f}）"
+        )
 
     rows = "\n".join(
         "    [%s], // %s" % (", ".join("%r" % v for v in table[s]), FEATURES[s])
@@ -209,7 +225,7 @@ def main():
     body = f"""//! 冻结的校准密度表（`TokenMode::Calibrated` 口径）。
 //!
 //! {note}。
-//! 改 tokenizer 后重跑 `python3 tools/gen_token_calib.py` 再提交。
+//! 改 tokenizer 后重跑 `python3 tools/calibrate.py` 再提交。
 
 #![forbid(unsafe_code)]
 
