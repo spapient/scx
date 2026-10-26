@@ -282,6 +282,11 @@ fn fingerprint(query: &str, cfg: &Config) -> String {
         buf.push_str(f);
         buf.push('\n');
     }
+    for k in &cfg.structure_anchors {
+        buf.push_str("anchor=");
+        buf.push_str(k.as_str());
+        buf.push('\n');
+    }
     crate::hash::hex(&crate::hash::sha256(buf.as_bytes()))
 }
 

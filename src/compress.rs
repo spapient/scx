@@ -743,6 +743,7 @@ const R_SEED: u8 = 1;
 const R_CONTEXT: u8 = 2;
 const R_FILL: u8 = 3;
 const R_GUARD: u8 = 4;
+const R_ANCHOR: u8 = 5;
 
 /// 先落种子与最小可读邻域；预算只约束其后的可选内容。
 /// 两趟：先种子（`Seed`），再邻域（`Context`），保证种子行的原因不被邻域覆盖。
@@ -787,6 +788,75 @@ fn mark_context(
             }
         }
     }
+}
+
+/// 结构锚点检测（P6）：标记结构边界行，默认空 kinds 全 false（现状行为）。
+fn anchors(lines: &[&str], kinds: &[crate::AnchorKind]) -> Vec<bool> {
+    let json = kinds.contains(&crate::AnchorKind::Json);
+    let xml = kinds.contains(&crate::AnchorKind::Xml) || kinds.contains(&crate::AnchorKind::Idoc);
+    let yaml = kinds.contains(&crate::AnchorKind::Yaml);
+    let mut a = vec![false; lines.len()];
+    for (i, line) in lines.iter().enumerate() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        a[i] = (json && json_anchor(t)) || (xml && tag_anchor(t)) || (yaml && yaml_anchor(t));
+    }
+    a
+}
+
+/// JSON 结构边界：去掉尾随逗号后恰为花括号/方括号，或行尾开括号/行首闭括号。
+fn json_anchor(t: &str) -> bool {
+    let s = t.trim_end_matches(',');
+    matches!(s, "{" | "}" | "[" | "]")
+        || s.ends_with('{')
+        || s.ends_with('[')
+        || s.starts_with('}')
+        || s.starts_with(']')
+}
+
+/// XML/IDoc 起止标签：整行为单个 `<...>`/`</...>` 标签（非 `<a>text</a>` 叶行，
+/// 避免把含内容的叶行也当结构边界整体保留）。
+fn tag_anchor(t: &str) -> bool {
+    if !t.starts_with('<') || !t.ends_with('>') {
+        return false;
+    }
+    !t[1..t.len() - 1].contains('>')
+}
+
+/// YAML 缩进层级键行：映射键（`key:`）或列表项（`- `）；跳过注释/文档标记。
+fn yaml_anchor(t: &str) -> bool {
+    if t.starts_with('#') || t.starts_with("---") || t.starts_with("...") {
+        return false;
+    }
+    t.ends_with(':') || t.starts_with("- ")
+}
+
+/// 把锚点行标记为保留（不覆盖已保留的种子/邻域/守卫）。
+fn mark_anchors(anchors: &[bool], keep: &mut [bool], keep_count: &mut usize, reason: &mut [u8]) {
+    for (i, &a) in anchors.iter().enumerate() {
+        if a && !keep[i] {
+            keep[i] = true;
+            *keep_count += 1;
+            reason[i] = R_ANCHOR;
+        }
+    }
+}
+
+/// 结构锚点标记入口（P6）：空 kinds 时为空操作（现状行为）；否则检测并标记锚点行。
+fn mark_structure_anchors(
+    cfg: &Config,
+    lines: &[&str],
+    keep: &mut [bool],
+    keep_count: &mut usize,
+    reason: &mut [u8],
+) {
+    if cfg.structure_anchors.is_empty() {
+        return;
+    }
+    let anchor_mask = anchors(lines, &cfg.structure_anchors);
+    mark_anchors(&anchor_mask, keep, keep_count, reason);
 }
 
 /// 预算填充候选资格：非折叠、未保留，且有真实得分或位于结构区间
@@ -1204,6 +1274,10 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let mut reason = vec![0u8; total];
     let (mut keep, mut keep_count) = floor(&seeds.seed, context, total, &mut reason);
 
+    // 结构锚点（P6 骨架保护）：结构边界行无条件保留，优先级低于证据（seed/context）、
+    // 高于可选填充。默认空 kinds 时为空操作，与现状逐字节一致。
+    mark_structure_anchors(cfg, &lines, &mut keep, &mut keep_count, &mut reason);
+
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
     // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
@@ -1456,6 +1530,7 @@ fn explain(reason: &[u8], dup: &[bool]) -> Vec<crate::Explain> {
             R_CONTEXT => crate::Explain::Context,
             R_FILL => crate::Explain::Fill,
             R_GUARD => crate::Explain::Guard,
+            R_ANCHOR => crate::Explain::Anchor,
             _ => {
                 if dup[i] {
                     crate::Explain::Dedup
@@ -1696,5 +1771,49 @@ mod tests {
             None,
             "上限内不触发行数直通"
         );
+    }
+
+    #[test]
+    fn json_anchor_detects_braces_and_brackets() {
+        assert!(json_anchor("{"));
+        assert!(json_anchor("}"));
+        assert!(json_anchor("["));
+        assert!(json_anchor("]"));
+        assert!(json_anchor("},"), "尾随逗号");
+        assert!(json_anchor("\"key\": {"), "行尾开括号");
+        assert!(!json_anchor("\"key\": 1"));
+    }
+
+    #[test]
+    fn tag_anchor_detects_xml_tags() {
+        assert!(tag_anchor("<root>"));
+        assert!(tag_anchor("</root>"));
+        assert!(tag_anchor("<tag attr=\"x\">"));
+        assert!(!tag_anchor("plain text"));
+        assert!(!tag_anchor("<item>data</item>"), "叶行非结构边界");
+    }
+
+    #[test]
+    fn yaml_anchor_detects_keys_and_list_items() {
+        assert!(yaml_anchor("key:"));
+        assert!(yaml_anchor("- item"));
+        assert!(!yaml_anchor("# comment"));
+        assert!(!yaml_anchor("key: value"));
+    }
+
+    #[test]
+    fn anchors_marks_only_enabled_kinds() {
+        let lines = ["{", "<tag>", "key:", "plain"];
+        let json_only = anchors(&lines, &[crate::AnchorKind::Json]);
+        assert_eq!(json_only, vec![true, false, false, false]);
+        let all = anchors(
+            &lines,
+            &[
+                crate::AnchorKind::Json,
+                crate::AnchorKind::Xml,
+                crate::AnchorKind::Yaml,
+            ],
+        );
+        assert_eq!(all, vec![true, true, true, false]);
     }
 }

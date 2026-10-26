@@ -72,6 +72,41 @@ pub enum Evidence {
     Substr(String),
 }
 
+/// 结构锚点种类（P6 骨架保护）：压缩时把对应结构边界行标记为保留锚点。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnchorKind {
+    /// JSON 花括号/方括号行。
+    Json,
+    /// XML 起止标签行。
+    Xml,
+    /// SAP IDoc 段标签行（复用 XML 标签启发式）。
+    Idoc,
+    /// YAML 缩进层级键行（映射键/列表项）。
+    Yaml,
+}
+
+impl AnchorKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            AnchorKind::Json => "json",
+            AnchorKind::Xml => "xml",
+            AnchorKind::Idoc => "idoc",
+            AnchorKind::Yaml => "yaml",
+        }
+    }
+
+    /// 名称 → 枚举（`--structure-anchors` 与 policy 表共用）。
+    pub fn parse(s: &str) -> Option<AnchorKind> {
+        match s {
+            "json" => Some(AnchorKind::Json),
+            "xml" => Some(AnchorKind::Xml),
+            "idoc" => Some(AnchorKind::Idoc),
+            "yaml" => Some(AnchorKind::Yaml),
+            _ => None,
+        }
+    }
+}
+
 /// 引擎配置。`ratio` 为可选内容预算占输入 token 估算的比例；入口会做边界规范化。
 #[derive(Clone)]
 pub struct Config {
@@ -106,6 +141,9 @@ pub struct Config {
     /// 注意与 [`Outcome::evidence`]（证据行计数 = seeds）语义不同：本字段是
     /// 调用方声明"必须保留"的行号/子串，仅用于计量 [`Outcome::ev_retention`]。
     pub evidence: Vec<Evidence>,
+    /// 结构锚点种类（P6 骨架保护，默认空 = 现状行为不变）：结构边界行标记为
+    /// 保留锚点，优先级低于证据行、高于普通噪声行。
+    pub structure_anchors: Vec<AnchorKind>,
 }
 
 impl Config {
@@ -135,6 +173,7 @@ impl Default for Config {
             sim_weight: 1.0,
             sims: None,
             evidence: Vec::new(),
+            structure_anchors: Vec::new(),
         }
     }
 }
@@ -296,6 +335,8 @@ pub enum Explain {
     Fill,
     /// 风险守卫（失败级错误行/事故标记行）。
     Guard,
+    /// 结构锚点（P6 骨架保护：结构边界行，优先级低于证据）。
+    Anchor,
     /// 去重折叠（第 3 次起的重复行）。
     Dedup,
     /// 删除（预算不足/结构裁剪/硬上限，细粒度见 `dropped`）。
@@ -310,6 +351,7 @@ impl Explain {
             Explain::Context => "context",
             Explain::Fill => "fill",
             Explain::Guard => "guard",
+            Explain::Anchor => "anchor",
             Explain::Dedup => "dedup",
             Explain::Dropped => "dropped",
         }
@@ -934,6 +976,68 @@ mod tests {
         let o = compress(&text, "db timeout", &c);
         assert_eq!(o.mode, Mode::Sieve);
         assert_eq!(o.ev_retention, 0.5, "1/2 证据保留");
+    }
+
+    #[test]
+    fn structure_anchors_preserve_json_boundaries() {
+        let mut lines: Vec<String> = vec!["{".into(), "  \"meta\": {".into()];
+        for i in 0..200 {
+            lines.push(format!("    \"filler{i}\": \"alpha beta line {i}\","));
+        }
+        lines.push("    \"target\": \"db timeout conn_id=9f2a\",".into());
+        lines.push("  }".into());
+        lines.push("}".into());
+        let text = lines.join("\n");
+
+        let mut c = cfg();
+        c.structure_anchors = vec![crate::AnchorKind::Json];
+        let o = compress(&text, "db timeout conn_id", &c);
+        assert_eq!(o.mode, Mode::Sieve);
+        assert!(o.text.contains("db timeout conn_id=9f2a"), "证据行保留");
+        // 结构边界行全部保留。
+        for b in ["{", "  \"meta\": {", "  }", "}"] {
+            assert!(o.text.lines().any(|l| l == b), "结构锚点保留: {b}");
+        }
+        // 花括号平衡（结构骨架完整）。
+        let open = o.text.chars().filter(|&ch| ch == '{').count();
+        let close = o.text.chars().filter(|&ch| ch == '}').count();
+        assert_eq!(open, close, "花括号平衡: open={open} close={close}");
+        assert!(open >= 2, "至少保留两个开括号，got {open}");
+    }
+
+    #[test]
+    fn structure_anchors_preserve_xml_tags() {
+        let mut lines: Vec<String> = vec!["<root>".into()];
+        for i in 0..200 {
+            lines.push(format!("  <item{i}>alpha beta line {i}</item{i}>"));
+        }
+        lines.push("  <target>db timeout conn_id=9f2a</target>".into());
+        lines.push("</root>".into());
+        let text = lines.join("\n");
+
+        let mut c = cfg();
+        c.structure_anchors = vec![crate::AnchorKind::Xml];
+        let o = compress(&text, "db timeout conn_id", &c);
+        assert!(o.text.contains("db timeout conn_id=9f2a"), "证据行保留");
+        assert!(o.text.lines().any(|l| l == "<root>"), "<root> 保留");
+        assert!(o.text.lines().any(|l| l == "</root>"), "</root> 保留");
+    }
+
+    #[test]
+    fn structure_anchors_default_off_no_anchor_reason() {
+        let mut lines: Vec<String> = vec!["{".into()];
+        for i in 0..200 {
+            lines.push(format!("  \"filler{i}\": \"alpha beta line {i}\","));
+        }
+        lines.push("  \"target\": \"db timeout conn_id=9f2a\",".into());
+        lines.push("}".into());
+        let text = lines.join("\n");
+        let o = compress(&text, "db timeout conn_id", &cfg());
+        assert_eq!(o.mode, Mode::Sieve);
+        assert!(
+            !o.explain.contains(&crate::Explain::Anchor),
+            "默认 off 不产生 anchor 原因"
+        );
     }
 
     /// 唯一字母词（base-26），长度不限，避免归一化后相同触发去重。

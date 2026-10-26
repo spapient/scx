@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -51,6 +51,10 @@ pub fn usage() -> String {
     s.push_str("  --evidence N|substr  declare must-keep evidence: positive int = line no, else substring;\n");
     s.push_str(
         "                       repeatable; only meters ev_retention, never changes trimming\n",
+    );
+    s.push_str("  --structure-anchors L comma-separated: json/xml/idoc/yaml; keep structural\n");
+    s.push_str(
+        "                       boundary lines (braces/tags/keys) as anchors below evidence\n",
     );
     #[cfg(feature = "semantic")]
     {
@@ -216,6 +220,8 @@ enum Kind {
     PolicyFile,
     /// 显式证据声明（`--evidence`，可重复；正整数=行号，其他=子串）。
     Evidence,
+    /// 结构锚点种类（`--structure-anchors`，逗号分隔：json/xml/idoc/yaml）。
+    Anchors,
 }
 
 /// 单 flag 声明：解析循环的唯一样板；新增 flag 只改表，不新增分支。
@@ -378,6 +384,15 @@ static FLAGS: &[Flag] = &[
         kind: Kind::Evidence,
         what: "",
         err_empty: "requires a line number or a substring",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--structure-anchors",
+        once: true,
+        kind: Kind::Anchors,
+        what: "",
+        err_empty: "requires a comma-separated list (json/xml/idoc/yaml)",
         err_zero: "",
         min: 0,
     },
@@ -831,9 +846,12 @@ fn flag(
     i: &mut usize,
 ) -> Result<(), String> {
     match f.kind {
-        Kind::NoValue | Kind::Value | Kind::Force | Kind::RatePair | Kind::Evidence => {
-            raw(s, f, inline, args, i)
-        }
+        Kind::NoValue
+        | Kind::Value
+        | Kind::Force
+        | Kind::RatePair
+        | Kind::Evidence
+        | Kind::Anchors => raw(s, f, inline, args, i),
         Kind::F64 | Kind::I64 | Kind::U64 | Kind::Bool01 => numeric(s, f, inline, args, i),
         #[cfg(feature = "semantic")]
         Kind::Semantic => weights(s, f, inline, args, i),
@@ -855,6 +873,7 @@ fn raw(
         Kind::Force => force(s, f, inline, args, i),
         Kind::RatePair => pair(s, f, inline, args, i),
         Kind::Evidence => evidence(s, f, inline, args, i),
+        Kind::Anchors => anchors(s, f, inline, args, i),
         _ => unreachable!("valueish flag without handler: {}", f.name),
     }
 }
@@ -1296,6 +1315,36 @@ fn evidence(
         _ => crate::Evidence::Substr(trimmed.to_string()),
     };
     s.config.evidence.push(ev);
+    Ok(())
+}
+
+/// 结构锚点种类（`--structure-anchors`，逗号分隔：json/xml/idoc/yaml）。
+fn anchors(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    let v = value(args, i, f.name, inline)?;
+    for part in v.split(',') {
+        let p = part.trim();
+        if p.is_empty() {
+            continue;
+        }
+        match crate::AnchorKind::parse(p) {
+            Some(k) if !s.config.structure_anchors.contains(&k) => {
+                s.config.structure_anchors.push(k);
+            }
+            Some(_) => {}
+            None => {
+                return Err(format!(
+                    "{} unknown anchor type {p:?} (allowed: json/xml/idoc/yaml)",
+                    f.name
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
