@@ -646,5 +646,26 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 **commit**：独立可回滚（接 P2 commit 之后）。
 
-#### P4（留一事故泛化 + κ，未开始）
+#### P4 完成记录（2026-10-26，留一事故泛化 + 标注一致性 κ 核对）
+
+**交付**：
+- `tools/scx.py stats --loo --gate`：留一事故（incident）泛化。按
+  `case_index//5` 把 150 查询归为 30 incidents（每组 5 例），逐一剔除
+  任一 incident 后在其余 hard 查询上重估配对 MRR（复用 analyze 的
+  bootstrap CI + permutation）；门禁：每个剔除后的 Δ≥0.05 且 CI 下界>0。
+  明细写 `--out` 同名 `.loo.json`。
+- CI：新增 `Gauge leave-one-incident-out gate` 步骤；`docs/eval.md` 补
+  LOO 与 κ 说明。
+
+**门禁证据**（Gauge 150 查询，mrr 轨）：
+- 30/30 剔除运行全部保持硬优势：min Δ=+0.0500、mean=+0.0608（与全量
+  逐位一致）、max=+0.0638；min CI 下界=+0.0135 >0；
+- **loo gate PASS**——hard 优势不依赖任一单一事故（泛化成立）。
+- κ 核对（`blind agree --a gauge.ai.labels.json --b
+  gauge.human.labels.json`）：common=384、raw=0.344、**κ=0.017**——AI
+  逐项盲审与人工盲审一致性极低，如实记录：AI 盲审标签不可直接充当人工
+  gold；Gauge 机械 MRR 主指标不依赖盲审标签，不受影响。
+- `cargo test --locked` = 228 / 0；`tools/scx.py selftest` PASS。
+
+**commit**：独立可回滚（接 P3 commit 之后）。
 

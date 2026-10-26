@@ -187,6 +187,16 @@ jobs:
             $hard | Format-List | Out-String | Write-Host
             throw "recall@3 advantage not established"
           }
+      - name: Gauge leave-one-incident-out gate
+        shell: pwsh
+        run: >-
+          python tools/scx.py stats
+          --baseline config/ci-baseline.json
+          --verbose config/ci-verbose.txt
+          --mem-dir config/ci-mem
+          --out config/ci-stats-loo.csv
+          --loo --loo-group 5 --gate
+          --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
 
   msrv:
     timeout-minutes: 15

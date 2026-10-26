@@ -631,6 +631,58 @@ def analyze_cluster(rows, cluster_size, boot, perm, seed, mde, metric):
     )
 
 
+def loo_incidents(rows, group_size, boot, perm, seed, mde, metric,
+                  gate_delta, gate):
+    """Leave-one-incident-out stability of the tier:hard advantage.
+
+    Cases are assumed ordered so that `case_index // group_size` identifies an
+    incident (Gauge: 30 incidents x 5 cases). Each incident is dropped once
+    and the hard-tier paired metric is re-estimated on the rest. Returns the
+    per-incident rows plus aggregate min/mean/max; with gate=True it exits 2
+    if any left-out run loses the frozen advantage (delta >= gate_delta AND
+    CI lower bound > 0).
+    """
+    hard = [row for row in rows if row["tier"] == "hard"]
+    if len(hard) < 2 * group_size:
+        sys.exit("stats: --loo needs hard cases spanning >= 2 incidents")
+    loo_rows = []
+    ngroups = max(row["i"] // group_size for row in hard) + 1
+    for g in range(ngroups):
+        rest = [r for r in hard if r["i"] // group_size != g]
+        if len(rest) < 2:
+            continue
+        res = analyze(
+            f"loo:incident-{g}", rest, boot, perm, seed, mde, metric
+        )
+        if res:
+            loo_rows.append(res)
+    if not loo_rows:
+        sys.exit("stats: --loo produced no runs")
+    deltas = [row["delta"] for row in loo_rows]
+    summary = {
+        "group": "loo:all",
+        "n_runs": len(deltas),
+        "min_delta": min(deltas),
+        "mean_delta": sum(deltas) / len(deltas),
+        "max_delta": max(deltas),
+        "min_ci_lo": min(row["ci_lo"] for row in loo_rows),
+    }
+    print(f"stats: loo incidents={len(loo_rows)} "
+          f"min_delta={min(deltas):+.4f} mean={sum(deltas)/len(deltas):+.4f} "
+          f"max={max(deltas):+.4f} min_ci_lo={summary['min_ci_lo']:+.4f}")
+    if gate:
+        bad = [row["group"] for row in loo_rows
+               if row["delta"] < gate_delta or row["ci_lo"] <= 0.0]
+        if bad:
+            print(f"stats: LOO GATE FAILED: advantage lost after dropping "
+                  f"{len(bad)} incident(s): {', '.join(sorted(bad)[:10])}"
+                  + (" ..." if len(bad) > 10 else ""))
+            raise SystemExit(2)
+        print(f"stats: loo gate PASS (every dropped incident keeps delta "
+              f">={gate_delta:.2f} and CI lo>0)")
+    return {"rows": loo_rows, "summary": summary}
+
+
 def cmd_stats(args):
     if args.boot < 1 or args.perm < 1:
         sys.exit("stats: --boot and --perm must be positive")
@@ -695,6 +747,15 @@ def cmd_stats(args):
         )
         if cluster:
             results.append(cluster)
+    if args.loo:
+        loo = loo_incidents(
+            rows, args.loo_group, args.boot, args.perm, args.seed, args.mde,
+            args.metric, args.loo_gate_delta, args.gate,
+        )
+        if loo:
+            results.extend(loo["rows"])
+        if args.out:
+            dump_json(args.out.replace(".csv", ".loo.json"), loo)
     results = [row for row in results if row]
     fields = list(results[0].keys())
     write_csv(args.out, fields, results)
@@ -1861,6 +1922,15 @@ def build_parser():
     stats.add_argument("--seed", type=int, default=20261023)
     stats.add_argument("--mde", type=float, default=0.05)
     stats.add_argument("--cluster-size", type=int, default=0)
+    stats.add_argument("--loo", action="store_true",
+                       help="leave-one-incident-out stability of tier:hard")
+    stats.add_argument("--loo-group", type=int, default=5,
+                       help="cases per incident for LOO grouping")
+    stats.add_argument("--loo-gate-delta", type=float, default=0.05,
+                       help="min tier:hard delta after dropping any incident")
+    stats.add_argument("--gate", action="store_true",
+                       help="with --loo: fail if any dropped incident loses "
+                            "the frozen advantage")
     stats.set_defaults(func=cmd_stats)
 
     blind = sub.add_parser("blind", help="frozen per-candidate blind review")

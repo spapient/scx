@@ -126,6 +126,21 @@ top-k 内计 1，否则 0。实测（2026-10-26）：tier:hard recall@1 Δ+0.058
 p=0.0064，显著）。CI 以 **recall@3** 作 Recall@k 门禁（Δ≥0.05 且 CI
 下界>0）；recall@1/5/10 供报告。
 
+**留一事故泛化（--loo --gate）**：按 `case_index//5` 把 150 查询归为 30
+个 incident（每组 5 例），逐一剔除任一 incident 后在其余 hard 查询上
+重估配对 MRR（bootstrap CI + permutation 同全量口径）；门禁要求每个
+剔除后的 Δ≥0.05 且 CI 下界>0。实测（2026-10-26）：30/30 剔除运行
+min Δ=+0.0500、mean=+0.0608（与全量一致）、max=+0.0638，min CI 下界
+=+0.0135——hard 优势**不依赖任一单一事故**。
+
+**标注一致性 κ（blind agree，核对性质）**：`blind agree --a
+config/gauge.ai.labels.json --b config/gauge.human.labels.json` 实测
+common=384、raw=0.344、**κ=0.017**——AI 逐项盲审与人工盲审一致性极低。
+如实记录并解读：AI 盲审标签不能直接充当人工 gold；Gauge 机械 MRR 主
+指标（tier:hard Δ 与显著检验）完全基于机械 target 与 relevance 定义，
+不依赖任何盲审标签，故不受 κ 影响。提升 AI-人工一致性属校准工作，
+不在 Gauge 预注册范围内。
+
 
 `seed` 默认使用 4 个并发 store 进程，`--jobs` 取 `1..=32`；超过 32 只会加剧
 进程启动与跨进程锁竞争。case 文本以 UTF-8 字节经 stdin 写入，不生成逐 case
