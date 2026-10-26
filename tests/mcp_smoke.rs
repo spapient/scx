@@ -75,9 +75,14 @@ fn mcp_stdio_roundtrip() {
         out.contains("sieve") && out.contains("kept") && out.contains("dropped"),
         "compress_context: {out}"
     );
-    // v0.6.5：返回为「效果卡 + JSON」双 content，首块人类可读、次块机器字段。
+    // v0.6.6：返回为单块 text（效果卡在上、机器 JSON 在下），任意客户端对话均可原样显示。
+    // 豆包实测对多 content 只渲染 JSON 转述，故合并为一块；断言单块结构 + 双语义字段。
     assert!(
-        out.contains("SCX 压缩召回") && out.contains("tokens_in") && out.contains("token_cut_pct"),
+        out.contains("SCX 压缩召回")
+            && out.contains("tokens_in")
+            && out.contains("token_cut_pct")
+            && out.contains("\"content\":[{\"type\":\"text\"")
+            && !out.contains("},{\"type\":\"text\""),
         "compress_context effect card missing: {out}"
     );
 
