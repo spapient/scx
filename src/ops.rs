@@ -13,7 +13,7 @@
 
 use crate::args::Opts;
 use crate::input::{fix, input};
-use crate::memory::{search, Case, Eval, Hit, Input, Stats};
+use crate::memory::{Case, Eval, Hit, Input, Stats};
 use crate::{compress, Mode, Outcome};
 use std::io::{self, Write};
 use std::sync::mpsc;
@@ -74,6 +74,9 @@ pub enum Op {
         query: String,
         k: usize,
         detail: bool,
+        embed_cmd: Option<String>,
+        sim_weight: f64,
+        minhash_weight: f64,
     },
     Eval {
         mem_dir: String,
@@ -132,6 +135,9 @@ fn select(opts: &Opts) -> Option<Op> {
             query: opts.query.clone(),
             k: opts.recall,
             detail: opts.recall_detail,
+            embed_cmd: opts.embed_cmd.clone(),
+            sim_weight: opts.config.sim_weight,
+            minhash_weight: opts.minhash_weight,
         });
     }
     if let Some(path) = &opts.eval {
@@ -260,7 +266,18 @@ fn dispatch(op: Op) -> Reply {
             query,
             k,
             detail,
-        } => result(&mem_dir, &query, k, detail),
+            embed_cmd,
+            sim_weight,
+            minhash_weight,
+        } => result(
+            &mem_dir,
+            &query,
+            k,
+            detail,
+            embed_cmd,
+            sim_weight,
+            minhash_weight,
+        ),
         Op::Eval {
             mem_dir,
             path,
@@ -281,8 +298,24 @@ fn dispatch(op: Op) -> Reply {
     }
 }
 
-fn result(mem_dir: &str, query: &str, k: usize, detail: bool) -> Reply {
-    match recall(mem_dir, query, k, detail) {
+fn result(
+    mem_dir: &str,
+    query: &str,
+    k: usize,
+    detail: bool,
+    embed_cmd: Option<String>,
+    sim_weight: f64,
+    minhash_weight: f64,
+) -> Reply {
+    match recall(
+        mem_dir,
+        query,
+        k,
+        detail,
+        embed_cmd,
+        sim_weight,
+        minhash_weight,
+    ) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(e) => Err(Failure::message(format!("--recall-only failed: {e}"))),
@@ -346,8 +379,24 @@ fn delete(mem_dir: &str, id: &str) -> Reply {
 }
 
 /// `--recall-only` 查看模式：只读召回、零库状态写入，库缺失时不创建目录。
-fn recall(mem_dir: &str, query: &str, k: usize, detail: bool) -> io::Result<()> {
-    let hits = search(mem_dir, query, k, true)?;
+fn recall(
+    mem_dir: &str,
+    query: &str,
+    k: usize,
+    detail: bool,
+    embed_cmd: Option<String>,
+    sim_weight: f64,
+    minhash_weight: f64,
+) -> io::Result<()> {
+    let hits = crate::memory::search_fused(
+        mem_dir,
+        query,
+        k,
+        true,
+        embed_cmd.as_deref(),
+        sim_weight,
+        minhash_weight,
+    )?;
     let stdout = io::stdout();
     let mut out = stdout.lock();
     lines(&mut out, &hits, mem_dir, detail, false)
