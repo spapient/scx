@@ -39,6 +39,7 @@ tools/scx --query "问题关键词" --ratio 0.35 /tmp/out.txt
 - 确定性：无随机源、无网络；相同输入、查询与配置产出相同结果。
 - 显式回退：无命中或无可用内容时返回原文并报告 `mode`，不静默返回空。
 - `compressed:` 统计行仅作核对，不是正文，不转述给用户；`seeds` 与 `evidence` 恒等，可机械断言。
+- v0.6.4+ 每次压缩在 stderr 输出「SCX 压缩召回」效果卡（原始/压缩后/省下的行·字符·token、证据召回、去重裁剪明细、风险；小输入透传与零命中各有结论卡）；`--json` 与 MCP 返回同步携带 `tokens_in`/`tokens_out`/`token_cut_pct`（估算口径，数字带"约"）。
 
 ## 记忆知识库（可选，默认关闭）
 - 沉淀：`--store 1 --fix "修复结论"` 把证据块与修复结论入库（入库前统一脱敏已知敏感模式，非通用 DLP）；不带 `--fix` 会警告。库目录 `--mem-dir DIR`（默认 `$SCX_MEM_DIR` 或 `~/.scx-memory`）；case id 形如 `<日期>_<16位hex>`。

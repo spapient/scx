@@ -198,6 +198,32 @@ compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence
 - `mode=sieve` 表示实际执行了筛选；passthrough 或 fail-open 模式返回原文。
 - 统计行属于 stdout；管道消费正文时加 `--no-stats`，需要机器可读统计时加 `--json`。
 
+### 压缩召回效果报告（v0.6.4+）
+
+每次压缩后，终端会额外输出一张「SCX 压缩召回」效果卡（stderr，不影响 stdout 管道契约），
+把"原始多大 → 压缩后多大 → 省了多少 → 召回多少证据 → 做了什么 → 风险如何"讲给普通人听：
+
+```text
+✦ SCX 压缩召回 ✦
+
+📌 查询      database connection failed
+⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据
+📥 原始      60 行 · 3,318 字符 · 约 830 token
+📤 压缩后    45 行 · 2,710 字符 · 约 678 token
+💾 省下      15 行 · 608 字符 · 约 151 token（-18.3%）
+🎯 证据召回  12 条关键证据全部保留 · 0 丢失
+🔁 去重      28 行重复内容已折叠
+✂️ 裁剪      11 段无关内容已移除
+🛡️ 风险      低 · 0 条额外守护
+```
+
+- 小输入（<40 行且 <1200 token）与查询零命中时同样出卡：结论分别是
+  「小输入透传 · 无需压缩」与「无命中保护 · 零丢失」，附一句人话说明为什么没有压缩。
+- token 为 scx 内部估算口径（`terms::estimate`：ASCII 约 4 字符/token，中文约 0.6 token/字），
+  数字带"约"字；行/字符/token 三口径同时给出，中文日志时三者的缩减率独立计算。
+- `--json` 的机器字段同步扩展（向后兼容）：`tokens_in` / `tokens_out` / `token_cut_pct`，
+  MCP `compress_context` 的返回 JSON 同样携带，AI 侧可直接转述"省了多少 token"。
+
 常用调节方式：
 
 ```bash

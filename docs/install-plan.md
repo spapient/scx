@@ -1,6 +1,9 @@
-# scx 发布与接入总览（v5 · 全渠道）
+# scx 发布与接入总览（v6 · 全渠道）
 
-> 版本 v5 · 2026-10-26 · 状态：**发布链全部落地，千问办公/豆包均已注册成功**
+> 版本 v6 · 2026-10-26 · 状态：**v0.6.4 全渠道发布完成，五端接入全部验证通过**
+> 变更（v6）：**v0.6.4 压缩召回效果报告**——每次压缩输出「SCX 压缩召回」效果卡（stderr），
+> 原始/压缩后/省下的行·字符·token 三口径 + 证据召回/去重/裁剪/风险；JSON 与 MCP 同步携带
+> `tokens_in`/`tokens_out`/`token_cut_pct`。全渠道升级 0.6.4（crates/GitHub/Homebrew/npm）。
 > 变更（v5）：**千问办公最终方案定为命令 `/opt/homebrew/bin/scx mcp`**（千问 STDIO 不传环境变量，
 > `SCX_MCP=1` 方案在千问侧失效，已实测留档）；scx 0.6.2 全渠道发布（crates/GitHub/Homebrew）。
 > 变更（v4）：千问办公（QwenWorkCN）手动配置注册成功（此前误判为平台放弃）。
@@ -14,6 +17,7 @@
 - **接入开发工具**：`scx setup` 一键注册到 Codex / Claude Code / Cursor / Qwen Code（全自动，实测通过）
 - **接入豆包**：GUI 连接器一次填写（`npx -y @spapient/scx mcp`），已注册成功
 - **接入千问办公**：GUI 手动配置（命令 `/opt/homebrew/bin/scx mcp`，**带参数，无需环境变量**），**已注册成功并启用**（详见 §3.2）
+- **效果可见**：v0.6.4 起每次压缩自动输出「SCX 压缩召回」效果卡（省了多少 token / 召回多少证据 / 做了什么 / 风险如何），豆包/千问调用 compress_context 的返回 JSON 也带 token 效果字段
 
 ---
 
@@ -21,17 +25,17 @@
 
 | 渠道 | 命名 | 版本 | 状态 | 关键证据 |
 |---|---|---|---|---|
-| crates.io | `scx`（账户 `apex`） | **0.6.2**（5 版，未 yanked） | ✅ 已发布 | 邮箱已验证（haofei.ni@outlook.com）；`cargo install scx` 可用 |
-| GitHub Release | `spapient/scx` | v0.6.2 | ✅ 已发布 | 三平台资产：darwin-arm64 / linux-x86_64（musl 静态）/ windows-x86_64 |
-| Homebrew | tap `spapient/homebrew-scx` | 0.6.2 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → `/opt/homebrew/bin/scx` 0.6.2 可运行 |
-| npm | `@spapient/scx`（scoped） | **0.6.2** | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过；包内含三平台二进制（1.8MB） |
+| crates.io | `scx`（账户 `apex`） | **0.6.4**（7 版，未 yanked） | ✅ 已发布 | 邮箱已验证（haofei.ni@outlook.com）；`cargo install scx` 可用，本机已实测 0.6.4 |
+| GitHub Release | `spapient/scx` | v0.6.4 | ✅ 已发布 | 三平台资产（tar.gz/zip + sha256 已核对）：darwin-arm64 / linux-x86_64（musl 静态）/ windows-x86_64 |
+| Homebrew | tap `spapient/homebrew-scx` | 0.6.4 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → `/opt/homebrew/bin/scx` 0.6.4 可运行 |
+| npm | `@spapient/scx`（scoped） | **0.6.4** | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.4）；包内置 0.6.4 三平台二进制。历史：0.6.2 包误内置 0.6.1 二进制，已重发修复 |
 | npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 年空壳包（tu123dou）占用；申请已发 npm 官方（落款 spapient / haofei.ni@outlook.com） |
 | winget | `Spapient.Scx` | 0.6.1 | ⏳ PR 审核中 | PR **#461786**（microsoft/winget-pkgs，portable 三 yaml） |
 | Scoop | `scx` | 0.6.1 | ⏳ PR 审核中 | PR **#8766**（ScoopInstaller/Main，bucket/scx.json） |
 | PyPI | `scx` | — | ✗ 被占 | 现存 v1.3.0 "MIT Supply Chain Python Package"，未注册 |
 | AUR | `scx` | — | ✗ 放弃 | 官网被反爬（Anubis）拦截；按用户指示放弃 |
 
-**版本一致性**：crates 0.6.2 = GitHub Release 0.6.2 = Homebrew 0.6.2 = npm 内置二进制 0.6.2（winget/Scoop PR 仍为 0.6.1，待合并时对齐）。
+**版本一致性**：crates 0.6.4 = GitHub Release v0.6.4 = Homebrew 0.6.4 = npm 内置二进制 0.6.4（winget/Scoop PR 仍为 0.6.1，待合并时对齐）。
 
 ---
 
@@ -39,15 +43,15 @@
 
 | 平台 | 命令 | 状态 |
 |---|---|---|
-| Rust / Cargo（通用） | `cargo install scx` | ✅ 可用（crates.io 0.6.2） |
-| macOS（Homebrew） | `brew tap spapient/scx && brew install scx` | ✅ 本机实测（0.6.2） |
-| 任意（Node ≥18） | `npx -y @spapient/scx` | ✅ 实测（MCP 入口 `npx -y @spapient/scx mcp`） |
+| Rust / Cargo（通用） | `cargo install scx` | ✅ 可用（crates.io 0.6.4） |
+| macOS（Homebrew） | `brew tap spapient/scx && brew install scx` | ✅ 本机实测（0.6.4） |
+| 任意（Node ≥18） | `npx -y @spapient/scx` | ✅ 实测（MCP 入口 `npx -y @spapient/scx mcp`，latest=0.6.4 内置 0.6.4 二进制） |
 | Windows（winget） | `winget install Spapient.Scx` | ⏳ 待 PR 合并后可用 |
 | Windows（Scoop） | `scoop install scx` | ⏳ 待 PR 合并后可用 |
 | 从源码 | `cargo build --release`（零第三方 crate，离线可构建） | ✅ |
 | 本地软链 | `tools/scx install`（构建 + 链接到 `~/.local/bin/scx`） | ✅ 仓库自带 |
 
-> 升级：`cargo install scx --force` 或 `brew upgrade scx`。本机 `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已对齐 0.6.2。
+> 升级：`cargo install scx --force` 或 `brew upgrade scx`。本机 `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已对齐 0.6.4。
 
 ---
 
@@ -101,7 +105,7 @@
 2. **本机无系统级 node/npx**：千问 App 启动子进程的 PATH 不含 Node 目录 → 旧 npx 配置 `process_not_found`。直接使用 brew 二进制 `/opt/homebrew/bin/scx` 规避。
 3. **千问 STDIO 不传递环境变量给子进程**：`SCX_MCP=1` 虽在 JSON 预览中正确生成（`env.SCX_MCP: "1"`、configRevision 递增），但 spawn 时 env 丢失——scx 以无参数方式启动、打印 usage 退出，诊断 `code=unknown`、`Registered 0 tools`（千问 main.log 实锤）。→ 不要依赖环境变量，用显式 `mcp` 子命令。
 
-**注**：scx 0.6.2 仍保留 `SCX_MCP=1` 环境变量开关（无参数时进 MCP 模式），对支持 env 的 MCP 客户端（如 Cursor/其他 harness）有效；千问侧不可用。
+**注**：scx 0.6.4 仍保留 `SCX_MCP=1` 环境变量开关（无参数时进 MCP 模式），对支持 env 的 MCP 客户端（如 Cursor/其他 harness）有效；千问侧不可用。
 
 **保存后验证**：已安装列表 `scx` 开关置 1，`IDENTITY_CONNECTOR_CONNECTION_FAILED` 消失、无「诊断」按钮；端到端调用 `compress_context` 见 §5 待办（千问对话中实测）。
 
@@ -138,10 +142,10 @@ scx mcp                  # stdio JSON-RPC（serverInfo.name=scx）
 | 1 | winget PR #461786 审核 | ⏳ 官方审核中 | 全球 Windows 用户 `winget install` 暂不可用 |
 | 2 | Scoop PR #8766 审核 | ⏳ 官方审核中 | `scoop install scx` 暂不可用 |
 | 3 | npm 纯名 `scx` 回收 | ⏳ 官方处理中 | 命名统一为 `scx` 的最终形态；现 scoped 包 `@spapient/scx` 已可用 |
-| 4 | 豆包端到端调用验证 | ⏳ 待测试 | 连接器已注册；在豆包对话中调用 `compress_context` 确认 |
-| 5 | ~~本机版本对齐~~ | ✅ 已完成 | `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已升 0.6.2 |
+| 4 | ~~豆包端到端调用验证~~ | ✅ 已实证 | 连接器进程链实证（npx→node→vendor 三进程存活）；豆包对话 7 行日志返回 `passthrough:small`（工具调用成功、小输入透传设计行为） |
+| 5 | ~~本机版本对齐~~ | ✅ 已完成 | `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已升 0.6.4 |
 | 6 | 千问办公端到端调用验证 | ⏳ 待测试 | 连接器已注册并启用（命令 `/opt/homebrew/bin/scx mcp`）；在千问对话中调用 `compress_context` 确认 |
-| 7 | `/opt/homebrew/bin/scx-mcp` 旧包装脚本 | ⏳ 待删除 | 已被「命令带 `mcp` 参数」方案取代，确认后删除 |
+| 7 | ~~`/opt/homebrew/bin/scx-mcp` 旧包装脚本~~ | ✅ 已删除 | 已被「命令带 `mcp` 参数」方案取代，2026-10-26 删除 |
 
 ---
 

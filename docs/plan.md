@@ -316,6 +316,18 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   `cargo publish --locked` 成功；crates.io max_version=0.6.1、num_versions=4；main 同步
   origin/main=bb600ac（271f4b2 fix + bump）。
 
+- **0.6.4 发布（2026-10-26）· 压缩召回效果报告**：① `Outcome.tokens_in` 全模式恒定填充
+  （`terms::estimate` 口径：ASCII≈4 字符/token、中文≈0.6 token/字）；② `render()` JSON 增
+  `tokens_in`/`tokens_out`/`token_cut_pct`（向后兼容，MCP `compress_context` 同步携带，
+  豆包/千问调用即可见"省了多少 token"）；③ CLI stderr 每次输出「SCX 压缩召回」效果卡——
+  原始/压缩后/省下的行·字符·token 三口径 + 证据召回/去重/裁剪明细 + 风险等级，小输入透传与
+  查询零命中各有结论卡（普通人可读）；stdout 契约零变化（golden 基线仅 stderr 增量更新）。
+  门禁：lib 205 + 集成 25 全绿、fmt/clippy 零告警、golden 回归零漂移；commit 链
+  95c5736（feat）→ f1cd2b4（bump）。全渠道发布：crates.io `scx` 0.6.4（Published）、
+  GitHub Release v0.6.4（三平台 tar.gz/zip + sha256 核对）、Homebrew tap 0.6.4
+  （fcbae74 已推）、npm `@spapient/scx` 0.6.4（versions 含 0.6.4，npx 端到端
+  serverInfo=0.6.4）；本机 `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已 0.6.4。
+
 ## 分发渠道与平台接入记录（2026-10-26，0.6.1 之后）
 
 > 完整矩阵见 `docs/install-plan.md`（v3 全渠道总览）。本段为 plan 侧状态记录。
@@ -324,10 +336,10 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 | 渠道 | 命名 | 版本 | 状态 | 证据 |
 |---|---|---|---|---|
-| crates.io | `scx`（账户 apex） | 0.6.1 | ✅ 已发布 | max_version=0.6.1、num_versions=4、未 yanked |
-| GitHub Release | spapient/scx | v0.6.1 | ✅ 已发布 | 三平台资产（darwin-arm64 / linux-x86_64 musl / windows-x86_64） |
-| Homebrew tap | `spapient/homebrew-scx` | 0.6.1 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → /opt/homebrew/bin/scx 0.6.1 |
-| npm | `@spapient/scx`（scoped） | 0.6.2 | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过；含三平台二进制 |
+| crates.io | `scx`（账户 apex） | 0.6.4 | ✅ 已发布 | max_version=0.6.4、未 yanked；`cargo install scx` 本机实测 |
+| GitHub Release | spapient/scx | v0.6.4 | ✅ 已发布 | 三平台资产（darwin-arm64 / linux-x86_64 musl / windows-x86_64，sha256 已核对） |
+| Homebrew tap | `spapient/homebrew-scx` | 0.6.4 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → /opt/homebrew/bin/scx 0.6.4 |
+| npm | `@spapient/scx`（scoped） | 0.6.4 | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.4）；包内置 0.6.4 三平台二进制 |
 | npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 空壳包（tu123dou）占用；已发 npm 官方（落款 spapient） |
 | winget | `Spapient.Scx` | 0.6.1 | ⏳ PR #461786 审核中 | microsoft/winget-pkgs portable 三 yaml |
 | Scoop | `scx` | 0.6.1 | ⏳ PR #8766 审核中 | ScoopInstaller/Main bucket/scx.json |
@@ -338,8 +350,11 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 - **豆包（Doubao.app）✅ 已注册成功**：GUI 连接器表单 STDIO，服务器名 `scx`、命令 `npx`、
   参数 `-y @spapient/scx mcp`（三行）；管理页「连接器」显示 scx 且开关开启。
-  豆包支持任意可执行命令（无千问那种 npx-only 限制）。**待办**：豆包内实际调用
-  compress_context 的端到端验证（GUI 自动点击曾被 computer-use 服务故障中断）。
+  豆包支持任意可执行命令（无千问那种 npx-only 限制）。**已实证连接器进程链**：
+  `ps` 可见豆包拉起 `npm exec @spapient/scx mcp` → node `.bin/scx mcp` →
+  vendor `scx-darwin-arm64 mcp`（长期存活，豆包自带 node 环境，无千问 PATH/env 坑）；
+  豆包对话中测试消息（7 行小日志）返回 `passthrough:small`（小输入透传，工具调用成功、
+  行为正确）。v0.6.4 起豆包调用 compress_context 的返回 JSON 带 token 效果字段。
 - **千问办公（QwenWorkCN）✅ 已注册成功（终版方案，2026-10-26）**：`LOCAL_IDENTITY_PHASE_RESTRICTED`
   仅拦截 **JSON 导入**，**手动填写表单可用**（用户主张正确）。**最终配置：命令 `/opt/homebrew/bin/scx mcp`
   （带显式 `mcp` 子命令参数）、环境变量留空**。三个关键坑：① `npx -y @spapient/scx mcp` 类命令保存时
