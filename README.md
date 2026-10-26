@@ -223,6 +223,9 @@ compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence
   数字带"约"字；行/字符/token 三口径同时给出，中文日志时三者的缩减率独立计算。
 - `--json` 的机器字段同步扩展（向后兼容）：`tokens_in` / `tokens_out` / `token_cut_pct`，
   MCP `compress_context` 的返回 JSON 同样携带，AI 侧可直接转述"省了多少 token"。
+- **MCP 返回双 content（v0.6.5+）**：`compress_context` 返回 `[效果卡, JSON]` 两块——
+  第一块就是上面这张「SCX 压缩召回」效果卡（豆包/千问/Codex/Cursor/Claude 对话直接可见），
+  第二块为机器 JSON（`tokens_in` 等完整字段）。对话里调用一次，效果一目了然。
 
 常用调节方式：
 

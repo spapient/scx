@@ -327,6 +327,14 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
   GitHub Release v0.6.4（三平台 tar.gz/zip + sha256 核对）、Homebrew tap 0.6.4
   （fcbae74 已推）、npm `@spapient/scx` 0.6.4（versions 含 0.6.4，npx 端到端
   serverInfo=0.6.4）；本机 `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已 0.6.4。
+- **0.6.5 发布（2026-10-26）· 效果卡进 MCP content**：`compress_context` 返回改为
+  `[效果卡, JSON]` 双 content——首块为「SCX 压缩召回」效果卡（复用 `recall_report`，人话可读），
+  次块为机器 JSON（`tokens_in` 等）；新增 `jesc` JSON 字符串转义（换行/制表符/反斜杠），
+  smoke 测试加双块断言。门禁全绿（lib 205 + 集成，fmt/clippy/doc/release 零告警）；
+  commit 链 feat+bump（main= 已推）。全渠道发布：crates.io 0.6.5（已存在确认）、
+  GitHub Release v0.6.5（三资产 sha256 核对）、Homebrew tap 0.6.5（本机 /opt/homebrew/bin/scx 已 0.6.5）、
+  npm `@spapient/scx` 0.6.5（versions 已含，豆包 npx 缓存清理后重启拉到 0.6.5）；
+  **豆包端到端实证：MCP 返回效果卡 + JSON 双块，对话直接可见压缩效果**（此前效果卡仅终端 stderr 可见）。
 
 ## 分发渠道与平台接入记录（2026-10-26，0.6.1 之后）
 
@@ -336,10 +344,10 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 | 渠道 | 命名 | 版本 | 状态 | 证据 |
 |---|---|---|---|---|
-| crates.io | `scx`（账户 apex） | 0.6.4 | ✅ 已发布 | max_version=0.6.4、未 yanked；`cargo install scx` 本机实测 |
-| GitHub Release | spapient/scx | v0.6.4 | ✅ 已发布 | 三平台资产（darwin-arm64 / linux-x86_64 musl / windows-x86_64，sha256 已核对） |
-| Homebrew tap | `spapient/homebrew-scx` | 0.6.4 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → /opt/homebrew/bin/scx 0.6.4 |
-| npm | `@spapient/scx`（scoped） | 0.6.4 | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.4）；包内置 0.6.4 三平台二进制 |
+| crates.io | `scx`（账户 apex） | 0.6.5 | ✅ 已发布 | max_version=0.6.5、未 yanked；`cargo install scx` 本机实测 |
+| GitHub Release | spapient/scx | v0.6.5 | ✅ 已发布 | 三平台资产（darwin-arm64 / linux-x86_64 musl / windows-x86_64，sha256 已核对） |
+| Homebrew tap | `spapient/homebrew-scx` | 0.6.5 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → /opt/homebrew/bin/scx 0.6.5 |
+| npm | `@spapient/scx`（scoped） | 0.6.5 | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.5）；包内置 0.6.5 三平台二进制 |
 | npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 空壳包（tu123dou）占用；已发 npm 官方（落款 spapient） |
 | winget | `Spapient.Scx` | 0.6.1 | ⏳ PR #461786 审核中 | microsoft/winget-pkgs portable 三 yaml |
 | Scoop | `scx` | 0.6.4 | ⏳ PR #8768 审核中 | package request #8767 已提；manifest 0.6.4（sha256 核对）。旧 PR #8766 因缺 request 被关，按官方流程重提 |
