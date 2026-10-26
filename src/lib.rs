@@ -36,6 +36,8 @@ pub mod ops;
 /// 记忆知识库（旁路，默认不启用）：I/O 侧模块，与纯函数 `compress` 完全隔离。
 pub mod memory;
 
+/// SHA-256 与十六进制编码（常驻，供 semantic 权重校验与 meter 快照指纹共用）。
+pub mod hash;
 pub mod json;
 pub mod mcp;
 pub mod setup;
