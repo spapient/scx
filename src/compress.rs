@@ -12,7 +12,6 @@ use crate::analysis::{
 use crate::analysis::{lowercase, normalize};
 use crate::policy::{Limits, Weights, DEFAULT_RISK, DEFAULT_SCORES};
 use crate::terms::terms;
-use crate::token::TokenMode;
 use crate::{prefix, Config, Mode, Outcome, Risk};
 
 /// 确定性快速哈希（FxHash 风格）：压缩内核的查找/计数型 map 统一使用，
@@ -174,14 +173,7 @@ struct Mask {
 
 /// 一次逐行×逐词扫描出命中位掩码；错误/标记/守卫/force 判定复用同一小写缓冲（无逐行分配）。
 /// `do_tok` 为真时在循环内累计 token 估算（大输入 + 非针尖档），避免为同一批行再走一趟。
-fn masks(
-    lines: &[&str],
-    terms: &[String],
-    forces: &[Force],
-    small_tok: f64,
-    do_tok: bool,
-    mode: TokenMode,
-) -> Mask {
+fn masks(lines: &[&str], terms: &[String], forces: &[Force], small_tok: f64, do_tok: bool) -> Mask {
     let total = lines.len();
     let words = terms.len().div_ceil(64).max(1);
     let mut mask_v = vec![0u64; total * words];
@@ -193,7 +185,7 @@ fn masks(
     let mut low = String::new();
     for i in 0..total {
         if do_tok {
-            total_tok += crate::token::estimate(lines[i], mode);
+            total_tok += crate::terms::estimate(lines[i]);
         }
         low.clear();
         lowercase(lines[i], &mut low);
@@ -894,7 +886,6 @@ struct Fill {
     ratio: f64,
     edge_head: usize,
     remaining: f64,
-    mode: TokenMode,
 }
 
 /// 预算选择：种子区域门控（首两行身份行除外）；独立入选须真实得分（scores > 0）。
@@ -924,7 +915,7 @@ fn fill(
     });
     let mut used = 0.0f64;
     for &(i, _) in &order {
-        let t = crate::token::estimate(sel.lines[i], cfg.mode);
+        let t = crate::terms::estimate(sel.lines[i]);
         if used + t > cap {
             continue;
         }
@@ -939,11 +930,11 @@ fn fill(
 }
 
 /// 已保留行的 token 估算总和（`--max-tokens` 记账口径）。
-fn tokens(lines: &[&str], keep: &[bool], mode: TokenMode) -> f64 {
+fn tokens(lines: &[&str], keep: &[bool]) -> f64 {
     let mut sum = 0.0f64;
     for (i, &k) in keep.iter().enumerate() {
         if k {
-            sum += crate::token::estimate(lines[i], mode);
+            sum += crate::terms::estimate(lines[i]);
         }
     }
     sum
@@ -1142,8 +1133,12 @@ fn active(risk: Risk, cfg: &Config) -> bool {
 /// 独立小函数中（`config` / `shape` / `cap_*` 等）。
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let (ratio, context, window) = config(cfg);
-    let tok_mode = cfg.token_mode;
     let kind = cfg.kind;
+    // --max-tokens 保守上界：可选填充预算按「用户上限 ÷ 安全系数」计（宁高估勿超预算）；
+    // 证据地板/守卫溢出诊断仍按诚实上限（cfg.limit），不翻转模式标签。
+    let budget_limit = cfg
+        .limit
+        .map(|m| m as f64 / crate::terms::BUDGET_SAFETY_FACTOR);
     // 分析使用 LF 归一化文本；passthrough/fail-open 返回输入原文，保持“原样保留”语义。
     let original = text;
     // 零拷贝快路径：无 CR 时直接借用原文本；行以 &str 切片保存，避免整文复制与逐行分配。
@@ -1155,7 +1150,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // token 估算只服务小输入直通与可选预算；针尖档大盘无需整份扫描。
     // 小输入先算一次即可（随后可能直接 passthrough）；大输入把估算并入
     // 逐行分析循环，避免为同一批行再走一趟缓存。
-    let small_tok = survey(&lines, total, tok_mode);
+    let small_tok = survey(&lines, total);
     let chars_a = chars(original);
     let evidence = &cfg.evidence;
 
@@ -1175,7 +1170,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
               dropped: Vec<crate::Dropped>|
      -> Outcome {
         let ev = ev_retention(evidence, &numbers, &text_owned, kept, total);
-        let tokens_out = crate::token::estimate(&text_owned, tok_mode);
+        let tokens_out = crate::terms::estimate(&text_owned);
         Outcome {
             text: text_owned,
             numbers,
@@ -1196,13 +1191,13 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             mode,
             limit,
             tokens,
-            tokens_in: crate::token::estimate(original, tok_mode),
+            tokens_in: crate::terms::estimate(original),
             dropped,
             budget_used_pct: 0.0,
             ev_retention: ev,
             buckets: vec![crate::BucketStat {
                 kind,
-                tokens_in: crate::token::estimate(original, tok_mode),
+                tokens_in: crate::terms::estimate(original),
                 tokens_out,
                 kept,
                 total,
@@ -1233,14 +1228,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
-    let masks = masks(
-        &lines,
-        &uniq_terms,
-        &force_pats,
-        small_tok,
-        do_tok,
-        tok_mode,
-    );
+    let masks = masks(&lines, &uniq_terms, &force_pats, small_tok, do_tok);
     let (dup, dup_n) = dedup(
         &lines,
         &masks.mask_v,
@@ -1308,7 +1296,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
     // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
-    let tok_floor = tokens(&lines, &keep, tok_mode);
+    let tok_floor = tokens(&lines, &keep);
     let mut overflow = cap(tok_floor, cfg.limit);
 
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
@@ -1326,8 +1314,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             total_tok: masks.total_tok,
             ratio,
             edge_head: DEFAULT_SCORES.edge_head,
-            remaining: remaining(tok_floor, cfg.limit),
-            mode: tok_mode,
+            remaining: remaining(tok_floor, budget_limit),
         },
         context,
         overflow,
@@ -1358,7 +1345,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     // 守卫后最终检查：填充受上限约束，但风险守卫可能追加证据性行；如实报告 OverflowFill。
-    let final_tok = tokens(&lines, &keep, tok_mode);
+    let final_tok = tokens(&lines, &keep);
     if overflow.is_none() {
         overflow = last(final_tok, cfg.limit);
     }
@@ -1423,7 +1410,7 @@ pub fn compress_bucketed(
         let mut c = cfg.clone();
         c.ratio = kind.default_ratio();
         let o = compress(text, query, &c);
-        let tok_out = crate::token::estimate(&o.text, cfg.token_mode);
+        let tok_out = crate::terms::estimate(&o.text);
         buckets.push(crate::BucketStat {
             kind: *kind,
             tokens_in: o.tokens_in,
@@ -1494,9 +1481,9 @@ fn config(cfg: &Config) -> (f64, i64, i64) {
 }
 
 /// 小输入 token 估算（仅 total < SMALL_LINES 时计算，其余为 0）。
-fn survey(lines: &[&str], total: usize, mode: TokenMode) -> f64 {
+fn survey(lines: &[&str], total: usize) -> f64 {
     if total < crate::policy::SMALL_LINES {
-        lines.iter().map(|s| crate::token::estimate(s, mode)).sum()
+        lines.iter().map(|s| crate::terms::estimate(s)).sum()
     } else {
         0.0
     }
@@ -1541,8 +1528,8 @@ fn cap(tok_floor: f64, limit: Option<usize>) -> Option<Mode> {
 }
 
 /// --max-tokens：可选填充可分配余量（无上限时为 +∞）。
-fn remaining(tok_floor: f64, limit: Option<usize>) -> f64 {
-    limit.map(|m| m as f64 - tok_floor).unwrap_or(f64::INFINITY)
+fn remaining(tok_floor: f64, limit: Option<f64>) -> f64 {
+    limit.map(|m| m - tok_floor).unwrap_or(f64::INFINITY)
 }
 
 /// --max-tokens：风险守卫追加证据性行后总估算仍超 → OverflowFill。

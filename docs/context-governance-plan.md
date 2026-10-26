@@ -175,7 +175,7 @@ pub struct RedactRule {
 | 项 | v0.1 位置 | 处置 | 理由 |
 | --- | --- | --- | --- |
 | BPE 精确器 | P1 缺口 1 | **砍掉**，移出路线图 | ① vocab 授权需确认；② 零依赖下手写 byte-level BPE 拿不到 Claude/GPT 精确 merge rank，就退化成"另一个估算器"；③ 压缩器绝对 token 精度只影响 `--max-tokens` 与成本估算，而成本默认不估算。将来真需要时，独立 feature + 第三方 crate 授权后再议。 |
-| Calibrated 校准表 | P1 缺口 1 | **缓办** | `terms::estimate` 三分类已修复 other 脚本 4–12x 低估（`src/terms.rs:321`）；MAE≤5% 收益薄、维护成本高。有明确消费方（真实 provider 成本估算或 `--max-tokens` 精度诉求）再启动。 |
+| Calibrated 校准表 | P1 缺口 1 | **已移除** | 三次方向（隐式分类/词数密度/换行特征）均撞共线（words↔alnum VIF≈596）与线性误设地板（留出 MAE 4.66 不回退）；无消费方需要低绝对 MAE。改以 `--max-tokens` 保守上界（`BUDGET_SAFETY_FACTOR`，`tools/calibrate.py` 定分位数）保预算安全。 |
 | SessionState 会话增量 | P4 缺口 9 | **缓办** | 等价性门（增量==全量逐字节）维护成本高，且前提是真实多轮场景存在。等 P4/P5 落地、有真实收益数据后再立项。 |
 | token 级裁剪 | 风险 3 | **维持砍掉** | 保持整行语义与结构安全；与 LLMLingua-2 的压缩率差距仍在（1.1–2.4x vs 2–20x），追平需带结构保护的 token 级算子，单独立项。 |
 

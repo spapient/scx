@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--token-mode MODE] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -61,9 +61,6 @@ pub fn usage() -> String {
     );
     s.push_str(
         "                       compression (mask secrets/PII as <redacted>), audit to stderr\n",
-    );
-    s.push_str(
-        "  --token-mode M       token estimate: heuristic (default) or calibrated (frozen coeffs)\n",
     );
     s.push_str("  --kind T             content-type tag: static-contract/system-definition/\n");
     s.push_str(
@@ -247,8 +244,6 @@ enum Kind {
     Anchors,
     /// 脱敏种类（`--redact`，逗号分隔：secret/id-card/phone/email）。
     Redact,
-    /// Token 计量口径（`--token-mode heuristic|calibrated`）。
-    TokenMode,
     /// 内容类型标注（`--kind <type>|auto`）。
     ContentType,
 }
@@ -431,15 +426,6 @@ static FLAGS: &[Flag] = &[
         kind: Kind::Redact,
         what: "",
         err_empty: "requires a comma-separated list (secret/id-card/phone/email)",
-        err_zero: "",
-        min: 0,
-    },
-    Flag {
-        name: "--token-mode",
-        once: true,
-        kind: Kind::TokenMode,
-        what: "",
-        err_empty: "requires heuristic or calibrated",
         err_zero: "",
         min: 0,
     },
@@ -914,7 +900,6 @@ fn flag(
         | Kind::Evidence
         | Kind::Anchors
         | Kind::Redact
-        | Kind::TokenMode
         | Kind::ContentType => raw(s, f, inline, args, i),
         Kind::F64 | Kind::I64 | Kind::U64 | Kind::Bool01 => numeric(s, f, inline, args, i),
         #[cfg(feature = "semantic")]
@@ -939,7 +924,6 @@ fn raw(
         Kind::Evidence => evidence(s, f, inline, args, i),
         Kind::Anchors => anchors(s, f, inline, args, i),
         Kind::Redact => redact(s, f, inline, args, i),
-        Kind::TokenMode => token_mode(s, f, inline, args, i),
         Kind::ContentType => content_kind(s, f, inline, args, i),
         _ => unreachable!("valueish flag without handler: {}", f.name),
     }
@@ -1442,21 +1426,6 @@ fn redact(
             }
         }
     }
-    Ok(())
-}
-
-/// Token 计量口径（`--token-mode heuristic|calibrated`）。
-fn token_mode(
-    s: &mut ParseState,
-    f: &Flag,
-    inline: Option<String>,
-    args: &[String],
-    i: &mut usize,
-) -> Result<(), String> {
-    let v = value(args, i, f.name, inline)?;
-    let m = crate::token::TokenMode::parse(v.trim())
-        .ok_or_else(|| format!("{} expects heuristic or calibrated, got {v:?}", f.name))?;
-    s.config.token_mode = m;
     Ok(())
 }
 

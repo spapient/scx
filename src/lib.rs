@@ -49,7 +49,6 @@ pub mod semantic;
 
 /// 类型路由 + 计量桶 + 前后快照（P1 治理层，复用 `compress` 内核）。
 pub mod bucket;
-pub mod calib;
 /// PostToolUse 自动拦截（P0）：压缩 Bash 大输出替换 tool_response。
 pub mod hook;
 /// Token 计量与压缩效果审计（P3 治理层：分桶统计/效果指标/预算管控/快照追溯）。
@@ -58,7 +57,6 @@ pub mod redact;
 pub mod regex;
 /// 可插拔相似度后端（`--embed-cmd`；默认无后端，见 `sim::compute`）。
 pub mod sim;
-pub mod token;
 
 pub use compress::{compress, compress_bucketed};
 
@@ -274,8 +272,6 @@ pub struct Config {
     /// 结构锚点种类（P6 骨架保护，默认空 = 现状行为不变）：结构边界行标记为
     /// 保留锚点，优先级低于证据行、高于普通噪声行。
     pub structure_anchors: Vec<AnchorKind>,
-    /// Token 计量口径（默认 Heuristic = 现状字符启发式；Calibrated 用冻结系数）。
-    pub token_mode: crate::token::TokenMode,
     /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
     /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
     /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
@@ -310,7 +306,6 @@ impl Default for Config {
             sims: None,
             evidence: Vec::new(),
             structure_anchors: Vec::new(),
-            token_mode: crate::token::TokenMode::Heuristic,
             kind: ContentType::ToolOutput,
         }
     }

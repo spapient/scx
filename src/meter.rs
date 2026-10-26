@@ -3,7 +3,7 @@
 //! 数据流：分类化载荷 `[(category, text)]` →（复用 [`crate::compress_bucketed`] 逐桶压缩）
 //! → 分桶 token → 聚合全局/占比/效果指标/预算 → [`crate::meter::Snapshot`]（可序列化 JSON，入
 //! [`crate::meter::Ledger`] 追溯）。本层是薄壳，不复制裁剪逻辑；仅复用
-//! [`crate::token::estimate`]（主链路计量口径）、`compress_bucketed`、
+//! [`crate::terms::estimate`]（主链路计量口径）、`compress_bucketed`、
 //! [`crate::ContentType`]（核心桶标签与价值梯度默认预算）与 [`crate::json`]。
 //!
 //! # 指标口径（全部确定性、可复现，除零保护固定）
