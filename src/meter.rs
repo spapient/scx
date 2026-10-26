@@ -3,8 +3,8 @@
 //! 数据流：分类化载荷 `[(category, text)]` →（复用 [`crate::compress`] 内核逐桶压缩）
 //! → 分桶 token → 聚合全局/占比/效果指标/预算 → [`crate::meter::Snapshot`]（可序列化 JSON，入
 //! [`crate::meter::Ledger`] 追溯）。本层是薄壳，不复制裁剪逻辑；仅复用 `crate::terms::estimate`
-//! （全链路唯一计量口径）、`compress`、[`crate::bucket::ContentType`]（核心桶标签
-//! 与价值梯度默认预算）与 [`crate::json`]。
+//! （全链路唯一计量口径）、`compress`、[`crate::ContentType`]（核心桶标签与价值
+//! 梯度默认预算）与 [`crate::json`]。
 //!
 //! # 指标口径（全部确定性、可复现，除零保护固定）
 //! - 压缩比 `ratio = tokens_out / tokens_in`（in=0 → 1.0）
@@ -14,18 +14,14 @@
 //! - 桶占比 `share = 桶 tokens / 全局 tokens × 100`
 //! - 预算使用率 `used_pct = used / cap × 100`；`level` 按 `used/cap` 越过 warn/over 阈值。
 //!
-//! 高价值桶 = [`crate::bucket::ContentType::StaticContract`] + [`crate::bucket::ContentType::SystemDefinition`]
+//! 高价值桶 = [`crate::ContentType::StaticContract`] + [`crate::ContentType::SystemDefinition`]
 //! （价值梯度最顶）。快照不含 wall-clock：`id`/`round` 由调用方传入，保证同输入
 //! 同配置输出逐字节一致。
 
 #![forbid(unsafe_code)]
 
-use crate::bucket::ContentType;
 use crate::json::Json;
-use crate::{compress, Config};
-
-/// 计量维度标签：核心桶取 [`ContentType::as_str`]，自定义桶用任意字符串。
-pub type Category = String;
+use crate::{compress, BucketStat, Config, ContentType};
 
 /// 对任意文本片段执行 token 计数（`terms::estimate` 向上取整；空串为 0）。
 /// 全链路唯一计量口径，与压缩主链路的 `tokens_in/out` 同一把尺。
@@ -34,41 +30,11 @@ pub fn count(s: &str) -> usize {
 }
 
 /// 高价值桶判定：价值梯度最顶（静态契约 + 系统定义），参与留存率/密度。
-fn high_value(cat: &str) -> bool {
-    cat == ContentType::StaticContract.as_str() || cat == ContentType::SystemDefinition.as_str()
-}
-
-/// 核心桶的默认预算比例；自定义桶回退到调用方 `cfg.ratio`。
-fn core_ratio(cat: &str) -> Option<f64> {
-    cat.parse::<ContentType>().ok().map(|ct| ct.default_ratio())
-}
-
-/// 削减百分比（token 口径）：`(in - out) / in × 100`，in=0 → 0。
-fn cut_pct(tin: f64, tout: f64) -> f64 {
-    if tin > 0.0 {
-        (tin - tout) * 100.0 / tin
-    } else {
-        0.0
-    }
-}
-
-/// 单桶计量（绝对值 + 占比 + 可选配额）。
-#[derive(Debug, Clone)]
-pub struct BucketStat {
-    pub cat: Category,
-    pub tokens_in: f64,
-    pub tokens_out: f64,
-    /// 占全局输入 token 的百分比。
-    pub share_in_pct: f64,
-    /// 占全局输出 token 的百分比。
-    pub share_out_pct: f64,
-    pub cut_pct: f64,
-    /// 该桶独立配额（`None` = 未分配）。
-    pub quota: Option<usize>,
-    /// 配额使用率（%）：`tokens_out / quota × 100`；无配额为 0。
-    pub quota_used_pct: f64,
-    /// 配额剩余（`quota - tokens_out`，可为负 = 超支；无配额为 +∞）。
-    pub quota_left: f64,
+fn high_value(kind: ContentType) -> bool {
+    matches!(
+        kind,
+        ContentType::StaticContract | ContentType::SystemDefinition
+    )
 }
 
 /// 压缩效果指标（口径见模块 doc）。
@@ -111,8 +77,8 @@ pub struct BudgetSpec {
     pub warn: f64,
     /// 超限阈值（使用率比例，默认 1.0）。
     pub over: f64,
-    /// 按桶配额（category → 上限 token 数）。
-    pub quotas: Vec<(Category, usize)>,
+    /// 按桶配额（kind → 上限 token 数）。
+    pub quotas: Vec<(ContentType, usize)>,
 }
 
 impl Default for BudgetSpec {
@@ -152,6 +118,8 @@ pub struct Snapshot {
     pub buckets: Vec<BucketStat>,
     pub tokens_in: f64,
     pub tokens_out: f64,
+    /// 按桶配额（kind → 上限）；渲染时由 `tokens_out` 派生使用率/剩余。
+    pub quotas: Vec<(ContentType, usize)>,
     pub metrics: Metrics,
     pub budget: Budget,
 }
@@ -161,16 +129,24 @@ impl Snapshot {
     pub fn by_share(&self) -> Vec<&BucketStat> {
         let mut v: Vec<&BucketStat> = self.buckets.iter().collect();
         v.sort_by(|a, b| {
-            b.share_in_pct
-                .partial_cmp(&a.share_in_pct)
+            b.tokens_in
+                .partial_cmp(&a.tokens_in)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         v
     }
 
     /// 单查指定分类的用量（需求：单独查询指定分类）。
-    pub fn find(&self, cat: &str) -> Option<&BucketStat> {
-        self.buckets.iter().find(|b| b.cat == cat)
+    pub fn find(&self, kind: ContentType) -> Option<&BucketStat> {
+        self.buckets.iter().find(|b| b.kind == kind)
+    }
+
+    /// 单查指定分类的配额（`None` = 未分配）。
+    fn quota_of(&self, kind: ContentType) -> Option<usize> {
+        self.quotas
+            .iter()
+            .find(|(k, _)| *k == kind)
+            .map(|(_, q)| *q)
     }
 }
 
@@ -249,10 +225,10 @@ impl Ledger {
 }
 
 /// 输入载荷哈希：parts 的 (category + text) 拼接后 SHA-256（hex）。
-fn payload_hash(parts: &[(&str, &str)]) -> String {
+fn payload_hash(parts: &[(ContentType, &str)]) -> String {
     let mut buf = String::new();
-    for (cat, text) in parts {
-        buf.push_str(cat);
+    for (kind, text) in parts {
+        buf.push_str(kind.as_str());
         buf.push('\n');
         buf.push_str(text);
         buf.push('\n');
@@ -292,34 +268,30 @@ fn fingerprint(query: &str, cfg: &Config) -> String {
 
 /// 最简入口：分类化载荷分桶压缩并计量。
 ///
-/// `parts` = `[(category, text)]`；核心桶 category 取 [`ContentType::as_str`]，
-/// 自定义桶用任意字符串。`budget` 为 `None` 时预算字段为空态（cap=None、level=Normal）。
+/// `parts` = `[(ContentType, text)]`。`budget` 为 `None` 时预算字段为空态。
 /// `id` 内容派生（确定性），`round` 由调用方传入。
 pub fn measure(
     round: u64,
-    parts: &[(&str, &str)],
+    parts: &[(ContentType, &str)],
     query: &str,
     cfg: &Config,
     budget: Option<&BudgetSpec>,
 ) -> Snapshot {
-    let mut buckets: Vec<BucketStat> = parts
+    let buckets: Vec<BucketStat> = parts
         .iter()
-        .map(|(cat, text)| compress_bucket(cat, text, query, cfg))
+        .map(|(kind, text)| compress_bucket(*kind, text, query, cfg))
         .collect();
     let tin = buckets.iter().map(|b| b.tokens_in).sum::<f64>();
     let tout = buckets.iter().map(|b| b.tokens_out).sum::<f64>();
-    fill_shares(&mut buckets, tin, tout);
-    if let Some(spec) = budget {
-        apply_quotas(&mut buckets, spec);
-    }
+    let quotas = budget.map(|spec| spec.quotas.clone()).unwrap_or_default();
     let hi_in = buckets
         .iter()
-        .filter(|b| high_value(&b.cat))
+        .filter(|b| high_value(b.kind))
         .map(|b| b.tokens_in)
         .sum::<f64>();
     let hi_out = buckets
         .iter()
-        .filter(|b| high_value(&b.cat))
+        .filter(|b| high_value(b.kind))
         .map(|b| b.tokens_out)
         .sum::<f64>();
     let payload_sha256 = payload_hash(parts);
@@ -336,6 +308,7 @@ pub fn measure(
         buckets,
         tokens_in: tin,
         tokens_out: tout,
+        quotas,
         metrics: compute_metrics(tin, tout, hi_in, hi_out),
         budget: compute_budget(budget, tout),
     }
@@ -343,8 +316,9 @@ pub fn measure(
 
 /// 纯计量（不压缩）：把 `text` 计为一个 kind 桶（token in == out），构造前置快照。
 /// `config_fingerprint` 仅含 VERSION（无 query/压缩参数，因为未压缩）。
-pub fn snapshot(round: u64, kind: &str, text: &str) -> Snapshot {
+pub fn snapshot(round: u64, kind: ContentType, text: &str) -> Snapshot {
     let tokens = count(text) as f64;
+    let lines = text.lines().count();
     let payload_sha256 = crate::hash::hex(&crate::hash::sha256(text.as_bytes()));
     let config_fingerprint = crate::hash::hex(&crate::hash::sha256(crate::VERSION.as_bytes()));
     let id = crate::hash::hex(&crate::hash::sha256(
@@ -357,18 +331,16 @@ pub fn snapshot(round: u64, kind: &str, text: &str) -> Snapshot {
         payload_sha256,
         config_fingerprint,
         buckets: vec![BucketStat {
-            cat: kind.to_string(),
+            kind,
             tokens_in: tokens,
             tokens_out: tokens,
-            share_in_pct: 100.0,
-            share_out_pct: 100.0,
-            cut_pct: 0.0,
-            quota: None,
-            quota_used_pct: 0.0,
-            quota_left: f64::INFINITY,
+            kept: lines,
+            total: lines,
+            mode: crate::Mode::Sieve,
         }],
         tokens_in: tokens,
         tokens_out: tokens,
+        quotas: Vec::new(),
         metrics: Metrics {
             ratio: 1.0,
             saved: 0.0,
@@ -386,55 +358,20 @@ pub fn snapshot(round: u64, kind: &str, text: &str) -> Snapshot {
     }
 }
 
-/// 压缩单个分类并返回其计量（占比/配额由后续阶段填充）。
-fn compress_bucket(cat: &str, text: &str, query: &str, cfg: &Config) -> BucketStat {
+/// 压缩单个分类并返回其计量。
+fn compress_bucket(kind: ContentType, text: &str, query: &str, cfg: &Config) -> BucketStat {
     let mut c = cfg.clone();
-    if let Some(r) = core_ratio(cat) {
-        c.ratio = r;
-    }
+    c.ratio = kind.default_ratio();
     let o = compress(text, query, &c);
-    // passthrough/fail-open 时 `o.tokens` 不保证，重新估算输出（与 bucket 同口径）。
+    // passthrough/fail-open 时 `o.tokens` 不保证，重新估算输出（与 ops 渲染同口径）。
     let out = crate::terms::estimate(&o.text);
     BucketStat {
-        cat: cat.to_string(),
+        kind,
         tokens_in: o.tokens_in,
         tokens_out: out,
-        share_in_pct: 0.0,
-        share_out_pct: 0.0,
-        cut_pct: cut_pct(o.tokens_in, out),
-        quota: None,
-        quota_used_pct: 0.0,
-        quota_left: f64::INFINITY,
-    }
-}
-
-fn fill_shares(buckets: &mut [BucketStat], tin: f64, tout: f64) {
-    for b in buckets.iter_mut() {
-        b.share_in_pct = share(b.tokens_in, tin);
-        b.share_out_pct = share(b.tokens_out, tout);
-    }
-}
-
-fn apply_quotas(buckets: &mut [BucketStat], spec: &BudgetSpec) {
-    for (cat, quota) in &spec.quotas {
-        if let Some(b) = buckets.iter_mut().find(|b| &b.cat == cat) {
-            b.quota = Some(*quota);
-            b.quota_used_pct = if *quota > 0 {
-                b.tokens_out * 100.0 / *quota as f64
-            } else {
-                0.0
-            };
-            b.quota_left = *quota as f64 - b.tokens_out;
-        }
-    }
-}
-
-/// 占比：`part / whole × 100`，whole=0 → 0。
-fn share(part: f64, whole: f64) -> f64 {
-    if whole > 0.0 {
-        part * 100.0 / whole
-    } else {
-        0.0
+        kept: o.kept,
+        total: o.total,
+        mode: o.mode,
     }
 }
 
@@ -515,7 +452,12 @@ pub fn render(s: &Snapshot) -> String {
         if i > 0 {
             out.push(',');
         }
-        out.push_str(&render_bucket(b));
+        out.push_str(&render_bucket(
+            b,
+            s.tokens_in,
+            s.tokens_out,
+            s.quota_of(b.kind),
+        ));
     }
     out.push_str("]}");
     out
@@ -545,7 +487,9 @@ fn aggregate(ledger: &Ledger) -> std::collections::BTreeMap<String, (f64, f64, u
     let mut by_kind = std::collections::BTreeMap::new();
     for s in &ledger.snaps {
         for b in &s.buckets {
-            let e = by_kind.entry(b.cat.clone()).or_insert((0.0, 0.0, 0));
+            let e = by_kind
+                .entry(b.kind.as_str().to_string())
+                .or_insert((0.0, 0.0, 0));
             e.0 += b.tokens_in;
             e.1 += b.tokens_out;
             e.2 += 1;
@@ -602,19 +546,43 @@ fn render_budget(b: &Budget) -> String {
     )
 }
 
-fn render_bucket(b: &BucketStat) -> String {
+/// 单桶 JSON：占比/削减用派生方法算，配额使用率/剩余由配额与 `tokens_out` 派生。
+fn render_bucket(b: &BucketStat, tin: f64, tout: f64, quota: Option<usize>) -> String {
+    let (quota_used_pct, quota_left) = match quota {
+        Some(q) if q > 0 => (b.tokens_out * 100.0 / q as f64, q as f64 - b.tokens_out),
+        _ => (0.0, f64::INFINITY),
+    };
     format!(
-        "{{\"cat\":{},\"tokens_in\":{:.2},\"tokens_out\":{:.2},\"share_in_pct\":{:.1},\"share_out_pct\":{:.1},\"cut_pct\":{:.1},\"quota\":{},\"quota_used_pct\":{:.1},\"quota_left\":{}}}",
-        crate::json::string(&b.cat),
+        "{{\"kind\":\"{}\",\"tokens_in\":{:.2},\"tokens_out\":{:.2},\"share_in_pct\":{:.1},\"share_out_pct\":{:.1},\"cut_pct\":{:.1},\"kept\":{},\"total\":{},\"mode\":\"{}\",\"quota\":{},\"quota_used_pct\":{:.1},\"quota_left\":{}}}",
+        b.kind.as_str(),
         b.tokens_in,
         b.tokens_out,
-        b.share_in_pct,
-        b.share_out_pct,
-        b.cut_pct,
-        opt_num(b.quota.map(|q| q as f64)),
-        b.quota_used_pct,
-        opt_f2(finite(b.quota_left))
+        share(b.tokens_in, tin),
+        share(b.tokens_out, tout),
+        cut_pct(b.tokens_in, b.tokens_out),
+        b.kept,
+        b.total,
+        b.mode,
+        opt_num(quota.map(|q| q as f64)),
+        quota_used_pct,
+        opt_f2(finite(quota_left))
     )
+}
+
+fn cut_pct(tin: f64, tout: f64) -> f64 {
+    if tin > 0.0 {
+        (tin - tout) * 100.0 / tin
+    } else {
+        0.0
+    }
+}
+
+fn share(part: f64, whole: f64) -> f64 {
+    if whole > 0.0 {
+        part * 100.0 / whole
+    } else {
+        0.0
+    }
 }
 
 /// `+∞` 序列化为 `null`（JSON 无 Infinity 字面量）。
@@ -647,6 +615,7 @@ fn from_json(v: &Json) -> Option<Snapshot> {
         buckets: from_buckets(v.get("buckets")?),
         tokens_in: num_of(v, "tokens_in")?,
         tokens_out: num_of(v, "tokens_out")?,
+        quotas: from_quotas(v.get("quotas")),
         metrics: from_metrics(v.get("metrics")?)?,
         budget: from_budget(v.get("budget")?)?,
     })
@@ -667,6 +636,11 @@ fn from_buckets(b: &Json) -> Vec<BucketStat> {
         Json::Arr(arr) => arr.iter().filter_map(from_bucket).collect(),
         _ => Vec::new(),
     }
+}
+
+/// 配额字段在 render 中未单独序列化（折叠在 bucket 里），反序列化时回退为空。
+fn from_quotas(_v: Option<&Json>) -> Vec<(ContentType, usize)> {
+    Vec::new()
 }
 
 /// 取字段并转数值；`None` = 字段缺失或非数值。
@@ -704,16 +678,33 @@ fn from_budget(b: &Json) -> Option<Budget> {
 }
 
 fn from_bucket(b: &Json) -> Option<BucketStat> {
+    let kind = str_of(b, "kind")?.parse().ok()?;
+    let mode = str_of(b, "mode")
+        .and_then(mode_of)
+        .unwrap_or(crate::Mode::Sieve);
     Some(BucketStat {
-        cat: str_of(b, "cat")?.to_string(),
+        kind,
         tokens_in: num_of(b, "tokens_in")?,
         tokens_out: num_of(b, "tokens_out")?,
-        share_in_pct: num_of(b, "share_in_pct")?,
-        share_out_pct: num_of(b, "share_out_pct")?,
-        cut_pct: num_of(b, "cut_pct")?,
-        quota: num_of(b, "quota").map(|n| n as usize),
-        quota_used_pct: num_of(b, "quota_used_pct")?,
-        quota_left: num_of(b, "quota_left").unwrap_or(f64::INFINITY),
+        kept: num_of(b, "kept")? as usize,
+        total: num_of(b, "total")? as usize,
+        mode,
+    })
+}
+
+/// mode 字符串 → 枚举（反序列化用；未知回退 Sieve）。
+fn mode_of(s: &str) -> Option<crate::Mode> {
+    use crate::Mode::*;
+    Some(match s {
+        "passthrough:small" => PassSmall,
+        "passthrough:longline" => PassLongline,
+        "passthrough:too-many-lines" => PassTooManyLines,
+        "failopen:zero-signal" => FailOpenZeroSignal,
+        "passthrough:no-kept" => PassNoKept,
+        "sieve" => Sieve,
+        "overflow:evidence" => OverflowEvidence,
+        "overflow:fill" => OverflowFill,
+        _ => return None,
     })
 }
 
@@ -770,13 +761,12 @@ mod tests {
         lines.join("\n")
     }
 
-    fn parts(t: &str) -> Vec<(&str, &str)> {
+    fn parts(t: &str) -> Vec<(ContentType, &str)> {
         vec![
-            (ContentType::StaticContract.as_str(), t),
-            (ContentType::SystemDefinition.as_str(), t),
-            (ContentType::SessionMessage.as_str(), t),
-            (ContentType::ToolOutput.as_str(), t),
-            ("skill-config", "skill: db pool tuning"),
+            (ContentType::StaticContract, t),
+            (ContentType::SystemDefinition, t),
+            (ContentType::SessionMessage, t),
+            (ContentType::ToolOutput, t),
         ]
     }
 
@@ -798,8 +788,16 @@ mod tests {
         let t = text();
         let p = parts(&t);
         let s = measure(1, &p, "db timeout", &Config::default(), None);
-        let in_sum: f64 = s.buckets.iter().map(|b| b.share_in_pct).sum();
-        let out_sum: f64 = s.buckets.iter().map(|b| b.share_out_pct).sum();
+        let in_sum: f64 = s
+            .buckets
+            .iter()
+            .map(|b| share(b.tokens_in, s.tokens_in))
+            .sum();
+        let out_sum: f64 = s
+            .buckets
+            .iter()
+            .map(|b| share(b.tokens_out, s.tokens_out))
+            .sum();
         assert!((in_sum - 100.0).abs() < 0.5, "input shares sum: {in_sum}");
         assert!(
             (out_sum - 100.0).abs() < 0.5,
@@ -815,13 +813,13 @@ mod tests {
         let hi_in: f64 = s
             .buckets
             .iter()
-            .filter(|b| high_value(&b.cat))
+            .filter(|b| high_value(b.kind))
             .map(|b| b.tokens_in)
             .sum();
         let hi_out: f64 = s
             .buckets
             .iter()
-            .filter(|b| high_value(&b.cat))
+            .filter(|b| high_value(b.kind))
             .map(|b| b.tokens_out)
             .sum();
         let tin = s.tokens_in;
@@ -839,7 +837,7 @@ mod tests {
         let p = parts(&t);
         let base = measure(1, &p, "db timeout", &Config::default(), None);
         let used = base.tokens_out;
-        let cap = (used * 1.5) as usize; // 使用率 ~66% → normal
+        let cap = (used * 1.5) as usize;
         let spec = BudgetSpec {
             cap: Some(cap),
             warn: 0.7,
@@ -848,7 +846,6 @@ mod tests {
         };
         let s = measure(1, &p, "db timeout", &Config::default(), Some(&spec));
         assert_eq!(s.budget.level, Level::Normal);
-        // 使用率 ~85% → warn
         let spec2 = BudgetSpec {
             cap: Some((used * 1.17) as usize),
             warn: 0.7,
@@ -857,7 +854,6 @@ mod tests {
         };
         let s2 = measure(1, &p, "db timeout", &Config::default(), Some(&spec2));
         assert_eq!(s2.budget.level, Level::Warn);
-        // 使用率 > 100% → over
         let spec3 = BudgetSpec {
             cap: Some((used * 0.5) as usize),
             warn: 0.7,
@@ -877,13 +873,12 @@ mod tests {
             cap: None,
             warn: 0.7,
             over: 1.0,
-            quotas: vec![(ContentType::ToolOutput.as_str().to_string(), 100)],
+            quotas: vec![(ContentType::ToolOutput, 100)],
         };
         let s = measure(1, &p, "db timeout", &Config::default(), Some(&spec));
-        let b = s.find(ContentType::ToolOutput.as_str()).unwrap();
-        assert_eq!(b.quota, Some(100));
-        assert!((b.quota_used_pct - b.tokens_out * 100.0 / 100.0).abs() < 1e-9);
-        assert!((b.quota_left - (100.0 - b.tokens_out)).abs() < 1e-9);
+        let b = s.find(ContentType::ToolOutput).unwrap();
+        assert_eq!(s.quota_of(ContentType::ToolOutput), Some(100));
+        assert!(b.tokens_out < 100.0, "配额内输出");
     }
 
     #[test]
@@ -897,14 +892,14 @@ mod tests {
             quotas: Vec::new(),
         };
         let a = render(&measure(
-            7,
+            1,
             &p,
             "db timeout",
             &Config::default(),
             Some(&spec),
         ));
         let b = render(&measure(
-            7,
+            1,
             &p,
             "db timeout",
             &Config::default(),
@@ -914,10 +909,10 @@ mod tests {
         assert!(a.starts_with("{\"id\":\""), "id 为内容派生");
         assert!(a.contains("\"payload_sha256\":"));
         assert!(a.contains("\"config_fingerprint\":"));
-        assert!(a.contains("\"round\":7"));
+        assert!(a.contains("\"round\":1"));
         assert!(a.contains("\"metrics\":{\"ratio\":"));
         assert!(a.contains("\"budget\":{\"cap\":5000"));
-        assert!(a.contains("\"buckets\":[{\"cat\":\"static-contract\""));
+        assert!(a.contains("\"buckets\":[{\"kind\":\"static-contract\""));
         assert!(a.ends_with("]}"));
     }
 
@@ -964,18 +959,15 @@ mod tests {
         let p = parts(&t);
         let a = measure(1, &p, "db timeout", &Config::default(), None);
         let b = measure(2, &p, "db timeout", &Config::default(), None);
-        // 同输入同配置（round 不参与内容寻址）→ 同 id/指纹。
         assert_eq!(a.id, b.id);
         assert_eq!(a.payload_sha256, b.payload_sha256);
         assert_eq!(a.config_fingerprint, b.config_fingerprint);
         assert_eq!(a.id.len(), 16, "id 为 16 位十六进制");
-        // 不同 query → 不同指纹。
         let c = measure(1, &p, "db timeout pool", &Config::default(), None);
         assert_ne!(a.config_fingerprint, c.config_fingerprint);
-        // 不同载荷 → 不同 payload hash。
         let d = measure(
             1,
-            &[("tool-output", "hello")],
+            &[(ContentType::ToolOutput, "hello")],
             "db timeout",
             &Config::default(),
             None,

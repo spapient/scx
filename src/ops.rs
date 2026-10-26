@@ -461,6 +461,27 @@ pub fn render(r: &Outcome) -> String {
     out.push_str(&format!(",\"budget_used_pct\":{:.1}", r.budget_used_pct));
     // 信息留存率（0..=1）：显式证据或默认行保留率代理（P4），全模式恒填充。
     out.push_str(&format!(",\"ev_retention\":{:.4}", r.ev_retention));
+    // 分桶统计（默认单桶；compress_bucketed 时逐桶填充）。
+    let global_out = crate::terms::estimate(&r.text);
+    out.push_str(",\"buckets\":[");
+    for (i, b) in r.buckets.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push_str(&format!(
+            "{{\"kind\":\"{}\",\"tokens_in\":{:.0},\"tokens_out\":{:.0},\"cut_pct\":{:.1},\"share_in_pct\":{:.1},\"share_out_pct\":{:.1},\"kept\":{},\"total\":{},\"mode\":\"{}\"}}",
+            b.kind.as_str(),
+            b.tokens_in,
+            b.tokens_out,
+            b.cut_pct(),
+            b.share_in_pct(r.tokens_in),
+            b.share_out_pct(global_out),
+            b.kept,
+            b.total,
+            b.mode
+        ));
+    }
+    out.push(']');
     // 逐行决策解释（数组下标 = 行号-1）；仅筛选模式非空。
     out.push_str(&format!(
         ",\"explain\":[{}]",

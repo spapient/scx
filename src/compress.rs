@@ -11,7 +11,8 @@ use crate::analysis::{
 };
 use crate::analysis::{lowercase, normalize};
 use crate::policy::{Limits, Weights, DEFAULT_RISK, DEFAULT_SCORES};
-use crate::terms::{estimate, terms};
+use crate::terms::terms;
+use crate::token::TokenMode;
 use crate::{prefix, Config, Mode, Outcome, Risk};
 
 /// 确定性快速哈希（FxHash 风格）：压缩内核的查找/计数型 map 统一使用，
@@ -173,7 +174,14 @@ struct Mask {
 
 /// 一次逐行×逐词扫描出命中位掩码；错误/标记/守卫/force 判定复用同一小写缓冲（无逐行分配）。
 /// `do_tok` 为真时在循环内累计 token 估算（大输入 + 非针尖档），避免为同一批行再走一趟。
-fn masks(lines: &[&str], terms: &[String], forces: &[Force], small_tok: f64, do_tok: bool) -> Mask {
+fn masks(
+    lines: &[&str],
+    terms: &[String],
+    forces: &[Force],
+    small_tok: f64,
+    do_tok: bool,
+    mode: TokenMode,
+) -> Mask {
     let total = lines.len();
     let words = terms.len().div_ceil(64).max(1);
     let mut mask_v = vec![0u64; total * words];
@@ -185,7 +193,7 @@ fn masks(lines: &[&str], terms: &[String], forces: &[Force], small_tok: f64, do_
     let mut low = String::new();
     for i in 0..total {
         if do_tok {
-            total_tok += estimate(lines[i]);
+            total_tok += crate::token::estimate(lines[i], mode);
         }
         low.clear();
         lowercase(lines[i], &mut low);
@@ -886,6 +894,7 @@ struct Fill {
     ratio: f64,
     edge_head: usize,
     remaining: f64,
+    mode: TokenMode,
 }
 
 /// 预算选择：种子区域门控（首两行身份行除外）；独立入选须真实得分（scores > 0）。
@@ -915,7 +924,7 @@ fn fill(
     });
     let mut used = 0.0f64;
     for &(i, _) in &order {
-        let t = estimate(sel.lines[i]);
+        let t = crate::token::estimate(sel.lines[i], cfg.mode);
         if used + t > cap {
             continue;
         }
@@ -930,11 +939,11 @@ fn fill(
 }
 
 /// 已保留行的 token 估算总和（`--max-tokens` 记账口径）。
-fn tokens(lines: &[&str], keep: &[bool]) -> f64 {
+fn tokens(lines: &[&str], keep: &[bool], mode: TokenMode) -> f64 {
     let mut sum = 0.0f64;
     for (i, &k) in keep.iter().enumerate() {
         if k {
-            sum += estimate(lines[i]);
+            sum += crate::token::estimate(lines[i], mode);
         }
     }
     sum
@@ -1133,6 +1142,7 @@ fn active(risk: Risk, cfg: &Config) -> bool {
 /// 独立小函数中（`config` / `shape` / `cap_*` 等）。
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let (ratio, context, window) = config(cfg);
+    let tok_mode = cfg.token_mode;
     // 分析使用 LF 归一化文本；passthrough/fail-open 返回输入原文，保持“原样保留”语义。
     let original = text;
     // 零拷贝快路径：无 CR 时直接借用原文本；行以 &str 切片保存，避免整文复制与逐行分配。
@@ -1144,7 +1154,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // token 估算只服务小输入直通与可选预算；针尖档大盘无需整份扫描。
     // 小输入先算一次即可（随后可能直接 passthrough）；大输入把估算并入
     // 逐行分析循环，避免为同一批行再走一趟缓存。
-    let small_tok = survey(&lines, total);
+    let small_tok = survey(&lines, total, tok_mode);
     let chars_a = chars(original);
     let evidence = &cfg.evidence;
 
@@ -1164,6 +1174,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
               dropped: Vec<crate::Dropped>|
      -> Outcome {
         let ev = ev_retention(evidence, &numbers, &text_owned, kept, total);
+        let tokens_out = crate::token::estimate(&text_owned, tok_mode);
         Outcome {
             text: text_owned,
             numbers,
@@ -1184,10 +1195,18 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             mode,
             limit,
             tokens,
-            tokens_in: estimate(original),
+            tokens_in: crate::token::estimate(original, tok_mode),
             dropped,
             budget_used_pct: 0.0,
             ev_retention: ev,
+            buckets: vec![crate::BucketStat {
+                kind: crate::ContentType::ToolOutput,
+                tokens_in: crate::token::estimate(original, tok_mode),
+                tokens_out,
+                kept,
+                total,
+                mode,
+            }],
             explain: Vec::new(),
         }
     };
@@ -1213,7 +1232,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
-    let masks = masks(&lines, &uniq_terms, &force_pats, small_tok, do_tok);
+    let masks = masks(
+        &lines,
+        &uniq_terms,
+        &force_pats,
+        small_tok,
+        do_tok,
+        tok_mode,
+    );
     let (dup, dup_n) = dedup(
         &lines,
         &masks.mask_v,
@@ -1281,7 +1307,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
     // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
-    let tok_floor = tokens(&lines, &keep);
+    let tok_floor = tokens(&lines, &keep, tok_mode);
     let mut overflow = cap(tok_floor, cfg.limit);
 
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
@@ -1300,6 +1326,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             ratio,
             edge_head: DEFAULT_SCORES.edge_head,
             remaining: remaining(tok_floor, cfg.limit),
+            mode: tok_mode,
         },
         context,
         overflow,
@@ -1330,7 +1357,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     // 守卫后最终检查：填充受上限约束，但风险守卫可能追加证据性行；如实报告 OverflowFill。
-    let final_tok = tokens(&lines, &keep);
+    let final_tok = tokens(&lines, &keep, tok_mode);
     if overflow.is_none() {
         overflow = last(final_tok, cfg.limit);
     }
@@ -1378,6 +1405,77 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     o
 }
 
+/// 分桶压缩：把分类化载荷逐桶压缩（各桶按价值梯度 ratio），拼接正文，聚合分桶统计。
+/// 全局 `kept/total/tokens/input/output` 为各桶之和；`mode` 恒为 `Sieve`（多桶摘要），
+/// 逐桶 mode/kept/total 在 `Outcome.buckets`。默认单桶路径（`compress`）不受影响。
+pub fn compress_bucketed(
+    parts: &[(crate::ContentType, &str)],
+    query: &str,
+    cfg: &Config,
+) -> Outcome {
+    let mut out_text = String::new();
+    let mut buckets = Vec::with_capacity(parts.len());
+    let (mut tin, mut tout) = (0.0, 0.0);
+    let (mut cin, mut cout) = (0usize, 0usize);
+    let (mut kept, mut total) = (0usize, 0usize);
+    for (kind, text) in parts {
+        let mut c = cfg.clone();
+        c.ratio = kind.default_ratio();
+        let o = compress(text, query, &c);
+        let tok_out = crate::token::estimate(&o.text, cfg.token_mode);
+        buckets.push(crate::BucketStat {
+            kind: *kind,
+            tokens_in: o.tokens_in,
+            tokens_out: tok_out,
+            kept: o.kept,
+            total: o.total,
+            mode: o.mode,
+        });
+        tin += o.tokens_in;
+        tout += tok_out;
+        cin += o.input;
+        cout += o.output;
+        kept += o.kept;
+        total += o.total;
+        out_text.push_str(&o.text);
+        if !o.text.is_empty() && !o.text.ends_with('\n') {
+            out_text.push('\n');
+        }
+    }
+    let cut = if cin > 0 {
+        (cin as f64 - cout as f64) * 100.0 / cin as f64
+    } else {
+        0.0
+    };
+    Outcome {
+        text: out_text,
+        numbers: Vec::new(),
+        kept,
+        total,
+        input: cin,
+        output: cout,
+        cut,
+        dup: 0,
+        seeds: 0,
+        evidence: 0,
+        risk: Risk::Low,
+        guarded: 0,
+        regions: 0,
+        window: cfg.window,
+        terms: 0,
+        forced: 0,
+        mode: Mode::Sieve,
+        limit: cfg.limit,
+        tokens: tout,
+        tokens_in: tin,
+        dropped: Vec::new(),
+        budget_used_pct: 0.0,
+        ev_retention: 1.0,
+        buckets,
+        explain: Vec::new(),
+    }
+}
+
 /// 配置规范化（库是公开接口：入口统一钳制，避免 CLI 之外的调用触发溢出或超大循环）。
 fn config(cfg: &Config) -> (f64, i64, i64) {
     let ratio = if cfg.ratio.is_nan() {
@@ -1395,9 +1493,9 @@ fn config(cfg: &Config) -> (f64, i64, i64) {
 }
 
 /// 小输入 token 估算（仅 total < SMALL_LINES 时计算，其余为 0）。
-fn survey(lines: &[&str], total: usize) -> f64 {
+fn survey(lines: &[&str], total: usize, mode: TokenMode) -> f64 {
     if total < crate::policy::SMALL_LINES {
-        lines.iter().map(|s| estimate(s)).sum()
+        lines.iter().map(|s| crate::token::estimate(s, mode)).sum()
     } else {
         0.0
     }

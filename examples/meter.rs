@@ -7,9 +7,8 @@
 //! 演示：四核心桶 + 一个自定义桶的分桶压缩 → 占比/效果指标/预算 → 快照 JSON；
 //! 两个轮次入账本，输出相邻快照对比。
 
-use scx::bucket::ContentType;
 use scx::meter::{self, BudgetSpec, Ledger};
-use scx::Config;
+use scx::{Config, ContentType};
 
 fn text() -> String {
     let mut lines: Vec<String> = (0..200)
@@ -22,13 +21,13 @@ fn text() -> String {
 
 fn main() {
     let t = text();
-    let parts: Vec<(&str, &str)> = vec![
-        (ContentType::StaticContract.as_str(), &t),
-        (ContentType::SystemDefinition.as_str(), &t),
-        (ContentType::SessionMessage.as_str(), &t),
-        (ContentType::ToolOutput.as_str(), &t),
+    let parts: Vec<(ContentType, &str)> = vec![
+        (ContentType::StaticContract, &t),
+        (ContentType::SystemDefinition, &t),
+        (ContentType::SessionMessage, &t),
+        (ContentType::ToolOutput, &t),
         (
-            "skill-config",
+            ContentType::ToolOutput,
             "skill: db pool tuning\nretry: 3\nbackoff: 1s",
         ),
     ];
@@ -37,7 +36,7 @@ fn main() {
         cap: Some(5000),
         warn: 0.7,
         over: 1.0,
-        quotas: vec![(ContentType::ToolOutput.as_str().to_string(), 400)],
+        quotas: vec![(ContentType::ToolOutput, 400)],
     };
 
     let mut ledger = Ledger::default();
@@ -54,7 +53,12 @@ fn main() {
         for b in s.by_share() {
             println!(
                 "  {:<20} in={:.0} out={:.0} share_in={:.1}% share_out={:.1}% cut={:.1}%",
-                b.cat, b.tokens_in, b.tokens_out, b.share_in_pct, b.share_out_pct, b.cut_pct
+                b.kind.as_str(),
+                b.tokens_in,
+                b.tokens_out,
+                b.share_in_pct(s.tokens_in),
+                b.share_out_pct(s.tokens_out),
+                b.cut_pct()
             );
         }
         println!();

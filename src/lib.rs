@@ -57,8 +57,10 @@ pub mod redact;
 pub mod regex;
 /// 可插拔相似度后端（`--embed-cmd`；默认无后端，见 `sim::compute`）。
 pub mod sim;
+pub mod token;
+pub mod token_calib;
 
-pub use compress::compress;
+pub use compress::{compress, compress_bucketed};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -108,6 +110,120 @@ impl AnchorKind {
     }
 }
 
+/// 内容类型，按价值梯度排列：静态契约 > 系统定义 > 会话消息 > 临时工具输出。
+/// 用于把上下文载荷路由到不同裁剪力度的桶；显式标注优先，缺失时隐式推断。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContentType {
+    StaticContract,
+    SystemDefinition,
+    SessionMessage,
+    ToolOutput,
+}
+
+impl ContentType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ContentType::StaticContract => "static-contract",
+            ContentType::SystemDefinition => "system-definition",
+            ContentType::SessionMessage => "session-message",
+            ContentType::ToolOutput => "tool-output",
+        }
+    }
+
+    /// 价值梯度默认预算（ratio，越大保留越多可选内容）：静态契约最保守、工具输出最激进。
+    pub const fn default_ratio(self) -> f64 {
+        match self {
+            ContentType::StaticContract => 1.0,
+            ContentType::SystemDefinition => 0.8,
+            ContentType::SessionMessage => 0.5,
+            ContentType::ToolOutput => 0.2,
+        }
+    }
+
+    /// 显式标注优先，缺失时隐式推断（`infer`）。
+    pub fn resolve(tag: Option<&str>, text: &str) -> ContentType {
+        match tag.and_then(|t| t.parse().ok()) {
+            Some(kind) => kind,
+            None => ContentType::infer(text),
+        }
+    }
+
+    /// 隐式推断：抽样前若干行做特征判定，按序命中即停；不确定 fail-open 到 ToolOutput。
+    pub fn infer(text: &str) -> ContentType {
+        let sample = sample(text);
+        if contract_like(&sample) {
+            return ContentType::StaticContract;
+        }
+        if system_like(&sample) {
+            return ContentType::SystemDefinition;
+        }
+        if session_like(&sample) {
+            return ContentType::SessionMessage;
+        }
+        ContentType::ToolOutput
+    }
+}
+
+impl std::str::FromStr for ContentType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "static-contract" => Ok(ContentType::StaticContract),
+            "system-definition" => Ok(ContentType::SystemDefinition),
+            "session-message" => Ok(ContentType::SessionMessage),
+            "tool-output" => Ok(ContentType::ToolOutput),
+            _ => Err(format!("unknown content type: {s}")),
+        }
+    }
+}
+
+/// 推断抽样：前 20 行 / 4096 字节，避免整文扫描。
+fn sample(text: &str) -> String {
+    let mut out = String::new();
+    for (n, line) in text.lines().enumerate() {
+        if n >= 20 || out.len() > 4096 {
+            break;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+/// 契约特征：JSON schema / 工具定义。
+fn contract_like(s: &str) -> bool {
+    s.contains("\"type\": \"object\"")
+        || s.contains("\"type\":\"object\"")
+        || s.contains("\"properties\"")
+        || s.contains("\"required\"")
+        || s.contains("\"parameters\"")
+        || s.contains("<tools>")
+        || s.contains("<function")
+}
+
+/// 系统定义特征：系统注入元数据 / 提示。
+fn system_like(s: &str) -> bool {
+    s.contains("<system-reminder>")
+        || s.contains("<system")
+        || s.contains("[sys]")
+        || s.contains("system prompt")
+        || s.contains("system_prompt")
+}
+
+/// 会话特征：user/assistant 前缀。
+fn session_like(s: &str) -> bool {
+    s.contains("<|im_start|>")
+        || s.lines().any(|l| {
+            let t = l.trim_start();
+            t.starts_with("user:")
+                || t.starts_with("assistant:")
+                || t.starts_with("system:")
+                || t.starts_with("Human:")
+                || t.starts_with("Assistant:")
+        })
+}
+
 /// 引擎配置。`ratio` 为可选内容预算占输入 token 估算的比例；入口会做边界规范化。
 #[derive(Clone)]
 pub struct Config {
@@ -145,6 +261,8 @@ pub struct Config {
     /// 结构锚点种类（P6 骨架保护，默认空 = 现状行为不变）：结构边界行标记为
     /// 保留锚点，优先级低于证据行、高于普通噪声行。
     pub structure_anchors: Vec<AnchorKind>,
+    /// Token 计量口径（默认 Heuristic = 现状字符启发式；Calibrated 用冻结系数）。
+    pub token_mode: crate::token::TokenMode,
 }
 
 impl Config {
@@ -175,6 +293,7 @@ impl Default for Config {
             sims: None,
             evidence: Vec::new(),
             structure_anchors: Vec::new(),
+            token_mode: crate::token::TokenMode::Heuristic,
         }
     }
 }
@@ -249,6 +368,47 @@ impl fmt::Display for Risk {
     }
 }
 
+/// 单桶计量（统一分桶统计，挂在 [`Outcome::buckets`]）。
+/// 只存事实字段；`cut_pct`/`share_*` 为派生值，用方法计算（不存冗余）。
+#[derive(Debug, Clone, Copy)]
+pub struct BucketStat {
+    pub kind: ContentType,
+    pub tokens_in: f64,
+    pub tokens_out: f64,
+    pub kept: usize,
+    pub total: usize,
+    pub mode: Mode,
+}
+
+impl BucketStat {
+    /// 削减百分比（token 口径）：`(in - out) / in × 100`，in=0 → 0。
+    pub fn cut_pct(&self) -> f64 {
+        if self.tokens_in > 0.0 {
+            (self.tokens_in - self.tokens_out) * 100.0 / self.tokens_in
+        } else {
+            0.0
+        }
+    }
+
+    /// 占全局输入 token 的百分比（global=0 → 0）。
+    pub fn share_in_pct(&self, global_in: f64) -> f64 {
+        if global_in > 0.0 {
+            self.tokens_in * 100.0 / global_in
+        } else {
+            0.0
+        }
+    }
+
+    /// 占全局输出 token 的百分比（global=0 → 0）。
+    pub fn share_out_pct(&self, global_out: f64) -> f64 {
+        if global_out > 0.0 {
+            self.tokens_out * 100.0 / global_out
+        } else {
+            0.0
+        }
+    }
+}
+
 /// 压缩结果与统计。`seeds == evidence` 恒成立（结构性不变量，可断言）。
 pub struct Outcome {
     /// 压缩后的文本；passthrough / fail-open 时为输入原文。
@@ -290,6 +450,9 @@ pub struct Outcome {
     /// 行保留率 kept/total（轻量代理，非信息留存语义，见 docs/context-governance-plan.md P4）。
     /// passthrough/fail-open/no-kept 恒 1.0（未删任何行）。`--json` 消费，默认统计行不输出。
     pub ev_retention: f64,
+    /// 分桶统计（默认单桶 = 整输入视作 ToolOutput）；`compress_bucketed` 时逐桶填充。
+    /// `--json` 消费，默认统计行不输出。
+    pub buckets: Vec<BucketStat>,
     /// 逐行决策解释（`--explain`/`--json` 消费）；长度 == total，仅筛选模式有值，
     /// passthrough/fail-open/no-kept 为空。默认统计行不输出（与 v0.4.1 逐字节一致）。
     pub explain: Vec<Explain>,
@@ -1038,6 +1201,57 @@ mod tests {
         assert!(
             !o.explain.contains(&crate::Explain::Anchor),
             "默认 off 不产生 anchor 原因"
+        );
+    }
+
+    #[test]
+    fn content_type_infer_classifies_by_feature() {
+        assert_eq!(
+            ContentType::infer("{\n  \"type\": \"object\",\n  \"properties\": {\"a\": {}}\n}"),
+            ContentType::StaticContract
+        );
+        assert_eq!(
+            ContentType::infer("<tools>\n<function name=\"get\">\n</function>\n</tools>"),
+            ContentType::StaticContract
+        );
+        assert_eq!(
+            ContentType::infer("<system-reminder>\nYou are an assistant.\n</system-reminder>"),
+            ContentType::SystemDefinition
+        );
+        assert_eq!(
+            ContentType::infer("[sys] system prompt"),
+            ContentType::SystemDefinition
+        );
+        assert_eq!(
+            ContentType::infer("user: hello\nassistant: hi"),
+            ContentType::SessionMessage
+        );
+        assert_eq!(
+            ContentType::infer("<|im_start|>user\nhi\n<|im_end|>"),
+            ContentType::SessionMessage
+        );
+        assert_eq!(
+            ContentType::infer("INFO heartbeat ok pool=3\nERROR db timeout"),
+            ContentType::ToolOutput
+        );
+    }
+
+    #[test]
+    fn content_type_resolve_prefers_explicit_tag() {
+        // 显式标注优先，忽略文本特征。
+        assert_eq!(
+            ContentType::resolve(Some("tool-output"), "{\"type\":\"object\"}"),
+            ContentType::ToolOutput
+        );
+        // 缺失时回退推断。
+        assert_eq!(
+            ContentType::resolve(None, "user: hi"),
+            ContentType::SessionMessage
+        );
+        // 非法 tag 也回退推断（fail-open）。
+        assert_eq!(
+            ContentType::resolve(Some("bogus"), "user: hi"),
+            ContentType::SessionMessage
         );
     }
 

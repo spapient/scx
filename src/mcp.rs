@@ -293,7 +293,8 @@ fn snapshot(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
     let kind = args
         .get("kind")
         .and_then(Json::str)
-        .unwrap_or("tool-output");
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(crate::ContentType::ToolOutput);
     let snap = crate::meter::snapshot(usage.round, kind, text);
     usage.round += 1;
     let json = crate::meter::render(&snap);
