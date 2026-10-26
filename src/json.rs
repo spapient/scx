@@ -118,50 +118,73 @@ impl<'a> Parser<'a> {
 
     fn string(&mut self) -> Result<String, String> {
         self.eat(b'"')?;
-        let mut out = String::new();
+        // 收集原始 UTF-8 字节，收尾统一解码：多字节序列（中文等）不再被按字节拆成 Latin-1 乱码。
+        let mut out: Vec<u8> = Vec::new();
         loop {
             match self.peek() {
                 Some(b'"') => {
                     self.pos += 1;
-                    return Ok(out);
+                    return String::from_utf8(out).map_err(|e| format!("bad string: {e}"));
                 }
                 Some(b'\\') => {
                     self.pos += 1;
                     let esc = self
                         .peek()
                         .ok_or_else(|| "unterminated escape".to_string())?;
-                    out.push(match esc {
-                        b'n' => '\n',
-                        b't' => '\t',
-                        b'r' => '\r',
-                        b'"' => '"',
-                        b'\\' => '\\',
-                        b'/' => '/',
+                    match esc {
+                        b'n' => out.push(b'\n'),
+                        b't' => out.push(b'\t'),
+                        b'r' => out.push(b'\r'),
+                        b'"' => out.push(b'"'),
+                        b'\\' => out.push(b'\\'),
+                        b'/' => out.push(b'/'),
                         b'u' => {
-                            let hex = self
-                                .src
-                                .get(self.pos + 1..self.pos + 5)
-                                .ok_or_else(|| "short \\u escape".to_string())?;
-                            let cp = u32::from_str_radix(
-                                std::str::from_utf8(hex).map_err(|e| e.to_string())?,
-                                16,
-                            )
-                            .map_err(|e| e.to_string())?;
-                            self.pos += 4;
-                            char::from_u32(cp).ok_or_else(|| "bad \\u code point".to_string())?
+                            let cp = self.u_escape()?;
+                            let mut buf = [0u8; 4];
+                            out.extend_from_slice(cp.encode_utf8(&mut buf).as_bytes());
                         }
                         _ => return Err(format!("bad escape \\{esc:?}")),
-                    });
+                    }
                     self.pos += 1;
                 }
                 Some(b) => {
-                    // 单字节即构成 UTF-8 前缀；非 ASCII 按字节透传（源为合法 UTF-8 文本）。
-                    out.push(b as char);
+                    out.push(b);
                     self.pos += 1;
                 }
                 None => return Err("unterminated string".to_string()),
             }
         }
+    }
+
+    /// 解析 `\uXXXX`（进入时 pos 指向 'u'；返回后 pos 指向该转义序列最后一个 hex 字节，
+    /// 由调用方统一 +1 前进），支持 UTF-16 代理对。
+    fn u_escape(&mut self) -> Result<char, String> {
+        fn hex4(src: &[u8], pos: usize) -> Result<u32, String> {
+            // pos 指向 'u'，4 个 hex 紧跟其后
+            let raw = src
+                .get(pos + 1..pos + 5)
+                .ok_or_else(|| "short \\u escape".to_string())?;
+            u32::from_str_radix(std::str::from_utf8(raw).map_err(|e| e.to_string())?, 16)
+                .map_err(|e| e.to_string())
+        }
+        let hi = hex4(self.src, self.pos)?;
+        if (0xD800..=0xDBFF).contains(&hi) {
+            // 高代理必须紧跟 \uXXXX 低代理
+            if self.src.get(self.pos + 5) == Some(&b'\\')
+                && self.src.get(self.pos + 6) == Some(&b'u')
+            {
+                let lo = hex4(self.src, self.pos + 6)?;
+                if !(0xDC00..=0xDFFF).contains(&lo) {
+                    return Err("bad \\u low surrogate".to_string());
+                }
+                self.pos += 10;
+                let cp = 0x1_0000 + ((hi - 0xD800) << 10) + (lo - 0xDC00);
+                return char::from_u32(cp).ok_or_else(|| "bad \\u code point".to_string());
+            }
+            return Err("\\u high surrogate without pair".to_string());
+        }
+        self.pos += 4;
+        char::from_u32(hi).ok_or_else(|| "bad \\u code point".to_string())
     }
 
     fn arr(&mut self) -> Result<Json, String> {
@@ -221,5 +244,41 @@ pub fn parse(s: &str) -> Result<Json, String> {
         Err(format!("trailing data at pos {}", p.pos))
     } else {
         Ok(v)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn str_utf8_multibyte() {
+        // 多字节 UTF-8 不得被按字节拆成 Latin-1 乱码（回归：MCP 中文 query/text）。
+        let v = parse(r#"{"query":"数据库连接失败"}"#).unwrap();
+        assert_eq!(v.get("query").unwrap().str(), Some("数据库连接失败"));
+        let v = parse(r#"{"text":"错误行: 端口5432 被占用"}"#).unwrap();
+        assert_eq!(
+            v.get("text").unwrap().str(),
+            Some("错误行: 端口5432 被占用")
+        );
+    }
+
+    #[test]
+    fn str_ascii_escapes() {
+        let v = parse(r#"{"a":"x\ny\t\"\\\/z"}"#).unwrap();
+        assert_eq!(v.get("a").unwrap().str(), Some("x\ny\t\"\\/z"));
+    }
+
+    #[test]
+    fn str_u_escapes_utf16_surrogate_pair() {
+        // \uD83D\uDE80 = U+1F680 🚀（代理对），\u4E2D = 中
+        let v = parse(r#"{"q":"\u4E2D\u6587\uD83D\uDE80"}"#).unwrap();
+        assert_eq!(v.get("q").unwrap().str(), Some("中文🚀"));
+    }
+
+    #[test]
+    fn str_u_escape_high_surrogate_without_pair_errors() {
+        assert!(parse(r#"{"q":"\uD83D"}"#).is_err());
+        assert!(parse(r#"{"q":"\uDE80"}"#).is_err());
     }
 }
