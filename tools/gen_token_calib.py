@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""生成 `src/token_calib.rs` 的冻结校准密度表（离线，仅改 tokenizer 后重跑）。
+"""生成 `src/token_calib.rs` 的冻结校准密度表，并报告 vs 启发式的 MAE。
 
-对代表性语料采样字符特征（words/ascii_alnum/ascii_punct/cjk/other），用真实
+对代表性语料采样字符特征（words/ascii_alnum/ascii_punct/newline/cjk/other），用真实
 tokenizer（tiktoken cl100k_base）取真值 token 数，按「长度桶」分片做无截距最小二乘
 回归，得到每桶每特征的密度，写入 `src/token_calib.rs` 的 `CALIB_DENSITY`
-（[[f64; 5]; 5]：特征序与长度桶序见 src/token.rs）。`words` 捕获「短词多 token 少」。
+（[[f64; 5]; 6]）。同时打印校准 vs 启发式的平均绝对误差（MAE，样本内，偏乐观）。
 
 用法：
     python3 tools/gen_token_calib.py [corpus.json] [out.rs]
@@ -17,8 +17,8 @@ import json
 import sys
 
 BUCKET_BOUNDS = [16, 64, 256, 1024]  # 长度桶上界（非空白字符数）
-HEURISTIC = [0.9, 0.05, 0.25, 0.6, 0.4]  # 词数主导的占位密度
-FEATURES = ["words", "ascii_alnum", "ascii_punct", "cjk", "other"]
+HEURISTIC = [0.9, 0.05, 0.25, 1.0, 0.6, 0.4]  # 词数主导 + 换行 1 token 的占位密度
+FEATURES = ["words", "ascii_alnum", "ascii_punct", "newline", "cjk", "other"]
 
 
 def full(ch):
@@ -35,8 +35,8 @@ def full(ch):
 
 
 def features(text):
-    """字符特征计数：`[words, alnum, punct, cjk, other]`（与 src/token.rs 同口径）。"""
-    words = alnum = punct = cjk = other = 0
+    """字符特征计数：`[words, alnum, punct, newline, cjk, other]`（与 src/token.rs 同口径）。"""
+    words = alnum = punct = newline = cjk = other = 0
     in_word = False
     for ch in text:
         if ch.isascii() and ch.isalnum():
@@ -48,18 +48,20 @@ def features(text):
             in_word = False
             if ch.isascii() and ch in "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~":
                 punct += 1
+            elif ch == "\n":
+                newline += 1
             elif ch.isascii() and ch.isspace():
-                pass  # 空白不计入（由 words 隐含）
+                pass  # 普通空白不计入
             elif full(ch):
                 cjk += 1
             else:
                 other += 1
-    return [words, alnum, punct, cjk, other]
+    return [words, alnum, punct, newline, cjk, other]
 
 
 def char_count(feat):
     """非空白字符总数（用于长度分桶，不含 words 这类的 run 计数）。"""
-    return feat[1] + feat[2] + feat[3] + feat[4]
+    return feat[1] + feat[2] + feat[3] + feat[4] + feat[5]
 
 
 def bucket_index(chars):
@@ -67,6 +69,19 @@ def bucket_index(chars):
         if chars <= b:
             return i
     return len(BUCKET_BOUNDS)
+
+
+def heuristic_estimate(text):
+    """复现 `terms::estimate`：ASCII 4 字/tok、CJK 0.6 tok/字、other 2.5 字/tok、截距 +1。"""
+    ascii_n = cjk = other = 0
+    for ch in text:
+        if ch.isascii():
+            ascii_n += 1
+        elif full(ch):
+            cjk += 1
+        else:
+            other += 1
+    return ascii_n / 4.0 + cjk * 0.6 + other / 2.5 + 1.0
 
 
 def default_corpus():
@@ -99,7 +114,7 @@ def default_corpus():
 
 
 def fit_global(samples, ys):
-    """全样本无截距最小二乘，返回 5 特征系数；失败回退启发式。"""
+    """全样本无截距最小二乘，返回 6 特征系数；失败回退启发式。"""
     import numpy as np
 
     x = np.array(samples, dtype=float)
@@ -124,7 +139,7 @@ def fit_bucket(xs, ys, global_coef):
     if x.shape[0] < 3:
         return coef
     col_sum = x.sum(axis=0)
-    active = [s for s in range(5) if col_sum[s] > 0]
+    active = [s for s in range(6) if col_sum[s] > 0]
     if not active:
         return coef
     try:
@@ -140,7 +155,7 @@ def fit_bucket(xs, ys, global_coef):
 
 def generate_table(samples, ys):
     global_coef = fit_global(samples, ys)
-    table = [[0.0] * 5 for _ in range(5)]
+    table = [[0.0] * 5 for _ in range(6)]
     for b in range(5):
         xs_b, ys_b = [], []
         for feat, tok in zip(samples, ys):
@@ -148,9 +163,18 @@ def generate_table(samples, ys):
                 xs_b.append(feat)
                 ys_b.append(tok)
         coef = fit_bucket(xs_b, ys_b, global_coef)
-        for s in range(5):
+        for s in range(6):
             table[s][b] = coef[s]
     return table
+
+
+def estimate(feat, table):
+    b = bucket_index(char_count(feat))
+    return sum(feat[s] * table[s][b] for s in range(6))
+
+
+def mae(estimates, ys):
+    return sum(abs(e - y) for e, y in zip(estimates, ys)) / len(ys)
 
 
 def main():
@@ -171,12 +195,16 @@ def main():
 
     if ys is None:
         table = [[d] * 5 for d in HEURISTIC]
+        mae_calib = mae_heur = None
     else:
         table = generate_table(xs, ys)
+        mae_calib = mae([estimate(f, table) for f in xs], ys)
+        mae_heur = mae([heuristic_estimate(s) for s in samples], ys)
+        note += f"（MAE 校准={mae_calib:.2f} 启发式={mae_heur:.2f}）"
 
     rows = "\n".join(
         "    [%s], // %s" % (", ".join("%r" % v for v in table[s]), FEATURES[s])
-        for s in range(5)
+        for s in range(6)
     )
     body = f"""//! 冻结的校准密度表（`TokenMode::Calibrated` 口径）。
 //!
@@ -185,18 +213,20 @@ def main():
 
 #![forbid(unsafe_code)]
 
-/// 特征序：`[words, ascii_alnum, ascii_punct, cjk, other]`；长度桶序见
+/// 特征序：`[words, ascii_alnum, ascii_punct, newline, cjk, other]`；长度桶序见
 /// [`crate::token`]（1-16/17-64/65-256/257-1024/1025+）。
 /// `CALIB_DENSITY[feature][bucket]` = 每单位 token 数。
-pub const CALIB_DENSITY: [[f64; 5]; 5] = [
+pub const CALIB_DENSITY: [[f64; 5]; 6] = [
 {rows}
 ];
 """
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(body)
     print("wrote %s:" % out_path)
-    for s in range(5):
+    for s in range(6):
         print("  %s: %s" % (FEATURES[s], table[s]))
+    if mae_calib is not None:
+        print("MAE 校准=%.2f 启发式=%.2f（样本内）" % (mae_calib, mae_heur))
 
 
 if __name__ == "__main__":

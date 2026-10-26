@@ -1,7 +1,7 @@
 //! Token 计量层（零第三方 crate、确定性）。
 //!
 //! 两种口径：`Heuristic`（字符三分类启发式，现状默认，`terms::estimate`）与
-//! `Calibrated`（按「脚本 × 长度桶」的密度查表，系数冻结在 [`crate::token_calib`]，
+//! `Calibrated`（按「特征 × 长度桶」的密度查表，系数冻结在 [`crate::token_calib`]，
 //! 由 `tools/gen_token_calib.py` 对真实 tokenizer 离线分桶回归生成后入 repo）。
 //! 默认 `Heuristic` 与现状逐字节一致。
 
@@ -40,12 +40,13 @@ pub fn estimate(text: &str, mode: TokenMode) -> f64 {
 }
 
 /// 字符特征（与 `tools/gen_token_calib.py` 同口径，确定性）：
-/// `[words, ascii_alnum, ascii_punct, cjk, other]`。`words` 为 ASCII 词数（≈BPE
-/// 主 token 数，捕获「短词多 token 少」）；ASCII 空白不计入（由 `words` 隐含）。
-pub fn features(text: &str) -> [f64; 5] {
+/// `[words, ascii_alnum, ascii_punct, newline, cjk, other]`。`words` 为 ASCII 词数
+/// （≈BPE 主 token 数）；`newline` 单独计（换行 ≈1 token）；普通空白忽略。
+pub fn features(text: &str) -> [f64; 6] {
     let mut words = 0usize;
     let mut alnum = 0usize;
     let mut punct = 0usize;
+    let mut newline = 0usize;
     let mut cjk = 0usize;
     let mut other = 0usize;
     let mut in_word = false;
@@ -59,21 +60,24 @@ pub fn features(text: &str) -> [f64; 5] {
             continue;
         }
         in_word = false;
-        classify(ch, &mut punct, &mut cjk, &mut other);
+        classify(ch, &mut punct, &mut newline, &mut cjk, &mut other);
     }
     [
         words as f64,
         alnum as f64,
         punct as f64,
+        newline as f64,
         cjk as f64,
         other as f64,
     ]
 }
 
-/// 非 ASCII 字母数字字符的分类计数（空白忽略）。
-fn classify(ch: char, punct: &mut usize, cjk: &mut usize, other: &mut usize) {
+/// 非 ASCII 字母数字字符的分类计数（普通空白忽略）。
+fn classify(ch: char, punct: &mut usize, newline: &mut usize, cjk: &mut usize, other: &mut usize) {
     if ch.is_ascii_punctuation() {
         *punct += 1;
+    } else if ch == '\n' {
+        *newline += 1;
     } else if !ch.is_ascii_whitespace() {
         if crate::terms::full(ch) {
             *cjk += 1;
@@ -83,7 +87,7 @@ fn classify(ch: char, punct: &mut usize, cjk: &mut usize, other: &mut usize) {
     }
 }
 
-/// 长度桶索引：按字符总数分 5 桶（1-16 / 17-64 / 65-256 / 257-1024 / 1025+）。
+/// 长度桶索引：按非空白字符总数分 5 桶（1-16/17-64/65-256/257-1024/1025+）。
 fn bucket(chars: usize) -> usize {
     const BOUNDS: [usize; 4] = [16, 64, 256, 1024];
     BOUNDS
@@ -95,9 +99,14 @@ fn bucket(chars: usize) -> usize {
 /// 校准口径：按（特征 × 长度桶）密度查表，`tokens = Σ 特征计数 × 密度[bucket]`。
 fn calibrated(text: &str) -> f64 {
     let f = features(text);
-    let b = bucket((f[1] + f[2] + f[3] + f[4]) as usize);
+    let b = bucket((f[1] + f[2] + f[3] + f[4] + f[5]) as usize);
     let d = crate::token_calib::CALIB_DENSITY;
-    f[0] * d[0][b] + f[1] * d[1][b] + f[2] * d[2][b] + f[3] * d[3][b] + f[4] * d[4][b]
+    f[0] * d[0][b]
+        + f[1] * d[1][b]
+        + f[2] * d[2][b]
+        + f[3] * d[3][b]
+        + f[4] * d[4][b]
+        + f[5] * d[5][b]
 }
 
 #[cfg(test)]
@@ -126,16 +135,13 @@ mod tests {
 
     #[test]
     fn features_partition_all_chars() {
-        let f = features("abc 数据库!");
-        // 非空白字符 = alnum + punct + cjk + other（空白由 words 隐含，不计入）。
-        let total = (f[1] + f[2] + f[3] + f[4]) as usize;
-        assert_eq!(
-            total,
-            "abc 数据库!".chars().filter(|c| !c.is_whitespace()).count()
-        );
-        assert!(f[0] > 0.0, "words");
-        assert!(f[1] > 0.0, "alnum");
-        assert!(f[3] > 0.0, "cjk");
+        let f = features("abc\n数据库!");
+        assert_eq!(f[0] as usize, 1, "words: abc 一词");
+        assert_eq!(f[1] as usize, 3, "alnum: a,b,c");
+        assert_eq!(f[2] as usize, 1, "punct: !");
+        assert_eq!(f[3] as usize, 1, "newline: \\n");
+        assert_eq!(f[4] as usize, 3, "cjk: 数据库");
+        assert_eq!(f[5] as usize, 0, "other");
     }
 
     #[test]
