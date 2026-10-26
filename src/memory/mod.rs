@@ -140,7 +140,7 @@ pub fn search(root: &str, query: &str, k: usize, read_only: bool) -> std::io::Re
     Ok(hits)
 }
 
-/// RRF 融合常数：与 `tools/embed_baseline.py` 的混合检索口径一致。
+/// RRF 融合常数（k=60）。
 const RRF_K: f64 = 60.0;
 
 /// 融合召回：BM25 top-k 与 embedding 余弦排名、MinHash-LSH Jaccard 的 RRF 融合。
