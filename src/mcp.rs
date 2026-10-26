@@ -138,8 +138,41 @@ fn result(id: Option<Json>, text: &str) -> String {
     format!(
         "{{\"jsonrpc\":\"2.0\",\"id\":{},\"result\":{{\"content\":[{{\"type\":\"text\",\"text\":\"{}\"}}],\"isError\":false}}}}",
         wire(&id),
-        text.replace('"', "\\\"")
+        jesc(text)
     )
+}
+
+/// 多块文本 content：首块为「SCX 压缩召回」效果卡（人类可读），后续块为机器 JSON。
+/// 客户端（豆包/千问/Codex/Cursor/Claude）顺序渲染，效果即对话可见。
+fn result_multi(id: Option<Json>, parts: &[&str]) -> String {
+    let mut items = String::new();
+    for p in parts {
+        if !items.is_empty() {
+            items.push(',');
+        }
+        items.push_str(&format!("{{\"type\":\"text\",\"text\":\"{}\"}}", jesc(p)));
+    }
+    format!(
+        "{{\"jsonrpc\":\"2.0\",\"id\":{},\"result\":{{\"content\":[{items}],\"isError\":false}}}}",
+        wire(&id)
+    )
+}
+
+/// JSON 字符串转义：反斜杠、引号、换行、回车、制表符。
+/// 效果卡为多行文本，缺少换行转义会使返回帧非法 JSON。
+fn jesc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// 从 JSON 值取数值参数（整数语义：f64 → usize，负值钳 0）。
@@ -175,7 +208,9 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
     usage.compressed += 1;
     usage.input += text.len() as u64;
     usage.output += outcome.text.len() as u64;
-    result(id, &crate::ops::render(&outcome))
+    let card = crate::ops::recall_report(&outcome, &query);
+    let json = crate::ops::render(&outcome);
+    result_multi(id, &[&card, &json])
 }
 
 /// 数值与开关参数落到压缩配置（缺省即保持 `Config::default()`）。

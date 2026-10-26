@@ -75,6 +75,11 @@ fn mcp_stdio_roundtrip() {
         out.contains("sieve") && out.contains("kept") && out.contains("dropped"),
         "compress_context: {out}"
     );
+    // v0.6.5：返回为「效果卡 + JSON」双 content，首块人类可读、次块机器字段。
+    assert!(
+        out.contains("SCX 压缩召回") && out.contains("tokens_in") && out.contains("token_cut_pct"),
+        "compress_context effect card missing: {out}"
+    );
 
     let usage = roundtrip(
         &mut stdin,
