@@ -37,6 +37,7 @@ pub fn usage() -> String {
     s.push_str("                       max_tokens/structure; precedence CLI > file > DEFAULT\n");
     s.push_str("  --force P            keep lines matching substring (case-insensitive); prefix re: enters\n");
     s.push_str("                       a finite regex subset: | alternation, [..] classes, * + ? quantifiers\n");
+    s.push_str("  --preserve T         keep lines with builtin entity T (url/ip/email/errno); repeatable\n");
     #[cfg(feature = "semantic")]
     {
         s.push_str("  --semantic <weights>    optional neural re-score (cargo feature=semantic); weights file\n");
@@ -61,6 +62,8 @@ pub struct Opts {
     pub json: bool,
     pub stat: bool,
     pub no_stats: bool,
+    /// 逐行决策解释（stderr 输出每行保留/删除原因）。
+    pub explain: bool,
     pub store: bool,
     /// 已验证的修复结论，仅在 `--store 1` 时写入 `case.fix`；缺失时输出警告。
     pub fix: String,
@@ -310,6 +313,15 @@ static FLAGS: &[Flag] = &[
         kind: Kind::Force,
         what: "",
         err_empty: "requires a non-empty pattern",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--preserve",
+        once: false,
+        kind: Kind::Force,
+        what: "",
+        err_empty: "requires a type (url/ip/email/errno)",
         err_zero: "",
         min: 0,
     },
@@ -583,6 +595,15 @@ static FLAGS: &[Flag] = &[
         err_zero: "",
         min: 0,
     },
+    Flag {
+        name: "--explain",
+        once: false,
+        kind: Kind::NoValue,
+        what: "",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
 ];
 
 fn find(name: &str) -> Option<&'static Flag> {
@@ -596,6 +617,7 @@ struct ParseState {
     json: bool,
     stat: bool,
     no_stats: bool,
+    explain: bool,
     store: bool,
     fix: String,
     fix_file: Option<String>,
@@ -635,6 +657,7 @@ impl ParseState {
             json: false,
             stat: false,
             no_stats: false,
+            explain: false,
             store: false,
             fix: String::new(),
             fix_file: None,
@@ -689,11 +712,12 @@ fn path(s: &mut ParseState, f: &Flag, v: String) {
     }
 }
 
-/// 输出形态开关（json / stat / no-stats）。
+/// 输出形态开关（json / stat / no-stats / explain）。
 fn output(s: &mut ParseState, name: &str) {
     match name {
         "--json" => s.json = true,
         "--stat" => s.stat = true,
+        "--explain" => s.explain = true,
         _ => s.no_stats = true,
     }
 }
@@ -794,7 +818,7 @@ fn none(s: &mut ParseState, f: &Flag, inline: Option<String>) -> Result<(), Stri
         return Err(format!("{} does not take a value", f.name));
     }
     match f.name {
-        "--json" | "--stat" | "--no-stats" => output(s, f.name),
+        "--json" | "--stat" | "--no-stats" | "--explain" => output(s, f.name),
         "--rebuild" | "--gc" => house(s, f.name),
         "--annotate" | "--annotate-raw" | "--gate" | "--gate-human" | "--gate-items" => {
             evaluate(s, f.name)
@@ -1109,7 +1133,17 @@ fn either(
     Ok(())
 }
 
-/// 强制模式子串（`|` 分隔，允许重复）。
+/// `--preserve <type>` 实体保留预设：内置高价值实体的手写正则（零依赖、确定性），
+/// 展开为等价 `--force re:...`，命中行视为证据无条件保留。正则只用 scx 有限子集
+/// （交替/字符类/量词，`.` 为字面、`{}` 不支持）。
+const PRESERVE_PATTERNS: &[(&str, &str)] = &[
+    ("url", "re://"), // 任意协议 ://（http/https/postgres/mysql/redis/...）
+    ("ip", "re:[0-9]+.[0-9]+.[0-9]+.[0-9]+"), // IPv4 点分十进制
+    ("email", "re:[a-z0-9._%+-]+@"), // email local part + @
+    ("errno", "re:errno[= ]*[0-9]+"), // errno=28 / errno 28
+];
+
+/// 强制模式子串（`|` 分隔，允许重复）；`--preserve` 走实体预设映射分支。
 fn force(
     s: &mut ParseState,
     f: &Flag,
@@ -1118,6 +1152,26 @@ fn force(
     i: &mut usize,
 ) -> Result<(), String> {
     let v = value(args, i, f.name, inline)?;
+    if f.name == "--preserve" {
+        let ty = v.trim();
+        if ty.is_empty() {
+            return Err(format!("{} {}", f.name, f.err_empty));
+        }
+        let pat = PRESERVE_PATTERNS
+            .iter()
+            .find(|(name, _)| *name == ty)
+            .map(|(_, p)| *p)
+            .ok_or_else(|| {
+                let allowed: Vec<&str> = PRESERVE_PATTERNS.iter().map(|(n, _)| *n).collect();
+                format!(
+                    "{} unknown type {ty:?} (allowed: {})",
+                    f.name,
+                    allowed.join("/")
+                )
+            })?;
+        s.config.forces.push(pat.to_string());
+        return Ok(());
+    }
     let trimmed = v.trim();
     if let Some(rest) = trimmed.strip_prefix("re:") {
         // `re:` 前缀：整个值是单个正则，`|` 是正则交替不拆分。CLI 层前置
@@ -1331,6 +1385,7 @@ fn finish(s: ParseState) -> Opts {
         json: s.json,
         stat: s.stat,
         no_stats: s.no_stats,
+        explain: s.explain,
         store: s.store,
         fix: s.fix,
         fix_file: s.fix_file,
@@ -1479,6 +1534,38 @@ mod tests {
         let o = all(args(&["--force", "SPECIAL"])).unwrap();
         assert_eq!(o.query, "");
         assert_eq!(o.config.forces, vec!["SPECIAL".to_string()]);
+    }
+
+    #[test]
+    fn preserve_expands_to_builtin_patterns() {
+        // --preserve 展开为内置 force 正则，命中行视为证据；无需 --query。
+        let o = all(args(&[
+            "--preserve",
+            "url",
+            "--preserve",
+            "errno",
+            "--force",
+            "SPECIAL",
+        ]))
+        .unwrap();
+        assert_eq!(o.query, "");
+        assert_eq!(
+            o.config.forces,
+            vec![
+                "re://".to_string(),
+                "re:errno[= ]*[0-9]+".to_string(),
+                "SPECIAL".to_string()
+            ]
+        );
+        // 非法类型报错并列出白名单。
+        let err = match all(args(&["--preserve", "bogus"])) {
+            Ok(_) => panic!("--preserve bogus 必须报错"),
+            Err(e) => e,
+        };
+        assert!(err.contains("unknown type"), "err: {err}");
+        assert!(err.contains("url/ip/email/errno"), "err: {err}");
+        // 空类型报错。
+        assert!(all(args(&["--preserve="])).is_err());
     }
 
     #[test]

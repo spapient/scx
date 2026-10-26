@@ -388,24 +388,28 @@ fn count(
 /// 超长区域按 `REGION_DEFAULT.max_span` 裁剪为种子邻域窗口。
 struct Region {
     in_region: Vec<bool>,
+    /// 仅结构区域（`--structure 1` 时 merge 并入的行）；默认关时全 false。
+    struct_region: Vec<bool>,
     count: usize,
     gate: bool,
 }
 
 fn expand(seed: &[bool], window: usize, total: usize, structs: Option<&Shape>) -> Region {
     let mut in_region = vec![false; total];
+    let mut struct_region = vec![false; total];
     let seed_idx: Vec<usize> = (0..total).filter(|&i| seed[i]).collect();
     // 结构并入是“叠加”而非“替代”：基础种子邻域（±window + gap 合并）先行，
     // 含种子的结构区域整段并入其上；count 以合并后的 mask 重算。
     let count = if let Some(map) = structs {
         windows(&seed_idx, window, total, &mut in_region);
-        merge(seed, window, total, map, &mut in_region);
+        merge(seed, window, total, map, &mut in_region, &mut struct_region);
         regions(&in_region)
     } else {
         windows(&seed_idx, window, total, &mut in_region)
     };
     Region {
         in_region,
+        struct_region,
         count,
         gate: (0..total).any(|i| seed[i]),
     }
@@ -439,14 +443,27 @@ fn windows(seed_idx: &[usize], w: usize, total: usize, in_region: &mut [bool]) -
 }
 
 /// 结构区域并入：含种子的区域整段进入候选；超长区域裁剪为种子 ± half 窗口。
-fn merge(seed: &[bool], window: usize, total: usize, map: &Shape, in_region: &mut [bool]) {
+fn merge(
+    seed: &[bool],
+    window: usize,
+    total: usize,
+    map: &Shape,
+    in_region: &mut [bool],
+    struct_region: &mut [bool],
+) {
     for r in &map.regions {
         if !(r.start..=r.end).any(|i| seed[i]) {
             continue;
         }
         if r.end - r.start < crate::policy::REGION_DEFAULT.max_span {
-            for slot in in_region.iter_mut().take(r.end + 1).skip(r.start) {
+            for (slot, sslot) in in_region
+                .iter_mut()
+                .zip(struct_region.iter_mut())
+                .take(r.end + 1)
+                .skip(r.start)
+            {
                 *slot = true;
+                *sslot = true;
             }
         } else {
             let half = crate::policy::REGION_DEFAULT.max_span / 2;
@@ -488,12 +505,14 @@ struct Shape {
 }
 
 /// 单趟状态机：fence 配对（``` / ~~~ 含后缀开启、纯标记闭合）、
-/// 连续 import/use/#include 块、连续堆栈链（at 帧 + Caused by: 延续）。
-/// fence 内行不参与 import/stack 判定；未闭合 fence 不并入（保守）。
+/// 连续 import/use/#include 块、连续堆栈链（at 帧 + Caused by: 延续）、
+/// 大括号块（函数体/类/impl/try 等）。fence 内行不参与其余判定；
+/// 未闭合 fence 与大括号块不并入（保守）。
 fn structures(lines: &[&str]) -> Shape {
     let mut regions: Vec<Span> = Vec::new();
     let mut block: Option<usize> = None;
     let mut cur: Option<(usize, Kind)> = None;
+    let mut brace = Brace::new();
     for (i, line) in lines.iter().enumerate() {
         if let Some(start) = block {
             if closes(line) {
@@ -506,8 +525,10 @@ fn structures(lines: &[&str]) -> Shape {
         if fence(line) {
             block = Some(i);
             cur = None;
+            brace.reset();
             continue;
         }
+        brace.scan(i, line, &mut regions);
         let kind = kind(line);
         if !continues(cur, kind) {
             close(&mut regions, cur, i.saturating_sub(1));
@@ -516,6 +537,53 @@ fn structures(lines: &[&str]) -> Shape {
     }
     close(&mut regions, cur, lines.len().saturating_sub(1));
     Shape { regions }
+}
+
+/// 大括号块追踪：从含 `{` 的行开始，到嵌套深度归零的 `}` 结束。
+/// 保守实现：不计字符串/注释内的括号；单行 `{ }` 自成一段；未闭合不并入。
+struct Brace {
+    start: Option<usize>,
+    depth: usize,
+}
+
+impl Brace {
+    fn new() -> Self {
+        Brace {
+            start: None,
+            depth: 0,
+        }
+    }
+
+    /// 进入 fence 时丢弃未闭合的块（fence 内行不参与大括号判定）。
+    fn reset(&mut self) {
+        self.start = None;
+        self.depth = 0;
+    }
+
+    /// 扫描一行的大括号，块闭合时追加 Span。
+    fn scan(&mut self, i: usize, line: &str, regions: &mut Vec<Span>) {
+        let opens = line.matches('{').count();
+        let closes = line.matches('}').count();
+        if self.start.is_none() {
+            if opens > 0 {
+                self.start = Some(i);
+                self.depth = opens.saturating_sub(closes);
+                if self.depth == 0 {
+                    regions.push(Span { start: i, end: i });
+                    self.start = None;
+                }
+            }
+        } else {
+            self.depth = self.depth.saturating_add(opens).saturating_sub(closes);
+            if self.depth == 0 {
+                regions.push(Span {
+                    start: self.start.unwrap(),
+                    end: i,
+                });
+                self.start = None;
+            }
+        }
+    }
 }
 
 /// 相邻行是否同属一段（同类结构且段未关闭）。
@@ -654,37 +722,64 @@ fn boost(scores: &[f64], dup: &[bool], window: usize, tbl: &Weights) -> Vec<f64>
     boost
 }
 
+/// 逐行保留原因编码（`--explain` 用）：0=删除，其余见 `explain` 映射。
+const R_SEED: u8 = 1;
+const R_CONTEXT: u8 = 2;
+const R_FILL: u8 = 3;
+const R_GUARD: u8 = 4;
+
 /// 先落种子与最小可读邻域；预算只约束其后的可选内容。
-fn floor(seed: &[bool], context: i64, total: usize) -> (Vec<bool>, usize) {
+/// 两趟：先种子（`Seed`），再邻域（`Context`），保证种子行的原因不被邻域覆盖。
+fn floor(seed: &[bool], context: i64, total: usize, reason: &mut [u8]) -> (Vec<bool>, usize) {
     let mut keep = vec![false; total];
     let mut keep_count = 0usize;
+    mark_seeds(seed, &mut keep, &mut keep_count, reason);
+    mark_context(seed, context, total, &mut keep, &mut keep_count, reason);
+    (keep, keep_count)
+}
+
+/// 第一趟：种子行标记 `Seed`。
+fn mark_seeds(seed: &[bool], keep: &mut [bool], keep_count: &mut usize, reason: &mut [u8]) {
+    for (i, &is_seed) in seed.iter().enumerate() {
+        if is_seed {
+            keep[i] = true;
+            *keep_count += 1;
+            reason[i] = R_SEED;
+        }
+    }
+}
+
+/// 第二趟：种子 ±context 邻域标记 `Context`（已保留的种子行不覆盖）。
+fn mark_context(
+    seed: &[bool],
+    context: i64,
+    total: usize,
+    keep: &mut [bool],
+    keep_count: &mut usize,
+    reason: &mut [u8],
+) {
     for (i, &is_seed) in seed.iter().enumerate() {
         if !is_seed {
             continue;
         }
         for d in -context..=context {
             let j = i as i64 + d;
-            if j >= 0 && (j as usize) < total && !keep[j as usize] {
+            if d != 0 && j >= 0 && (j as usize) < total && !keep[j as usize] {
                 keep[j as usize] = true;
-                keep_count += 1;
+                *keep_count += 1;
+                reason[j as usize] = R_CONTEXT;
             }
         }
     }
-    (keep, keep_count)
 }
 
-/// 预算填充候选资格：非折叠、未保留、真实得分，且位于种子区域（首 `edge_head`
-/// 身份行豁免区域门控）。
-fn eligible(
-    i: usize,
-    edge_head: usize,
-    dup: &[bool],
-    keep: &[bool],
-    scores: &[f64],
-    region_gate: bool,
-    in_region: &[bool],
-) -> bool {
-    !dup[i] && !keep[i] && scores[i] > 0.0 && (!region_gate || in_region[i] || i < edge_head)
+/// 预算填充候选资格：非折叠、未保留，且有真实得分或位于结构区间
+/// （`--structure 1` 让「整段并入」名副其实）；种子区域门控（首两行身份行豁免）。
+fn eligible(sel: &Select, cfg: &Fill, keep: &[bool], i: usize) -> bool {
+    !sel.dup[i]
+        && !keep[i]
+        && (sel.scores[i] > 0.0 || sel.struct_region[i])
+        && (!cfg.region_gate || sel.in_region[i] || i < cfg.edge_head)
 }
 
 /// 预算选择：种子区域门控（首两行身份行除外）；独立入选须真实得分（scores > 0）。
@@ -695,6 +790,7 @@ struct Select<'a> {
     boost: &'a [f64],
     dup: &'a [bool],
     in_region: &'a [bool],
+    struct_region: &'a [bool],
 }
 
 /// 预算填充的标量配置。
@@ -710,22 +806,18 @@ struct Fill {
 /// 排序按 `scores + boost` 降序、行号升序（确定性 tie-break）。
 /// `remaining` 为 `--max-tokens` 下可选填充的可分配余量（无上限时 +∞）；
 /// 填充总量受 `min(budget, remaining)` 双重约束。
-fn fill(sel: &Select, cfg: &Fill, keep: &mut [bool], keep_count: &mut usize) {
+fn fill(
+    sel: &Select,
+    cfg: &Fill,
+    keep: &mut [bool],
+    keep_count: &mut usize,
+    reason: &mut [u8],
+) -> f64 {
     let total = sel.lines.len();
     let budget = (cfg.total_tok * cfg.ratio).max(crate::policy::BUDGET_MIN);
     let cap = budget.min(cfg.remaining);
     let mut order: Vec<(usize, f64)> = (0..total)
-        .filter(|&i| {
-            eligible(
-                i,
-                cfg.edge_head,
-                sel.dup,
-                keep,
-                sel.scores,
-                cfg.region_gate,
-                sel.in_region,
-            )
-        })
+        .filter(|&i| eligible(sel, cfg, keep, i))
         .map(|i| (i, sel.scores[i] + sel.boost[i]))
         .collect();
     order.sort_unstable_by(|&(a, sa), &(b, sb)| {
@@ -744,9 +836,11 @@ fn fill(sel: &Select, cfg: &Fill, keep: &mut [bool], keep_count: &mut usize) {
         if !keep[i] {
             keep[i] = true;
             *keep_count += 1;
+            reason[i] = R_FILL;
         }
         used += t;
     }
+    used
 }
 
 /// 已保留行的 token 估算总和（`--max-tokens` 记账口径）。
@@ -804,6 +898,7 @@ fn guard(
     dup: &[bool],
     guard: &[bool],
     marker: &[bool],
+    reason: &mut [u8],
 ) -> u8 {
     let mut guarded = 0u8;
     for i in 0..keep.len() {
@@ -813,6 +908,7 @@ fn guard(
         if guard[i] || marker[i] {
             keep[i] = true;
             *keep_count += 1;
+            reason[i] = R_GUARD;
             guarded = 1;
         }
     }
@@ -887,7 +983,8 @@ fn semantic(
 ) {
 }
 
-/// 可选预算填充：`--context 0` 或已进入 overflow 时跳过。
+/// 可选预算填充：`--context 0` 或已进入 overflow 时跳过。返回可选填充实际
+/// 消耗的 token 估算（跳过时返回 0），供 `budget_used_pct` 记账。
 fn optional(
     sel: &Select,
     cfg: &Fill,
@@ -895,11 +992,12 @@ fn optional(
     overflow: Option<Mode>,
     keep: &mut [bool],
     keep_count: &mut usize,
-) {
+    reason: &mut [u8],
+) -> f64 {
     if context == 0 || overflow.is_some() {
-        return;
+        return 0.0;
     }
-    fill(sel, cfg, keep, keep_count);
+    fill(sel, cfg, keep, keep_count, reason)
 }
 
 /// 风险守卫触发条件（HIGH 且未关闭 `--risk-gate`）。
@@ -963,6 +1061,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             tokens,
             tokens_in: estimate(original),
             dropped,
+            budget_used_pct: 0.0,
+            explain: Vec::new(),
         }
     };
 
@@ -1043,7 +1143,9 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 叠加 sigmoid 打分作为排序加分；不启用时与 v0.4.1 逐字节一致。
     semantic(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
     let boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
-    let (mut keep, mut keep_count) = floor(&seeds.seed, context, total);
+    // 逐行保留原因（--explain 用）：0=删除，其余见 R_* 常量。
+    let mut reason = vec![0u8; total];
+    let (mut keep, mut keep_count) = floor(&seeds.seed, context, total, &mut reason);
 
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
@@ -1052,13 +1154,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let mut overflow = cap(tok_floor, cfg.limit);
 
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
-    optional(
+    let used_optional = optional(
         &Select {
             lines: &lines,
             scores: &scores,
             boost: &boost,
             dup: &dup,
             in_region: &regions.in_region,
+            struct_region: &regions.struct_region,
         },
         &Fill {
             region_gate: regions.gate,
@@ -1071,7 +1174,16 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         overflow,
         &mut keep,
         &mut keep_count,
+        &mut reason,
     );
+    // 可选预算利用率（%）：实际填充 ÷ 预算上限，展示 `--ratio` 的实际作用。
+    // 与 fill 同口径（budget = max(total_tok × ratio, BUDGET_MIN)）。
+    let budget = (masks.total_tok * ratio).max(crate::policy::BUDGET_MIN);
+    let budget_used_pct = if budget > 0.0 {
+        (used_optional / budget * 100.0).clamp(0.0, 100.0)
+    } else {
+        0.0
+    };
 
     let risk = audit(&keep, &masks.err_v, &seeds.hits, &DEFAULT_RISK);
     let mut guarded = 0u8;
@@ -1082,6 +1194,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             &dup,
             &masks.guard_v,
             &masks.marker_v,
+            &mut reason,
         );
     }
 
@@ -1113,7 +1226,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
 
     let (out_text, numbers) = render(&lines, &keep, cfg.elide, cfg.lineno);
     let (chars_b, cut) = cut(&out_text, chars_a);
-    mk(
+    let mut o = mk(
         out_text,
         keep_count,
         chars_b,
@@ -1127,8 +1240,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         overflow.unwrap_or(Mode::Sieve),
         cfg.limit,
         final_tok,
-        runs(&keep, overflow.is_some()),
-    )
+        runs(&keep, &dup, overflow.is_some()),
+    );
+    o.budget_used_pct = budget_used_pct;
+    o.explain = explain(&reason, &dup);
+    o
 }
 
 /// 配置规范化（库是公开接口：入口统一钳制，避免 CLI 之外的调用触发溢出或超大循环）。
@@ -1208,38 +1324,90 @@ fn last(final_tok: f64, limit: Option<usize>) -> Option<Mode> {
 }
 
 /// 删除区间：`keep` 中连续未保留段（1-based 闭区间）与原因。
-/// `overflow` 为真（--max-tokens 生效且超限）时记 `MaxTokens`，否则记 `Budget`
-/// （含 `--structure 1` 超长结构区域裁剪——裁剪行为在 merge 完成，
-/// 此处统一按未保留段记录）。
-fn runs(keep: &[bool], overflow: bool) -> Vec<crate::Dropped> {
+/// `dup[i]` 的行记 `Dedup`（去重折叠）；其余 `overflow` 为真记 `MaxTokens`、
+/// 否则记 `Budget`（含 `--structure 1` 超长结构区域裁剪——裁剪行为在 merge
+/// 完成，此处统一按未保留段记录）。同段内原因变化时拆分为多区间。
+fn runs(keep: &[bool], dup: &[bool], overflow: bool) -> Vec<crate::Dropped> {
     let mut out: Vec<crate::Dropped> = Vec::new();
     let mut start: Option<usize> = None;
+    let mut cur = crate::Reason::Budget;
     for (i, &k) in keep.iter().enumerate() {
-        if !k {
-            if start.is_none() {
-                start = Some(i);
+        if k {
+            if let Some(s) = start.take() {
+                run(&mut out, s, i, cur);
             }
-        } else if let Some(s) = start.take() {
-            run(&mut out, s, i, overflow);
+            continue;
         }
+        let reason = drop_reason(dup[i], overflow);
+        advance(&mut out, &mut start, &mut cur, i, reason);
     }
     if let Some(s) = start {
-        run(&mut out, s, keep.len(), overflow);
+        run(&mut out, s, keep.len(), cur);
     }
     out
 }
 
+/// 未保留行的删除原因：去重折叠 > 硬上限 > 预算不足。
+fn drop_reason(dup: bool, overflow: bool) -> crate::Reason {
+    if dup {
+        crate::Reason::Dedup
+    } else if overflow {
+        crate::Reason::MaxTokens
+    } else {
+        crate::Reason::Budget
+    }
+}
+
+/// 推进删除区间：无起始则开新段，原因一致则延续，原因变化则收尾旧段再开新段。
+fn advance(
+    out: &mut Vec<crate::Dropped>,
+    start: &mut Option<usize>,
+    cur: &mut crate::Reason,
+    i: usize,
+    reason: crate::Reason,
+) {
+    match *start {
+        None => {
+            *start = Some(i);
+            *cur = reason;
+        }
+        Some(s) if reason != *cur => {
+            run(out, s, i, *cur);
+            *start = Some(i);
+            *cur = reason;
+        }
+        Some(_) => {}
+    }
+}
+
 /// 追加一段未保留区间（1-based 闭区间）与原因。
-fn run(out: &mut Vec<crate::Dropped>, start: usize, end: usize, overflow: bool) {
+fn run(out: &mut Vec<crate::Dropped>, start: usize, end: usize, reason: crate::Reason) {
     out.push(crate::Dropped {
         start: start + 1,
         end,
-        reason: if overflow {
-            crate::Reason::MaxTokens
-        } else {
-            crate::Reason::Budget
-        },
+        reason,
     });
+}
+
+/// 逐行决策解释：保留原因来自 `reason` 编码，删除原因按去重折叠 vs 其余区分。
+fn explain(reason: &[u8], dup: &[bool]) -> Vec<crate::Explain> {
+    reason
+        .iter()
+        .enumerate()
+        .map(|(i, &r)| match r {
+            R_SEED => crate::Explain::Seed,
+            R_CONTEXT => crate::Explain::Context,
+            R_FILL => crate::Explain::Fill,
+            R_GUARD => crate::Explain::Guard,
+            _ => {
+                if dup[i] {
+                    crate::Explain::Dedup
+                } else {
+                    crate::Explain::Dropped
+                }
+            }
+        })
+        .collect()
 }
 
 /// 输出统计：字符数（去掉尾随换行）与压减率。
@@ -1267,14 +1435,15 @@ mod tests {
 
     #[test]
     fn drop_runs_empty_keep() {
-        assert!(runs(&[], false).is_empty());
-        assert!(runs(&[true, true, true], false).is_empty());
+        assert!(runs(&[], &[], false).is_empty());
+        assert!(runs(&[true, true, true], &[false; 3], false).is_empty());
     }
 
     #[test]
     fn drop_runs_budget_runs() {
         let keep = vec![true, false, false, true, false, true];
-        let dr = runs(&keep, false);
+        let dup = vec![false; 6];
+        let dr = runs(&keep, &dup, false);
         assert_eq!(dr.len(), 2);
         assert_eq!((dr[0].start, dr[0].end), (2, 3));
         assert_eq!(dr[0].reason, crate::Reason::Budget);
@@ -1285,7 +1454,7 @@ mod tests {
     #[test]
     fn drop_runs_trailing_tail() {
         let keep = vec![true, false, false];
-        let dr = runs(&keep, false);
+        let dr = runs(&keep, &[false; 3], false);
         assert_eq!(dr.len(), 1);
         assert_eq!((dr[0].start, dr[0].end), (2, 3));
     }
@@ -1293,11 +1462,34 @@ mod tests {
     #[test]
     fn drop_runs_overflow_reason() {
         let keep = vec![false, false, true];
-        let dr = runs(&keep, true);
+        let dr = runs(&keep, &[false; 3], true);
         assert_eq!(dr.len(), 1);
         assert_eq!(dr[0].reason, crate::Reason::MaxTokens);
         assert_eq!(dr[0].reason.as_str(), "max-tokens");
         assert_eq!(crate::Reason::Budget.as_str(), "budget");
+        assert_eq!(crate::Reason::Dedup.as_str(), "dedup");
+    }
+
+    #[test]
+    fn drop_runs_dedup_splits_from_budget() {
+        // dup 行记 Dedup，与相邻 budget 行拆分为不同区间。
+        let keep = vec![true, false, false];
+        let dup = vec![false, true, false];
+        let dr = runs(&keep, &dup, false);
+        assert_eq!(dr.len(), 2);
+        assert_eq!((dr[0].start, dr[0].end), (2, 2));
+        assert_eq!(dr[0].reason, crate::Reason::Dedup);
+        assert_eq!((dr[1].start, dr[1].end), (3, 3));
+        assert_eq!(dr[1].reason, crate::Reason::Budget);
+        // 同一原因延续不拆分：两个相邻 dup 合并为一个 Dedup 区间。
+        let keep2 = vec![true, false, false, false];
+        let dup2 = vec![false, true, true, false];
+        let dr2 = runs(&keep2, &dup2, false);
+        assert_eq!(dr2.len(), 2);
+        assert_eq!((dr2[0].start, dr2[0].end), (2, 3));
+        assert_eq!(dr2[0].reason, crate::Reason::Dedup);
+        assert_eq!((dr2[1].start, dr2[1].end), (4, 4));
+        assert_eq!(dr2[1].reason, crate::Reason::Budget);
     }
 
     #[test]
@@ -1347,6 +1539,54 @@ mod tests {
         assert!(import("use crate::policy::DEFAULT_RATIO"));
         assert!(import("#include <stdio.h>"));
         assert!(import("import os"));
+    }
+
+    #[test]
+    fn scan_structures_brace_block() {
+        // 大括号块（函数体 + 嵌套 if）：从含 { 的行到匹配的 } 整段并入。
+        let lines = sample_lines(&[
+            "fn connect() {",
+            "  let conn = pool.acquire();",
+            "  if conn.is_err() {",
+            "    return Err(conn.err());",
+            "  }",
+            "  Ok(conn)",
+            "}",
+            "x",
+        ]);
+        let map = structures(&lines);
+        assert_eq!(map.regions.len(), 1, "单个函数体块");
+        assert_eq!((map.regions[0].start, map.regions[0].end), (0, 6));
+    }
+
+    #[test]
+    fn scan_structures_single_line_brace_block() {
+        // 单行 { } 自成一段。
+        let lines = sample_lines(&["fn empty() {}", "x"]);
+        let map = structures(&lines);
+        assert_eq!(map.regions.len(), 1);
+        assert_eq!((map.regions[0].start, map.regions[0].end), (0, 0));
+    }
+
+    #[test]
+    fn scan_structures_fence_shields_brace_block() {
+        // fence 内的代码块不参与大括号判定（重置 brace）。
+        let lines = sample_lines(&[
+            "```",
+            "fn inside() {",
+            "  return 1;",
+            "}",
+            "```",
+            "fn outside() {",
+            "  return 2;",
+            "}",
+        ]);
+        let map = structures(&lines);
+        // 只有 fence（0..4）和 fence 外的函数体（5..7）。
+        assert_eq!(map.regions.len(), 2, "fence 区域 + fence 外函数体");
+        let mut spans: Vec<(usize, usize)> = map.regions.iter().map(|r| (r.start, r.end)).collect();
+        spans.sort();
+        assert_eq!(spans, vec![(0, 4), (5, 7)]);
     }
 
     #[test]

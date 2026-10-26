@@ -2,5 +2,6 @@
 def run():
     conn 9f2a broken db crash
     return pool
+```
 ...
-compressed: kept=4/155 lines chars=6704->64 (99.0% cut) dup=148 seeds=1 evidence=1 risk=LOW guarded=0 regions=1 window=2 terms=3 forced=0 mode=sieve
+compressed: kept=5/155 lines chars=6704->68 (99.0% cut) dup=148 seeds=1 evidence=1 risk=LOW guarded=0 regions=1 window=2 terms=3 forced=0 mode=sieve

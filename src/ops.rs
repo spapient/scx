@@ -49,6 +49,7 @@ pub struct Compress {
     pub stat: bool,
     pub no_stats: bool,
     pub json: bool,
+    pub explain: bool,
     pub max_bytes: Option<u64>,
     pub mem_dir: String,
 }
@@ -222,6 +223,7 @@ fn job(opts: &Opts) -> Compress {
         stat: opts.stat,
         no_stats: opts.no_stats,
         json: opts.json,
+        explain: opts.explain,
         max_bytes: opts.max_bytes,
         mem_dir: opts.mem_dir.clone(),
     }
@@ -397,8 +399,29 @@ pub fn render(r: &Outcome) -> String {
             .collect::<Vec<_>>()
             .join(",")
     ));
+    // 可选预算利用率（%）：--ratio 预算实际填充了多少。
+    out.push_str(&format!(",\"budget_used_pct\":{:.1}", r.budget_used_pct));
+    // 逐行决策解释（数组下标 = 行号-1）；仅筛选模式非空。
+    out.push_str(&format!(
+        ",\"explain\":[{}]",
+        r.explain
+            .iter()
+            .map(|e| format!("\"{}\"", e.as_str()))
+            .collect::<Vec<_>>()
+            .join(",")
+    ));
     out.push('}');
     out
+}
+
+/// 逐行决策解释（stderr，一行；`<line>:<reason>` 空格分隔，1-based）。
+fn explain_report(r: &Outcome) -> String {
+    r.explain
+        .iter()
+        .enumerate()
+        .map(|(i, e)| format!("{}:{}", i + 1, e.as_str()))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// token 缩减率（%）：输入估算为 0 时视为 0（passthrough/fail-open 恒为 0）。
@@ -764,6 +787,9 @@ fn filter(job: &Compress) -> Reply {
     }
     if job.json {
         eprintln!("scxjson: {}", render(&outcome));
+    }
+    if job.explain {
+        eprintln!("scx: explain: {}", explain_report(&outcome));
     }
     if let Some(rx) = store_rx {
         let result = rx

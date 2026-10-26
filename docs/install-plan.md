@@ -71,7 +71,6 @@
 | Claude Code | `claude mcp add` CLI | `scx setup` 自动 | ✅ 全自动 | `✔ Connected` + `--allowedTools mcp__scx__compress_context` 端到端成功 |
 | Codex | `codex mcp add` CLI（config.toml env_key） | `scx setup` 自动 | ✅ 全自动 | `--approve-for-dev` 类放行后 MCP 通道调用成功 |
 | Cursor | `~/.cursor/mcp.json` 直写 | `scx setup` 自动 | ✅ 全自动 | 配置落盘，与用户原有连接器并存 |
-| Qwen Code | `qwen mcp add` CLI | `scx setup` 自动 | ✅ 全自动 | 官方 mcpServers/stdio 格式 |
 | **豆包（Doubao.app）** | GUI 连接器表单（STDIO） | 手动一次填写 | ✅ **已注册成功** | 管理 → 连接器 → 个人板块显示 `scx`，开关开启 |
 | **千问办公（QwenWorkCN）** | GUI 手动填写（STDIO，命令带参数） | 手动一次填写 | ✅ **已注册成功** | 连接器 → 已安装 → `scx` 开关开启，无失败标记；命令 `/opt/homebrew/bin/scx mcp`（详见 §3.2） |
 
@@ -131,12 +130,10 @@ winget install Spapient.Scx                          # Windows（PR 合并后）
 scoop install scx                                    # Windows（PR 合并后）
 
 # 一键接入开发工具（全自动）
-scx setup --all          # Codex / Claude / Cursor / Qwen Code 注册 + 握手自检
-scx setup                # 交互菜单
-scx setup --claude --codex   # 指定平台
-scx setup --list         # 各平台检测状态
-scx setup --verify       # 会话级握手自检
-scx setup --uninstall    # 可逆卸载
+scx setup                # 注册 Claude / Codex / Cursor（写前备份 + 写后自检）
+scx setup --claude --codex   # 只注册指定平台
+scx setup --cursor       # 只写 Cursor 配置
+scx setup --project-cursor   # 写当前项目 .cursor/mcp.json
 
 # MCP 协议入口（供手工配置使用）
 scx mcp                  # stdio JSON-RPC（serverInfo.name=scx）

@@ -208,6 +208,12 @@ pub struct Outcome {
     /// passthrough/fail-open/no-kept 为空。`--json` 或新渲染模式消费；默认
     /// stdout 统计行不输出（与 v0.4.1 逐字节一致）。
     pub dropped: Vec<Dropped>,
+    /// 可选预算利用率（%）：实际填充的可选内容 token 估算 ÷ 预算上限。仅筛选
+    /// 模式有值；passthrough/fail-open/no-kept 为 0。`--json` 消费，默认统计行不输出。
+    pub budget_used_pct: f64,
+    /// 逐行决策解释（`--explain`/`--json` 消费）；长度 == total，仅筛选模式有值，
+    /// passthrough/fail-open/no-kept 为空。默认统计行不输出（与 v0.4.1 逐字节一致）。
+    pub explain: Vec<Explain>,
 }
 
 /// 删除原因（`dropped` 每区间一条）。
@@ -217,6 +223,8 @@ pub enum Reason {
     Budget,
     /// `--max-tokens` 硬上限导致可选内容容量不足。
     MaxTokens,
+    /// 归一化后第 3 次起的重复行折叠（非查询命中、非错误、非 force）。
+    Dedup,
 }
 
 impl Reason {
@@ -225,6 +233,7 @@ impl Reason {
         match self {
             Reason::Budget => "budget",
             Reason::MaxTokens => "max-tokens",
+            Reason::Dedup => "dedup",
         }
     }
 }
@@ -235,6 +244,37 @@ pub struct Dropped {
     pub start: usize,
     pub end: usize,
     pub reason: Reason,
+}
+
+/// 逐行决策解释：每行的保留/删除原因（`Outcome::explain`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Explain {
+    /// 证据行（query 词命中或 `--force`/`--preserve` 命中）。
+    Seed,
+    /// 证据的最小邻域（±context）。
+    Context,
+    /// 可选预算填充。
+    Fill,
+    /// 风险守卫（失败级错误行/事故标记行）。
+    Guard,
+    /// 去重折叠（第 3 次起的重复行）。
+    Dedup,
+    /// 删除（预算不足/结构裁剪/硬上限，细粒度见 `dropped`）。
+    Dropped,
+}
+
+impl Explain {
+    /// JSON / 文本字段值（小写）。
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Explain::Seed => "seed",
+            Explain::Context => "context",
+            Explain::Fill => "fill",
+            Explain::Guard => "guard",
+            Explain::Dedup => "dedup",
+            Explain::Dropped => "dropped",
+        }
+    }
 }
 
 // 零分配 u64→十进制行号写入（`N: ` 前缀，grep -n 风格；供 --lineno 使用）。
@@ -763,5 +803,41 @@ mod tests {
         let o = compress(&text, "alpha conn broken", &cfg());
         assert_eq!(o.mode, Mode::Sieve);
         assert_eq!(o.limit, None);
+    }
+
+    #[test]
+    fn explain_reports_per_line_reason() {
+        // 唯一字母 filler（不 dedup、无 query 命中、scores=0 → Dropped），
+        // 种子 + 邻域（Seed/Context），首两行 edge 身份（Fill）。
+        let mut lines: Vec<String> = (0..60).map(|i| format!("INFO {}", word(i))).collect();
+        lines[30] = "ERROR db timeout conn_id=9f2a".to_string();
+        let text = lines.join("\n");
+        let o = compress(&text, "db timeout", &cfg());
+        assert_eq!(o.explain.len(), o.total, "explain 长度必须 == total");
+        assert_eq!(o.explain[30], Explain::Seed, "query 命中行是 seed");
+        assert_eq!(o.explain[29], Explain::Context, "种子邻域是 context");
+        assert_eq!(o.explain[31], Explain::Context, "种子下方邻域是 context");
+        assert_eq!(o.explain[0], Explain::Fill, "首行 edge 身份行是 fill");
+        assert!(
+            o.explain.contains(&Explain::Dropped),
+            "非 dup、无得分的未保留行应标记 dropped"
+        );
+        // as_str 映射。
+        assert_eq!(Explain::Seed.as_str(), "seed");
+        assert_eq!(Explain::Dropped.as_str(), "dropped");
+    }
+
+    /// 唯一字母词（base-26），长度不限，避免归一化后相同触发去重。
+    fn word(i: usize) -> String {
+        let mut n = i;
+        let mut s = Vec::new();
+        loop {
+            s.push((b'a' + (n % 26) as u8) as char);
+            n /= 26;
+            if n == 0 {
+                break;
+            }
+        }
+        s.into_iter().rev().collect()
     }
 }
