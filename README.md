@@ -253,6 +253,22 @@ compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence
 ./tools/scx --query "oom crash" --policy-file policy.toml app.log
 ```
 
+### 自动压缩命令输出（`scx wrap`）
+
+`scx wrap` 包装任意命令，把其 stdout+stderr 合并后按需压缩——省去手动落盘再接管道：
+
+```bash
+# 构建/测试输出自动压缩，只保留与问题相关的行；退出码沿用被包装命令
+scx wrap --query "compile error" -- cargo build
+scx wrap --query "db timeout" --preserve errno -- make test
+```
+
+小输出由内核自动 passthrough（原样透传），大输出按 `--query`/`--force`/`--preserve` 筛选，正文写 stdout、效果卡写 stderr。等价于 `CMD > /tmp/out 2>&1 && scx --query "..." /tmp/out`，但一条命令完成且退出码正确透传。
+
+> 完全自动的「工具输出拦截」（无需模型主动调用）需在宿主 Agent 配 hook：思路是在
+> PostToolUse hook 里把大 `tool_response` 交给 `scx wrap`（或直接 `scx`）压缩后再回填，
+> 具体脚本取决于宿主当前的 hook 协议（见 `docs/automatic-interception.md` 的模板）。
+
 ## 工作原理
 
 ```text

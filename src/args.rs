@@ -1143,6 +1143,28 @@ const PRESERVE_PATTERNS: &[(&str, &str)] = &[
     ("errno", "re:errno[= ]*[0-9]+"), // errno=28 / errno 28
 ];
 
+/// 把 `--preserve <type>` 展开为内置 force 正则，追加到 `config.forces`。
+/// 供 `args::force` 与 `wrap` 复用，避免实体预设映射分散在两处。
+pub(crate) fn preserve_into(config: &mut Config, ty: &str) -> Result<(), String> {
+    let ty = ty.trim();
+    if ty.is_empty() {
+        return Err("preserve requires a type (url/ip/email/errno)".to_string());
+    }
+    let pat = PRESERVE_PATTERNS
+        .iter()
+        .find(|(name, _)| *name == ty)
+        .map(|(_, p)| *p)
+        .ok_or_else(|| {
+            let allowed: Vec<&str> = PRESERVE_PATTERNS.iter().map(|(n, _)| *n).collect();
+            format!(
+                "preserve unknown type {ty:?} (allowed: {})",
+                allowed.join("/")
+            )
+        })?;
+    config.forces.push(pat.to_string());
+    Ok(())
+}
+
 /// 强制模式子串（`|` 分隔，允许重复）；`--preserve` 走实体预设映射分支。
 fn force(
     s: &mut ParseState,
@@ -1153,23 +1175,7 @@ fn force(
 ) -> Result<(), String> {
     let v = value(args, i, f.name, inline)?;
     if f.name == "--preserve" {
-        let ty = v.trim();
-        if ty.is_empty() {
-            return Err(format!("{} {}", f.name, f.err_empty));
-        }
-        let pat = PRESERVE_PATTERNS
-            .iter()
-            .find(|(name, _)| *name == ty)
-            .map(|(_, p)| *p)
-            .ok_or_else(|| {
-                let allowed: Vec<&str> = PRESERVE_PATTERNS.iter().map(|(n, _)| *n).collect();
-                format!(
-                    "{} unknown type {ty:?} (allowed: {})",
-                    f.name,
-                    allowed.join("/")
-                )
-            })?;
-        s.config.forces.push(pat.to_string());
+        preserve_into(&mut s.config, &v).map_err(|e| format!("{} {}", f.name, e))?;
         return Ok(());
     }
     let trimmed = v.trim();

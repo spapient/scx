@@ -39,6 +39,8 @@ pub mod memory;
 pub mod json;
 pub mod mcp;
 pub mod setup;
+/// `scx wrap`：包装命令自动压缩其大输出（壳层，复用 compress 内核）。
+pub mod wrap;
 
 #[cfg(feature = "semantic")]
 pub mod semantic;

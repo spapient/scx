@@ -68,6 +68,9 @@ fn run(args: &[String]) -> ops::Reply {
         if sub == "setup" {
             std::process::exit(scx::setup::run(&args[1..]));
         }
+        if sub == "wrap" {
+            std::process::exit(scx::wrap::run(&args[1..]));
+        }
     }
     let opts = parse(args).map_err(Failure::Usage)?;
     ops::run(ops::parse(&opts))
