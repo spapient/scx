@@ -42,22 +42,24 @@ cargo build --release --locked
 ./tools/scx.py fidelity config/fidelity.corpus.json --gate
 ```
 
-`--gate` 冻结门禁（CI 强制执行）：
+`--gate` 冻结门禁（CI 强制执行）。实测数字统一以
+`docs/gauge-metrics.md`（自动生成，CI 断言逐字节一致）为准；这里只列
+冻结阈值与口径：
 
-| 指标 | 冻结阈值 | 本轮实测（P2，40 slice） |
+| 指标 | 冻结阈值 | 口径 |
 | --- | --- | --- |
-| 证据保留（全局） | ≥ 0.95 且 **> trunc** | 65/65 = 100%（trunc 89.23% / rand 72.31%） |
-| 可回答率（全局） | ≥ 0.90 且 **> trunc** | 40/40 = 100%（trunc 82.50% / rand 75.00%） |
-| per-kind 证据保留 | 每域 ≥ 0.95（零域回退） | 8/8 kinds 均 100% |
-| token recall | 报告（不入门禁） | 74.58%（trunc 81.83% / rand 80.99%） |
-| mean char cut | 报告 | 27.44%（token cut 28.34%） |
+| 证据保留（全局） | ≥ 0.95 且 **> trunc** | 全部证据行逐字保留率 |
+| 可回答率（全局） | ≥ 0.90 且 **> trunc** | 证据保留 + query token 覆盖 ≥0.5 |
+| per-kind 证据保留 | 每域 ≥ 0.95（零域回退） | 8/8 kinds 全部通过 |
+| token recall | 报告（不入门禁） | 去噪压缩结构性不利，只报告 |
+| mean char cut | 报告 | 压缩率信息 |
 
 per-kind 门禁只断言绝对阈值（零域回退），不与 trunc 逐域比较：5 slice
 样本太小，trunc 头部可能恰好覆盖证据行（db/diff/hardware/log/stack 的
 trunc=100%），"逐域严格优于 trunc" 过于脆弱。全局（40 slice）仍要求
 严格优于 trunc。
 
-## 本轮实测行为（2026-10-26，P2）
+## 实测行为（数字见 docs/gauge-metrics.md，此处为口径记录）
 
 - 模式分布：sieve 32 / passthrough:small 8（两条压缩路径都被评测覆盖）。
 - 第二故障域（db / network / hardware）全部可回答且证据全保留，跨域

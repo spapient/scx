@@ -1,0 +1,17 @@
+{
+ "note": "frozen evaluation inputs; CI asserts hashes are stable",
+ "files": {
+  "config/gauge.corpus.json": "714ba0eefaaa445cab2a59ff0a1641505d03c772d22204fd31f94d305ac9d65e",
+  "config/fidelity.corpus.json": "32194397471d91fff574123b44b857be8981eab68099793e606755773d09f997",
+  "config/gauge.policy.labels.json": "1a4fabcff0df1e0ed1d65eda7355818914239d8828c30963491e5aa17d3474f6",
+  "config/gauge.ai.labels.json": "97c4580fc25f77bc1fab6032262420fa24e7584a2d7f4bf72ef31465a9930726",
+  "config/gauge.human.labels.json": "43c5976bc91872b4ba049ab8e08cc6c43de8103687c3818e90cbcac3ca992f87",
+  "config/gauge.blind40.packet.tsv": "b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f",
+  "config/ci-baseline.json": "96728a485deda5deeade3d092a22dde6f550109d2c6f26d1a4c200447061b551",
+  "config/ci-verbose.txt": "847212e68aa04e25fd39ddd26e0e31cef528c950c5b340c5b95f189f371f65aa"
+ },
+ "normalize": [
+  "config/ci-baseline.json",
+  "config/ci-verbose.txt"
+ ]
+}

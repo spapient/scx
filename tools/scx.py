@@ -28,6 +28,7 @@ import sys
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1763,6 +1764,171 @@ def cmd_verify(args):
     print(f"verify: packet={args.packet} rows={len(rows)} sha256={actual}")
 
 
+def cmd_manifest(args):
+    """Frozen evaluation-input manifest.
+
+    Records sha256 of the tracked evaluation inputs so CI can assert they
+    never drift unnoticed. With --expect, recomputes and compares against the
+    frozen manifest; mismatch exits 2.
+    """
+    if args.expect:
+        expected = load_json(args.expect)
+        files = expected.get("files") or {}
+        normalize = set(expected.get("normalize") or [])
+        failures = []
+        for path, want in sorted(files.items()):
+            got = sha256_file(path, path in normalize)
+            if got != want:
+                failures.append(f"{path}: expected {want} got {got}")
+        if failures:
+            for line in failures:
+                print(f"manifest: MISMATCH {line}")
+            sys.exit(2)
+        print(f"manifest: PASS ({len(files)} files frozen)")
+        return
+    entries = {}
+    normalize = []
+    for path in args.files:
+        if path.startswith("date:"):
+            normalize.append(path[5:])
+            path = path[5:]
+        entries[path] = sha256_file(path, path in normalize)
+    manifest = {
+        "note": "frozen evaluation inputs; CI asserts hashes are stable",
+        "files": entries,
+        "normalize": sorted(normalize),
+    }
+    if not args.out:
+        print(json.dumps(manifest, ensure_ascii=False, indent=1))
+        return
+    dump_json(args.out, manifest)
+    print(f"manifest: wrote {args.out} ({len(entries)} files)")
+
+
+def sha256_file(path, normalize_date=False):
+    with open(path, "rb") as handle:
+        data = handle.read()
+    if normalize_date:
+        data = re.sub(rb"\d{4}-\d{2}-\d{2}_", b"<date>_", data)
+    return hashlib.sha256(data).hexdigest()
+
+
+def cmd_report(args):
+    """Compose the frozen metrics markdown from the gate run artifacts.
+
+    All numbers come from the tool outputs (stats CSVs, LOO detail, fidelity
+    detail) rather than hand-written documentation, so the docs can never
+    drift from a real run. --check <file> compares byte-for-byte and exits 2
+    on any drift.
+    """
+    def hard_of(csv_path, metric):
+        rows = read_csv(csv_path)
+        hard = [r for r in rows if r.get("group") == "tier:hard"]
+        if len(hard) != 1:
+            sys.exit(f"report: {csv_path} missing tier:hard row")
+        row = hard[0]
+        return {
+            "n": int(row["n"]),
+            "a": float(row[f"A_{metric}"]),
+            "b": float(row[f"B_{metric}"]),
+            "delta": float(row["delta"]),
+            "ci_lo": float(row["ci_lo"]),
+            "ci_hi": float(row["ci_hi"]),
+            "p": float(row["perm_p"]),
+        }
+
+    mrr = hard_of(args.stats, "mrr")
+    recall3 = hard_of(args.stats_recall3, "recall@3")
+    loo = load_json(args.loo_json)["summary"]
+    fid = load_json(args.fidelity)
+    agg = fid["aggregate"]
+    n = int(agg["n"])
+    ev_rate = agg["ev_kept"] / agg["ev_total"]
+    ev_trunc = agg["trunc_ev"] / agg["ev_total"]
+    ans_rate = agg["ans"] / n
+    ans_trunc = agg["ans_trunc"] / n
+    kinds = agg["kinds"]
+    per_kind_bad = [name for name, k in sorted(kinds.items())
+                    if k["ev_kept"] / k["ev_total"] < 0.95]
+
+    gate_bad = []
+    if not (mrr["delta"] >= 0.05 and mrr["ci_lo"] > 0 and mrr["p"] < 0.05):
+        gate_bad.append("mrr hard advantage")
+    if not (recall3["delta"] >= 0.05 and recall3["ci_lo"] > 0):
+        gate_bad.append("recall@3 hard advantage")
+    if not (loo["min_delta"] >= 0.05 and loo["min_ci_lo"] > 0):
+        gate_bad.append("leave-one-incident-out stability")
+    if not (ev_rate >= 0.95 and ev_rate > ev_trunc):
+        gate_bad.append("fidelity evidence retention")
+    if not (ans_rate >= 0.90 and ans_rate > ans_trunc):
+        gate_bad.append("fidelity answerability")
+    if per_kind_bad:
+        gate_bad.append(f"per-kind zero-regression ({len(per_kind_bad)} kinds)")
+    gate_ok = not gate_bad
+    lines = [
+        "# 评测实测指标（自动生成）",
+        "",
+        "> 由 `python tools/scx.py report` 生成；CI 断言与本文件逐字节一致，"
+        "文档数字一律以本文件为准。",
+        "",
+        "## Gauge（150 查询，seed 20261023，tier:hard）",
+        "",
+        "| 指标 | n | A | B | Δ | 95% CI | perm p |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+        f"| MRR | {mrr['n']} | {mrr['a']:.4f} | {mrr['b']:.4f} | +{mrr['delta']:.4f} "
+        f"| [{mrr['ci_lo']:+.4f},{mrr['ci_hi']:+.4f}] | {mrr['p']:.4f} |",
+        f"| recall@3 | {recall3['n']} | {recall3['a']:.4f} | {recall3['b']:.4f} "
+        f"| +{recall3['delta']:.4f} | [{recall3['ci_lo']:+.4f},"
+        f"{recall3['ci_hi']:+.4f}] | {recall3['p']:.4f} |",
+        "",
+        "## 留一事故泛化（30 incidents 逐一剔除）",
+        "",
+        f"- min Δ **+{loo['min_delta']:.4f}** / mean +{loo['mean_delta']:.4f} "
+        f"/ max +{loo['max_delta']:.4f}；min CI 下界 +{loo['min_ci_lo']:.4f}",
+        f"- 门禁：{'PASS' if loo['min_delta'] >= 0.05 and loo['min_ci_lo'] > 0 else 'FAIL'}",
+        "",
+        "## Fidelity（40 slice / 8 kinds）",
+        "",
+        f"- 证据保留 {agg['ev_kept']}/{agg['ev_total']} = "
+        f"{100.0 * ev_rate:.2f}%（trunc {100.0 * ev_trunc:.2f}%）",
+        f"- 可回答率 {agg['ans']}/{n} = "
+        f"{100.0 * ans_rate:.2f}%（trunc {100.0 * ans_trunc:.2f}%）",
+        f"- token recall {100.0 * agg['tok']:.2f}%（报告-only）",
+        f"- per-kind 证据保留：{len(kinds) - len(per_kind_bad)}/{len(kinds)} 域 ≥95%"
+        + (f"（未过：{', '.join(sorted(per_kind_bad))}）" if per_kind_bad else ""),
+        "",
+        f"## 汇总门禁：{'PASS' if gate_ok else 'FAIL'}",
+    ]
+    if gate_bad:
+        lines.append("")
+        lines.append("失败项：" + "；".join(gate_bad))
+    text = "\n".join(lines) + "\n"
+    if args.check:
+        try:
+            with open(args.check, encoding="utf-8") as handle:
+                frozen = handle.read()
+        except OSError:
+            frozen = None
+        if frozen != text:
+            print(f"report: DRIFT in {args.check}")
+            if frozen is None:
+                print("report: frozen file missing")
+            else:
+                import difflib
+                print("".join(difflib.unified_diff(
+                    frozen.splitlines(True), text.splitlines(True),
+                    fromfile="frozen", tofile="live")))
+            sys.exit(2)
+        print(f"report: PASS (matches {args.check})")
+        return
+    if args.out:
+        with open(args.out, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        print(f"report: wrote {args.out}")
+    else:
+        sys.stdout.write(text)
+
+
 def selftest():
     assert not is_memory_dir(ROOT)
     with tempfile.TemporaryDirectory(prefix="scx-selftest-") as tmp:
@@ -1884,6 +2050,21 @@ def selftest():
     assert recall_at(3, 3) == 1.0
     assert recall_at(4, 3) == 0.0
     assert recall_at(10, 10) == 1.0
+    # manifest + report smoke: freeze, verify, drift must fail
+    with tempfile.TemporaryDirectory() as tmp:
+        marker = Path(tmp) / "marker.txt"
+        marker.write_text("payload\n", encoding="utf-8")
+        man = Path(tmp) / "man.json"
+        cmd_manifest(SimpleNamespace(files=[str(marker)], out=str(man),
+                                     expect=None))
+        cmd_manifest(SimpleNamespace(files=[], out=None, expect=str(man)))
+        with open(marker, "a", encoding="utf-8") as handle:
+            handle.write("drift\n")
+        try:
+            cmd_manifest(SimpleNamespace(files=[], out=None, expect=str(man)))
+            raise AssertionError("manifest drift not detected")
+        except SystemExit as error:
+            assert error.code == 2
     print("selftest: PASS")
 
 
@@ -2012,6 +2193,29 @@ def build_parser():
     fidelity.add_argument("--gate-ev", type=float, default=0.95)
     fidelity.add_argument("--gate-ans", type=float, default=0.90)
     fidelity.set_defaults(func=cmd_fidelity)
+
+    manifest = sub.add_parser(
+        "manifest", help="freeze/verify evaluation-input hashes"
+    )
+    manifest.add_argument("--files", nargs="+", default=[],
+                          help="paths to freeze; prefix 'date:' to normalize "
+                               "YYYY-MM-DD_ -> <date>_")
+    manifest.add_argument("--out", help="write frozen manifest JSON")
+    manifest.add_argument("--expect", help="verify against frozen manifest")
+    manifest.set_defaults(func=cmd_manifest)
+
+    report = sub.add_parser(
+        "report", help="compose frozen metrics markdown from gate artifacts"
+    )
+    report.add_argument("--stats", required=True, help="mrr stats CSV")
+    report.add_argument("--stats-recall3", required=True,
+                        help="recall@3 stats CSV")
+    report.add_argument("--loo-json", required=True, help="LOO detail JSON")
+    report.add_argument("--fidelity", required=True,
+                        help="fidelity detail JSON")
+    report.add_argument("--out", help="write generated markdown")
+    report.add_argument("--check", help="verify byte-identical frozen file")
+    report.set_defaults(func=cmd_report)
 
     test = sub.add_parser("selftest")
     test.set_defaults(func=lambda _args: selftest())

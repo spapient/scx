@@ -81,6 +81,7 @@ jobs:
         run: >-
           python tools/scx.py fidelity config/fidelity.corpus.json
           --binary target/release/scx.exe --gate
+          --out config/ci-fidelity.json
       - name: Rebuild Gauge corpus
         run: >-
           python tools/scx.py seed config/gauge.corpus.json
@@ -197,6 +198,17 @@ jobs:
           --out config/ci-stats-loo.csv
           --loo --loo-group 5 --gate
           --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
+      - name: Frozen evaluation-input manifest
+        run: python tools/scx.py manifest --expect config/eval-manifest.json
+      - name: Frozen metrics report
+        shell: pwsh
+        run: >-
+          python tools/scx.py report
+          --stats config/ci-stats.csv
+          --stats-recall3 config/ci-stats-recall3.csv
+          --loo-json config/ci-stats-loo.loo.json
+          --fidelity config/ci-fidelity.json
+          --check docs/gauge-metrics.md
 
   msrv:
     timeout-minutes: 15

@@ -120,18 +120,17 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 `.github/workflows/ci.yml`。
 
 `--metric recall@k`（k∈{1,3,5,10}）输出同构的 Recall@k 报告：target 在
-top-k 内计 1，否则 0。实测（2026-10-26）：tier:hard recall@1 Δ+0.058
-（CI 下界 +0.0145 >0，perm p=0.1236——二进制指标翻转样本少，检验功率
-不足，观测为正但未达显著）；recall@3 Δ+0.116（CI [+0.0435,+0.1884]，
-p=0.0064，显著）。CI 以 **recall@3** 作 Recall@k 门禁（Δ≥0.05 且 CI
-下界>0）；recall@1/5/10 供报告。
+top-k 内计 1，否则 0。实测口径：recall@1 二进制指标翻转样本少，检验
+功率不足（观测为正但未达显著，2026-10-26 实测 perm p=0.1236）；CI 以
+**recall@3** 作 Recall@k 门禁（Δ≥0.05 且 CI 下界>0）；recall@1/5/10
+供报告。MRR / recall@3 / LOO / fidelity 的实测数字统一以
+`docs/gauge-metrics.md`（自动生成）为准。
 
 **留一事故泛化（--loo --gate）**：按 `case_index//5` 把 150 查询归为 30
 个 incident（每组 5 例），逐一剔除任一 incident 后在其余 hard 查询上
 重估配对 MRR（bootstrap CI + permutation 同全量口径）；门禁要求每个
-剔除后的 Δ≥0.05 且 CI 下界>0。实测（2026-10-26）：30/30 剔除运行
-min Δ=+0.0500、mean=+0.0608（与全量一致）、max=+0.0638，min CI 下界
-=+0.0135——hard 优势**不依赖任一单一事故**。
+剔除后的 Δ≥0.05 且 CI 下界>0。实测结论：hard 优势**不依赖任一单一
+事故**（数字见 `docs/gauge-metrics.md`）。
 
 **标注一致性 κ（blind agree，核对性质）**：`blind agree --a
 config/gauge.ai.labels.json --b config/gauge.human.labels.json` 实测
