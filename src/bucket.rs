@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::{compress_bucketed, ContentType, Outcome};
+use crate::{compress_bucketed, ContentType};
 
 /// `scx bucket` 入口：读 stdin 类型化载荷 JSON，分桶压缩输出 `Outcome` JSON；
 /// `--record` 追加收益记录。
@@ -39,10 +39,13 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
     let refs: Vec<(ContentType, &str)> = parts.iter().map(|(t, s)| (*t, s.as_str())).collect();
-    let outcome = compress_bucketed(&refs, &query, &crate::Config::default());
+    let cfg = crate::Config::default();
+    let outcome = compress_bucketed(&refs, &query, &cfg);
     println!("{}", crate::ops::render(&outcome));
     if let Some(path) = record_path {
-        append_record(path, &query, &outcome);
+        // 收益记录写 Snapshot JSONL（与 `scx ledger --summarize` 同格式、确定性、无 wall-clock）。
+        let snap = crate::meter::measure(0, &refs, &query, &cfg, None);
+        record(path, &snap);
     }
     0
 }
@@ -73,19 +76,11 @@ fn parse_manifest(input: &str) -> Result<(String, Vec<(ContentType, String)>), S
     Ok((query, parts))
 }
 
-/// 追加一条收益记录（JSONL：`{ts, query, outcome}`），失败静默（账本是旁路，不影响压缩）。
-fn append_record(path: &str, query: &str, outcome: &Outcome) {
+/// 追加一条快照 JSONL 到账本文件（供 `scx ledger --summarize` 聚合），失败静默
+/// （账本是旁路，不影响压缩正文/统计/退出码）。
+fn record(path: &str, snap: &crate::meter::Snapshot) {
     use std::io::Write;
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let line = format!(
-        "{{\"ts\":{},\"query\":{},\"outcome\":{}}}\n",
-        ts,
-        crate::json::string(query),
-        crate::ops::render(outcome)
-    );
+    let line = format!("{}\n", crate::meter::render(snap));
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

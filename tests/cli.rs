@@ -62,6 +62,46 @@ fn no_stats_returns_body_without_compressed_line() {
 }
 
 #[test]
+fn kind_flag_routes_bucket_type() {
+    let text: String = (0..200)
+        .map(|i| format!("INFO filler {} alpha beta", i))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let path = write_temp("kind", &text);
+    // 显式类型：scxjson 单桶标签变为对应类型。
+    let out = run(&[
+        "--query",
+        "alpha",
+        "--kind",
+        "static-contract",
+        "--json",
+        path.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("\"kind\":\"static-contract\""),
+        "stderr: {err}"
+    );
+    // 缺省仍是单桶 tool-output（v0.4.1 行为不变）。
+    let out2 = run(&["--query", "alpha", "--json", path.to_str().unwrap()]);
+    let err2 = String::from_utf8_lossy(&out2.stderr);
+    assert!(err2.contains("\"kind\":\"tool-output\""), "stderr: {err2}");
+    // --kind auto：正文为日志 → 推断 tool-output。
+    let out3 = run(&[
+        "--query",
+        "alpha",
+        "--kind",
+        "auto",
+        "--json",
+        path.to_str().unwrap(),
+    ]);
+    let err3 = String::from_utf8_lossy(&out3.stderr);
+    assert!(err3.contains("\"kind\":\"tool-output\""), "stderr: {err3}");
+    let _ = fs::remove_file(path);
+}
+
+#[test]
 fn stat_returns_one_statistics_line() {
     let text: String = (0..100)
         .map(|i| format!("INFO filler {} alpha beta gamma delta epsilon", i))

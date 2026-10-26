@@ -1,10 +1,10 @@
 //! 计量与审计层（P3 治理层）：Token 分桶统计、压缩效果指标、预算管控、快照追溯。
 //!
-//! 数据流：分类化载荷 `[(category, text)]` →（复用 [`crate::compress`] 内核逐桶压缩）
+//! 数据流：分类化载荷 `[(category, text)]` →（复用 [`crate::compress_bucketed`] 逐桶压缩）
 //! → 分桶 token → 聚合全局/占比/效果指标/预算 → [`crate::meter::Snapshot`]（可序列化 JSON，入
-//! [`crate::meter::Ledger`] 追溯）。本层是薄壳，不复制裁剪逻辑；仅复用 `crate::terms::estimate`
-//! （全链路唯一计量口径）、`compress`、[`crate::ContentType`]（核心桶标签与价值
-//! 梯度默认预算）与 [`crate::json`]。
+//! [`crate::meter::Ledger`] 追溯）。本层是薄壳，不复制裁剪逻辑；仅复用
+//! [`crate::token::estimate`]（主链路计量口径）、`compress_bucketed`、
+//! [`crate::ContentType`]（核心桶标签与价值梯度默认预算）与 [`crate::json`]。
 //!
 //! # 指标口径（全部确定性、可复现，除零保护固定）
 //! - 压缩比 `ratio = tokens_out / tokens_in`（in=0 → 1.0）
@@ -21,7 +21,7 @@
 #![forbid(unsafe_code)]
 
 use crate::json::Json;
-use crate::{compress, BucketStat, Config, ContentType};
+use crate::{BucketStat, Config, ContentType};
 
 /// 对任意文本片段执行 token 计数（`terms::estimate` 向上取整；空串为 0）。
 /// 全链路唯一计量口径，与压缩主链路的 `tokens_in/out` 同一把尺。
@@ -277,12 +277,12 @@ pub fn measure(
     cfg: &Config,
     budget: Option<&BudgetSpec>,
 ) -> Snapshot {
-    let buckets: Vec<BucketStat> = parts
-        .iter()
-        .map(|(kind, text)| compress_bucket(*kind, text, query, cfg))
-        .collect();
-    let tin = buckets.iter().map(|b| b.tokens_in).sum::<f64>();
-    let tout = buckets.iter().map(|b| b.tokens_out).sum::<f64>();
+    // 分桶压缩只此一份实现（`compress_bucketed`）；本函数仅从其 `Outcome` 组装快照，
+    // 不复制逐桶裁剪逻辑。`outcome.tokens_in/out` 已按各桶求和，与逐桶明细一致。
+    let outcome = crate::compress_bucketed(parts, query, cfg);
+    let buckets = outcome.buckets;
+    let tin = outcome.tokens_in;
+    let tout = outcome.tokens;
     let quotas = budget.map(|spec| spec.quotas.clone()).unwrap_or_default();
     let hi_in = buckets
         .iter()
@@ -355,23 +355,6 @@ pub fn snapshot(round: u64, kind: ContentType, text: &str) -> Snapshot {
             left_pct: 0.0,
             level: Level::Normal,
         },
-    }
-}
-
-/// 压缩单个分类并返回其计量。
-fn compress_bucket(kind: ContentType, text: &str, query: &str, cfg: &Config) -> BucketStat {
-    let mut c = cfg.clone();
-    c.ratio = kind.default_ratio();
-    let o = compress(text, query, &c);
-    // passthrough/fail-open 时 `o.tokens` 不保证，重新估算输出（与 ops 渲染同口径）。
-    let out = crate::terms::estimate(&o.text);
-    BucketStat {
-        kind,
-        tokens_in: o.tokens_in,
-        tokens_out: out,
-        kept: o.kept,
-        total: o.total,
-        mode: o.mode,
     }
 }
 

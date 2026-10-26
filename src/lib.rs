@@ -192,12 +192,25 @@ fn sample(text: &str) -> String {
 }
 
 /// 契约特征：JSON schema / 工具定义。
+/// 追加 JSON Schema 组合与 `$` 关键字（`allOf`/`oneOf`/`anyOf`/`$ref`/`$defs`/
+/// `$schema`/`type:array`）：这些关键字几乎不会出现在普通工具输出里，却覆盖了
+/// 大量「无 `type:object`/`properties` 声明」的引用式/组合式 schema，避免契约被
+/// 误判为工具输出而过度裁剪（fail-open 反方向）。
 fn contract_like(s: &str) -> bool {
     s.contains("\"type\": \"object\"")
         || s.contains("\"type\":\"object\"")
+        || s.contains("\"type\": \"array\"")
+        || s.contains("\"type\":\"array\"")
         || s.contains("\"properties\"")
         || s.contains("\"required\"")
         || s.contains("\"parameters\"")
+        || s.contains("\"$schema\"")
+        || s.contains("\"$ref\"")
+        || s.contains("\"definitions\"")
+        || s.contains("\"$defs\"")
+        || s.contains("\"allOf\"")
+        || s.contains("\"oneOf\"")
+        || s.contains("\"anyOf\"")
         || s.contains("<tools>")
         || s.contains("<function")
 }
@@ -263,6 +276,10 @@ pub struct Config {
     pub structure_anchors: Vec<AnchorKind>,
     /// Token 计量口径（默认 Heuristic = 现状字符启发式；Calibrated 用冻结系数）。
     pub token_mode: crate::token::TokenMode,
+    /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
+    /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
+    /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
+    pub kind: ContentType,
 }
 
 impl Config {
@@ -294,6 +311,7 @@ impl Default for Config {
             evidence: Vec::new(),
             structure_anchors: Vec::new(),
             token_mode: crate::token::TokenMode::Heuristic,
+            kind: ContentType::ToolOutput,
         }
     }
 }
@@ -1252,6 +1270,113 @@ mod tests {
         assert_eq!(
             ContentType::resolve(Some("bogus"), "user: hi"),
             ContentType::SessionMessage
+        );
+    }
+
+    #[test]
+    fn config_kind_labels_single_bucket() {
+        // 缺省单桶 = ToolOutput；显式 cfg.kind 只改单桶标签，不改变筛选行为本身。
+        let mut lines: Vec<String> = (0..200).map(|_| filler()).collect();
+        lines[100] = "fn target() { return 1; }".to_string();
+        let text = lines.join("\n");
+
+        let default = compress(&text, "target", &cfg());
+        assert_eq!(default.buckets.len(), 1);
+        assert_eq!(default.buckets[0].kind, ContentType::ToolOutput);
+
+        let mut tagged = cfg();
+        tagged.kind = ContentType::StaticContract;
+        let o = compress(&text, "target", &tagged);
+        assert_eq!(o.buckets.len(), 1);
+        assert_eq!(o.buckets[0].kind, ContentType::StaticContract);
+        // 标签不影响保留的正文（相同 ratio 下筛选结果一致）。
+        assert_eq!(o.text, default.text);
+    }
+
+    /// 带标签的小语料（人为采样，覆盖清晰正例与已知混淆负例）。这是回归护栏，
+    /// 度量 `ContentType::infer` 的启发式在此采样上的精度，不是真实分布上的
+    /// 准确率声明。标签为内容类型的客观类别，非人工相关性判断。
+    fn content_type_corpus() -> Vec<(&'static str, ContentType)> {
+        use ContentType::*;
+        vec![
+            // —— StaticContract：JSON Schema / 工具定义 ——
+            ("{\n  \"type\": \"object\",\n  \"properties\": {\"a\": {\"type\": \"string\"}}\n}", StaticContract),
+            ("{\"type\":\"object\",\"properties\":{}}", StaticContract),
+            ("{\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\"}}", StaticContract),
+            ("<tools>\n<function name=\"get\">\n</function>\n</tools>", StaticContract),
+            ("<function name=\"search\">", StaticContract),
+            ("{\"required\":[\"a\"],\"properties\":{\"a\":{}}}", StaticContract),
+            ("{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"definitions\": {\"Foo\": {\"type\": \"string\"}}\n}", StaticContract),
+            ("{\"allOf\":[{\"$ref\":\"#/definitions/Foo\"}]}", StaticContract),
+            ("{\"oneOf\":[{\"type\":\"string\"},{\"type\":\"integer\"}]}", StaticContract),
+            ("{\"$defs\":{\"Bar\":{\"type\":\"object\"}}}", StaticContract),
+            ("{\"type\": \"array\", \"items\": {\"type\": \"string\"}}", StaticContract),
+            ("openapi: 3.0.0\npaths:\n  /x:\n    get:\n      parameters: []", StaticContract),
+            // —— SystemDefinition：系统注入元数据 / 提示 ——
+            ("<system-reminder>\nYou are an assistant.\n</system-reminder>", SystemDefinition),
+            ("[sys] system prompt", SystemDefinition),
+            ("<system>\nbe concise\n</system>", SystemDefinition),
+            ("system prompt: you are a helpful coding assistant", SystemDefinition),
+            ("system_prompt = \"answer briefly\"", SystemDefinition),
+            ("<system_reminder>inline</system_reminder>", SystemDefinition),
+            ("You are Claude, a coding assistant. Follow these rules.", SystemDefinition),
+            ("## System Prompt\nYou are an agent.", SystemDefinition),
+            ("System: you are a shell assistant", SystemDefinition),
+            // —— SessionMessage：user/assistant 前缀 ——
+            ("user: hello\nassistant: hi", SessionMessage),
+            ("<|im_start|>user\nhi\n<|im_end|>", SessionMessage),
+            ("Human: question\nAssistant: answer", SessionMessage),
+            ("system: reminder text", SessionMessage),
+            ("  user: indented\n  assistant: reply", SessionMessage),
+            ("User: hello\nAssistant: hi", SessionMessage),
+            ("**User:** hi\n**Assistant:** hello", SessionMessage),
+            ("USER: turn", SessionMessage),
+            ("[user] hello", SessionMessage),
+            // —— ToolOutput：日志 / 命令输出 / 数据 ——
+            ("INFO heartbeat ok pool=3\nERROR db timeout conn_id=9f2a", ToolOutput),
+            ("[12:00] INFO cache warmup complete\n[12:01] WARN retrying", ToolOutput),
+            ("at com.ingest.Pool.acquire(Pool.java:214)\nCaused by: SQLException", ToolOutput),
+            ("{\"name\":\"db\",\"status\":\"ok\"}", ToolOutput),
+            ("{\"type\":\"error\",\"message\":\"timeout\"}", ToolOutput),
+            ("total 123\ndrwxr-xr-x 2 user staff 68 dir", ToolOutput),
+            ("diff --git a/x b/x\n--- a/x\n+++ b/x", ToolOutput),
+            ("[{\"a\":1},{\"b\":2}]", ToolOutput),
+            ("KEY=value\nSECRET=hidden", ToolOutput),
+            ("user: connection reset by peer", ToolOutput),
+            ("{\"properties\": {\"host\": \"a\", \"port\": 8080}}", ToolOutput),
+        ]
+    }
+
+    #[test]
+    fn content_type_infer_quantified() {
+        let corpus = content_type_corpus();
+        let mut correct = 0usize;
+        let mut contract_total = 0usize;
+        let mut contract_correct = 0usize;
+        for (text, gold) in &corpus {
+            let pred = ContentType::infer(text);
+            if pred == *gold {
+                correct += 1;
+            }
+            if *gold == ContentType::StaticContract {
+                contract_total += 1;
+                if pred == ContentType::StaticContract {
+                    contract_correct += 1;
+                }
+            }
+        }
+        let accuracy = correct as f64 / corpus.len() as f64;
+        let contract_recall = contract_correct as f64 / contract_total as f64;
+        // 冻结护栏：整集精度 + 契约召回（契约→工具输出是危险方向，会过度裁剪）。
+        // 实测（本语料 41 例，v0.6.7）：acc=0.780，契约 f1=0.917、系统 f1=0.800、
+        // 会话 f1=0.750、工具 f1=0.667。残余误判集中在固有歧义：无标记纯系统提示、
+        // 会话前缀大小写/格式变体（User:/**User:**/USER:）、带 user:/properties 的
+        // 工具输出与 YAML 契约（OpenAPI）；这些靠启发式无法消解，显式 `--kind`
+        // 才是首选，隐式仅作缺省。
+        assert!(accuracy >= 0.75, "infer 整集精度退化: {accuracy:.3}");
+        assert!(
+            contract_recall >= 0.9,
+            "契约召回（危险方向）退化: {contract_recall:.3}"
         );
     }
 

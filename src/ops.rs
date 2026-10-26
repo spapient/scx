@@ -58,6 +58,10 @@ pub struct Compress {
     pub minhash_weight: f64,
     /// 压缩前脱敏种类（`--redact`，默认空 = 不脱敏）。
     pub redact: Vec<crate::redact::RedactKind>,
+    /// `--kind auto`：正文类型在读到正文后按 infer 推断。
+    pub kind_auto: bool,
+    /// 是否显式给出 `--ratio`（决定 `--kind` 缺省 ratio 是否被覆盖）。
+    pub ratio_explicit: bool,
 }
 
 /// 标注动作入参。
@@ -241,6 +245,8 @@ fn job(opts: &Opts) -> Compress {
         embed_cmd: opts.embed_cmd.clone(),
         minhash_weight: opts.minhash_weight,
         redact: opts.redact.clone(),
+        kind_auto: opts.kind_auto,
+        ratio_explicit: opts.ratio_explicit,
     }
 }
 
@@ -902,6 +908,13 @@ fn filter(job: &Compress) -> Reply {
     // 压缩前脱敏（P7）：脱敏后正文参与压缩与记忆入库，原文不落盘。
     let (text, redact_hits) = redact_input(text, &job.redact);
     let mut config = job.config.clone();
+    if job.kind_auto {
+        // `--kind auto`：正文类型按隐式推断；缺省 ratio 用该类型价值梯度默认。
+        config.kind = crate::ContentType::infer(&text);
+        if !job.ratio_explicit {
+            config.ratio = config.kind.default_ratio();
+        }
+    }
     config.sims = embed_sims(job, &text)?;
     let outcome = compress(&text, &job.query, &config);
     let stdout = io::stdout();

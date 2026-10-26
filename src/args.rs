@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--token-mode MODE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--token-mode MODE] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -65,6 +65,14 @@ pub fn usage() -> String {
     s.push_str(
         "  --token-mode M       token estimate: heuristic (default) or calibrated (frozen coeffs)\n",
     );
+    s.push_str("  --kind T             content-type tag: static-contract/system-definition/\n");
+    s.push_str(
+        "                       session-message/tool-output/auto (auto = infer from text);\n",
+    );
+    s.push_str(
+        "                       per-kind default ratio unless --ratio given (default off =\n",
+    );
+    s.push_str("                       single tool-output bucket, byte-identical to v0.4.1)\n");
     #[cfg(feature = "semantic")]
     {
         s.push_str("  --semantic <weights>    optional neural re-score (cargo feature=semantic); weights file\n");
@@ -145,6 +153,10 @@ pub struct Opts {
     pub minhash_weight: f64,
     /// 压缩前脱敏种类（`--redact`，逗号分隔：secret/id-card/phone/email）。
     pub redact: Vec<crate::redact::RedactKind>,
+    /// `--kind auto`：正文类型在 ops 层按 infer 推断。
+    pub kind_auto: bool,
+    /// 是否显式给出 `--ratio`（决定 `--kind` 缺省 ratio 是否被覆盖）。
+    pub ratio_explicit: bool,
 }
 
 /// 默认记忆库目录：$SCX_MEM_DIR 优先，否则用户主目录下的 .scx-memory。
@@ -237,6 +249,8 @@ enum Kind {
     Redact,
     /// Token 计量口径（`--token-mode heuristic|calibrated`）。
     TokenMode,
+    /// 内容类型标注（`--kind <type>|auto`）。
+    ContentType,
 }
 
 /// 单 flag 声明：解析循环的唯一样板；新增 flag 只改表，不新增分支。
@@ -426,6 +440,15 @@ static FLAGS: &[Flag] = &[
         kind: Kind::TokenMode,
         what: "",
         err_empty: "requires heuristic or calibrated",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--kind",
+        once: true,
+        kind: Kind::ContentType,
+        what: "",
+        err_empty: "requires static-contract/system-definition/session-message/tool-output/auto",
         err_zero: "",
         min: 0,
     },
@@ -753,6 +776,8 @@ struct ParseState {
     embed_cmd: Option<String>,
     minhash_weight: f64,
     redact: Vec<crate::redact::RedactKind>,
+    /// `--kind auto` 标记：正文类型在 ops 层按 infer 推断。
+    kind_auto: bool,
     seen: HashSet<&'static str>,
 }
 
@@ -796,6 +821,7 @@ impl ParseState {
             embed_cmd: None,
             minhash_weight: 0.0,
             redact: Vec::new(),
+            kind_auto: false,
             seen: HashSet::new(),
         }
     }
@@ -888,7 +914,8 @@ fn flag(
         | Kind::Evidence
         | Kind::Anchors
         | Kind::Redact
-        | Kind::TokenMode => raw(s, f, inline, args, i),
+        | Kind::TokenMode
+        | Kind::ContentType => raw(s, f, inline, args, i),
         Kind::F64 | Kind::I64 | Kind::U64 | Kind::Bool01 => numeric(s, f, inline, args, i),
         #[cfg(feature = "semantic")]
         Kind::Semantic => weights(s, f, inline, args, i),
@@ -913,6 +940,7 @@ fn raw(
         Kind::Anchors => anchors(s, f, inline, args, i),
         Kind::Redact => redact(s, f, inline, args, i),
         Kind::TokenMode => token_mode(s, f, inline, args, i),
+        Kind::ContentType => content_kind(s, f, inline, args, i),
         _ => unreachable!("valueish flag without handler: {}", f.name),
     }
 }
@@ -1432,6 +1460,35 @@ fn token_mode(
     Ok(())
 }
 
+/// 内容类型标注（`--kind <type>|auto`）：显式类型立即落位并给缺省 `--ratio`；
+/// `auto` 交由 ops 层在读到正文后按 [`crate::ContentType::infer`] 推断。
+fn content_kind(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    let v = value(args, i, f.name, inline)?;
+    let v = v.trim();
+    if v == "auto" {
+        s.kind_auto = true;
+        return Ok(());
+    }
+    let kind: crate::ContentType = v.parse().map_err(|_| {
+        format!(
+            "{} expects static-contract/system-definition/session-message/tool-output/auto, got {v:?}",
+            f.name
+        )
+    })?;
+    s.config.kind = kind;
+    // 显式 `--ratio` 优先（CLI > 缺省）；未显式给出时才用该类型的价值梯度默认。
+    if !s.seen.contains("--ratio") {
+        s.config.ratio = kind.default_ratio();
+    }
+    Ok(())
+}
+
 /// 反馈对（good/bad + case-id）。
 fn pair(
     s: &mut ParseState,
@@ -1661,6 +1718,8 @@ fn finish(s: ParseState) -> Opts {
         embed_cmd: s.embed_cmd,
         minhash_weight: s.minhash_weight,
         redact: s.redact,
+        kind_auto: s.kind_auto,
+        ratio_explicit: s.seen.contains("--ratio"),
     }
 }
 
@@ -1838,6 +1897,47 @@ mod tests {
         assert!(err.contains("url/ip/email/errno"), "err: {err}");
         // 空类型报错。
         assert!(all(args(&["--preserve="])).is_err());
+    }
+
+    #[test]
+    fn kind_flag_tags_and_defaults_ratio() {
+        // 显式类型：kind 落位，缺省 ratio 用该类型价值梯度默认。
+        let o = all(args(&["--query", "q", "--kind", "static-contract"])).unwrap();
+        assert_eq!(o.config.kind, crate::ContentType::StaticContract);
+        assert_eq!(
+            o.config.ratio,
+            crate::ContentType::StaticContract.default_ratio()
+        );
+        assert!(!o.kind_auto);
+        assert!(!o.ratio_explicit);
+
+        // 显式 --ratio 优先于类型默认。
+        let o = all(args(&[
+            "--query",
+            "q",
+            "--kind",
+            "tool-output",
+            "--ratio",
+            "0.5",
+        ]))
+        .unwrap();
+        assert_eq!(o.config.kind, crate::ContentType::ToolOutput);
+        assert_eq!(o.config.ratio, 0.5);
+        assert!(o.ratio_explicit);
+
+        // auto：类型留待 ops 层推断，ratio 保持默认。
+        let o = all(args(&["--query", "q", "--kind", "auto"])).unwrap();
+        assert!(o.kind_auto);
+        assert_eq!(o.config.kind, crate::ContentType::ToolOutput);
+        assert!(!o.ratio_explicit);
+
+        // 非法类型报错并列出白名单。
+        let err = match all(args(&["--query", "q", "--kind", "bogus"])) {
+            Ok(_) => panic!("--kind bogus 必须报错"),
+            Err(e) => e,
+        };
+        assert!(err.contains("static-contract"), "err: {err}");
+        assert!(all(args(&["--query", "q", "--kind"])).is_err());
     }
 
     #[test]

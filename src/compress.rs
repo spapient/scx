@@ -1143,6 +1143,7 @@ fn active(risk: Risk, cfg: &Config) -> bool {
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let (ratio, context, window) = config(cfg);
     let tok_mode = cfg.token_mode;
+    let kind = cfg.kind;
     // 分析使用 LF 归一化文本；passthrough/fail-open 返回输入原文，保持“原样保留”语义。
     let original = text;
     // 零拷贝快路径：无 CR 时直接借用原文本；行以 &str 切片保存，避免整文复制与逐行分配。
@@ -1200,7 +1201,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             budget_used_pct: 0.0,
             ev_retention: ev,
             buckets: vec![crate::BucketStat {
-                kind: crate::ContentType::ToolOutput,
+                kind,
                 tokens_in: crate::token::estimate(original, tok_mode),
                 tokens_out,
                 kept,
