@@ -93,11 +93,8 @@ impl<'a> Parser<'a> {
         loop {
             match self.peek() {
                 None | Some('|') | Some(']') => break,
-                Some('*') | Some('+') | Some('?') => {
-                    return Err(format!(
-                        "re: quantifier {:?} has no operand; {SUBSET}",
-                        self.peek().unwrap()
-                    ));
+                Some(q @ ('*' | '+' | '?')) => {
+                    return Err(format!("re: quantifier {q:?} has no operand; {SUBSET}"));
                 }
                 Some(_) => items.push(self.atom()?),
             }
@@ -118,7 +115,10 @@ impl<'a> Parser<'a> {
     }
 
     fn base(&mut self) -> Result<Node, String> {
-        match self.bump().unwrap() {
+        match self
+            .bump()
+            .ok_or_else(|| "re: unexpected end of pattern".to_string())?
+        {
             '\\' => {
                 let esc = self
                     .bump()
