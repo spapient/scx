@@ -77,6 +77,7 @@ fn subcommand(args: &[String]) {
         "wrap" => scx::wrap::run(&args[1..]),
         "hook" => scx::hook::run(),
         "bucket" => scx::bucket::run(&args[1..]),
+        "ledger" => scx::meter::run_ledger(&args[1..]),
         _ => return,
     };
     std::process::exit(code);

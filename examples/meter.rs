@@ -41,22 +41,12 @@ fn main() {
     };
 
     let mut ledger = Ledger::default();
-    ledger.push(meter::measure(
-        "round-1",
-        1,
-        &parts,
-        "db timeout",
-        &cfg,
-        Some(&budget),
-    ));
-    ledger.push(meter::measure(
-        "round-2",
-        2,
-        &parts,
-        "db timeout pool",
-        &cfg,
-        Some(&budget),
-    ));
+    let a = meter::measure(1, &parts, "db timeout", &cfg, Some(&budget));
+    let b = meter::measure(2, &parts, "db timeout pool", &cfg, Some(&budget));
+    let a_id = a.id.clone();
+    let b_id = b.id.clone();
+    ledger.push(a);
+    ledger.push(b);
 
     for s in &ledger.snaps {
         println!("{}", meter::render(s));
@@ -70,12 +60,14 @@ fn main() {
         println!();
     }
 
-    if let Some(d) = ledger.diff("round-1", "round-2") {
+    if let Some(d) = ledger.diff(&a_id, &b_id) {
         println!(
             "相邻快照对比: delta_in={:+.0} delta_out={:+.0} delta_saved={:+.4} delta_ratio={:+.4}",
             d.delta_in, d.delta_out, d.delta_saved, d.delta_ratio
         );
     }
+
+    println!("\n账本聚合:\n{}", meter::summarize(&ledger));
 
     println!(
         "\n单文本计数示例: count(\"数据库连接超时\") = {}",

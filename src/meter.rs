@@ -139,11 +139,16 @@ pub struct Budget {
     pub level: Level,
 }
 
-/// 计量快照：唯一 ID + 轮次 + 分桶明细 + 效果指标 + 预算。
+/// 计量快照：内容寻址 ID + 轮次 + 分桶明细 + 效果指标 + 预算。
 #[derive(Debug, Clone)]
 pub struct Snapshot {
+    /// 内容派生 ID = sha256(payload_sha256 + config_fingerprint) 前 16 位十六进制。
     pub id: String,
     pub round: u64,
+    /// 输入载荷（parts 文本）的 SHA-256（hex）。
+    pub payload_sha256: String,
+    /// 配置指纹 = SHA-256(VERSION + query + 压缩参数)（hex）。
+    pub config_fingerprint: String,
     pub buckets: Vec<BucketStat>,
     pub tokens_in: f64,
     pub tokens_out: f64,
@@ -243,12 +248,49 @@ impl Ledger {
     }
 }
 
+/// 输入载荷哈希：parts 的 (category + text) 拼接后 SHA-256（hex）。
+fn payload_hash(parts: &[(&str, &str)]) -> String {
+    let mut buf = String::new();
+    for (cat, text) in parts {
+        buf.push_str(cat);
+        buf.push('\n');
+        buf.push_str(text);
+        buf.push('\n');
+    }
+    crate::hash::hex(&crate::hash::sha256(buf.as_bytes()))
+}
+
+/// 配置指纹：SHA-256(VERSION + query + 压缩参数)（hex）。确定性，捕获决定
+/// 压缩结果的全部配置维度（不含运行时嵌入 sims）。
+fn fingerprint(query: &str, cfg: &Config) -> String {
+    let mut buf = String::new();
+    buf.push_str(crate::VERSION);
+    buf.push('\n');
+    buf.push_str(query);
+    buf.push('\n');
+    buf.push_str(&format!("ratio={:.17}\n", cfg.ratio));
+    buf.push_str(&format!("context={}\n", cfg.context));
+    buf.push_str(&format!("window={}\n", cfg.window));
+    buf.push_str(&format!("elide={}\n", cfg.elide));
+    buf.push_str(&format!("gate={}\n", cfg.gate));
+    buf.push_str(&format!("lineno={}\n", cfg.lineno));
+    buf.push_str(&format!("structure={}\n", cfg.structure));
+    buf.push_str(&format!("sim_weight={:.17}\n", cfg.sim_weight));
+    buf.push_str(&format!("limit={:?}\n", cfg.limit));
+    for f in &cfg.forces {
+        buf.push_str("force=");
+        buf.push_str(f);
+        buf.push('\n');
+    }
+    crate::hash::hex(&crate::hash::sha256(buf.as_bytes()))
+}
+
 /// 最简入口：分类化载荷分桶压缩并计量。
 ///
 /// `parts` = `[(category, text)]`；核心桶 category 取 [`ContentType::as_str`]，
 /// 自定义桶用任意字符串。`budget` 为 `None` 时预算字段为空态（cap=None、level=Normal）。
+/// `id` 内容派生（确定性），`round` 由调用方传入。
 pub fn measure(
-    id: &str,
     round: u64,
     parts: &[(&str, &str)],
     query: &str,
@@ -275,14 +317,67 @@ pub fn measure(
         .filter(|b| high_value(&b.cat))
         .map(|b| b.tokens_out)
         .sum::<f64>();
+    let payload_sha256 = payload_hash(parts);
+    let config_fingerprint = fingerprint(query, cfg);
+    let id = crate::hash::hex(&crate::hash::sha256(
+        format!("{payload_sha256}{config_fingerprint}").as_bytes(),
+    ))[..16]
+        .to_string();
     Snapshot {
-        id: id.to_string(),
+        id,
         round,
+        payload_sha256,
+        config_fingerprint,
         buckets,
         tokens_in: tin,
         tokens_out: tout,
         metrics: compute_metrics(tin, tout, hi_in, hi_out),
         budget: compute_budget(budget, tout),
+    }
+}
+
+/// 纯计量（不压缩）：把 `text` 计为一个 kind 桶（token in == out），构造前置快照。
+/// `config_fingerprint` 仅含 VERSION（无 query/压缩参数，因为未压缩）。
+pub fn snapshot(round: u64, kind: &str, text: &str) -> Snapshot {
+    let tokens = count(text) as f64;
+    let payload_sha256 = crate::hash::hex(&crate::hash::sha256(text.as_bytes()));
+    let config_fingerprint = crate::hash::hex(&crate::hash::sha256(crate::VERSION.as_bytes()));
+    let id = crate::hash::hex(&crate::hash::sha256(
+        format!("{payload_sha256}{config_fingerprint}").as_bytes(),
+    ))[..16]
+        .to_string();
+    Snapshot {
+        id,
+        round,
+        payload_sha256,
+        config_fingerprint,
+        buckets: vec![BucketStat {
+            cat: kind.to_string(),
+            tokens_in: tokens,
+            tokens_out: tokens,
+            share_in_pct: 100.0,
+            share_out_pct: 100.0,
+            cut_pct: 0.0,
+            quota: None,
+            quota_used_pct: 0.0,
+            quota_left: f64::INFINITY,
+        }],
+        tokens_in: tokens,
+        tokens_out: tokens,
+        metrics: Metrics {
+            ratio: 1.0,
+            saved: 0.0,
+            retention: 1.0,
+            density: 1.0,
+        },
+        budget: Budget {
+            cap: None,
+            used: tokens,
+            used_pct: 0.0,
+            left: f64::INFINITY,
+            left_pct: 0.0,
+            level: Level::Normal,
+        },
     }
 }
 
@@ -399,8 +494,10 @@ fn compute_budget(spec: Option<&BudgetSpec>, used: f64) -> Budget {
 /// 标准化 JSON 输出（P3 可视化/链路监控/审计导出消费）。
 pub fn render(s: &Snapshot) -> String {
     let mut out = format!(
-        "{{\"id\":{},\"round\":{},\"tokens_in\":{:.2},\"tokens_out\":{:.2},",
+        "{{\"id\":{},\"payload_sha256\":{},\"config_fingerprint\":{},\"round\":{},\"tokens_in\":{:.2},\"tokens_out\":{:.2},",
         crate::json::string(&s.id),
+        crate::json::string(&s.payload_sha256),
+        crate::json::string(&s.config_fingerprint),
         s.round,
         s.tokens_in,
         s.tokens_out
@@ -417,6 +514,68 @@ pub fn render(s: &Snapshot) -> String {
     }
     out.push_str("]}");
     out
+}
+
+/// 账本聚合：按 kind（字典序）汇总 token 与调用次数，输出确定性 JSON。
+/// `est_cost_saved_usd` 默认 null（价格表未配置时绝不编造成本）。
+pub fn summarize(ledger: &Ledger) -> String {
+    let by_kind = aggregate(ledger);
+    let tin: f64 = ledger.snaps.iter().map(|s| s.tokens_in).sum();
+    let tout: f64 = ledger.snaps.iter().map(|s| s.tokens_out).sum();
+    let mut out = String::from("{\"by_kind\":[");
+    for (i, (kind, (ki, ko, calls))) in by_kind.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push_str(&render_kind(kind, *ki, *ko, *calls));
+    }
+    out.push_str("],\"total\":{");
+    out.push_str(&render_total(tin, tout, ledger.snaps.len()));
+    out.push('}');
+    out
+}
+
+/// 按 kind 累加 token 与调用次数（kind 字典序）。
+fn aggregate(ledger: &Ledger) -> std::collections::BTreeMap<String, (f64, f64, usize)> {
+    let mut by_kind = std::collections::BTreeMap::new();
+    for s in &ledger.snaps {
+        for b in &s.buckets {
+            let e = by_kind.entry(b.cat.clone()).or_insert((0.0, 0.0, 0));
+            e.0 += b.tokens_in;
+            e.1 += b.tokens_out;
+            e.2 += 1;
+        }
+    }
+    by_kind
+}
+
+/// 单 kind 聚合项 JSON。
+fn render_kind(kind: &str, ki: f64, ko: f64, calls: usize) -> String {
+    let saved = (ki - ko).max(0.0);
+    let ratio = if ki > 0.0 { ko / ki } else { 1.0 };
+    format!(
+        "{{\"kind\":{},\"tokens_in\":{:.2},\"tokens_out\":{:.2},\"tokens_saved\":{:.2},\"ratio\":{:.4},\"calls\":{}}}",
+        crate::json::string(kind),
+        ki,
+        ko,
+        saved,
+        ratio,
+        calls
+    )
+}
+
+/// 全局汇总项 JSON。
+fn render_total(tin: f64, tout: f64, calls: usize) -> String {
+    let saved = (tin - tout).max(0.0);
+    let ratio = if tin > 0.0 { tout / tin } else { 1.0 };
+    format!(
+        "\"tokens_in\":{:.2},\"tokens_out\":{:.2},\"tokens_saved\":{:.2},\"ratio\":{:.4},\"calls\":{},\"est_cost_saved_usd\":null",
+        tin,
+        tout,
+        saved,
+        ratio,
+        calls
+    )
 }
 
 fn render_metrics(m: &Metrics) -> String {
@@ -474,15 +633,28 @@ fn opt_f2(x: Option<f64>) -> String {
 
 /// 从 `render` 输出的 JSON 反序列化（供 `Ledger::from_jsonl` 使用；`None` = 字段缺失）。
 fn from_json(v: &Json) -> Option<Snapshot> {
+    let (id, round, payload_sha256, config_fingerprint) = head_of(v)?;
     Some(Snapshot {
-        id: str_of(v, "id")?.to_string(),
-        round: num_of(v, "round")? as u64,
+        id,
+        round,
+        payload_sha256,
+        config_fingerprint,
         buckets: from_buckets(v.get("buckets")?),
         tokens_in: num_of(v, "tokens_in")?,
         tokens_out: num_of(v, "tokens_out")?,
         metrics: from_metrics(v.get("metrics")?)?,
         budget: from_budget(v.get("budget")?)?,
     })
+}
+
+/// 解析快照头部标量字段（id/round/载荷哈希/配置指纹）。
+fn head_of(v: &Json) -> Option<(String, u64, String, String)> {
+    Some((
+        str_of(v, "id")?.to_string(),
+        num_of(v, "round")? as u64,
+        str_of(v, "payload_sha256")?.to_string(),
+        str_of(v, "config_fingerprint")?.to_string(),
+    ))
 }
 
 fn from_buckets(b: &Json) -> Vec<BucketStat> {
@@ -540,6 +712,47 @@ fn from_bucket(b: &Json) -> Option<BucketStat> {
     })
 }
 
+/// `scx ledger` 入口：读账本 JSONL（文件或 stdin），输出聚合 JSON。
+/// 用法：`scx ledger --summarize [--json] [ledger.jsonl]`。
+pub fn run_ledger(args: &[String]) -> i32 {
+    let mut do_summarize = false;
+    let mut path: Option<&str> = None;
+    for a in args {
+        match a.as_str() {
+            "--summarize" => do_summarize = true,
+            "--json" => {}
+            other if !other.starts_with("--") => path = Some(other),
+            other => {
+                eprintln!("scx ledger: unknown argument {other}");
+                return 2;
+            }
+        }
+    }
+    if !do_summarize {
+        eprintln!("scx ledger: usage: scx ledger --summarize [--json] [ledger.jsonl]");
+        return 2;
+    }
+    let ledger = match path {
+        Some(p) => match Ledger::load_jsonl(p) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("scx ledger: {e}");
+                return 1;
+            }
+        },
+        None => {
+            let mut s = String::new();
+            if std::io::Read::read_to_string(&mut std::io::stdin(), &mut s).is_err() {
+                eprintln!("scx ledger: read stdin failed");
+                return 2;
+            }
+            Ledger::from_jsonl(&s)
+        }
+    };
+    println!("{}", summarize(&ledger));
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -579,7 +792,7 @@ mod tests {
     fn measure_aggregates_shares_sum_to_100() {
         let t = text();
         let p = parts(&t);
-        let s = measure("s1", 1, &p, "db timeout", &Config::default(), None);
+        let s = measure(1, &p, "db timeout", &Config::default(), None);
         let in_sum: f64 = s.buckets.iter().map(|b| b.share_in_pct).sum();
         let out_sum: f64 = s.buckets.iter().map(|b| b.share_out_pct).sum();
         assert!((in_sum - 100.0).abs() < 0.5, "input shares sum: {in_sum}");
@@ -593,7 +806,7 @@ mod tests {
     #[test]
     fn metrics_match_hand_computation() {
         let t = text();
-        let s = measure("s1", 1, &parts(&t), "db timeout", &Config::default(), None);
+        let s = measure(1, &parts(&t), "db timeout", &Config::default(), None);
         let hi_in: f64 = s
             .buckets
             .iter()
@@ -619,7 +832,7 @@ mod tests {
     fn budget_levels_normal_warn_over() {
         let t = text();
         let p = parts(&t);
-        let base = measure("s", 1, &p, "db timeout", &Config::default(), None);
+        let base = measure(1, &p, "db timeout", &Config::default(), None);
         let used = base.tokens_out;
         let cap = (used * 1.5) as usize; // 使用率 ~66% → normal
         let spec = BudgetSpec {
@@ -628,7 +841,7 @@ mod tests {
             over: 1.0,
             quotas: Vec::new(),
         };
-        let s = measure("s", 1, &p, "db timeout", &Config::default(), Some(&spec));
+        let s = measure(1, &p, "db timeout", &Config::default(), Some(&spec));
         assert_eq!(s.budget.level, Level::Normal);
         // 使用率 ~85% → warn
         let spec2 = BudgetSpec {
@@ -637,7 +850,7 @@ mod tests {
             over: 1.0,
             quotas: Vec::new(),
         };
-        let s2 = measure("s", 1, &p, "db timeout", &Config::default(), Some(&spec2));
+        let s2 = measure(1, &p, "db timeout", &Config::default(), Some(&spec2));
         assert_eq!(s2.budget.level, Level::Warn);
         // 使用率 > 100% → over
         let spec3 = BudgetSpec {
@@ -646,7 +859,7 @@ mod tests {
             over: 1.0,
             quotas: Vec::new(),
         };
-        let s3 = measure("s", 1, &p, "db timeout", &Config::default(), Some(&spec3));
+        let s3 = measure(1, &p, "db timeout", &Config::default(), Some(&spec3));
         assert_eq!(s3.budget.level, Level::Over);
         assert!(s3.budget.left < 0.0, "超限时剩余为负");
     }
@@ -661,7 +874,7 @@ mod tests {
             over: 1.0,
             quotas: vec![(ContentType::ToolOutput.as_str().to_string(), 100)],
         };
-        let s = measure("s", 1, &p, "db timeout", &Config::default(), Some(&spec));
+        let s = measure(1, &p, "db timeout", &Config::default(), Some(&spec));
         let b = s.find(ContentType::ToolOutput.as_str()).unwrap();
         assert_eq!(b.quota, Some(100));
         assert!((b.quota_used_pct - b.tokens_out * 100.0 / 100.0).abs() < 1e-9);
@@ -679,7 +892,6 @@ mod tests {
             quotas: Vec::new(),
         };
         let a = render(&measure(
-            "s1",
             7,
             &p,
             "db timeout",
@@ -687,7 +899,6 @@ mod tests {
             Some(&spec),
         ));
         let b = render(&measure(
-            "s1",
             7,
             &p,
             "db timeout",
@@ -695,7 +906,10 @@ mod tests {
             Some(&spec),
         ));
         assert_eq!(a, b, "同输入同配置渲染必须逐字节一致");
-        assert!(a.starts_with("{\"id\":\"s1\",\"round\":7"));
+        assert!(a.starts_with("{\"id\":\""), "id 为内容派生");
+        assert!(a.contains("\"payload_sha256\":"));
+        assert!(a.contains("\"config_fingerprint\":"));
+        assert!(a.contains("\"round\":7"));
         assert!(a.contains("\"metrics\":{\"ratio\":"));
         assert!(a.contains("\"budget\":{\"cap\":5000"));
         assert!(a.contains("\"buckets\":[{\"cat\":\"static-contract\""));
@@ -706,23 +920,20 @@ mod tests {
     fn ledger_lookup_and_diff() {
         let t = text();
         let p = parts(&t);
+        let a = measure(1, &p, "db timeout", &Config::default(), None);
+        let b = measure(2, &p, "db timeout pool", &Config::default(), None);
+        let a_id = a.id.clone();
+        let b_id = b.id.clone();
         let mut ledger = Ledger::default();
-        ledger.push(measure("a", 1, &p, "db timeout", &Config::default(), None));
-        ledger.push(measure(
-            "b",
-            2,
-            &p,
-            "db timeout pool",
-            &Config::default(),
-            None,
-        ));
-        assert!(ledger.by_id("a").is_some());
+        ledger.push(a);
+        ledger.push(b);
+        assert!(ledger.by_id(&a_id).is_some());
         assert!(ledger.by_round(2).is_some());
         assert!(ledger.by_id("zz").is_none());
-        let d = ledger.diff("a", "b").unwrap();
+        let d = ledger.diff(&a_id, &b_id).unwrap();
         assert_eq!(
             d.delta_in,
-            ledger.by_id("b").unwrap().tokens_in - ledger.by_id("a").unwrap().tokens_in
+            ledger.by_id(&b_id).unwrap().tokens_in - ledger.by_id(&a_id).unwrap().tokens_in
         );
     }
 
@@ -731,13 +942,54 @@ mod tests {
         let t = text();
         let p = parts(&t);
         let mut ledger = Ledger::default();
-        ledger.push(measure("a", 1, &p, "db timeout", &Config::default(), None));
-        ledger.push(measure("b", 2, &p, "db timeout", &Config::default(), None));
+        ledger.push(measure(1, &p, "db timeout", &Config::default(), None));
+        ledger.push(measure(2, &p, "db timeout pool", &Config::default(), None));
         let jsonl = ledger.to_jsonl();
         let back = Ledger::from_jsonl(&jsonl);
         assert_eq!(back.snaps.len(), 2);
-        assert_eq!(back.by_id("a").map(|s| s.round), Some(1));
-        assert_eq!(back.by_round(2).map(|s| s.id.as_str()), Some("b"));
+        assert_eq!(back.snaps[0].id, ledger.snaps[0].id);
+        assert_eq!(back.snaps[0].round, 1);
+        assert_eq!(back.snaps[1].round, 2);
         assert_eq!(back.snaps[0].tokens_in, ledger.snaps[0].tokens_in);
+    }
+
+    #[test]
+    fn fingerprint_deterministic_and_content_addressed() {
+        let t = text();
+        let p = parts(&t);
+        let a = measure(1, &p, "db timeout", &Config::default(), None);
+        let b = measure(2, &p, "db timeout", &Config::default(), None);
+        // 同输入同配置（round 不参与内容寻址）→ 同 id/指纹。
+        assert_eq!(a.id, b.id);
+        assert_eq!(a.payload_sha256, b.payload_sha256);
+        assert_eq!(a.config_fingerprint, b.config_fingerprint);
+        assert_eq!(a.id.len(), 16, "id 为 16 位十六进制");
+        // 不同 query → 不同指纹。
+        let c = measure(1, &p, "db timeout pool", &Config::default(), None);
+        assert_ne!(a.config_fingerprint, c.config_fingerprint);
+        // 不同载荷 → 不同 payload hash。
+        let d = measure(
+            1,
+            &[("tool-output", "hello")],
+            "db timeout",
+            &Config::default(),
+            None,
+        );
+        assert_ne!(a.payload_sha256, d.payload_sha256);
+    }
+
+    #[test]
+    fn summarize_aggregates_by_kind() {
+        let t = text();
+        let p = parts(&t);
+        let mut ledger = Ledger::default();
+        ledger.push(measure(1, &p, "db timeout", &Config::default(), None));
+        let s = summarize(&ledger);
+        assert!(s.starts_with("{\"by_kind\":["));
+        assert!(s.contains("\"kind\":\"static-contract\""));
+        assert!(s.contains("\"calls\":"));
+        assert!(s.contains("\"total\":{\"tokens_in\":"));
+        assert!(s.contains("\"est_cost_saved_usd\":null"));
+        assert!(s.ends_with("}"));
     }
 }

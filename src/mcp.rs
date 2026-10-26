@@ -11,12 +11,14 @@
 
 use crate::json::{parse, Json};
 
-/// 进程内用量记账（单线程 stdio 循环，无需原子）。
+/// 进程内状态（单线程 stdio 循环，无需原子）：用量计数 + 快照账本 + 轮次。
 #[derive(Default)]
 struct Usage {
     compressed: u64,
     input: u64,
     output: u64,
+    round: u64,
+    ledger: crate::meter::Ledger,
 }
 
 /// 工具定义（tools/list 静态表）：名称、描述、JSON Schema。
@@ -27,6 +29,21 @@ const TOOLS: &[(&str, &str, &str)] = &[
         "compress_context",
         "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1)",
         "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\"]}}},\"required\":[\"query\",\"text\"]}",
+    ),
+    (
+        "context_snapshot",
+        "meter a text blob without compressing (pre-snapshot): returns token count and stores the snapshot in the process ledger. args: text (str), optional kind (str)",
+        "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"kind\":{\"type\":\"string\"}},\"required\":[\"text\"]}",
+    ),
+    (
+        "context_diff",
+        "diff the two most recent snapshots in the process ledger (token deltas). no args",
+        "{\"type\":\"object\",\"properties\":{}}",
+    ),
+    (
+        "ledger_summary",
+        "aggregate the process ledger by kind: tokens in/out/saved, ratio, calls. no args",
+        "{\"type\":\"object\",\"properties\":{}}",
     ),
     (
         "connect_account",
@@ -110,6 +127,9 @@ fn call(id: Option<Json>, msg: &Json, usage: &mut Usage) -> Option<String> {
     let args = msg.get("params").and_then(|p| p.get("arguments"));
     Some(match name.as_str() {
         "compress_context" => compress(id, args, usage),
+        "context_snapshot" => snapshot(id, args, usage),
+        "context_diff" => context_diff(id, usage),
+        "ledger_summary" => ledger_summary(id, usage),
         "connect_account" => account(id),
         "usage_summary" => summary(id, usage),
         _ => error(id, -32602, &format!("unknown tool: {name}")),
@@ -258,6 +278,57 @@ fn summary(id: Option<Json>, usage: &Usage) -> String {
             usage.compressed, usage.input, usage.output
         ),
     )
+}
+
+/// 计量（不压缩）：计数 token，写入账本并返回快照 JSON。
+fn snapshot(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String {
+    let args = match args {
+        Some(a) => a,
+        None => return error(id, -32602, "context_snapshot: missing arguments"),
+    };
+    let text = match args.get("text").and_then(Json::str) {
+        Some(t) => t,
+        _ => return error(id, -32602, "context_snapshot: missing text"),
+    };
+    let kind = args
+        .get("kind")
+        .and_then(Json::str)
+        .unwrap_or("tool-output");
+    let snap = crate::meter::snapshot(usage.round, kind, text);
+    usage.round += 1;
+    let json = crate::meter::render(&snap);
+    usage.ledger.push(snap);
+    result(id, &json)
+}
+
+/// 差分最近两次快照（token 增减）。
+fn context_diff(id: Option<Json>, usage: &Usage) -> String {
+    let n = usage.ledger.snaps.len();
+    if n < 2 {
+        return error(id, -32602, "context_diff: need at least two snapshots");
+    }
+    let a = &usage.ledger.snaps[n - 2];
+    let b = &usage.ledger.snaps[n - 1];
+    match usage.ledger.diff(&a.id, &b.id) {
+        Some(d) => result(
+            id,
+            &format!(
+                "{{\"from\":{},\"to\":{},\"delta_in\":{:.2},\"delta_out\":{:.2},\"delta_saved\":{:.4},\"delta_ratio\":{:.4}}}",
+                crate::json::string(&a.id),
+                crate::json::string(&b.id),
+                d.delta_in,
+                d.delta_out,
+                d.delta_saved,
+                d.delta_ratio
+            ),
+        ),
+        None => error(id, -32602, "context_diff: snapshots not found"),
+    }
+}
+
+/// 账本聚合（按 kind）。
+fn ledger_summary(id: Option<Json>, usage: &Usage) -> String {
+    result(id, &crate::meter::summarize(&usage.ledger))
 }
 
 /// stdio 服务循环：逐行读 stdin，逐行回 stdout，EOF 结束。

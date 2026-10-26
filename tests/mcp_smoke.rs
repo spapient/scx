@@ -107,3 +107,61 @@ fn mcp_stdio_roundtrip() {
     let status = child.wait().expect("wait scx mcp");
     assert!(status.success(), "exit status: {status:?}");
 }
+
+#[test]
+fn mcp_lifecycle_snapshot_diff_summary() {
+    let (mut child, mut stdin, mut stdout) = spawn();
+
+    roundtrip(
+        &mut stdin,
+        &mut stdout,
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#,
+    );
+    let list = roundtrip(
+        &mut stdin,
+        &mut stdout,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+    );
+    assert!(list.contains("context_snapshot"), "tools/list: {list}");
+    assert!(list.contains("context_diff"), "tools/list: {list}");
+    assert!(list.contains("ledger_summary"), "tools/list: {list}");
+
+    let snap1 = roundtrip(
+        &mut stdin,
+        &mut stdout,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"context_snapshot","arguments":{"text":"hello world foo bar","kind":"tool-output"}}}"#,
+    );
+    assert!(snap1.contains("tokens_in"), "snapshot 1: {snap1}");
+    assert!(snap1.contains("payload_sha256"), "fingerprint: {snap1}");
+
+    let snap2 = roundtrip(
+        &mut stdin,
+        &mut stdout,
+        r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"context_snapshot","arguments":{"text":"a much longer text with many more tokens to count over here"}}}"#,
+    );
+    assert!(snap2.contains("tokens_in"), "snapshot 2: {snap2}");
+
+    let diff = roundtrip(
+        &mut stdin,
+        &mut stdout,
+        r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"context_diff"}}"#,
+    );
+    assert!(
+        diff.contains("delta_in") && diff.contains("delta_out"),
+        "context_diff: {diff}"
+    );
+
+    let summary = roundtrip(
+        &mut stdin,
+        &mut stdout,
+        r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"ledger_summary"}}"#,
+    );
+    assert!(
+        summary.contains("by_kind") && summary.contains("total"),
+        "ledger_summary: {summary}"
+    );
+
+    drop(stdin);
+    let status = child.wait().expect("wait scx mcp");
+    assert!(status.success(), "exit status: {status:?}");
+}
