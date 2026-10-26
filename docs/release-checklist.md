@@ -1,6 +1,6 @@
 # scx 发布检查单（crates.io 发布前）
 
-> 状态：**已发布**（0.5.0 → 0.5.1 → 0.6.0 → 0.6.1 → 0.6.4 → 0.6.5，crates.io max_version=0.6.5、num_versions=8）。
+> 状态：**已发布**（0.5.0 → 0.5.1 → 0.6.0 → 0.6.1 → 0.6.4 → 0.6.5 → 0.6.6，crates.io max_version=0.6.6、num_versions=9）。
 > 下节为历次发布前 dry-run 验证证据模板；本节头部已更新为当前状态。
 > 检查日期：2026-10-25 初版；2026-10-26 随 0.6.x 系列更新。
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | `cargo package --list` | ✅ | 196 文件（1.9MiB，压缩 350.5KiB），含 README/LICENSE/SKILL.md/docs/config/tools/bin/Cargo.toml |
 | `cargo package --locked`（dry-run verify） | ✅ | `Packaged 196 files, 1.9MiB`；`Verifying scx v0.5.0` dev profile 编译通过 |
-| `[package]` 元数据 | ✅ | name/version(0.5.0)/edition(2021)/rust-version(1.82)/license(MIT)/description/repository/homepage/keywords/categories 齐全 |
+| `[package]` 元数据 | ✅ | name/version(0.6.6)/edition(2021)/rust-version(1.82)/license(MIT)/description/repository/homepage/keywords/categories 齐全 |
 | LICENSE 文件 | ✅ | 仓库根 LICENSE（MIT），已入包 |
 | MSRV 一致性 | ✅ | Cargo.toml `rust-version = "1.82"` 与 README 徽章 `Rust 1.82+` 一致 |
 | 文档完备 | ✅ | README（P1–P3 同步至 0.5.0）、SKILL.md、docs/（memory/locking/plan/eval 预注册/RFC） |

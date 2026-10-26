@@ -1,6 +1,9 @@
-# scx 发布与接入总览（v7 · 全渠道）
+# scx 发布与接入总览（v8 · 全渠道）
 
-> 版本 v7 · 2026-10-26 · 状态：**v0.6.5 全渠道发布完成，豆包已实证效果卡可见**
+> 版本 v8 · 2026-10-26 · 状态：**v0.6.6 全渠道发布完成，MCP 单 content 修复豆包渲染**
+> 变更（v8）：**v0.6.6 MCP 单 content 合并**——`compress_context` 返回「效果卡+JSON」
+> **一块** text（效果卡在上、机器 JSON 在下）。实测豆包对多 content（0.6.5 双块）仅渲染
+> JSON 转述、效果卡不可见；合并为单块后任意客户端对话均原样显示效果卡。0.6.5 双 content 行为废弃。
 > 变更（v7）：**v0.6.5 效果卡进 MCP content**——`compress_context` 返回 `[效果卡, JSON]` 双块，
 > 豆包/千问对话调用 compress_context 直接展示「SCX 压缩召回」效果卡（此前仅终端 stderr 可见）；
 > 豆包连接器已实证拉到 0.6.5（npx 缓存清理后重启，vendor 二进制 0.6.5）。
@@ -28,17 +31,17 @@
 
 | 渠道 | 命名 | 版本 | 状态 | 关键证据 |
 |---|---|---|---|---|
-| crates.io | `scx`（账户 `apex`） | **0.6.5**（8 版，未 yanked） | ✅ 已发布 | 邮箱已验证（haofei.ni@outlook.com）；`cargo install scx` 可用，本机已实测 0.6.5 |
-| GitHub Release | `spapient/scx` | v0.6.5 | ✅ 已发布 | 三平台资产（tar.gz/zip + sha256 已核对）：darwin-arm64 / linux-x86_64（musl 静态）/ windows-x86_64 |
-| Homebrew | tap `spapient/homebrew-scx` | 0.6.5 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → `/opt/homebrew/bin/scx` 0.6.5 可运行 |
-| npm | `@spapient/scx`（scoped） | **0.6.5** | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.5）；包内置 0.6.5 三平台二进制。历史：0.6.2 包误内置 0.6.1 二进制，已重发修复 |
+| crates.io | `scx`（账户 `apex`） | **0.6.6**（9 版，未 yanked） | ✅ 已发布 | 邮箱已验证（haofei.ni@outlook.com）；`cargo install scx` 可用，本机已实测 0.6.6 |
+| GitHub Release | `spapient/scx` | v0.6.6 | ✅ 已发布 | 三平台资产（tar.gz/zip + sha256 已核对）：darwin-arm64 / linux-x86_64（musl 静态）/ windows-x86_64 |
+| Homebrew | tap `spapient/homebrew-scx` | 0.6.6 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → `/opt/homebrew/bin/scx` 0.6.6 可运行 |
+| npm | `@spapient/scx`（scoped） | **0.6.6** | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.6）；包内置 0.6.6 三平台二进制。历史：0.6.2 包误内置 0.6.1 二进制，已重发修复 |
 | npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 年空壳包（tu123dou）占用；申请已发 npm 官方（落款 spapient / haofei.ni@outlook.com） |
 | winget | `Spapient.Scx` | 0.6.1 | ⏳ PR 审核中 | PR **#461786**（microsoft/winget-pkgs，portable 三 yaml） |
 | Scoop | `scx` | 0.6.4 | ⏳ PR 审核中 | package request **#8767** 已提；PR **#8768**（ScoopInstaller/Main，manifest 0.6.4，bot 检查中）。注：旧 PR #8766 因缺 package request 被官方关闭（`not-meet-criteria`），已按流程重提 |
 | PyPI | `scx` | — | ✗ 被占 | 现存 v1.3.0 "MIT Supply Chain Python Package"，未注册 |
 | AUR | `scx` | — | ✗ 放弃 | 官网被反爬（Anubis）拦截；按用户指示放弃 |
 
-**版本一致性**：crates 0.6.5 = GitHub Release v0.6.5 = Homebrew 0.6.5 = npm 内置二进制 0.6.5 = 豆包连接器 0.6.5（winget/Scoop PR 仍为 0.6.1，待合并时对齐）。
+**版本一致性**：crates 0.6.6 = GitHub Release v0.6.6 = Homebrew 0.6.6 = npm 内置二进制 0.6.6 = 豆包/千问连接器 0.6.6（winget/Scoop PR 仍为 0.6.1，待合并时对齐）。
 
 ---
 
@@ -46,15 +49,15 @@
 
 | 平台 | 命令 | 状态 |
 |---|---|---|
-| Rust / Cargo（通用） | `cargo install scx` | ✅ 可用（crates.io 0.6.5） |
-| macOS（Homebrew） | `brew tap spapient/scx && brew install scx` | ✅ 本机实测（0.6.5） |
-| 任意（Node ≥18） | `npx -y @spapient/scx` | ✅ 实测（MCP 入口 `npx -y @spapient/scx mcp`，latest=0.6.5 内置 0.6.5 二进制） |
+| Rust / Cargo（通用） | `cargo install scx` | ✅ 可用（crates.io 0.6.6） |
+| macOS（Homebrew） | `brew tap spapient/scx && brew install scx` | ✅ 本机实测（0.6.6） |
+| 任意（Node ≥18） | `npx -y @spapient/scx` | ✅ 实测（MCP 入口 `npx -y @spapient/scx mcp`，latest=0.6.6 内置 0.6.6 二进制） |
 | Windows（winget） | `winget install Spapient.Scx` | ⏳ 待 PR 合并后可用 |
 | Windows（Scoop） | `scoop install scx` | ⏳ 待 PR 合并后可用 |
 | 从源码 | `cargo build --release`（零第三方 crate，离线可构建） | ✅ |
 | 本地软链 | `tools/scx install`（构建 + 链接到 `~/.local/bin/scx`） | ✅ 仓库自带 |
 
-> 升级：`cargo install scx --force` 或 `brew upgrade scx`。本机 `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已对齐 0.6.5。
+> 升级：`cargo install scx --force` 或 `brew upgrade scx`。本机 `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已对齐 0.6.6。
 
 ---
 
@@ -145,8 +148,8 @@ scx mcp                  # stdio JSON-RPC（serverInfo.name=scx）
 | 1 | winget PR #461786 审核 | ⏳ 官方审核中 | 全球 Windows 用户 `winget install` 暂不可用 |
 | 2 | Scoop PR #8766 审核 | ⏳ 官方审核中 | `scoop install scx` 暂不可用 |
 | 3 | npm 纯名 `scx` 回收 | ⏳ 官方处理中 | 命名统一为 `scx` 的最终形态；现 scoped 包 `@spapient/scx` 已可用 |
-| 4 | ~~豆包端到端调用验证~~ | ✅ 已实证 | 连接器进程链实证；豆包已拉 0.6.5，MCP 返回 [效果卡 + JSON] 双 content（豆包对话直接可见压缩效果） |
-| 5 | ~~本机版本对齐~~ | ✅ 已完成 | `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已升 0.6.5 |
+| 4 | ~~豆包端到端调用验证~~ | ✅ 已实证 | 连接器进程链实证；豆包已拉 0.6.6，MCP 返回「效果卡+JSON」单 content（豆包对话直接可见压缩效果） |
+| 5 | ~~本机版本对齐~~ | ✅ 已完成 | `~/.cargo/bin/scx` 与 `/opt/homebrew/bin/scx` 均已升 0.6.6 |
 | 6 | 千问办公端到端调用验证 | ⏳ 待测试 | 连接器已注册并启用（命令 `/opt/homebrew/bin/scx mcp`）；在千问对话中调用 `compress_context` 确认 |
 | 7 | ~~`/opt/homebrew/bin/scx-mcp` 旧包装脚本~~ | ✅ 已删除 | 已被「命令带 `mcp` 参数」方案取代，2026-10-26 删除 |
 
