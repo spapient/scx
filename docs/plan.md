@@ -669,3 +669,46 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 **commit**：独立可回滚（接 P3 commit 之后）。
 
+### Gauge 架构/质量优化（Phase A–C，2026-10-26，目标 0.6.8）
+
+用户要求按 Unix 组合式架构继续优化 Gauge 模块（"架构优化好质量要
+优化好"），三个方向按序全部落地，每阶段独立 commit：
+
+#### Phase A 完成记录（2adcf73，评测产物冻结 + 文档自动生成）
+- `scx.py manifest`：冻结评测输入 SHA256（gauge/fidelity 语料、
+  policy/ai/human 标签、盲审包、ci-baseline/verbose），日期规范化
+  hash（`YYYY-MM-DD_ → <date>_`）保证未来 CI 日期变化仍可校验；
+  漂移 exit 2。冻结清单 `config/eval-manifest.json`（8 文件）。
+- `scx.py report`：从 gate 产物（stats CSV / LOO detail / fidelity
+  detail）自动生成 `docs/gauge-metrics.md`——文档数字零手工、零漂移；
+  `--check` 逐字节比对，漂移 exit 2。
+- `docs/eval.md`/`fidelity.md` 实测数字外置为指向自动生成文件
+  （recall@1 功率不足说明与 κ=0.017 保持叙述性——report 不覆盖）。
+- CI：Fidelity gate 输出 `ci-fidelity.json`；quality job 末尾新增
+  `Frozen evaluation-input manifest` + `Frozen metrics report` 两步骤。
+
+#### Phase B 完成记录（8798450，多重比较 Holm-Bonferroni）
+- `holm_bonferroni(ps)`：α=0.05 逐步下降 FWER 控制；report 输出
+  Gauge 族（m=2：MRR hard、recall@3 hard）校正决策
+  （阈值 0.025/0.05），Holm 失败计入汇总门禁。
+- fidelity ev/ans 是阈值门禁（非显著性检验），无 p 需校正——口径
+  在 report 与文档说明。
+- 实测：p=0.0029/0.0064 校正后均显著，汇总门禁 PASS。
+- selftest +5 holm 单测。
+
+#### Phase C 完成记录（72e2431，per-domain cluster-bootstrap）
+- `domain_cluster_bootstrap(agg, boot, seed)`：以 kind 为 cluster
+  单位（保护域内相关），对每域证据保留差（scx−trunc）做 cluster
+  bootstrap，单侧检验跨域平均差 >0（seed `domain-cluster-v1`）。
+- fidelity `--gate` 新增域检验门禁（p<0.05 且 mean Δ>0）；
+  CI 显式冻结 `--domain-boot 10000 --domain-gate-p 0.05`。
+- 实测：mean Δ **+11.07pp**、95% CI **[+2.50,+22.14]pp**、
+  **p=0.0231**、3/8 域正差——跨域优势不依赖个别域；per-kind 绝对
+  阈值（零回退）与跨域统计量并存。
+- report fidelity 段新增跨域行并计入汇总门禁。
+
+**Phase A–C 门禁复核**：cargo test 228/0、selftest PASS（+manifest/
+holm/domain 断言）、fidelity gate PASS（含 domain）、manifest PASS、
+report --check PASS、golden 零漂移。commit 链：
+`2adcf73 → 8798450 → 72e2431`。
+
