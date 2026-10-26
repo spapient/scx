@@ -26,6 +26,7 @@ pub(crate) mod ranking;
 mod recall;
 mod store;
 mod util;
+pub(crate) use util::sanitize;
 
 pub use recall::Hit;
 pub use store::{Case, Feedback, Fields, Stats};

@@ -56,6 +56,8 @@ pub struct Compress {
     pub embed_cmd: Option<String>,
     /// MinHash-LSH 召回权重（`--minhash-weight`，默认 0 = 关）。
     pub minhash_weight: f64,
+    /// 压缩前脱敏种类（`--redact`，默认空 = 不脱敏）。
+    pub redact: Vec<crate::redact::RedactKind>,
 }
 
 /// 标注动作入参。
@@ -238,6 +240,7 @@ fn job(opts: &Opts) -> Compress {
         mem_dir: opts.mem_dir.clone(),
         embed_cmd: opts.embed_cmd.clone(),
         minhash_weight: opts.minhash_weight,
+        redact: opts.redact.clone(),
     }
 }
 
@@ -479,6 +482,40 @@ fn explain_report(r: &Outcome) -> String {
         .map(|(i, e)| format!("{}:{}", i + 1, e.as_str()))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// 脱敏命中审计（stderr，一行；`kind=count` 空格分隔）。
+fn redact_report(hits: &[crate::redact::Hit]) -> String {
+    let parts: Vec<String> = hits
+        .iter()
+        .map(|h| format!("{}={}", h.kind, h.count))
+        .collect();
+    format!("scx: redact: {}", parts.join(" "))
+}
+
+/// 附加 stderr 诊断（json/explain/redact），从 `filter` 抽出以压认知复杂度。
+fn diagnostics(job: &Compress, outcome: &Outcome, redact_hits: &[crate::redact::Hit]) {
+    if job.json {
+        eprintln!("scxjson: {}", render(outcome));
+    }
+    if job.explain {
+        eprintln!("scx: explain: {}", explain_report(outcome));
+    }
+    if !redact_hits.is_empty() {
+        eprintln!("{}", redact_report(redact_hits));
+    }
+}
+
+/// 压缩前脱敏入口：空 kinds 时原样返回（无命中）。
+fn redact_input(
+    text: String,
+    kinds: &[crate::redact::RedactKind],
+) -> (String, Vec<crate::redact::Hit>) {
+    if kinds.is_empty() {
+        (text, Vec::new())
+    } else {
+        crate::redact::redact(&text, kinds)
+    }
 }
 
 /// token 缩减率（%）：输入估算为 0 时视为 0（passthrough/fail-open 恒为 0）。
@@ -841,6 +878,8 @@ fn embed_sims(job: &Compress, text: &str) -> Result<Option<Vec<f64>>, Failure> {
 
 fn filter(job: &Compress) -> Reply {
     let text = input(&job.files).map_err(Failure::message)?;
+    // 压缩前脱敏（P7）：脱敏后正文参与压缩与记忆入库，原文不落盘。
+    let (text, redact_hits) = redact_input(text, &job.redact);
     let mut config = job.config.clone();
     config.sims = embed_sims(job, &text)?;
     let outcome = compress(&text, &job.query, &config);
@@ -856,12 +895,7 @@ fn filter(job: &Compress) -> Reply {
         write(writeln!(out, "{}", stats(&outcome)))?;
         eprintln!("{}", recall_report(&outcome, &job.query));
     }
-    if job.json {
-        eprintln!("scxjson: {}", render(&outcome));
-    }
-    if job.explain {
-        eprintln!("scx: explain: {}", explain_report(&outcome));
-    }
+    diagnostics(job, &outcome, &redact_hits);
     if let Some(rx) = store_rx {
         let result = rx
             .recv()

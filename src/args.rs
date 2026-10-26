@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -55,6 +55,12 @@ pub fn usage() -> String {
     s.push_str("  --structure-anchors L comma-separated: json/xml/idoc/yaml; keep structural\n");
     s.push_str(
         "                       boundary lines (braces/tags/keys) as anchors below evidence\n",
+    );
+    s.push_str(
+        "  --redact L           comma-separated: secret/id-card/phone/email; redact before\n",
+    );
+    s.push_str(
+        "                       compression (mask secrets/PII as <redacted>), audit to stderr\n",
     );
     #[cfg(feature = "semantic")]
     {
@@ -134,6 +140,8 @@ pub struct Opts {
     pub embed_cmd: Option<String>,
     /// MinHash-LSH 召回在 RRF 融合中的权重（`--minhash-weight`，默认 0 = 关）。
     pub minhash_weight: f64,
+    /// 压缩前脱敏种类（`--redact`，逗号分隔：secret/id-card/phone/email）。
+    pub redact: Vec<crate::redact::RedactKind>,
 }
 
 /// 默认记忆库目录：$SCX_MEM_DIR 优先，否则用户主目录下的 .scx-memory。
@@ -222,6 +230,8 @@ enum Kind {
     Evidence,
     /// 结构锚点种类（`--structure-anchors`，逗号分隔：json/xml/idoc/yaml）。
     Anchors,
+    /// 脱敏种类（`--redact`，逗号分隔：secret/id-card/phone/email）。
+    Redact,
 }
 
 /// 单 flag 声明：解析循环的唯一样板；新增 flag 只改表，不新增分支。
@@ -393,6 +403,15 @@ static FLAGS: &[Flag] = &[
         kind: Kind::Anchors,
         what: "",
         err_empty: "requires a comma-separated list (json/xml/idoc/yaml)",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--redact",
+        once: true,
+        kind: Kind::Redact,
+        what: "",
+        err_empty: "requires a comma-separated list (secret/id-card/phone/email)",
         err_zero: "",
         min: 0,
     },
@@ -719,6 +738,7 @@ struct ParseState {
     files: Vec<String>,
     embed_cmd: Option<String>,
     minhash_weight: f64,
+    redact: Vec<crate::redact::RedactKind>,
     seen: HashSet<&'static str>,
 }
 
@@ -761,6 +781,7 @@ impl ParseState {
             files: Vec::new(),
             embed_cmd: None,
             minhash_weight: 0.0,
+            redact: Vec::new(),
             seen: HashSet::new(),
         }
     }
@@ -851,7 +872,8 @@ fn flag(
         | Kind::Force
         | Kind::RatePair
         | Kind::Evidence
-        | Kind::Anchors => raw(s, f, inline, args, i),
+        | Kind::Anchors
+        | Kind::Redact => raw(s, f, inline, args, i),
         Kind::F64 | Kind::I64 | Kind::U64 | Kind::Bool01 => numeric(s, f, inline, args, i),
         #[cfg(feature = "semantic")]
         Kind::Semantic => weights(s, f, inline, args, i),
@@ -874,6 +896,7 @@ fn raw(
         Kind::RatePair => pair(s, f, inline, args, i),
         Kind::Evidence => evidence(s, f, inline, args, i),
         Kind::Anchors => anchors(s, f, inline, args, i),
+        Kind::Redact => redact(s, f, inline, args, i),
         _ => unreachable!("valueish flag without handler: {}", f.name),
     }
 }
@@ -1348,6 +1371,36 @@ fn anchors(
     Ok(())
 }
 
+/// 脱敏种类（`--redact`，逗号分隔：secret/id-card/phone/email）。
+fn redact(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    let v = value(args, i, f.name, inline)?;
+    for part in v.split(',') {
+        let p = part.trim();
+        if p.is_empty() {
+            continue;
+        }
+        match crate::redact::RedactKind::parse(p) {
+            Some(k) if !s.redact.contains(&k) => {
+                s.redact.push(k);
+            }
+            Some(_) => {}
+            None => {
+                return Err(format!(
+                    "{} unknown redact kind {p:?} (allowed: secret/id-card/phone/email)",
+                    f.name
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// 反馈对（good/bad + case-id）。
 fn pair(
     s: &mut ParseState,
@@ -1576,6 +1629,7 @@ fn finish(s: ParseState) -> Opts {
         files: s.files,
         embed_cmd: s.embed_cmd,
         minhash_weight: s.minhash_weight,
+        redact: s.redact,
     }
 }
 
