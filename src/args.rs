@@ -24,7 +24,7 @@ pub fn usage() -> String {
     s.push_str("  --ratio R            optional-content budget (default ");
     s.push_str(&Config::DEFAULT_RATIO.to_string());
     s.push_str("); evidence lines and minimum neighborhood are exempt\n");
-    s.push_str("  --context 0|1        context 0 = needle mode: skip optional fill, keep evidence lines only\n");
+    s.push_str("  --context N          context 0 = needle mode: skip optional fill, keep evidence lines only (0..=4)\n");
     s.push_str(
         "  --max-tokens N       hard token ceiling; evidence floor wins, overflow is reported as\n",
     );

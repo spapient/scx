@@ -66,7 +66,7 @@ fn print_usage() {
          \n\
          Register the scx MCP stdio server into agent configs (idempotent).\n\
          --claude / --codex / --cursor  limit registration to that agent.\n\
-         --project-cursor                write Cursor config to ./cursor/mcp.json\n\
+         --project-cursor                write Cursor config to ./.cursor/mcp.json\n\
                                         (default: ~/.cursor/mcp.json).\n\
          Config files are backed up to <path>.scx.bak before writing;\n\
          a tools/list handshake runs after each successful registration."
@@ -246,19 +246,25 @@ fn update_toml_command(text: &str, command: &str) -> String {
     let mut out = String::new();
     let mut in_scx = false;
     for line in text.lines() {
-        if line == "[mcp_servers.scx]" {
+        let t = line.trim();
+        if t == "[mcp_servers.scx]" {
             in_scx = true;
             out.push_str(line);
             out.push('\n');
             continue;
         }
-        if in_scx && line.starts_with('[') && line.ends_with(']') {
+        if in_scx && t.starts_with('[') && t.ends_with(']') {
             in_scx = false;
         }
-        if in_scx && (line.starts_with("command ") || line.starts_with("command=")) {
-            out.push_str(command);
-            out.push('\n');
-            continue;
+        // command 键：允许任意空白后跟 `=`（`command =` / `command=` / `command  =`），
+        // 注释行（`#` 开头）因 trim 后带 `#` 前缀不会误判。
+        if in_scx && t.starts_with("command") {
+            let rest = &t["command".len()..];
+            if rest.trim_start().starts_with('=') {
+                out.push_str(command);
+                out.push('\n');
+                continue;
+            }
         }
         out.push_str(line);
         out.push('\n');
@@ -496,6 +502,32 @@ pub fn handshake(exe: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn update_toml_command_matches_any_whitespace_and_skips_comments() {
+        // `command =` / `command=` / `command  =` 都应原位替换；注释里的
+        // `[mcp_servers.scx]` 或 `command =` 不误判。
+        let text = "[mcp_servers.scx]\ncommand = \"/old/bin\"\nargs = [\"mcp\"]\n# [mcp_servers.scx]\n# command = should-not-change\n";
+        let out = update_toml_command(text, "command = \"/new/bin\"");
+        assert!(
+            out.contains("command = \"/new/bin\""),
+            "command = 应替换: {out}"
+        );
+        assert!(!out.contains("\"/old/bin\""), "旧 command 应被替换: {out}");
+        assert!(
+            out.contains("# command = should-not-change"),
+            "注释不得改动: {out}"
+        );
+        assert!(out.contains("args = [\"mcp\"]"), "args 保留: {out}");
+
+        // 多空格 `command   =` 也应匹配。
+        let multi = "[mcp_servers.scx]\ncommand   = \"/old\"\n";
+        let out2 = update_toml_command(multi, "command = \"/new\"");
+        assert!(
+            out2.contains("command = \"/new\""),
+            "多空格 command 应替换: {out2}"
+        );
+    }
 
     #[cfg(unix)]
     #[test]

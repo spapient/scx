@@ -52,9 +52,9 @@ case "$cmd" in
   install)
     require_cargo
     echo "[scx] release build (--locked) ..."
-    (cd "$ROOT" && cargo build --release --locked)
+    cargo build --release --quiet --locked --manifest-path "$MANIFEST" --target-dir "$TD" >&2
     mkdir -p "$BIN_DIR"
-    ln -sf "$ROOT/target/release/scx" "$BIN_DIR/scx"
+    ln -sf "$SCX_BIN" "$BIN_DIR/scx"
     "$BIN_DIR/scx" --version
     echo "installed: $BIN_DIR/scx"
     echo "提示：若 $BIN_DIR 不在 PATH，可追加：export PATH=\"$BIN_DIR:\$PATH\""
