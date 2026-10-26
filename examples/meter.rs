@@ -27,7 +27,10 @@ fn main() {
         (ContentType::SystemDefinition.as_str(), &t),
         (ContentType::SessionMessage.as_str(), &t),
         (ContentType::ToolOutput.as_str(), &t),
-        ("skill-config", "skill: db pool tuning\nretry: 3\nbackoff: 1s"),
+        (
+            "skill-config",
+            "skill: db pool tuning\nretry: 3\nbackoff: 1s",
+        ),
     ];
     let cfg = Config::default();
     let budget = BudgetSpec {
@@ -38,8 +41,22 @@ fn main() {
     };
 
     let mut ledger = Ledger::default();
-    ledger.push(meter::measure("round-1", 1, &parts, "db timeout", &cfg, Some(&budget)));
-    ledger.push(meter::measure("round-2", 2, &parts, "db timeout pool", &cfg, Some(&budget)));
+    ledger.push(meter::measure(
+        "round-1",
+        1,
+        &parts,
+        "db timeout",
+        &cfg,
+        Some(&budget),
+    ));
+    ledger.push(meter::measure(
+        "round-2",
+        2,
+        &parts,
+        "db timeout pool",
+        &cfg,
+        Some(&budget),
+    ));
 
     for s in &ledger.snaps {
         println!("{}", meter::render(s));
@@ -60,5 +77,8 @@ fn main() {
         );
     }
 
-    println!("\n单文本计数示例: count(\"数据库连接超时\") = {}", meter::count("数据库连接超时"));
+    println!(
+        "\n单文本计数示例: count(\"数据库连接超时\") = {}",
+        meter::count("数据库连接超时")
+    );
 }

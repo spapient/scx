@@ -47,10 +47,10 @@ pub mod semantic;
 
 /// 类型路由 + 计量桶 + 前后快照（P1 治理层，复用 `compress` 内核）。
 pub mod bucket;
-/// Token 计量与压缩效果审计（P3 治理层：分桶统计/效果指标/预算管控/快照追溯）。
-pub mod meter;
 /// PostToolUse 自动拦截（P0）：压缩 Bash 大输出替换 tool_response。
 pub mod hook;
+/// Token 计量与压缩效果审计（P3 治理层：分桶统计/效果指标/预算管控/快照追溯）。
+pub mod meter;
 pub mod regex;
 /// 可插拔相似度后端（`--embed-cmd`；默认无后端，见 `sim::compute`）。
 pub mod sim;

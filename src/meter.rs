@@ -40,9 +40,7 @@ fn high_value(cat: &str) -> bool {
 
 /// 核心桶的默认预算比例；自定义桶回退到调用方 `cfg.ratio`。
 fn core_ratio(cat: &str) -> Option<f64> {
-    cat.parse::<ContentType>()
-        .ok()
-        .map(|ct| ct.default_ratio())
+    cat.parse::<ContentType>().ok().map(|ct| ct.default_ratio())
 }
 
 /// 削减百分比（token 口径）：`(in - out) / in × 100`，in=0 → 0。
@@ -372,9 +370,7 @@ fn compute_budget(spec: Option<&BudgetSpec>, used: f64) -> Budget {
             level: Level::Normal,
         };
     };
-    let (warn, over) = spec
-        .map(|s| (s.warn, s.over))
-        .unwrap_or((0.7, 1.0));
+    let (warn, over) = spec.map(|s| (s.warn, s.over)).unwrap_or((0.7, 1.0));
     let used_pct = if cap > 0.0 { used * 100.0 / cap } else { 0.0 };
     let left = cap - used;
     let left_pct = if cap > 0.0 { left * 100.0 / cap } else { 0.0 };
@@ -569,8 +565,14 @@ mod tests {
     #[test]
     fn count_matches_estimate_ceil_and_empty_is_zero() {
         assert_eq!(count(""), 0);
-        assert_eq!(count("hello"), crate::terms::estimate("hello").ceil() as usize);
-        assert_eq!(count("数据库连接超时"), crate::terms::estimate("数据库连接超时").ceil() as usize);
+        assert_eq!(
+            count("hello"),
+            crate::terms::estimate("hello").ceil() as usize
+        );
+        assert_eq!(
+            count("数据库连接超时"),
+            crate::terms::estimate("数据库连接超时").ceil() as usize
+        );
     }
 
     #[test]
@@ -581,7 +583,10 @@ mod tests {
         let in_sum: f64 = s.buckets.iter().map(|b| b.share_in_pct).sum();
         let out_sum: f64 = s.buckets.iter().map(|b| b.share_out_pct).sum();
         assert!((in_sum - 100.0).abs() < 0.5, "input shares sum: {in_sum}");
-        assert!((out_sum - 100.0).abs() < 0.5, "output shares sum: {out_sum}");
+        assert!(
+            (out_sum - 100.0).abs() < 0.5,
+            "output shares sum: {out_sum}"
+        );
         assert_eq!(s.buckets.len(), p.len());
     }
 
@@ -673,8 +678,22 @@ mod tests {
             over: 1.0,
             quotas: Vec::new(),
         };
-        let a = render(&measure("s1", 7, &p, "db timeout", &Config::default(), Some(&spec)));
-        let b = render(&measure("s1", 7, &p, "db timeout", &Config::default(), Some(&spec)));
+        let a = render(&measure(
+            "s1",
+            7,
+            &p,
+            "db timeout",
+            &Config::default(),
+            Some(&spec),
+        ));
+        let b = render(&measure(
+            "s1",
+            7,
+            &p,
+            "db timeout",
+            &Config::default(),
+            Some(&spec),
+        ));
         assert_eq!(a, b, "同输入同配置渲染必须逐字节一致");
         assert!(a.starts_with("{\"id\":\"s1\",\"round\":7"));
         assert!(a.contains("\"metrics\":{\"ratio\":"));
@@ -689,12 +708,22 @@ mod tests {
         let p = parts(&t);
         let mut ledger = Ledger::default();
         ledger.push(measure("a", 1, &p, "db timeout", &Config::default(), None));
-        ledger.push(measure("b", 2, &p, "db timeout pool", &Config::default(), None));
+        ledger.push(measure(
+            "b",
+            2,
+            &p,
+            "db timeout pool",
+            &Config::default(),
+            None,
+        ));
         assert!(ledger.by_id("a").is_some());
         assert!(ledger.by_round(2).is_some());
         assert!(ledger.by_id("zz").is_none());
         let d = ledger.diff("a", "b").unwrap();
-        assert_eq!(d.delta_in, ledger.by_id("b").unwrap().tokens_in - ledger.by_id("a").unwrap().tokens_in);
+        assert_eq!(
+            d.delta_in,
+            ledger.by_id("b").unwrap().tokens_in - ledger.by_id("a").unwrap().tokens_in
+        );
     }
 
     #[test]
