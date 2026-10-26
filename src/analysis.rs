@@ -280,9 +280,11 @@ fn skip(it: &mut std::iter::Peekable<std::str::Chars<'_>>, pred: impl Fn(char) -
     }
 }
 
-/// 十六进制 run < 8 位时，数字段折叠为 `#`，字母保留（`0x1f` → `#x#`）。
+/// 十六进制 run：>=8 位且含数字视为十六进制值/地址，整体折叠为 `#`；
+/// 纯字母串（如 `deadbeef`/`cafebabe` 这类 a-f 魔数名）与 <8 位串按
+/// 数字段折叠、字母保留，避免把字母标识符误折叠成数字。
 fn fold(run: &str, out: &mut String) {
-    if run.len() >= 8 {
+    if run.len() >= 8 && run.bytes().any(|b| b.is_ascii_digit()) {
         out.push('#');
         return;
     }
@@ -334,9 +336,10 @@ fn ascii(s: &[u8], out: &mut String) {
     }
 }
 
-/// 十六进制 run < 8 位时按字节折叠（数字→`#`，其余保留）。
+/// 十六进制 run：>=8 位且含数字视为十六进制值，整体折叠；纯字母与 <8 位
+/// 按字节折叠（数字→`#`，其余保留），与 `fold` 通用路径逐字节一致。
 fn bytes(run: &[u8], out: &mut String) {
-    if run.len() >= 8 {
+    if run.len() >= 8 && run.iter().any(|b| b.is_ascii_digit()) {
         out.push('#');
         return;
     }
@@ -597,7 +600,8 @@ mod tests {
             &mut norm,
             &mut String::new(),
         );
-        assert_eq!(norm, "cafe # # # 错误 运行");
+        // 数字段（1234/42）折叠为 #；纯字母 hex（deadbeef）保留词面，不误当数字。
+        assert_eq!(norm, "cafe # deadbeef # 错误 运行");
 
         let mut out = String::new();
         canonical("  Hello\t WORLD 1234 ", &mut out);

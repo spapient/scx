@@ -188,7 +188,7 @@ pub fn hits(root: &str, hits: Vec<Hit>) -> Vec<Hit> {
     let (base, margin) = params(root);
     let top1 = hits.first().map(|h| h.sim).unwrap_or(0.0);
     let top2 = hits.get(1).map(|h| h.sim).unwrap_or(0.0);
-    if feedback::qualified(top1, top2, base, margin, 1.0) {
+    if feedback::qualified(top1, top2, base, margin) {
         hits
     } else {
         Vec::new()

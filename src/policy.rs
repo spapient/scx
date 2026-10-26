@@ -12,10 +12,13 @@ pub const MAX_WINDOW: i64 = 8;
 
 /// 小输入直通阈值：行数 < `SMALL_LINES` 且 token 估算 < `SMALL_TOK`。
 pub const SMALL_LINES: usize = 40;
-pub const SMALL_TOK: f64 = 1200.0;
+pub const SMALL_TOK: f64 = 600.0;
 /// 超长行直通阈值：单行字节与字符均超过即返回原文。
 pub const LONGLINE_BYTES: usize = 100_000;
 pub const LONGLINE_CHARS: usize = 100_000;
+/// 行数直通上限：筛选为每行分配位掩码/向量，纯换行等稀疏输入会按行数放大内存
+/// （8 MiB 换行 ≈ 8M 行 ≈ 数百 MiB RSS），超限 fail-open 返回原文避免 OOM。
+pub const MAX_LINES: usize = 4_000_000;
 /// 可选内容预算下限（token 估算）。
 pub const BUDGET_MIN: f64 = 200.0;
 /// 种子区域合并间隔 = `window * GAP_RATIO`。

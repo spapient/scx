@@ -31,7 +31,7 @@ tools/scx --query "问题关键词" --ratio 0.35 /tmp/out.txt
 - `scx mcp`：进入 MCP stdio server 模式（initialize/tools/list/tools/call；`serverInfo.name=scx`，工具 `compress_context`/`connect_account`/`usage_summary`）——供 Claude/Codex/Cursor 以子进程拉起。
 - `scx setup [--claude|--codex|--cursor] [--project-cursor]`：一键注册 MCP 配置到三种 agent（注册名统一小写 `scx`；幂等、写前备份 `<path>.scx.bak`、写后 tools/list 自检；Claude/Codex 优先官方 CLI、兜底写配置文件）。
 
-约束：单次输入上限 64 MiB（多文件合计）；未提供 `--query` 时必须至少一个非空 `--force`；小输入（<40 行且 <1200 token 估算）自动 passthrough。
+约束：单次输入上限 64 MiB（多文件合计）；未提供 `--query` 时必须至少一个非空 `--force`；小输入（<40 行且 <600 token 估算）自动 passthrough。
 
 ## 行为保证（不变量）
 - 只删不改：筛选保留行是原文逐字，`...` 仅表示省略区间；passthrough/fail-open 返回输入原文。

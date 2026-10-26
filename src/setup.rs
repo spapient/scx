@@ -438,6 +438,11 @@ fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     }
     let tmp = parent.join(format!(".scx-setup-{}", std::process::id()));
     fs::write(&tmp, text).map_err(|e| format!("write {}: {e}", tmp.display()))?;
+    // 保留原文件权限：fs::write 按 umask 创建 0644，会把原 0600 的配置放宽。
+    // 原文件不存在（首次注册）时跳过，沿用默认 umask。
+    if let Ok(meta) = fs::metadata(path) {
+        let _ = fs::set_permissions(&tmp, meta.permissions());
+    }
     fs::rename(&tmp, path).map_err(|e| format!("rename {}: {e}", path.display()))?;
     Ok(())
 }
@@ -485,5 +490,32 @@ pub fn handshake(exe: &Path) -> Result<String, String> {
         Err(format!(
             "tools/list handshake failed: unexpected reply {list:?}"
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_preserves_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "scx-setup-perm-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        fs::write(&path, "old").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        write_atomic(&path, "new").unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "原子写后应保留原 0600 权限，而非放宽到 0644");
+        let _ = fs::remove_dir_all(&dir);
     }
 }

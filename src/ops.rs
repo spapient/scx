@@ -462,6 +462,7 @@ fn mode_label(m: Mode) -> (&'static str, &'static str) {
         Mode::Sieve => ("sieve 智能筛选", "按问题逐行召回证据"),
         Mode::PassSmall => ("小输入透传", "无需压缩"),
         Mode::PassLongline => ("超长行透传", "单行过长，原样保留"),
+        Mode::PassTooManyLines => ("行数超限透传", "行数过多，原样保留避免内存放大"),
         Mode::PassNoKept => ("预算过紧回退", "未选出有效行，原文保留"),
         Mode::FailOpenZeroSignal => ("无命中保护", "零丢失"),
         Mode::OverflowEvidence => ("证据优先保底", "超过 token 上限，证据全保留"),
@@ -530,29 +531,34 @@ pub fn recall_report(r: &Outcome, query: &str) -> String {
                 &format!("{} · {} 条额外守护", risk_zh(r.risk), r.guarded),
             ));
         }
-        Mode::PassSmall | Mode::PassLongline | Mode::PassNoKept => {
+        Mode::PassSmall | Mode::PassLongline | Mode::PassTooManyLines | Mode::PassNoKept => {
             s.push_str(&row(
                 "📥",
                 "原始",
                 &format!("{} 行 · {} 字符", sep(r.total as u64), sep(r.input as u64)),
             ));
             s.push_str(&row("📤", "压缩后", "原样保留，一字未动"));
-            let (save, why) = match r.mode {
-                Mode::PassSmall => (
-                    "0 —— 内容本就很少",
-                    "内容很少（<40 行且不足 1200 token），压缩反而可能丢信息，自动跳过",
+            let save = match r.mode {
+                Mode::PassSmall => "0 —— 内容本就很少",
+                Mode::PassLongline => "0 —— 无损失保留原文",
+                Mode::PassTooManyLines => "0 —— 无损失保留原文",
+                _ => "0 —— 无损失保留原文",
+            };
+            let why = match r.mode {
+                Mode::PassSmall => format!(
+                    "内容很少（<{} 行且不足 {} token），压缩反而可能丢信息，自动跳过",
+                    crate::policy::SMALL_LINES,
+                    crate::policy::SMALL_TOK as u64
                 ),
-                Mode::PassLongline => (
-                    "0 —— 无损失保留原文",
-                    "单行过长无法安全压缩，原样返回，不冒险删减",
+                Mode::PassLongline => "单行过长无法安全压缩，原样返回，不冒险删减".to_string(),
+                Mode::PassTooManyLines => format!(
+                    "行数超过 {}，筛选会按行数放大内存，原样返回避免内存耗尽",
+                    crate::policy::MAX_LINES
                 ),
-                _ => (
-                    "0 —— 无损失保留原文",
-                    "预算过紧未选出有效行，宁可原样返回也不静默删减",
-                ),
+                _ => "预算过紧未选出有效行，宁可原样返回也不静默删减".to_string(),
             };
             s.push_str(&row("💾", "省下", save));
-            s.push_str(&row("💡", "说明", why));
+            s.push_str(&row("💡", "说明", &why));
         }
         Mode::FailOpenZeroSignal => {
             s.push_str(&row(
@@ -583,10 +589,13 @@ fn lines(
 ) -> io::Result<()> {
     for h in hits {
         let short = h.id.rsplit('_').next().unwrap_or(&h.id);
+        // 索引路径的 id 未过白名单，可能含控制字符；转义后回显防终端注入。
         writeln!(
             out,
             "mem: sim={:.2} score={:.2} case={}",
-            h.sim, h.score, short
+            h.sim,
+            h.score,
+            escape(short)
         )?;
         let c = match crate::memory::load(root, &h.id) {
             Ok(c) => c,

@@ -90,11 +90,15 @@ fn object(kvs: &[(String, Val)], out: &mut String) {
     out.push('}');
 }
 
+/// 最大嵌套深度：递归下降解析器在更深处直接报错，防恶意深嵌套触发栈溢出。
+const MAX_DEPTH: usize = 128;
+
 /// 从字符串解析 JSON，返回 Val。递归下降，O(n)。
 pub fn parse(s: &str) -> Result<Val, String> {
     let mut p = Parser {
         bytes: s.as_bytes(),
         pos: 0,
+        depth: 0,
     };
     p.space();
     let v = p.value()?;
@@ -108,6 +112,7 @@ pub fn parse(s: &str) -> Result<Val, String> {
 struct Parser<'a> {
     bytes: &'a [u8],
     pos: usize,
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -137,9 +142,21 @@ impl<'a> Parser<'a> {
         }
     }
     fn value(&mut self) -> Result<Val, String> {
+        if matches!(self.peek(), Some(b'{') | Some(b'[')) {
+            self.depth += 1;
+            if self.depth > MAX_DEPTH {
+                self.depth -= 1;
+                return Err(format!("nesting exceeds {MAX_DEPTH} at {}", self.pos));
+            }
+            let v = match self.peek() {
+                Some(b'{') => self.obj(),
+                Some(b'[') => self.arr(),
+                _ => unreachable!("guarded by matches!"),
+            };
+            self.depth -= 1;
+            return v;
+        }
         match self.peek() {
-            Some(b'{') => self.obj(),
-            Some(b'[') => self.arr(),
             Some(b'"') => self.str().map(Val::Str),
             Some(b't') => self.lit("true", Val::Bool(true)),
             Some(b'f') => self.lit("false", Val::Bool(false)),
@@ -343,5 +360,18 @@ mod tests {
         );
         assert_eq!(write(&Val::Str("a\"b".to_string())), "\"a\\\"b\"");
         assert_eq!(write(&Val::Arr(vec![])), "[]");
+    }
+
+    #[test]
+    fn deep_nesting_is_rejected_not_stack_overflow() {
+        let ok = format!("{}1{}", "[".repeat(MAX_DEPTH), "]".repeat(MAX_DEPTH));
+        assert!(parse(&ok).is_ok(), "深度内应正常解析");
+        let over = format!(
+            "{}1{}",
+            "[".repeat(MAX_DEPTH + 1),
+            "]".repeat(MAX_DEPTH + 1)
+        );
+        let err = parse(&over).unwrap_err();
+        assert!(err.contains("nesting"), "超深应报错而非栈溢出: {err}");
     }
 }

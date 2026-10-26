@@ -442,3 +442,48 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 2. SuperCompress 同场对照仍待第三方盲审（需真实事故语料 + 独立复现；本机未 vendor 其 compiler）。
 3. contain token 压减为确定性正则估算（非真实 tokenizer），文档已标注。
 4. 词干化词表为英文屈折最小集（ies/咝音 es/尾 s）；扩展方向（同义词/更多词形）留待后续语料验证后保守增量。
+
+---
+
+## v0.6.6 阈值调整记录（2026-10-26，小输入直通 SMALL_TOK 1200→600）
+
+### 需求与改动
+
+- 触发：豆包侧 `compress_context` 实测反馈——7 行日志（约 109 token）被判定
+  「小输入透传」跳过压缩。需求口径：**超过 600 token 即应进入压缩**，原
+  `SMALL_TOK = 1200.0` 门槛过高。
+- 改动：`policy::SMALL_TOK` 1200 → 600（`SMALL_LINES = 40` 不变）；同步
+  卡片文案与文档引用，共 8 处：`src/policy.rs`、`src/ops.rs`、
+  `tests/golden/expected/{small_passthrough,unified_diff,memory_store}.err`、
+  `README.md`×2、`SKILL.md`×1。语义不变：行数 < 40 **且** token < 600 才
+  透传；介于 600–1200 的输入由透传改为实压（用户期望行为）。
+
+### 门禁证据（双轨 + 最优轮复核）
+
+- `cargo fmt --check` = 0；`cargo clippy --all-targets --locked -- -D warnings`
+  默认 / semantic 双轨 = 0；`RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked` = 0；
+  `cargo build --release --locked` = 0。
+- `cargo test --locked` = **206 / 0**（含新增边界单测 `small_guard_cuts_at_600_not_1200`：
+  39 行 × 65 字符 ≈ 660 token 必须压缩、39 行 × 8 字符 ≈ 80 token 仍透传）；
+  `--features semantic` 轨 = **214 / 0**（+8 词干化单测）；golden **37 例零漂移**
+  （`golden_gate` ok，按新文案重冻 3 个 `.err`）。
+- 最优轮去魔法数字：`src/ops.rs` 透传卡说明文案改为从 `policy::SMALL_LINES` /
+  `SMALL_TOK` 常量动态生成（`format!`），输出与 golden 期望逐字一致，杜绝
+  再次改阈值时文案/期望文件漏同步（本轮即因此补冻 2 个 `.err`）。
+- 行为实测（release 二进制）：39 行 × 66 字符（token≈640，旧阈值下透传）→
+  `mode=sieve`，13/39 行，字符削减 66.7%；10 行 "line N"（token<<600）→
+  `mode=passthrough:small` 原样保留。600 边界行为符合需求。
+- confirm5 机械复核（**实跑**，`tools/scx.py seed + baseline + --eval --gate + stats`，
+  150 查询，mem=/tmp/scx-confirm5-066）：三层 MRR 与冻结基线逐位一致——
+  literal **1.0000**、paraphrase **0.2467**（基线 0.247）、semantic **0.8361**
+  （基线 0.836）；tier:hard ΔMRR **+0.0608** CI [+0.0202,+0.1095]（p=0.0029，
+  显著为正）——无退化。EVAL_RC=0，`--gate` 通过。
+- MCP 端到端冒烟：`./target/release/scx mcp` stdio 握手 `initialize`（serverInfo
+  name=scx version=0.6.6）→ `tools/call compress_context`（7 行日志）返回
+  `isError=false`、卡片文案「不足 600 token」、`mode=passthrough:small` ——
+  豆包侧调用链路所用二进制行为一致。
+
+### 状态
+
+- 版本：Cargo.toml 保持 **0.6.6**（未发布；仅策略常量微调，发布动作需用户授权）。
+- 遗留：无阻塞项；后续若需更低透传门槛可再下调 `SMALL_TOK`（文案随常量自动同步）。

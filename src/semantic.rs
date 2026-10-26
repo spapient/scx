@@ -142,8 +142,14 @@ fn weights(path: &str, v: &Json, dim: usize) -> Result<Vec<f64>, String> {
         Some(Json::Arr(items)) => items
             .iter()
             .map(|it| {
-                it.num()
-                    .ok_or_else(|| format!("{path}: non-numeric weight"))
+                let n = it
+                    .num()
+                    .ok_or_else(|| format!("{path}: non-numeric weight"))?;
+                if !n.is_finite() {
+                    // JSON 数字 `1e999` 溢出为 f64::INFINITY，NaN/inf 会污染打分破坏确定性。
+                    return Err(format!("{path}: non-finite weight {n}"));
+                }
+                Ok(n)
             })
             .collect::<Result<Vec<f64>, String>>()?,
         _ => return Err(format!("{path}: missing weights array")),
@@ -375,6 +381,14 @@ mod tests {
             .unwrap_err()
             .contains("dim"));
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn weights_reject_non_finite_value() {
+        // 1e999 溢出为 f64::INFINITY，会污染打分破坏确定性，必须在加载时拒绝。
+        let v = crate::json::parse(r#"{"weights":[1e999, 0.5]}"#).unwrap();
+        let err = weights("test", &v, 2).unwrap_err();
+        assert!(err.contains("non-finite"), "err: {err}");
     }
 
     #[test]

@@ -111,6 +111,8 @@ pub enum Mode {
     PassSmall,
     /// 超长行直通（单行字节与字符均超过 `policy::LONGLINE_*`）。
     PassLongline,
+    /// 行数直通（超过 `policy::MAX_LINES`），返回输入原文避免按行数放大内存。
+    PassTooManyLines,
     /// 无查询信号 fail-open（零命中且无 `--force` 命中），返回输入原文。
     FailOpenZeroSignal,
     /// 预算过紧未选出任何行，回退原文。
@@ -131,6 +133,7 @@ impl Mode {
         match self {
             Mode::PassSmall => "passthrough:small",
             Mode::PassLongline => "passthrough:longline",
+            Mode::PassTooManyLines => "passthrough:too-many-lines",
             Mode::FailOpenZeroSignal => "failopen:zero-signal",
             Mode::PassNoKept => "passthrough:no-kept",
             Mode::Sieve => "sieve",
@@ -434,8 +437,8 @@ mod tests {
         };
         assert_eq!(n("  a   b  "), "a b");
         assert_eq!(n("xyz123def"), "xyz#def");
-        assert_eq!(n("abcdefab"), "#");
-        assert_eq!(n("0xDEADBEEF1234"), "#x#");
+        assert_eq!(n("abcdefab"), "abcdefab"); // 纯字母 hex 串保留词面
+        assert_eq!(n("0xDEADBEEF1234"), "#x#"); // 含数字的 hex 串整体折叠
         assert_eq!(n("a1b2c3"), "a#b#c#");
         assert_eq!(n("seq=42 ok"), "seq=# ok");
         assert_eq!(n(""), "");
@@ -582,6 +585,28 @@ mod tests {
         let o = compress(&text, "alpha", &cfg());
         assert_ne!(o.mode, Mode::PassSmall);
         assert!(o.seeds == 0);
+    }
+
+    #[test]
+    fn small_guard_cuts_at_600_not_1200() {
+        // 39 行 × 65 字符 ≈ 660 token：位于新阈值 600 之上、旧阈值 1200 之下 → 必须压缩。
+        let line = "alpha filler line with padding text for token estimation purposes".to_string();
+        let text: String = (0..39).map(|_| line.clone()).collect::<Vec<_>>().join("\n");
+        let o = compress(&text, "alpha", &cfg());
+        assert_ne!(
+            o.mode,
+            Mode::PassSmall,
+            "token≈660 必须进入压缩（阈值已降至 600）"
+        );
+        assert!(o.kept > 0 && o.kept < 39, "压缩应保留部分证据行");
+
+        // 39 行 × 8 字符 ≈ 80 token < 600 → 仍透传。
+        let tiny: String = (0..39)
+            .map(|i| format!("alpha {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let o2 = compress(&tiny, "alpha", &cfg());
+        assert_eq!(o2.mode, Mode::PassSmall, "token≈80 仍属小输入透传");
     }
 
     #[test]

@@ -1163,9 +1163,11 @@ fn long(lines: &[&str]) -> bool {
     })
 }
 
-/// 直通判定：小输入（行数与 token 估算双低）或超长行，返回对应模式；否则 None。
+/// 直通判定：行数超限 / 小输入（行数与 token 估算双低）/ 超长行，返回对应模式；否则 None。
 fn shape(total: usize, small_tok: f64, has_longline: bool) -> Option<Mode> {
-    if total < crate::policy::SMALL_LINES && small_tok < crate::policy::SMALL_TOK {
+    if total >= crate::policy::MAX_LINES {
+        Some(Mode::PassTooManyLines)
+    } else if total < crate::policy::SMALL_LINES && small_tok < crate::policy::SMALL_TOK {
         Some(Mode::PassSmall)
     } else if has_longline {
         Some(Mode::PassLongline)
@@ -1383,5 +1385,19 @@ mod tests {
         assert!(merged.in_region[0], "fence 开启行并入");
         assert!(merged.in_region[4], "fence 闭合行并入");
         assert!(!merged.in_region[5], "fence 外行不并入");
+    }
+
+    #[test]
+    fn too_many_lines_returns_passthrough() {
+        assert_eq!(
+            shape(crate::policy::MAX_LINES, 0.0, false),
+            Some(Mode::PassTooManyLines),
+            "行数达到上限应直通"
+        );
+        assert_eq!(
+            shape(crate::policy::MAX_LINES - 1, 0.0, false),
+            None,
+            "上限内不触发行数直通"
+        );
     }
 }

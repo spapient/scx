@@ -95,16 +95,9 @@ fn terms(c: &Case) -> Vec<String> {
 }
 
 /// L1 自适应置信判据（§5.1）：sim_top1 ≥ l1_base 且 (top1−top2) ≥ margin。
-/// `ext_hit`：PRF 扩展词命中率，设计预留；当前 recall 未返回扩展词统计，
-/// 传 1.0 视为满足。
-pub(crate) fn qualified(
-    top1_sim: f64,
-    top2_sim: f64,
-    l1_base: f64,
-    margin: f64,
-    ext_hit: f64,
-) -> bool {
-    top1_sim >= l1_base && (top1_sim - top2_sim) >= margin && ext_hit >= 0.30
+/// 两重判据已足够保守：`--fix` 始终是候选答案（SKILL.md 要求验证后再直答）。
+pub(crate) fn qualified(top1_sim: f64, top2_sim: f64, l1_base: f64, margin: f64) -> bool {
+    top1_sim >= l1_base && (top1_sim - top2_sim) >= margin
 }
 
 /// 从 meta 读 l1_base / l1_margin_min；缺省值统一由 `meta::DEFAULT_PARAMS` 提供。
@@ -175,10 +168,9 @@ mod tests {
 
     #[test]
     fn l1_qualified_requires_base_and_margin() {
-        assert!(qualified(0.8, 0.4, 0.6, 0.15, 1.0), "达标");
-        assert!(!qualified(0.8, 0.7, 0.6, 0.15, 1.0), "margin 不足");
-        assert!(!qualified(0.5, 0.1, 0.6, 0.15, 1.0), "低于基线");
-        assert!(!qualified(0.8, 0.4, 0.6, 0.15, 0.2), "扩展命中不足");
+        assert!(qualified(0.8, 0.4, 0.6, 0.15), "达标");
+        assert!(!qualified(0.8, 0.7, 0.6, 0.15), "margin 不足");
+        assert!(!qualified(0.5, 0.1, 0.6, 0.15), "低于基线");
     }
 
     #[test]

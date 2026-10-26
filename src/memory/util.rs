@@ -123,7 +123,10 @@ fn redact(
     let key_end = i + key_len + sep_len;
     out.push_str(&s[i..key_end]);
     let mut v = key_end;
-    if let Some(tok_end) = value(b, v) {
+    // JSON 引号值 `"value"` → 跳过整个引号串（含闭合引号）；否则走 Bearer/边界。
+    if b.get(v) == Some(&b'"') {
+        v = quoted(b, v);
+    } else if let Some(tok_end) = value(b, v) {
         v = tok_end;
     } else {
         v = end(b, v);
@@ -133,6 +136,19 @@ fn redact(
         (v, true)
     } else {
         (key_end, false)
+    }
+}
+
+/// 从值前引号 `"` 起，跳到闭合引号之后；未闭合则到串尾。
+fn quoted(b: &[u8], start: usize) -> usize {
+    let mut j = start + 1;
+    while j < b.len() && b[j] != b'"' {
+        j += 1;
+    }
+    if j < b.len() {
+        j + 1
+    } else {
+        b.len()
     }
 }
 
@@ -163,8 +179,14 @@ fn end(b: &[u8], mut n: usize) -> usize {
 }
 
 /// 位置 i 是否以敏感键开头（大小写不敏感）且键后紧跟 `=`/`:`（可带空白）。
+/// 支持 `key=value`/`key: value` 与 JSON `"key": value`/`"key"=value`。
 /// 返回 (键字节长, 分隔符字节长含键后空白)。
 fn pair(b: &[u8], i: usize) -> Option<(usize, usize)> {
+    if b[i] == b'"' {
+        if let Some(p) = json_pair(b, i) {
+            return Some(p);
+        }
+    }
     for key in SENSITIVE_KEYS {
         let k = key.as_bytes();
         if !start(b, i, k) {
@@ -178,6 +200,30 @@ fn pair(b: &[u8], i: usize) -> Option<(usize, usize)> {
         let after = skip(b, j + 1);
         sep_len += after - (j + 1); // 分隔符后空白
         return Some((k.len(), sep_len));
+    }
+    None
+}
+
+/// JSON 键形式 `"key":`/`"key"=`：i 指向键前引号，返回 (键字节长含引号, 分隔符长)。
+fn json_pair(b: &[u8], i: usize) -> Option<(usize, usize)> {
+    for key in SENSITIVE_KEYS {
+        let k = key.as_bytes();
+        let j = i + 1;
+        if b.len() < j + k.len() + 1 {
+            continue;
+        }
+        if !b[j..j + k.len()].eq_ignore_ascii_case(k) || b[j + k.len()] != b'"' {
+            continue;
+        }
+        let key_end = j + k.len() + 1; // 闭合引号后
+        let sep = skip(b, key_end);
+        if sep >= b.len() || !separator(b[sep]) {
+            continue;
+        }
+        let after = skip(b, sep + 1);
+        let key_len = k.len() + 2; // "key" 含两侧引号
+        let sep_len = (sep - key_end) + 1 + (after - (sep + 1));
+        return Some((key_len, sep_len));
     }
     None
 }
@@ -421,6 +467,10 @@ mod tests {
                 "postgres://user:<redacted>@db:5432/x",
             ),
             ("client_secret = 9f8e7d6c5b4a", "client_secret = <redacted>"),
+            // JSON 形式：键与值均带引号。
+            (r#"{"password": "hunter2"}"#, r#"{"password": <redacted>}"#),
+            (r#""token": "eyJhbGciOiJ9""#, r#""token": <redacted>"#),
+            (r#""api_key"="sk-live-abc""#, r#""api_key"=<redacted>"#),
             ("ERROR plain log line", "ERROR plain log line"),
             ("conn timeout pool", "conn timeout pool"),
         ];
