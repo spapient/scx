@@ -81,6 +81,7 @@ jobs:
         run: >-
           python tools/scx.py fidelity config/fidelity.corpus.json
           --binary target/release/scx.exe --gate
+          --domain-boot 10000 --domain-gate-p 0.05
           --out config/ci-fidelity.json
       - name: Rebuild Gauge corpus
         run: >-

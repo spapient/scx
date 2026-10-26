@@ -59,6 +59,13 @@ per-kind 门禁只断言绝对阈值（零域回退），不与 trunc 逐域比�
 trunc=100%），"逐域严格优于 trunc" 过于脆弱。全局（40 slice）仍要求
 严格优于 trunc。
 
+**跨域优势（domain cluster-bootstrap，Phase C）**：以 kind 为 cluster
+单位（保护域内相关），对每域证据保留差（scx − trunc）做 cluster
+bootstrap，单侧检验跨域平均差 >0。门禁：p<0.05 且 mean Δ>0（当前
+实测 mean +11.07pp、95% CI [+2.50,+22.14]pp、p=0.0231、3/8 域正差）。
+该检验回答"优势是否只来自个别域"——per-kind 绝对阈值保证零回退，
+cluster-bootstrap 给出跨域整体优势的统计量。
+
 ## 实测行为（数字见 docs/gauge-metrics.md，此处为口径记录）
 
 - 模式分布：sieve 32 / passthrough:small 8（两条压缩路径都被评测覆盖）。

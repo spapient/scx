@@ -1540,6 +1540,45 @@ def _fidelity_aggregate(rows):
     return agg
 
 
+def domain_cluster_bootstrap(agg, boot, seed):
+    """One-sided cluster bootstrap over domains (kinds).
+
+    Per-kind evidence retention delta (scx - trunc) is the cluster unit;
+    bootstrap re-samples the whole domain set (cluster = kind, protecting
+    within-kind correlation). Reports mean delta and the one-sided p of
+    observing mean <= 0 under the null.
+    """
+    names = sorted(agg["kinds"])
+    deltas = []
+    for name in names:
+        k = agg["kinds"][name]
+        if not k["ev_total"]:
+            continue
+        scx = k["ev_kept"] / k["ev_total"]
+        trunc = k["trunc_ev"] / k["ev_total"]
+        deltas.append(scx - trunc)
+    if len(deltas) < 2:
+        return {"n_domains": len(deltas), "mean_delta": None, "p": None,
+                "ci_lo": None, "ci_hi": None}
+    rng = random.Random(seed)
+    m = len(deltas)
+    means = [
+        sum(deltas[rng.randrange(m)] for _ in range(m)) / m
+        for _ in range(boot)
+    ]
+    lo, hi = ci_bounds(means, boot)
+    hits = sum(1 for value in means if value <= 0.0)
+    p = (hits + 1.0) / (boot + 1.0)
+    return {
+        "n_domains": m,
+        "mean_delta": sum(deltas) / m,
+        "ci_lo": lo,
+        "ci_hi": hi,
+        "p": p,
+        "positive_domains": sum(1 for value in deltas if value > 0.0),
+    }
+
+
 def _fidelity_gate_failures(agg, gate_ev, gate_ans):
     """Return gate failures (list of human strings); empty means PASS.
 
@@ -1569,6 +1608,14 @@ def _fidelity_gate_failures(agg, gate_ev, gate_ans):
         # too brittle at 5 slices: trunc can coincidentally cover evidence.
         if k_ret < gate_ev:
             failed.append(f"kind {kind} ev={k_ret:.4f} < {gate_ev:.4f}")
+    db = agg.get("domain_boot") or {}
+    if db.get("mean_delta") is not None:
+        if db["mean_delta"] <= 0.0 or db.get("p", 1.0) >= agg.get("domain_gate_p", 0.05):
+            failed.append(
+                f"domain cluster-bootstrap p={db.get('p'):.4f} "
+                f"mean_delta={db['mean_delta']:+.4f} "
+                f"(need p<0.05 and mean_delta>0)"
+            )
     return failed
 
 
@@ -1602,6 +1649,12 @@ def _print_fidelity(agg, args, kind_counts, binary):
     print(f"fidelity: mean char cut     = {agg['char_cut']*100:.2f}% / "
           f"token cut {agg['token_cut']*100:.2f}%")
     print(f"fidelity: mean wall         = {agg['wall']:.3f} ms")
+    db = agg.get("domain_boot") or {}
+    if db.get("mean_delta") is not None:
+        print(f"fidelity: domain cluster-bootstrap (n_domains={db['n_domains']}, "
+              f"cluster=kind): mean_delta={db['mean_delta']*100:+.2f}pp "
+              f"CI95=[{db['ci_lo']*100:+.2f},{db['ci_hi']*100:+.2f}]pp "
+              f"p={db['p']:.4f} (one-sided, positive_domains={db['positive_domains']})")
     print("fidelity: per-kind (ev / trunc_ev / ans / tok / char_cut):")
     for kind in sorted(agg["kinds"]):
         k = agg["kinds"][kind]
@@ -1632,6 +1685,10 @@ def cmd_fidelity(args):
             ))
     args._rows = rows
     agg = _fidelity_aggregate(rows)
+    agg["domain_boot"] = domain_cluster_bootstrap(
+        agg, args.domain_boot, "domain-cluster-v1",
+    )
+    agg["domain_gate_p"] = args.domain_gate_p
     _print_fidelity(agg, args, kind_counts, binary)
     if args.gate:
         failed = _fidelity_gate_failures(agg, args.gate_ev, args.gate_ans)
@@ -1640,6 +1697,7 @@ def cmd_fidelity(args):
             return 2
         print(f"fidelity: gate PASS (ev>={args.gate_ev}, ans>={args.gate_ans}, "
               f"both strictly better than trunc; per-kind zero-regression; "
+              f"domain cluster-bootstrap p<{args.domain_gate_p}; "
               f"token recall report-only)")
     if args.out:
         dump_json(args.out, {
@@ -1886,6 +1944,11 @@ def cmd_report(args):
         gate_bad.append("fidelity evidence retention")
     if not (ans_rate >= 0.90 and ans_rate > ans_trunc):
         gate_bad.append("fidelity answerability")
+    db = agg.get("domain_boot") or {}
+    if db.get("mean_delta") is not None and not (
+        db["mean_delta"] > 0 and db.get("p", 1.0) < 0.05
+    ):
+        gate_bad.append("fidelity domain cluster-bootstrap")
     if per_kind_bad:
         gate_bad.append(f"per-kind zero-regression ({len(per_kind_bad)} kinds)")
     if not holm_ok:
@@ -1922,6 +1985,10 @@ def cmd_report(args):
         f"- token recall {100.0 * agg['tok']:.2f}%（报告-only）",
         f"- per-kind 证据保留：{len(kinds) - len(per_kind_bad)}/{len(kinds)} 域 ≥95%"
         + (f"（未过：{', '.join(sorted(per_kind_bad))}）" if per_kind_bad else ""),
+        f"- 跨域优势（cluster=kind，单侧 cluster-bootstrap）：mean Δ "
+        f"+{100.0 * db['mean_delta']:.2f}pp，p={db['p']:.4f}"
+        f"（{db['positive_domains']}/{db['n_domains']} 域正差）"
+        if db.get("mean_delta") is not None else "- 跨域优势：域不足，无法检验",
         "",
         "## 多重比较（Holm-Bonferroni，Gauge 族 m=2，α=0.05）",
         "",
@@ -2106,6 +2173,19 @@ def selftest():
     assert holm_bonferroni([0.03, 0.04]) == [False, False]  # 0.03>0.025 -> both fail
     assert holm_bonferroni([0.02, 0.03]) == [True, True]
     assert holm_bonferroni([0.5, 0.001]) == [False, True]  # p=0.5 fails 0.05, later all fail
+    # domain cluster-bootstrap unit checks (deterministic seed)
+    db_agg = {"kinds": {
+        "a": {"ev_total": 2, "ev_kept": 2, "trunc_ev": 0},
+        "b": {"ev_total": 2, "ev_kept": 2, "trunc_ev": 0},
+        "c": {"ev_total": 2, "ev_kept": 0, "trunc_ev": 0},
+    }}
+    db = domain_cluster_bootstrap(db_agg, 400, "domain-test-v1")
+    assert db["n_domains"] == 3 and db["mean_delta"] > 0.0 and db["p"] < 0.05
+    db_zero = domain_cluster_bootstrap({"kinds": {
+        "a": {"ev_total": 2, "ev_kept": 2, "trunc_ev": 2},
+        "b": {"ev_total": 2, "ev_kept": 2, "trunc_ev": 2},
+    }}, 400, "domain-test-v1")
+    assert db_zero["mean_delta"] == 0.0 and db_zero["p"] > 0.9
     print("selftest: PASS")
 
 
@@ -2233,6 +2313,10 @@ def build_parser():
                               "and > trunc; token recall is report-only")
     fidelity.add_argument("--gate-ev", type=float, default=0.95)
     fidelity.add_argument("--gate-ans", type=float, default=0.90)
+    fidelity.add_argument("--domain-boot", type=int, default=10000,
+                          help="bootstrap replicates for domain cluster test")
+    fidelity.add_argument("--domain-gate-p", type=float, default=0.05,
+                          help="one-sided p threshold for cross-domain advantage")
     fidelity.set_defaults(func=cmd_fidelity)
 
     manifest = sub.add_parser(

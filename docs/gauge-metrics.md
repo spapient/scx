@@ -20,6 +20,7 @@
 - 可回答率 40/40 = 100.00%（trunc 82.50%）
 - token recall 74.58%（报告-only）
 - per-kind 证据保留：8/8 域 ≥95%
+- 跨域优势（cluster=kind，单侧 cluster-bootstrap）：mean Δ +11.07pp，p=0.0231（3/8 域正差）
 
 ## 多重比较（Holm-Bonferroni，Gauge 族 m=2，α=0.05）
 
