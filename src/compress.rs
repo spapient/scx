@@ -953,6 +953,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             mode,
             limit,
             tokens,
+            tokens_in: estimate(original),
             dropped,
         }
     };

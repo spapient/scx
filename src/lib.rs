@@ -198,6 +198,9 @@ pub struct Outcome {
     pub limit: Option<usize>,
     /// 输出文本的 token 估算（`terms::estimate` 口径）；passthrough/fail-open 不保证。
     pub tokens: f64,
+    /// 输入全文的 token 估算（`terms::estimate` 口径）；全模式恒定填充，
+    /// 供 v0.6.4 效果报告与 JSON 展示"原始 token → 压缩后 token → 缩减率"。
+    pub tokens_in: f64,
     /// 被删除的连续区间（1-based 原始行号闭区间）与原因；仅在筛选模式下有值，
     /// passthrough/fail-open/no-kept 为空。`--json` 或新渲染模式消费；默认
     /// stdout 统计行不输出（与 v0.4.1 逐字节一致）。

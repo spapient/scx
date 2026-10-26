@@ -368,13 +368,21 @@ pub fn render(r: &Outcome) -> String {
         "{{\"kept\":{},\"total\":{},\"chars_in\":{},\"chars_out\":{},\"cut_pct\":{:.1},\"dup\":{},\"seeds\":{},\"evidence\":{},\"risk\":\"{}\",\"guarded\":{},\"regions\":{},\"window\":{},\"terms\":{},\"forced\":{},\"mode\":\"{}\"",
         r.kept, r.total, r.input, r.output, r.cut, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode
     );
-    // --json 新增字段向后兼容：仅启用 --max-tokens 时附加，默认输出逐字节不变。
+    // --json 新增字段向后兼容：仅启用 --max-tokens 时附加（v0.4.1 契约不变）。
     if let Some(m) = r.limit {
         out.push_str(&format!(
             ",\"max_tokens\":{},\"tok_est\":{:.0}",
             m, r.tokens
         ));
     }
+    // v0.6.4 效果口径：输入/输出 token 估算（`terms::estimate`）与缩减率，全模式
+    // 恒定填充（passthrough/fail-open 时 tokens_out == tokens_in，cut 为 0）。
+    out.push_str(&format!(
+        ",\"tokens_in\":{:.0},\"tokens_out\":{:.0},\"token_cut_pct\":{:.1}",
+        r.tokens_in,
+        crate::terms::estimate(&r.text),
+        token_cut(r.tokens_in, crate::terms::estimate(&r.text))
+    ));
     // 删除区间（每段一条，1-based 闭区间 + 原因）；默认 stdout 统计行不输出。
     out.push_str(&format!(
         ",\"dropped\":[{}]",
@@ -391,6 +399,177 @@ pub fn render(r: &Outcome) -> String {
     ));
     out.push('}');
     out
+}
+
+/// token 缩减率（%）：输入估算为 0 时视为 0（passthrough/fail-open 恒为 0）。
+fn token_cut(tin: f64, tout: f64) -> f64 {
+    if tin <= 0.0 {
+        0.0
+    } else {
+        (tin - tout) * 100.0 / tin
+    }
+}
+
+/// 千分位格式化（u64，如 3318 -> "3,318"）。
+fn sep(n: u64) -> String {
+    let s = n.to_string();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// 长文本截断（按字符数，超长加省略号）。
+fn clip(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let head: String = s.chars().take(max).collect();
+        format!("{head}…")
+    }
+}
+
+/// 字段名补宽到 8 列（CJK 按 2 列），保证效果报告各行左对齐。
+fn pad_field(field: &str) -> String {
+    let w = field
+        .chars()
+        .map(|c| if crate::terms::full(c) { 2 } else { 1 })
+        .sum::<usize>();
+    format!("{field}{}", " ".repeat(8usize.saturating_sub(w)))
+}
+
+/// 效果报告行：`{icon} {field:8}  {value}`。
+fn row(icon: &str, field: &str, value: &str) -> String {
+    format!("{icon} {}  {value}\n", pad_field(field))
+}
+
+/// 风险等级中文（效果报告用）。
+fn risk_zh(r: crate::Risk) -> &'static str {
+    match r {
+        crate::Risk::Low => "低",
+        crate::Risk::Medium => "中",
+        crate::Risk::High => "高",
+    }
+}
+
+/// 模式中文标签与一句话说明（效果报告用）。
+fn mode_label(m: Mode) -> (&'static str, &'static str) {
+    match m {
+        Mode::Sieve => ("sieve 智能筛选", "按问题逐行召回证据"),
+        Mode::PassSmall => ("小输入透传", "无需压缩"),
+        Mode::PassLongline => ("超长行透传", "单行过长，原样保留"),
+        Mode::PassNoKept => ("预算过紧回退", "未选出有效行，原文保留"),
+        Mode::FailOpenZeroSignal => ("无命中保护", "零丢失"),
+        Mode::OverflowEvidence => ("证据优先保底", "超过 token 上限，证据全保留"),
+        Mode::OverflowFill => ("上限裁剪", "超上限，保留证据并裁剪可选内容"),
+    }
+}
+
+/// 压缩召回效果报告（v0.6.4）：stderr 人工可读块，stdout 契约零变化。
+/// 三模式各有结论卡；数字口径与 `render()` JSON 完全一致（`terms::estimate`）。
+pub fn recall_report(r: &Outcome, query: &str) -> String {
+    let mut s = String::from("✦ SCX 压缩召回 ✦\n\n");
+    s.push_str(&row("📌", "查询", &clip(query, 40)));
+    let (label, desc) = mode_label(r.mode);
+    s.push_str(&row("⚙️", "模式", &format!("{label} · {desc}")));
+    match r.mode {
+        Mode::Sieve | Mode::OverflowEvidence | Mode::OverflowFill => {
+            let tin = r.tokens_in;
+            let tout = crate::terms::estimate(&r.text);
+            s.push_str(&row(
+                "📥",
+                "原始",
+                &format!(
+                    "{} 行 · {} 字符 · 约 {} token",
+                    sep(r.total as u64),
+                    sep(r.input as u64),
+                    sep(tin as u64)
+                ),
+            ));
+            s.push_str(&row(
+                "📤",
+                "压缩后",
+                &format!(
+                    "{} 行 · {} 字符 · 约 {} token",
+                    sep(r.kept as u64),
+                    sep(r.output as u64),
+                    sep(tout as u64)
+                ),
+            ));
+            let d_rows = r.total.saturating_sub(r.kept);
+            let d_chars = r.input.saturating_sub(r.output);
+            s.push_str(&row(
+                "💾",
+                "省下",
+                &format!(
+                    "{} 行 · {} 字符 · 约 {} token（-{:.1}%）",
+                    sep(d_rows as u64),
+                    sep(d_chars as u64),
+                    sep((tin - tout) as u64),
+                    token_cut(tin, tout)
+                ),
+            ));
+            s.push_str(&row(
+                "🎯",
+                "证据召回",
+                &format!("{} 条关键证据全部保留 · 0 丢失", r.evidence),
+            ));
+            s.push_str(&row("🔁", "去重", &format!("{} 行重复内容已折叠", r.dup)));
+            s.push_str(&row(
+                "✂️",
+                "裁剪",
+                &format!("{} 段无关内容已移除", r.dropped.len()),
+            ));
+            s.push_str(&row(
+                "🛡️",
+                "风险",
+                &format!("{} · {} 条额外守护", risk_zh(r.risk), r.guarded),
+            ));
+        }
+        Mode::PassSmall | Mode::PassLongline | Mode::PassNoKept => {
+            s.push_str(&row(
+                "📥",
+                "原始",
+                &format!("{} 行 · {} 字符", sep(r.total as u64), sep(r.input as u64)),
+            ));
+            s.push_str(&row("📤", "压缩后", "原样保留，一字未动"));
+            let (save, why) = match r.mode {
+                Mode::PassSmall => (
+                    "0 —— 内容本就很少",
+                    "内容很少（<40 行且不足 1200 token），压缩反而可能丢信息，自动跳过",
+                ),
+                Mode::PassLongline => (
+                    "0 —— 无损失保留原文",
+                    "单行过长无法安全压缩，原样返回，不冒险删减",
+                ),
+                _ => (
+                    "0 —— 无损失保留原文",
+                    "预算过紧未选出有效行，宁可原样返回也不静默删减",
+                ),
+            };
+            s.push_str(&row("💾", "省下", save));
+            s.push_str(&row("💡", "说明", why));
+        }
+        Mode::FailOpenZeroSignal => {
+            s.push_str(&row(
+                "📥",
+                "原始",
+                &format!("{} 行 · {} 字符", sep(r.total as u64), sep(r.input as u64)),
+            ));
+            s.push_str(&row("📤", "压缩后", "原样保留，一字未动"));
+            s.push_str(&row("💾", "省下", "0 —— 无相关内容可压缩"));
+            s.push_str(&row(
+                "💡",
+                "说明",
+                "没找到与问题相关的证据行，压缩会误删信息，完整返回",
+            ));
+        }
+    }
+    s
 }
 
 /// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
@@ -572,6 +751,7 @@ fn filter(job: &Compress) -> Reply {
     memory(&mut out, job)?;
     if !job.no_stats {
         write(writeln!(out, "{}", stats(&outcome)))?;
+        eprintln!("{}", recall_report(&outcome, &job.query));
     }
     if job.json {
         eprintln!("scxjson: {}", render(&outcome));
@@ -745,5 +925,109 @@ mod tests {
         cfg2.limit = Some(100);
         let o2 = compress("a\nb\nc\n", "a", &cfg2);
         assert!(render(&o2).contains("\"max_tokens\":100"));
+    }
+
+    /// 60 行合成日志 + 命中查询 → sieve 卡：标题/查询/模式/证据/风险齐备，
+    /// token 数字与估算口径一致。
+    #[test]
+    fn recall_report_sieve_card_is_complete() {
+        let text = (0..60)
+            .map(|i| {
+                if i % 5 == 0 {
+                    format!(
+                        "[12:00] ERROR failed to connect to database: connection refused attempt={i}"
+                    )
+                } else if i % 3 == 0 {
+                    format!("[12:00] WARN retrying in 5s... attempt={i}")
+                } else {
+                    format!("[12:00] INFO cache warmup complete ({i} entries)")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let o = compress(
+            &text,
+            "database connection failed",
+            &crate::Config::default(),
+        );
+        assert_eq!(o.mode, Mode::Sieve, "60 行命中查询应走 sieve");
+        assert!(
+            (o.tokens_in - crate::terms::estimate(&text)).abs() < 1e-9,
+            "tokens_in 恒等于输入估算"
+        );
+        let rep = recall_report(&o, "database connection failed");
+        assert!(rep.contains("✦ SCX 压缩召回 ✦"));
+        assert!(rep.contains("📌 查询"));
+        assert!(rep.contains("database connection failed"));
+        assert!(rep.contains("sieve 智能筛选"));
+        assert!(rep.contains("📥 原始"));
+        assert!(rep.contains("📤 压缩后"));
+        assert!(rep.contains("💾 省下"));
+        assert!(rep.contains(&format!("约 {} token", o.tokens_in as u64)));
+        assert!(rep.contains("证据召回"));
+        assert!(rep.contains("🛡️ 风险"));
+    }
+
+    /// 小输入（<40 行）→ passthrough 卡：说明行解释为什么不压缩。
+    #[test]
+    fn recall_report_passthrough_card_explains() {
+        let o = compress("a\nb\nc\nd\ne\nf\ng\n", "a", &crate::Config::default());
+        assert_eq!(o.mode, Mode::PassSmall);
+        let rep = recall_report(&o, "a");
+        assert!(rep.contains("✦ SCX 压缩召回 ✦"));
+        assert!(rep.contains("小输入透传"));
+        assert!(rep.contains("原样保留，一字未动"));
+        assert!(rep.contains("💡 说明"));
+        assert!(rep.contains("自动跳过"));
+    }
+
+    /// 查询零命中 → fail-open 卡：零丢失语义。
+    #[test]
+    fn recall_report_failopen_card_preserves() {
+        let text = (0..60)
+            .map(|i| format!("[12:00] INFO warmup entry {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let o = compress(&text, "zzz_no_such_term", &crate::Config::default());
+        assert_eq!(o.mode, Mode::FailOpenZeroSignal);
+        let rep = recall_report(&o, "zzz_no_such_term");
+        assert!(rep.contains("无命中保护"));
+        assert!(rep.contains("原样保留，一字未动"));
+        assert!(rep.contains("完整返回"));
+    }
+
+    /// render() v0.6.4 新字段：tokens_in/out/cut 全模式填充；passthrough cut=0。
+    #[test]
+    fn render_adds_token_effect_fields() {
+        let cfg = crate::Config::default();
+        let small = compress("a\nb\nc\n", "a", &cfg);
+        let j = render(&small);
+        assert!(j.contains("\"tokens_in\":"), "默认路径也带 tokens_in");
+        assert!(j.contains("\"tokens_out\":"));
+        assert!(j.contains("\"token_cut_pct\":0.0"), "passthrough cut 为 0");
+
+        let big = (0..60)
+            .map(|i| format!("line {i} ERROR boom"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let o = compress(&big, "boom", &cfg);
+        assert!(
+            o.mode == Mode::Sieve || o.mode == Mode::OverflowEvidence,
+            "60 行命中走 sieve/overflow"
+        );
+        let tin = o.tokens_in;
+        let tout = crate::terms::estimate(&o.text);
+        let j2 = render(&o);
+        assert!(j2.contains(&format!("\"tokens_in\":{:.0}", tin)));
+        assert!(j2.contains(&format!("\"tokens_out\":{:.0}", tout)));
+        assert!(j2.contains(&format!("\"token_cut_pct\":{:.1}", token_cut(tin, tout))));
+    }
+
+    /// token_cut 边界：输入 0 安全返回 0；正常削减百分比正确。
+    #[test]
+    fn token_cut_is_safe_and_exact() {
+        assert_eq!(token_cut(0.0, 999.0), 0.0);
+        assert!((token_cut(100.0, 50.0) - 50.0).abs() < 1e-9);
+        assert!((token_cut(200.0, 180.0) - 10.0).abs() < 1e-9);
     }
 }

@@ -1,2 +1,11 @@
 scx: note: --store without --fix; L1 cannot answer 'how was it solved' - pass --fix "..." after a verified fix (HARD discipline)
-scx: stored case=2026-10-25_123e7decc4c4a423 added=yes
+✦ SCX 压缩召回 ✦
+
+📌 查询      db timeout conn_id
+⚙️ 模式      小输入透传 · 无需压缩
+📥 原始      4 行 · 115 字符
+📤 压缩后    原样保留，一字未动
+💾 省下      0 —— 内容本就很少
+💡 说明      内容很少（<40 行且不足 1200 token），压缩反而可能丢信息，自动跳过
+
+scx: stored case=2026-10-26_123e7decc4c4a423 added=yes

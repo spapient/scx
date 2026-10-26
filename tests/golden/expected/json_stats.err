@@ -1,1 +1,13 @@
-scxjson: {"kept":5,"total":200,"chars_in":8909,"chars_out":236,"cut_pct":97.4,"dup":195,"seeds":1,"evidence":1,"risk":"LOW","guarded":0,"regions":1,"window":2,"terms":2,"forced":0,"mode":"sieve","dropped":[{"start":3,"end":149,"reason":"budget"},{"start":153,"end":200,"reason":"budget"}]}
+✦ SCX 压缩召回 ✦
+
+📌 查询      timeout conn_id
+⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据
+📥 原始      200 行 · 8,909 字符 · 约 2,228 token
+📤 压缩后    5 行 · 236 字符 · 约 60 token
+💾 省下      195 行 · 8,673 字符 · 约 2,168 token（-97.3%）
+🎯 证据召回  1 条关键证据全部保留 · 0 丢失
+🔁 去重      195 行重复内容已折叠
+✂️ 裁剪      2 段无关内容已移除
+🛡️ 风险      低 · 0 条额外守护
+
+scxjson: {"kept":5,"total":200,"chars_in":8909,"chars_out":236,"cut_pct":97.4,"dup":195,"seeds":1,"evidence":1,"risk":"LOW","guarded":0,"regions":1,"window":2,"terms":2,"forced":0,"mode":"sieve","tokens_in":2228,"tokens_out":60,"token_cut_pct":97.3,"dropped":[{"start":3,"end":149,"reason":"budget"},{"start":153,"end":200,"reason":"budget"}]}

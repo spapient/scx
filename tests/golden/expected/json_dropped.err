@@ -1,1 +1,13 @@
-scxjson: {"kept":5,"total":200,"chars_in":8870,"chars_out":208,"cut_pct":97.7,"dup":197,"seeds":1,"evidence":1,"risk":"LOW","guarded":0,"regions":1,"window":2,"terms":3,"forced":0,"mode":"sieve","dropped":[{"start":3,"end":99,"reason":"budget"},{"start":103,"end":200,"reason":"budget"}]}
+✦ SCX 压缩召回 ✦
+
+📌 查询      alpha conn broken
+⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据
+📥 原始      200 行 · 8,870 字符 · 约 2,218 token
+📤 压缩后    5 行 · 208 字符 · 约 53 token
+💾 省下      195 行 · 8,662 字符 · 约 2,165 token（-97.6%）
+🎯 证据召回  1 条关键证据全部保留 · 0 丢失
+🔁 去重      197 行重复内容已折叠
+✂️ 裁剪      2 段无关内容已移除
+🛡️ 风险      低 · 0 条额外守护
+
+scxjson: {"kept":5,"total":200,"chars_in":8870,"chars_out":208,"cut_pct":97.7,"dup":197,"seeds":1,"evidence":1,"risk":"LOW","guarded":0,"regions":1,"window":2,"terms":3,"forced":0,"mode":"sieve","tokens_in":2218,"tokens_out":53,"token_cut_pct":97.6,"dropped":[{"start":3,"end":99,"reason":"budget"},{"start":103,"end":200,"reason":"budget"}]}
