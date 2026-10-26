@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -41,6 +41,9 @@ pub fn usage() -> String {
     s.push_str("                       L\\t<line> on stdin, emits one score per line (default off, zero-dep)\n");
     s.push_str(
         "  --sim-weight F       weight of injected similarity in ranking (default 1.0; >=0)\n",
+    );
+    s.push_str(
+        "  --minhash-weight F   weight of MinHash-LSH Jaccard recall in RRF fusion (default 0; >=0)\n",
     );
     s.push_str("  --force P            keep lines matching substring (case-insensitive); prefix re: enters\n");
     s.push_str("                       a finite regex subset: | alternation, [..] classes, * + ? quantifiers\n");
@@ -121,6 +124,8 @@ pub struct Opts {
     pub files: Vec<String>,
     /// 可插拔相似度后端命令（`--embed-cmd <sh 命令>`）；`None` = 不启用。
     pub embed_cmd: Option<String>,
+    /// MinHash-LSH 召回在 RRF 融合中的权重（`--minhash-weight`，默认 0 = 关）。
+    pub minhash_weight: f64,
 }
 
 /// 默认记忆库目录：$SCX_MEM_DIR 优先，否则用户主目录下的 .scx-memory。
@@ -327,6 +332,15 @@ static FLAGS: &[Flag] = &[
     },
     Flag {
         name: "--sim-weight",
+        once: true,
+        kind: Kind::F64,
+        what: "a number",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--minhash-weight",
         once: true,
         kind: Kind::F64,
         what: "a number",
@@ -674,6 +688,7 @@ struct ParseState {
     mem_dir: String,
     files: Vec<String>,
     embed_cmd: Option<String>,
+    minhash_weight: f64,
     seen: HashSet<&'static str>,
 }
 
@@ -715,6 +730,7 @@ impl ParseState {
             mem_dir: home(),
             files: Vec::new(),
             embed_cmd: None,
+            minhash_weight: 0.0,
             seen: HashSet::new(),
         }
     }
@@ -912,6 +928,12 @@ fn float(
                 return Err(format!("{} must be a finite number >= 0", f.name));
             }
             s.config.sim_weight = parsed;
+        }
+        "--minhash-weight" => {
+            if parsed < 0.0 {
+                return Err(format!("{} must be a finite number >= 0", f.name));
+            }
+            s.minhash_weight = parsed;
         }
         _ => unreachable!("F64 flag without arm: {}", f.name),
     }
@@ -1464,6 +1486,7 @@ fn finish(s: ParseState) -> Opts {
         mem_dir: s.mem_dir,
         files: s.files,
         embed_cmd: s.embed_cmd,
+        minhash_weight: s.minhash_weight,
     }
 }
 

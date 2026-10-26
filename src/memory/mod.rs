@@ -21,6 +21,7 @@ mod json;
 pub(crate) mod lock;
 mod maintenance;
 mod meta;
+mod minhash;
 pub(crate) mod ranking;
 mod recall;
 mod store;
@@ -142,13 +143,13 @@ pub fn search(root: &str, query: &str, k: usize, read_only: bool) -> std::io::Re
 /// RRF 融合常数：与 `tools/embed_baseline.py` 的混合检索口径一致。
 const RRF_K: f64 = 60.0;
 
-/// 融合召回：BM25 top-k 与 embedding 余弦排名的 RRF 融合（可选，`--embed-cmd`）。
+/// 融合召回：BM25 top-k 与 embedding 余弦排名、MinHash-LSH Jaccard 的 RRF 融合。
 ///
-/// `embed_cmd: None` 或 `embed_weight <= 0.0` 时直接返回 `search` 结果，行为不变。
-/// 否则枚举全库 case 文本，计算 query×文本 embedding 相似度排名，与 BM25 排名做
-/// RRF 融合后取 top-k。BM25 命中保留原 `score`/`sim`；仅靠 embedding 救回的 case
-/// （不在 BM25 top-k）`score`/`sim` 记 0——不触发 L1 直答，符合低词面置信语义。
-/// 本函数不触碰评测路径（`--eval` 走 `recall::clock`/`read`），召回评测门不回归。
+/// `embed_cmd: None`/`embed_weight <= 0.0` 且 `minhash_weight <= 0.0` 时直接返回
+/// `search` 结果，行为不变。否则枚举全库 case 文本，计算 query×文本相似度排名，
+/// 与 BM25 排名做 RRF 融合后取 top-k。BM25 命中保留原 `score`/`sim`；仅靠 side
+/// 信号救回的 case（不在 BM25 top-k）`score`/`sim` 记 0——不触发 L1 直答，符合
+/// 低词面置信语义。本函数不触碰评测路径（`--eval` 走 `recall::clock`/`read`）。
 pub fn search_fused(
     root: &str,
     query: &str,
@@ -156,35 +157,23 @@ pub fn search_fused(
     read_only: bool,
     embed_cmd: Option<&str>,
     embed_weight: f64,
+    minhash_weight: f64,
 ) -> std::io::Result<Vec<Hit>> {
     let bm25 = search(root, query, k, read_only)?;
-    if embed_cmd.is_none() || embed_weight <= 0.0 || k == 0 {
+    let use_embed = embed_cmd.is_some() && embed_weight > 0.0;
+    let use_minhash = minhash_weight > 0.0;
+    if k == 0 || (!use_embed && !use_minhash) {
         return Ok(bm25);
     }
     let ids = store::list(root)?;
     if ids.is_empty() {
         return Ok(bm25);
     }
-    let mut texts: Vec<String> = Vec::with_capacity(ids.len());
-    for id in &ids {
-        texts.push(store::load(root, id)?.text);
-    }
-    let refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
-    let sims = crate::sim::compute(embed_cmd, query, &refs).map_err(std::io::Error::other)?;
-
-    // embedding 排名：sim 降序，同分按 id 升序（确定性）。
-    let mut order: Vec<usize> = (0..ids.len()).collect();
-    order.sort_by(|&a, &b| {
-        sims[b]
-            .partial_cmp(&sims[a])
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| ids[a].cmp(&ids[b]))
-    });
-    let embed_term: HashMap<String, f64> = order
+    let texts: Vec<String> = ids
         .iter()
-        .enumerate()
-        .map(|(r, &i)| (ids[i].clone(), 1.0 / (RRF_K + r as f64 + 1.0)))
-        .collect();
+        .map(|id| store::load(root, id).map(|c| c.text))
+        .collect::<std::io::Result<_>>()?;
+    let refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
 
     // BM25 排名项与 score/sim 快照。
     let bm25_term: HashMap<String, f64> = bm25
@@ -197,12 +186,29 @@ pub fn search_fused(
         .map(|h| (h.id.clone(), (h.score, h.sim)))
         .collect();
 
+    let embed_term = if use_embed {
+        let sims = crate::sim::compute(embed_cmd, query, &refs).map_err(std::io::Error::other)?;
+        Some(full_rank_term(&ids, &sims))
+    } else {
+        None
+    };
+    let minhash_term = if use_minhash {
+        Some(full_rank_term(&ids, &minhash::scores(query, &refs)))
+    } else {
+        None
+    };
+
     let mut fused: Vec<(f64, String)> = ids
         .iter()
         .map(|id| {
-            let b = bm25_term.get(id).copied().unwrap_or(0.0);
-            let e = embed_term.get(id).copied().unwrap_or(0.0);
-            (b + embed_weight * e, id.clone())
+            let mut s = bm25_term.get(id).copied().unwrap_or(0.0);
+            if let Some(t) = &embed_term {
+                s += embed_weight * t.get(id).copied().unwrap_or(0.0);
+            }
+            if let Some(t) = &minhash_term {
+                s += minhash_weight * t.get(id).copied().unwrap_or(0.0);
+            }
+            (s, id.clone())
         })
         .collect();
     fused.sort_by(|a, b| {
@@ -219,6 +225,22 @@ pub fn search_fused(
             Hit { id, score, sim }
         })
         .collect())
+}
+
+/// side 信号（embedding/MinHash）的 RRF 排名项：sim 降序，同分按 id 升序（确定性）。
+fn full_rank_term(ids: &[String], sims: &[f64]) -> HashMap<String, f64> {
+    let mut order: Vec<usize> = (0..ids.len()).collect();
+    order.sort_by(|&a, &b| {
+        sims[b]
+            .partial_cmp(&sims[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| ids[a].cmp(&ids[b]))
+    });
+    order
+        .iter()
+        .enumerate()
+        .map(|(r, &i)| (ids[i].clone(), 1.0 / (RRF_K + r as f64 + 1.0)))
+        .collect()
 }
 
 fn session(
@@ -377,7 +399,7 @@ mod tests {
         );
         seed(&root, "disk full", "disk full errno=28\nfix: clean up");
         let plain = search(&root, "db timeout", 2, true).unwrap();
-        let fused = search_fused(&root, "db timeout", 2, true, None, 1.0).unwrap();
+        let fused = search_fused(&root, "db timeout", 2, true, None, 1.0, 0.0).unwrap();
         assert_eq!(plain, fused, "embed_cmd=None 必须与 search 逐字节一致");
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -388,9 +410,28 @@ mod tests {
         seed(&root, "db timeout", "db timeout conn pool");
         seed(&root, "disk full", "disk full errno=28");
         let cmd = "printf '0.5\\n0.5\\n'";
-        let hits = search_fused(&root, "db timeout", 2, true, Some(cmd), 1.0).unwrap();
+        let hits = search_fused(&root, "db timeout", 2, true, Some(cmd), 1.0, 0.0).unwrap();
         assert!(!hits.is_empty(), "融合召回不应为空");
         assert!(hits.len() <= 2, "融合召回须受 k 约束");
+        assert!(
+            hits.iter().all(|h| h.id.contains('_')),
+            "case id 形如 YYYY-MM-DD_hex"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn search_fused_with_minhash_returns_valid_hits() {
+        let root = tmp("mh");
+        seed(
+            &root,
+            "db connection timeout",
+            "db connection timeout conn pool",
+        );
+        seed(&root, "disk full", "disk full errno=28");
+        let hits = search_fused(&root, "db connection timeout", 2, true, None, 0.0, 1.0).unwrap();
+        assert!(!hits.is_empty(), "MinHash 融合召回不应为空");
+        assert!(hits.len() <= 2, "MinHash 融合召回须受 k 约束");
         assert!(
             hits.iter().all(|h| h.id.contains('_')),
             "case id 形如 YYYY-MM-DD_hex"

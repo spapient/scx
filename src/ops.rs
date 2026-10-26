@@ -54,6 +54,8 @@ pub struct Compress {
     pub mem_dir: String,
     /// 可插拔相似度后端命令（`--embed-cmd`）；`None` = 不启用。
     pub embed_cmd: Option<String>,
+    /// MinHash-LSH 召回权重（`--minhash-weight`，默认 0 = 关）。
+    pub minhash_weight: f64,
 }
 
 /// 标注动作入参。
@@ -229,6 +231,7 @@ fn job(opts: &Opts) -> Compress {
         max_bytes: opts.max_bytes,
         mem_dir: opts.mem_dir.clone(),
         embed_cmd: opts.embed_cmd.clone(),
+        minhash_weight: opts.minhash_weight,
     }
 }
 
@@ -841,6 +844,7 @@ fn memory(out: &mut dyn Write, job: &Compress) -> Reply {
         false,
         job.embed_cmd.as_deref(),
         job.config.sim_weight,
+        job.minhash_weight,
     ) {
         Ok(hits) => {
             let qualified = crate::memory::hits(&job.mem_dir, hits);
