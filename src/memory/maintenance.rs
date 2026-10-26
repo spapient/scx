@@ -61,6 +61,14 @@ fn expired(c: &store::Case, now_s: u64, ttl_regressed: f64, ttl_stale: f64) -> b
 /// id 先过白名单校验，禁止 `..` 与路径分隔符逃逸。
 /// 返回是否存在。
 pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
+    // id 白名单必须先于取锁：锁名 `cases/{id}.lock` 与目录 `cases/{id}` 都以
+    // 用户输入拼接，`Path::join` 遇绝对路径会整段替换、遇 `../` 会逃逸目录。
+    if !store::valid(id) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid case id: {id}"),
+        ));
+    }
     // 锁序契约（docs/locking.md）：case → index → meta → qmap，细粒度在前。
     // locks 按固定序一次性取齐，任一把失败即整体放弃（已持锁逆序释放），
     // 绝不半持锁返回；meta 的写入用 *_locked 变体避免自死锁。
@@ -364,6 +372,34 @@ mod tests {
         assert!(!index::load(&root).unwrap().is_some(), "删除后索引惰性作废");
         let m = crate::memory::meta::load(&root).unwrap();
         assert_eq!(m.case_count, 0);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn delete_rejects_path_traversal_and_absolute_paths() {
+        let root = root("del-traverse");
+        // victim 放在 mem-dir 根下、cases 之外：`cases/../victim` 会落到这里。
+        let victim = Path::new(&root).join("victim");
+        fs::create_dir_all(&victim).unwrap();
+        fs::write(victim.join("keep.txt"), b"important").unwrap();
+
+        // 绝对路径：`Path::join` 遇绝对路径整段替换，白名单必须先拦。
+        let abs = victim.to_string_lossy().into_owned();
+        let err = delete(&root, &abs).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(
+            victim.join("keep.txt").exists(),
+            "绝对路径 id 不得删除外部目录"
+        );
+
+        // 相对逃逸：`cases/../victim` 会逃逸出 cases 目录。
+        let err = delete(&root, "../victim").unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(
+            victim.join("keep.txt").exists(),
+            ".. 逃逸 id 不得删除外部目录"
+        );
+
         let _ = fs::remove_dir_all(&root);
     }
 }
