@@ -342,7 +342,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 | npm | `@spapient/scx`（scoped） | 0.6.4 | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.4）；包内置 0.6.4 三平台二进制 |
 | npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 空壳包（tu123dou）占用；已发 npm 官方（落款 spapient） |
 | winget | `Spapient.Scx` | 0.6.1 | ⏳ PR #461786 审核中 | microsoft/winget-pkgs portable 三 yaml |
-| Scoop | `scx` | 0.6.1 | ⏳ PR #8766 审核中 | ScoopInstaller/Main bucket/scx.json |
+| Scoop | `scx` | 0.6.4 | ⏳ PR #8768 审核中 | package request #8767 已提；manifest 0.6.4（sha256 核对）。旧 PR #8766 因缺 request 被关，按官方流程重提 |
 | PyPI | `scx` | — | ✗ 被占 | 现存无关包；未注册 |
 | AUR | `scx` | — | ✗ 放弃 | 官网反爬；按用户指示放弃 |
 

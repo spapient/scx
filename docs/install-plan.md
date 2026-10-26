@@ -31,7 +31,7 @@
 | npm | `@spapient/scx`（scoped） | **0.6.4** | ✅ 已发布并实测 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.4）；包内置 0.6.4 三平台二进制。历史：0.6.2 包误内置 0.6.1 二进制，已重发修复 |
 | npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 年空壳包（tu123dou）占用；申请已发 npm 官方（落款 spapient / haofei.ni@outlook.com） |
 | winget | `Spapient.Scx` | 0.6.1 | ⏳ PR 审核中 | PR **#461786**（microsoft/winget-pkgs，portable 三 yaml） |
-| Scoop | `scx` | 0.6.1 | ⏳ PR 审核中 | PR **#8766**（ScoopInstaller/Main，bucket/scx.json） |
+| Scoop | `scx` | 0.6.4 | ⏳ PR 审核中 | package request **#8767** 已提；PR **#8768**（ScoopInstaller/Main，manifest 0.6.4，bot 检查中）。注：旧 PR #8766 因缺 package request 被官方关闭（`not-meet-criteria`），已按流程重提 |
 | PyPI | `scx` | — | ✗ 被占 | 现存 v1.3.0 "MIT Supply Chain Python Package"，未注册 |
 | AUR | `scx` | — | ✗ 放弃 | 官网被反爬（Anubis）拦截；按用户指示放弃 |
 
