@@ -1813,6 +1813,24 @@ def sha256_file(path, normalize_date=False):
     return hashlib.sha256(data).hexdigest()
 
 
+def holm_bonferroni(ps):
+    """Holm-Bonferroni decisions at alpha=0.05.
+
+    Sorted p-values are compared against alpha/(m-rank); the first failure
+    rejects the rest (step-down). Returns one boolean per input, in input
+    order.
+    """
+    m = len(ps)
+    order = sorted(range(m), key=lambda index: ps[index])
+    decisions = [False] * m
+    for rank, index in enumerate(order):
+        if ps[index] <= 0.05 / (m - rank):
+            decisions[index] = True
+        else:
+            break
+    return decisions
+
+
 def cmd_report(args):
     """Compose the frozen metrics markdown from the gate run artifacts.
 
@@ -1851,6 +1869,12 @@ def cmd_report(args):
     per_kind_bad = [name for name, k in sorted(kinds.items())
                     if k["ev_kept"] / k["ev_total"] < 0.95]
 
+    # Family-wise error control: the Gauge advantage tests (mrr, recall@3)
+    # form one family; Holm-Bonferroni at alpha=0.05. Fidelity ev/ans are
+    # threshold gates (not significance tests), so they have no p to adjust.
+    holm = holm_bonferroni([mrr["p"], recall3["p"]])
+    holm_ok = all(holm)
+
     gate_bad = []
     if not (mrr["delta"] >= 0.05 and mrr["ci_lo"] > 0 and mrr["p"] < 0.05):
         gate_bad.append("mrr hard advantage")
@@ -1864,6 +1888,8 @@ def cmd_report(args):
         gate_bad.append("fidelity answerability")
     if per_kind_bad:
         gate_bad.append(f"per-kind zero-regression ({len(per_kind_bad)} kinds)")
+    if not holm_ok:
+        gate_bad.append("holm-bonferroni family-wise control")
     gate_ok = not gate_bad
     lines = [
         "# 评测实测指标（自动生成）",
@@ -1896,6 +1922,15 @@ def cmd_report(args):
         f"- token recall {100.0 * agg['tok']:.2f}%（报告-only）",
         f"- per-kind 证据保留：{len(kinds) - len(per_kind_bad)}/{len(kinds)} 域 ≥95%"
         + (f"（未过：{', '.join(sorted(per_kind_bad))}）" if per_kind_bad else ""),
+        "",
+        "## 多重比较（Holm-Bonferroni，Gauge 族 m=2，α=0.05）",
+        "",
+        "| 检验 | perm p | Holm 阈值 | 校正后 |",
+        "| --- | --- | --- | --- |",
+        f"| MRR hard | {mrr['p']:.4f} | 0.0250 | {'显著' if holm[0] else '不显著'} |",
+        f"| recall@3 hard | {recall3['p']:.4f} | 0.0500 | {'显著' if holm[1] else '不显著'} |",
+        "",
+        "fidelity 的 ev/ans 是阈值门禁（非显著性检验），无 p 需校正。",
         "",
         f"## 汇总门禁：{'PASS' if gate_ok else 'FAIL'}",
     ]
@@ -2065,6 +2100,12 @@ def selftest():
             raise AssertionError("manifest drift not detected")
         except SystemExit as error:
             assert error.code == 2
+    # holm-bonferroni unit checks
+    assert holm_bonferroni([0.001, 0.04]) == [True, True]
+    assert holm_bonferroni([0.01, 0.03]) == [True, True]   # 0.01<=0.025, 0.03<=0.05
+    assert holm_bonferroni([0.03, 0.04]) == [False, False]  # 0.03>0.025 -> both fail
+    assert holm_bonferroni([0.02, 0.03]) == [True, True]
+    assert holm_bonferroni([0.5, 0.001]) == [False, True]  # p=0.5 fails 0.05, later all fail
     print("selftest: PASS")
 
 

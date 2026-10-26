@@ -119,6 +119,13 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 输出同构的 nDCG 报告。stats CSV 由 CI 直接消费，阈值冻结在
 `.github/workflows/ci.yml`。
 
+**多重比较控制（Holm-Bonferroni）**：Gauge 优势检验族（MRR hard 与
+recall@3 hard 两个 perm p）构成一个族（m=2），`report` 按 α=0.05 做
+Holm 逐步校正并输出校正后决策（阈值 0.025 / 0.05）；两检验实测均通过
+校正（p=0.0029 / 0.0064），校正后仍显著。fidelity 的 ev/ans 是阈值门禁
+（非显著性检验），无 p 需校正。校正决策随 `docs/gauge-metrics.md`
+自动生成并由 CI 断言。
+
 `--metric recall@k`（k∈{1,3,5,10}）输出同构的 Recall@k 报告：target 在
 top-k 内计 1，否则 0。实测口径：recall@1 二进制指标翻转样本少，检验
 功率不足（观测为正但未达显著，2026-10-26 实测 perm p=0.1236）；CI 以

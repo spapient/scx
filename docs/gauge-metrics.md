@@ -21,4 +21,13 @@
 - token recall 74.58%（报告-only）
 - per-kind 证据保留：8/8 域 ≥95%
 
+## 多重比较（Holm-Bonferroni，Gauge 族 m=2，α=0.05）
+
+| 检验 | perm p | Holm 阈值 | 校正后 |
+| --- | --- | --- | --- |
+| MRR hard | 0.0029 | 0.0250 | 显著 |
+| recall@3 hard | 0.0064 | 0.0500 | 显著 |
+
+fidelity 的 ev/ans 是阈值门禁（非显著性检验），无 p 需校正。
+
 ## 汇总门禁：PASS
