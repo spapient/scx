@@ -317,19 +317,42 @@ fn grams(terms: &mut Vec<String>, seen: &mut HashSet<String>, chars: &[char]) {
     }
 }
 
+/// 计量口径系数：对齐 `token-meter` 的字符三分类启发式。
+/// ASCII 4 字符/token；CJK 族（表意/假名/谚文/全角）0.6 token/字；
+/// other（emoji/西里尔/阿拉伯/泰文等非 ASCII 非 CJK）2.5 字符/token。
+/// 纯 ASCII 与纯 CJK 输入与旧口径逐位一致，仅修正 other 脚本此前按 0.25
+/// token/字符低估 4–12 倍的问题。
+const ASCII_CHARS_PER_TOKEN: f64 = 4.0;
+const CJK_TOKENS_PER_CHAR: f64 = 0.6;
+const OTHER_CHARS_PER_TOKEN: f64 = 2.5;
+
 pub(crate) fn estimate(s: &str) -> f64 {
     if s.is_ascii() {
-        return s.len() as f64 / 4.0 + 1.0;
+        return s.len() as f64 / ASCII_CHARS_PER_TOKEN + 1.0;
     }
-    let mut cjk = 0usize;
-    let mut len = 0usize;
+    let (mut ascii, mut cjk, mut other) = (0usize, 0usize, 0usize);
     for c in s.chars() {
-        len += 1;
-        if full(c) {
+        if c.is_ascii() {
+            ascii += 1;
+        } else if full(c) {
             cjk += 1;
+        } else {
+            other += 1;
         }
     }
-    (len - cjk) as f64 / 4.0 + cjk as f64 * 0.6 + 1.0
+    ascii as f64 / ASCII_CHARS_PER_TOKEN
+        + cjk as f64 * CJK_TOKENS_PER_CHAR
+        + other as f64 / OTHER_CHARS_PER_TOKEN
+        + 1.0
+}
+
+/// 整数化 token 计数（`estimate` 向上取整；空串为 0，供计量/预算用整数口径）。
+pub(crate) fn count(s: &str) -> usize {
+    if s.is_empty() {
+        0
+    } else {
+        estimate(s).ceil() as usize
+    }
 }
 
 #[cfg(test)]
