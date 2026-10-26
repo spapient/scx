@@ -447,6 +447,11 @@ def mrr(rank):
     return 1.0 / rank if rank else 0.0
 
 
+def recall_at(rank, k):
+    """Binary hit indicator: target within top-k (rank 0 = not found)."""
+    return 1.0 if rank and rank <= k else 0.0
+
+
 def dcg(rels):
     return sum(rel / math.log2(i + 2.0) for i, rel in enumerate(rels))
 
@@ -648,8 +653,12 @@ def cmd_stats(args):
         if args.metric == "mrr":
             left = mrr(target_rank(hits["A"], target))
             right = mrr(target_rank(hits["B"], target))
-        else:
+        elif args.metric == "ndcg":
             left, right = ndcg(case, hits["A"]), ndcg(case, hits["B"])
+        else:
+            k = int(args.metric.split("@")[1])
+            left = recall_at(target_rank(hits["A"], target), k)
+            right = recall_at(target_rank(hits["B"], target), k)
         rows.append(
             {
                 "i": int(case.get("case_index", index)),
@@ -1809,6 +1818,11 @@ def selftest():
                           "error[E0433]: use of undeclared `config`")
     assert token_set_recall("let ttl = ttl_from_env()?;", "let ttl = ttl_from_env()?;") == 1.0
     assert token_set_recall("let ttl = ttl_from_env()?;", "unrelated text here") < 1.0
+    assert recall_at(0, 1) == 0.0  # target not found
+    assert recall_at(1, 1) == 1.0
+    assert recall_at(3, 3) == 1.0
+    assert recall_at(4, 3) == 0.0
+    assert recall_at(10, 10) == 1.0
     print("selftest: PASS")
 
 
@@ -1841,7 +1855,7 @@ def build_parser():
     stats.add_argument("--out", required=True)
     stats.add_argument("--mem-dir")
     stats.add_argument("--strata")
-    stats.add_argument("--metric", choices=("mrr", "ndcg"), default="mrr")
+    stats.add_argument("--metric", choices=("mrr", "ndcg", "recall@1", "recall@3", "recall@5", "recall@10"), default="mrr")
     stats.add_argument("--boot", type=int, default=10000)
     stats.add_argument("--perm", type=int, default=10000)
     stats.add_argument("--seed", type=int, default=20261023)

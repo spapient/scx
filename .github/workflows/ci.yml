@@ -176,6 +176,17 @@ jobs:
           if ($cluster.Count -ne 1 -or [double]$cluster[0].ci_lo -le 0) {
             throw "Gauge cluster sensitivity failed"
           }
+      - name: Gauge recall@3 gate
+        shell: pwsh
+        run: |
+          python tools/scx.py stats --baseline config/ci-baseline.json --verbose config/ci-verbose.txt --mem-dir config/ci-mem --out config/ci-stats-recall3.csv --metric recall@3 --cluster-size 5 --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
+          $rows = @(Import-Csv .\config\ci-stats-recall3.csv)
+          $hard = @($rows | Where-Object { $_.group -eq 'tier:hard' })
+          if ($hard.Count -ne 1) { throw "recall@3 hard result missing" }
+          if ([double]$hard[0].delta -lt 0.05 -or [double]$hard[0].ci_lo -le 0) {
+            $hard | Format-List | Out-String | Write-Host
+            throw "recall@3 advantage not established"
+          }
 
   msrv:
     timeout-minutes: 15

@@ -119,6 +119,14 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 输出同构的 nDCG 报告。stats CSV 由 CI 直接消费，阈值冻结在
 `.github/workflows/ci.yml`。
 
+`--metric recall@k`（k∈{1,3,5,10}）输出同构的 Recall@k 报告：target 在
+top-k 内计 1，否则 0。实测（2026-10-26）：tier:hard recall@1 Δ+0.058
+（CI 下界 +0.0145 >0，perm p=0.1236——二进制指标翻转样本少，检验功率
+不足，观测为正但未达显著）；recall@3 Δ+0.116（CI [+0.0435,+0.1884]，
+p=0.0064，显著）。CI 以 **recall@3** 作 Recall@k 门禁（Δ≥0.05 且 CI
+下界>0）；recall@1/5/10 供报告。
+
+
 `seed` 默认使用 4 个并发 store 进程，`--jobs` 取 `1..=32`；超过 32 只会加剧
 进程启动与跨进程锁竞争。case 文本以 UTF-8 字节经 stdin 写入，不生成逐 case
 临时文件，也不受 Windows 换行转换影响。输出 CSV 始终按语料顺序排列，case id

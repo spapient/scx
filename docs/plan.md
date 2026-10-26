@@ -623,7 +623,28 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 
 **commit**：独立可回滚（接 P1 commit 之后）。
 
-#### P3（stats Recall@k，未开始）
+#### P3 完成记录（2026-10-26，stats 增补 Recall@k）
+
+**交付**：
+- `tools/scx.py stats --metric recall@k`（k∈{1,3,5,10}）：`recall_at`
+  二分命中指示（target 在 top-k 内计 1），复用 analyze/analyze_cluster
+  的 bootstrap CI 与 permutation 检验（metric 只影响列名，架构零侵入）；
+  CSV 新列 + 打印与 mrr/ndcg 同构。
+- CI：新增 `Gauge recall@3 gate`（Δ≥0.05 且 CI 下界>0）；`docs/eval.md`
+  补 Recall@k 说明与实测数字。
+
+**门禁证据**（Gauge 150 查询复跑，metric 各一轨）：
+- mrr 回归与基线**逐位一致**（hard Δ+0.0608 CI [+0.0202,+0.1095]
+  p=0.0029）——Recall@k 增补零侵入；
+- recall@1 tier:hard Δ+0.0580（CI 下界 +0.0145 >0，**perm p=0.1236
+  不显著**：二进制指标翻转样本少，检验功率不足，观测为正）；
+- recall@3 tier:hard Δ+0.1159（CI [+0.0435,+0.1884]，**p=0.0064 显著**）；
+  all Δ+0.0667（p=0.0021）。
+- **口径校准**：CI 断言取 recall@3（统计可靠、显著），recall@1/5/10
+  供报告；不硬套"recall@1 显著"（实测 p=0.12，诚实记录）。
+- `tools/scx.py selftest` PASS（+recall_at 边界断言）。
+
+**commit**：独立可回滚（接 P2 commit 之后）。
 
 #### P4（留一事故泛化 + κ，未开始）
 
