@@ -253,8 +253,8 @@ pub(crate) fn normalize(s: &str, out: &mut String, run: &mut String) {
 /// 通用 Unicode 归一化；`ascii` 的语义基准。
 fn unicode(s: &str, out: &mut String, run: &mut String) {
     let mut pending_space = false;
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
+    let mut it: Cursor = s.char_indices().peekable();
+    while let Some((start, c)) = it.next() {
         if c.is_ascii_hexdigit() {
             hex(&mut it, c, run);
             space(&mut pending_space, out);
@@ -268,23 +268,49 @@ fn unicode(s: &str, out: &mut String, run: &mut String) {
             pending_space = true;
         } else {
             space(&mut pending_space, out);
-            out.push(c);
+            // 整段吞并「普通字符」run 并一次性 push_str：中文日志每行只有少量
+            // 数字/空白段，逐字符 push 是 normalize 的主要成本。
+            let end = plain_run(&mut it, start, c);
+            out.push_str(&s[start..end]);
         }
     }
 }
 
+/// 归一化扫描游标：字符 + 字节起点（普通 run 需要整段切片）。
+type Cursor<'a> = std::iter::Peekable<std::str::CharIndices<'a>>;
+
+/// 吞并「普通字符」run（非十六进制/数字/空白），返回切片终点（不含）。
+fn plain_run(it: &mut Cursor<'_>, start: usize, first: char) -> usize {
+    let mut end = start + first.len_utf8();
+    while let Some(&(j, d)) = it.peek() {
+        if d.is_ascii_hexdigit() || d.is_whitespace() {
+            break;
+        }
+        end = j + d.len_utf8();
+        it.next();
+    }
+    end
+}
+
 /// 收集一段连续十六进制 run（首字符已消费）。
-fn hex(it: &mut std::iter::Peekable<std::str::Chars<'_>>, first: char, run: &mut String) {
+fn hex(it: &mut Cursor<'_>, first: char, run: &mut String) {
     run.clear();
     run.push(first);
-    while it.peek().is_some_and(|&n| n.is_ascii_hexdigit()) {
-        run.push(it.next().unwrap());
+    while let Some(&(_, n)) = it.peek() {
+        if !n.is_ascii_hexdigit() {
+            break;
+        }
+        run.push(n);
+        it.next();
     }
 }
 
 /// 跳过满足谓词的连续字符。
-fn skip(it: &mut std::iter::Peekable<std::str::Chars<'_>>, pred: impl Fn(char) -> bool) {
-    while it.peek().is_some_and(|&n| pred(n)) {
+fn skip(it: &mut Cursor<'_>, pred: impl Fn(char) -> bool) {
+    while let Some(&(_, n)) = it.peek() {
+        if !pred(n) {
+            break;
+        }
         it.next();
     }
 }
@@ -534,6 +560,63 @@ pub(crate) fn stack(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 朴素参考实现（批量 run 优化前的逐字符语义），供差分测试。
+    fn naive_unicode(s: &str) -> String {
+        let mut out = String::new();
+        let mut run = String::new();
+        let mut pending = false;
+        let mut it = s.chars().peekable();
+        while let Some(c) = it.next() {
+            if c.is_ascii_hexdigit() {
+                run.clear();
+                run.push(c);
+                while let Some(&n) = it.peek() {
+                    if !n.is_ascii_hexdigit() {
+                        break;
+                    }
+                    run.push(n);
+                    it.next();
+                }
+                space(&mut pending, &mut out);
+                fold(&run, &mut out);
+            } else if c.is_ascii_digit() {
+                while it.peek().is_some_and(|&n| n.is_ascii_digit()) {
+                    it.next();
+                }
+                space(&mut pending, &mut out);
+                out.push('#');
+            } else if c.is_whitespace() {
+                while it.peek().is_some_and(|&n| n.is_whitespace()) {
+                    it.next();
+                }
+                pending = true;
+            } else {
+                space(&mut pending, &mut out);
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn unicode_bulk_run_matches_naive() {
+        let cases = [
+            "服务器　超时  42",
+            "a\tb\x0bc\r\nd",
+            "deadbeef deadbee abc123 0xDEADBEEF",
+            "错误 42 naïve 123456789",
+            "conn 9f2a ",
+            "纯中文无数字的普通文本",
+            "🙂 emoji 混合 ＡＢＣ",
+            "abc def",
+        ];
+        for input in cases {
+            let mut got = String::new();
+            normalize(input, &mut got, &mut String::new());
+            assert_eq!(got, naive_unicode(input), "normalize mismatch for {input:?}");
+        }
+    }
 
     #[test]
     fn error_flags_split_warn_from_failure() {
