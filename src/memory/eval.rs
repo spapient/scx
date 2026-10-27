@@ -735,7 +735,14 @@ mod tests {
             false,
         );
         // 例 2：top1 答错（分数很高）→ 必须计入分母且算未命中。
-        acc.fold(&mk(&["c1"]), vec![hit("c9", 0.95)], vec![], 0.55, 0.15, false);
+        acc.fold(
+            &mk(&["c1"]),
+            vec![hit("c9", 0.95)],
+            vec![],
+            0.55,
+            0.15,
+            false,
+        );
         // 例 3：top1 正确但间距 0.1 < 0.15 → 不自答。
         acc.fold(
             &mk(&["c1"]),

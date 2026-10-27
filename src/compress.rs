@@ -936,13 +936,7 @@ struct Fill {
 /// 排序按 `scores + boost` 降序、行号升序（确定性 tie-break）。
 /// `remaining` 为 `--max-tokens` 下可选填充的可分配余量（无上限时 +∞）；
 /// 填充总量受 `min(budget, remaining)` 双重约束。
-fn fill(
-    sel: &Select,
-    cfg: &Fill,
-    keep: &mut [bool],
-    kept: &mut usize,
-    reason: &mut [u8],
-) -> f64 {
+fn fill(sel: &Select, cfg: &Fill, keep: &mut [bool], kept: &mut usize, reason: &mut [u8]) -> f64 {
     let total = sel.lines.len();
     let budget = (cfg.total_tok * cfg.ratio).max(crate::policy::BUDGET_MIN);
     let cap = budget.min(cfg.remaining);
@@ -1289,13 +1283,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
 
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
     let masks = masks(&lines, &uniq_terms, &force_pats, small_tok, do_tok);
-    let (dup, folds) = dedup(
-        &lines,
-        &masks.mask,
-        masks.words,
-        &masks.errs,
-        &masks.pinned,
-    );
+    let (dup, folds) = dedup(&lines, &masks.mask, masks.words, &masks.errs, &masks.pinned);
     let stat = weights(&masks.mask, masks.words, &dup, uniq_terms.len(), folds);
     let seeds = marks(
         &masks.mask,
@@ -1888,7 +1876,14 @@ mod tests {
         // 归一化键 < 6 字符（含首尾空白填充）的行从不参与折叠；长行仍按
         // 第 3 次起折叠。快速路径（trim 后 < 6 字节直接跳过）不得改变判定。
         let lines: Vec<&str> = vec![
-            "abc", "   abc   ", "a\tb", "错误", "abcdef", "abcdef", "abcdef", "abcdef",
+            "abc",
+            "   abc   ",
+            "a\tb",
+            "错误",
+            "abcdef",
+            "abcdef",
+            "abcdef",
+            "abcdef",
         ];
         let mask = vec![0u64; lines.len()];
         let err = vec![false; lines.len()];

@@ -1805,10 +1805,7 @@ mod tests {
         let readme = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"))
             .expect("README.md 必须存在");
         let marker = "键白名单 `";
-        let start = readme
-            .find(marker)
-            .expect("README 必须列出策略键白名单")
-            + marker.len();
+        let start = readme.find(marker).expect("README 必须列出策略键白名单") + marker.len();
         // README 以「`key`/`key`/…；」列出：截到中文分号，再按 / 拆分、去反引号。
         let rest = &readme[start..];
         let end = rest.find('；').expect("白名单必须以中文分号收尾");

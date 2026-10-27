@@ -912,10 +912,7 @@ fn select(hits: &[Rank], docs: &Docs, k: usize, meta: &Meta) -> Vec<Hit> {
         let scores_norm: Vec<f64> = hits.iter().map(|h| h.sim).collect();
         // doc_terms 必须与 scores_norm/order 同为 hit 下标空间：hits 是 docs 的
         // 打分后子集，按 docs 顺序建会错位（线性路径 docs.len() > hits.len()）。
-        let doc_terms: Vec<&[String]> = hits
-            .iter()
-            .map(|h| &docs[h.doc].1.terms[..])
-            .collect();
+        let doc_terms: Vec<&[String]> = hits.iter().map(|h| &docs[h.doc].1.terms[..]).collect();
         crate::memory::ranking::pick(&order, &doc_terms, &scores_norm, k, lambda)
     } else {
         order.truncate(k);

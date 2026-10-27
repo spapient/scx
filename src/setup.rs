@@ -247,11 +247,10 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
 /// 段头判定：`[mcp_servers.scx]` 允许行尾注释（`# note`），但不匹配更长的段名。
 /// 只用精确匹配会把「段头带注释」当成未注册，进而追加重复段使配置损坏。
 fn header(t: &str) -> bool {
-    t.strip_prefix("[mcp_servers.scx]")
-        .is_some_and(|rest| {
-            let rest = rest.trim_start();
-            rest.is_empty() || rest.starts_with('#')
-        })
+    t.strip_prefix("[mcp_servers.scx]").is_some_and(|rest| {
+        let rest = rest.trim_start();
+        rest.is_empty() || rest.starts_with('#')
+    })
 }
 
 /// 段内更新 command 行（保持文件其余内容逐字节不变）。
@@ -530,7 +529,10 @@ mod tests {
             1,
             "不得追加重复段: {text}"
         );
-        assert!(text.contains("command = \"/new/bin\""), "应原位更新: {text}");
+        assert!(
+            text.contains("command = \"/new/bin\""),
+            "应原位更新: {text}"
+        );
         assert!(text.contains("# keep this note"), "段头注释保留: {text}");
         let _ = std::fs::remove_dir_all(&dir);
     }

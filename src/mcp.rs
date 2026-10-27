@@ -460,11 +460,16 @@ mod tests {
         // JSON-RPC 2.0：notification（无 id）不得回复。
         let mut usage = Usage::default();
         assert!(handle(r#"{"jsonrpc":"2.0","method":"nope"}"#, &mut usage).is_none());
-        assert!(handle(r#"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"nope"}}"#, &mut usage)
-            .is_none());
+        assert!(handle(
+            r#"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"nope"}}"#,
+            &mut usage
+        )
+        .is_none());
         // 带 id 的未知 method 仍需回错误。
-        assert!(handle(r#"{"jsonrpc":"2.0","id":7,"method":"nope"}"#, &mut usage)
-            .is_some_and(|r| r.contains("-32601")));
+        assert!(
+            handle(r#"{"jsonrpc":"2.0","id":7,"method":"nope"}"#, &mut usage)
+                .is_some_and(|r| r.contains("-32601"))
+        );
     }
 
     #[test]

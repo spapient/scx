@@ -629,7 +629,11 @@ mod tests {
         for input in cases {
             let mut got = String::new();
             normalize(input, &mut got);
-            assert_eq!(got, naive_unicode(input), "normalize mismatch for {input:?}");
+            assert_eq!(
+                got,
+                naive_unicode(input),
+                "normalize mismatch for {input:?}"
+            );
         }
     }
 

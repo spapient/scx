@@ -147,9 +147,7 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
         let raw = std::str::from_utf8(&self.src[start..self.pos]).map_err(|e| e.to_string())?;
-        let n: f64 = raw
-            .parse()
-            .map_err(|e| format!("bad number {raw}: {e}"))?;
+        let n: f64 = raw.parse().map_err(|e| format!("bad number {raw}: {e}"))?;
         // JSON 无 Infinity/NaN：`1e999` 会解析成 inf，放行会导致回显 `"id":inf`
         // 这类非法 JSON（MCP 客户端整流解析失败）。
         if !n.is_finite() {
