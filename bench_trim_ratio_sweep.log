@@ -1,0 +1,36 @@
+=== trim-ratio 0.2 ===
+=== GSM8K 8-shot 三方对照（Qwen2.5-3B-Instruct（千问） via MLX, n=50, seed=20261027）===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.480 (24/50)  ctx_tok=816  tok_ratio=0.613
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 22/30 = 0.733
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 15 样本
+  >35%: 35 样本
+=== trim-ratio 0.3 ===
+=== GSM8K 8-shot 三方对照（Qwen2.5-3B-Instruct（千问） via MLX, n=50, seed=20261027）===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.540 (27/50)  ctx_tok=866  tok_ratio=0.650
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 25/30 = 0.833
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 27 样本
+  >35%: 23 样本
+=== trim-ratio 0.5 ===
+=== GSM8K 8-shot 三方对照（Qwen2.5-3B-Instruct（千问） via MLX, n=50, seed=20261027）===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.540 (27/50)  ctx_tok=953  tok_ratio=0.716
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 26/30 = 0.867
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 41 样本
+  >35%: 9 样本
+=== trim-ratio 0.7 ===
+
+=== GSM8K 8-shot 三方对照（Qwen2.5-3B-Instruct（千问） via MLX, n=50, seed=20261027）===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.600 (30/50)  ctx_tok=1056  tok_ratio=0.792
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 26/30 = 0.867
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 50 样本
