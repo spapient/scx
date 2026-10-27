@@ -334,13 +334,13 @@ fn result(
 fn rate(mem_dir: &str, id: &str, good: bool) -> Reply {
     let case = crate::memory::rate(mem_dir, id, good)
         .map_err(|e| Failure::message(format!("rate failed: {e}")))?;
-    println!(
+    say(format!(
         "rate: good={} bad={} quality={:.2} status={} case={}",
         case.feedback.good, case.feedback.bad, case.quality, case.status, id
-    );
+    ))?;
     if good {
         let (base, _) = crate::memory::params(mem_dir);
-        println!("l1_base: {base:.3} (自适应)");
+        say(format!("l1_base: {base:.3} (自适应)"))?;
     }
     Ok(())
 }
@@ -351,14 +351,12 @@ fn apply(op: Op) -> Reply {
         Op::Rebuild { mem_dir } => {
             let (docs, terms) = crate::memory::rebuild(&mem_dir)
                 .map_err(|e| Failure::message(format!("rebuild failed: {e}")))?;
-            println!("rebuild: docs={docs} terms={terms}");
-            Ok(())
+            say(format!("rebuild: docs={docs} terms={terms}"))
         }
         Op::Gc { mem_dir } => {
             let removed = crate::memory::gc(&mem_dir)
                 .map_err(|e| Failure::message(format!("gc failed: {e}")))?;
-            println!("gc: removed={removed}");
-            Ok(())
+            say(format!("gc: removed={removed}"))
         }
         Op::Delete { mem_dir, id } => delete(&mem_dir, &id),
         Op::Annotate(job) => annotate(&job),
@@ -378,10 +376,7 @@ fn apply(op: Op) -> Reply {
 
 fn delete(mem_dir: &str, id: &str) -> Reply {
     match crate::memory::delete(mem_dir, id) {
-        Ok(true) => {
-            println!("delete: removed case={id}");
-            Ok(())
-        }
+        Ok(true) => say(format!("delete: removed case={id}")),
         Ok(false) => Err(Failure::message(format!("no such case: {id}"))),
         Err(e) => Err(Failure::message(format!("delete failed: {e}"))),
     }
@@ -443,11 +438,12 @@ pub fn render(r: &Outcome) -> String {
     }
     // v0.6.4 效果口径：输入/输出 token 估算（`terms::estimate`）与缩减率，全模式
     // 恒定填充（passthrough/fail-open 时 tokens_out == tokens_in，cut 为 0）。
+    let tokens_out = crate::terms::estimate(&r.text);
     out.push_str(&format!(
         ",\"tokens_in\":{:.0},\"tokens_out\":{:.0},\"token_cut_pct\":{:.1}",
         r.tokens_in,
-        crate::terms::estimate(&r.text),
-        token_cut(r.tokens_in, crate::terms::estimate(&r.text))
+        tokens_out,
+        token_cut(r.tokens_in, tokens_out)
     ));
     // 删除区间（每段一条，1-based 闭区间 + 原因）；默认 stdout 统计行不输出。
     out.push_str(&format!(
@@ -468,7 +464,7 @@ pub fn render(r: &Outcome) -> String {
     // 信息留存率（0..=1）：显式证据或默认行保留率代理（P4），全模式恒填充。
     out.push_str(&format!(",\"ev_retention\":{:.4}", r.ev_retention));
     // 分桶统计（默认单桶；compress_bucketed 时逐桶填充）。
-    let global_out = crate::terms::estimate(&r.text);
+    let global_out = tokens_out;
     out.push_str(",\"buckets\":[");
     for (i, b) in r.buckets.iter().enumerate() {
         if i > 0 {
@@ -841,19 +837,33 @@ fn write(result: io::Result<()>) -> Reply {
     }
 }
 
-fn emit(result: io::Result<Vec<String>>, action: &str) -> Reply {
-    let lines = result.map_err(|e| Failure::message(format!("{action} failed: {e}")))?;
+/// 逐行写 stdout；BrokenPipe 视为正常结束（下游关闭，如 `| head`），与 [`write`]
+/// 同口径，其余 IO 错误上报。
+fn lines_out(lines: Vec<String>) -> Reply {
+    let mut out = io::stdout().lock();
     for line in lines {
-        println!("{line}");
+        match writeln!(out, "{line}") {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::BrokenPipe => return Ok(()),
+            Err(e) => return Err(Failure::message(format!("cannot write output: {e}"))),
+        }
     }
     Ok(())
 }
 
+/// 单行 stdout 输出（BrokenPipe 语义同 [`lines_out`]）。
+fn say(text: String) -> Reply {
+    lines_out(vec![text])
+}
+
+fn emit(result: io::Result<Vec<String>>, action: &str) -> Reply {
+    let lines = result.map_err(|e| Failure::message(format!("{action} failed: {e}")))?;
+    lines_out(lines)
+}
+
 fn eval(result: io::Result<(Vec<String>, bool)>) -> Reply {
     let (lines, gate_failed) = result.map_err(|e| Failure::message(format!("eval failed: {e}")))?;
-    for line in lines {
-        println!("{line}");
-    }
+    lines_out(lines)?;
     if gate_failed {
         Err(Failure::GateFailed)
     } else {
@@ -880,15 +890,12 @@ fn annotate(job: &Annotate) -> Reply {
         &path,
     )
     .map_err(|e| Failure::message(format!("annotate failed: {e}")))?;
-    for line in lines {
-        println!("{line}");
-    }
+    lines_out(lines)?;
     let out_name = std::path::Path::new(&path)
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.clone());
-    println!("  out: {out_name}");
-    Ok(())
+    say(format!("  out: {out_name}"))
 }
 
 /// 可插拔相似度后端：在 ops 层（I/O 层）预计算 query×每行的相似度，

@@ -178,7 +178,9 @@ pub(crate) fn invalidate(root: &str) -> std::io::Result<()> {
 
 /// 进程内索引缓存（会话/守护进程多次召回免重复 parse；CLI 单次无副作用）。
 /// 键 = (root, postings mtime)：invalidate 删文件/重建后 mtime 变化 → 自动 miss。
-type Entry = (String, SystemTime, Arc<Index>);
+/// 缓存键：mtime + 文件长度（仅 mtime 在粗粒度文件系统上会误命中）。
+type Key = (SystemTime, u64);
+type Entry = (String, Key, Arc<Index>);
 static INDEX_CACHE: OnceLock<Mutex<Option<Entry>>> = OnceLock::new();
 
 fn cache() -> &'static Mutex<Option<Entry>> {
@@ -221,7 +223,13 @@ fn terms(docs: &[(String, Record)]) -> HashMap<String, Vec<usize>> {
     let mut dict: HashMap<String, Vec<usize>> = HashMap::new();
     for (di, (_, rec)) in docs.iter().enumerate() {
         for t in rec.terms.iter() {
-            dict.entry(t.clone()).or_default().push(di);
+            // 命中已存在的键时不再克隆字符串（10k 库可达百万次无谓分配）。
+            match dict.get_mut(t.as_str()) {
+                Some(v) => v.push(di),
+                None => {
+                    dict.insert(t.clone(), vec![di]);
+                }
+            }
         }
     }
     dict
@@ -310,28 +318,36 @@ pub(crate) fn build(root: &str) -> std::io::Result<(usize, usize, Df)> {
 /// 1 万条库的 postings 仅数 MB，`fs::read` 在页缓存下开销可忽略，且保持零 unsafe。
 pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
     let p = postings(root);
-    if !p.exists() {
-        return Ok(None);
-    }
-    let mtime = p.metadata().and_then(|m| m.modified()).ok();
+    // 缓存键 = mtime + 文件长度：粗粒度 mtime 文件系统（ext3/NFS/SMB）上同秒重建
+    // 会得到相同 mtime，仅比 mtime 会长期复用旧索引并漏掉新 case。
+    let mtime = match p.metadata() {
+        Ok(m) => m.modified().ok().map(|t| (t, m.len())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => None,
+    };
     if let Some(idx) = cached(root, mtime.as_ref()) {
         return Ok(Some(idx));
     }
-    let buf = fs::read(&p)?;
+    let buf = match fs::read(&p) {
+        Ok(b) => b,
+        // 读取与 stat 之间被并发 rebuild 删除：按"无索引"处理，不当作错误。
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
     let parsed: Option<Index> = parse(&buf).map(Some)?;
     let arc = parsed.map(Arc::new);
     store(root, mtime, arc.as_ref());
     Ok(arc)
 }
 
-fn cached(root: &str, mtime: Option<&std::time::SystemTime>) -> Option<Arc<Index>> {
+fn cached(root: &str, mtime: Option<&Key>) -> Option<Arc<Index>> {
     let mt = mtime?;
     let g = cache().lock().unwrap();
     let (r, t, idx) = g.as_ref()?;
     (r == root && t == mt).then(|| idx.clone())
 }
 
-fn store(root: &str, mtime: Option<std::time::SystemTime>, idx: Option<&Arc<Index>>) {
+fn store(root: &str, mtime: Option<Key>, idx: Option<&Arc<Index>>) {
     if let (Some(mt), Some(idx)) = (mtime, idx) {
         let mut g = cache().lock().unwrap();
         *g = Some((root.to_string(), mt, idx.clone()));

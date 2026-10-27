@@ -1333,7 +1333,9 @@ fn force(
         return Ok(());
     }
     let trimmed = v.trim();
-    if let Some(rest) = trimmed.strip_prefix("re:") {
+    // 引擎（compress::forces）先整体小写再识别 `re:` 前缀，此处必须同口径校验，
+    // 否则 `RE:[` 之类会绕过前置校验，在引擎侧触发断言/静默丢弃。
+    if let Some(rest) = trimmed.to_lowercase().strip_prefix("re:") {
         // `re:` 前缀：整个值是单个正则，`|` 是正则交替不拆分。CLI 层前置
         // 校验手写正则子集，非法即报错拒绝运行。
         if rest.is_empty() {
@@ -1438,6 +1440,7 @@ fn content_kind(
     args: &[String],
     i: &mut usize,
 ) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
     let v = value(args, i, f.name, inline)?;
     let v = v.trim();
     if v == "auto" {
@@ -1772,6 +1775,29 @@ mod tests {
         ]))
         .is_err());
         assert!(all(args(&["--query", "a", "--stat", "--no-stats"])).is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_kind() {
+        // FLAGS 声明 --kind once:true，必须与 --ratio 等标量同口径拒绝重复。
+        assert!(all(args(&["--query", "q", "--kind", "tool-output"])).is_ok());
+        assert!(all(args(&[
+            "--query",
+            "q",
+            "--kind",
+            "tool-output",
+            "--kind",
+            "session-message"
+        ]))
+        .is_err());
+    }
+
+    #[test]
+    fn force_re_prefix_is_case_insensitive() {
+        // 引擎先整体小写再识别 `re:`；CLI 校验必须同口径，否则 `RE:[` 会绕过
+        // 前置校验，在引擎侧触发 debug 断言或静默丢弃该模式。
+        assert!(all(args(&["--query", "q", "--force", "RE:["])).is_err());
+        assert!(all(args(&["--query", "q", "--force", "RE:error|fatal"])).is_ok());
     }
 
     #[test]

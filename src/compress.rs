@@ -523,6 +523,9 @@ fn structures(lines: &[&str]) -> Shape {
             continue;
         }
         if fence(line) {
+            // 进入 fence 前先收尾此前的连续结构段（如 import 块），否则该段
+            // 起点会随 cur 一起被丢弃，`--structure 1` 保护不到它。
+            close(&mut regions, cur, i.saturating_sub(1));
             block = Some(i);
             cur = None;
             brace.reset();
@@ -733,7 +736,11 @@ fn apply_sims(cfg: &Config, scores: &mut [f64], dup: &[bool], total: usize) {
     }
     for i in 0..total {
         if !dup[i] && i < sims.len() {
-            scores[i] += sims[i] * cfg.sim_weight;
+            // 外部嵌入命令可能输出 NaN/inf（`f64::from_str` 接受 "NaN"）；
+            // 一旦进入 scores，排序比较器将不再满足全序，std 会 panic 或乱序。
+            if sims[i].is_finite() {
+                scores[i] += sims[i] * cfg.sim_weight;
+            }
         }
     }
 }
@@ -1724,6 +1731,32 @@ mod tests {
         let map = structures(&lines);
         assert_eq!(map.regions.len(), 1);
         assert_eq!((map.regions[0].start, map.regions[0].end), (0, 2));
+    }
+
+    #[test]
+    fn nan_sims_do_not_poison_scores() {
+        // 外部嵌入命令输出 NaN 时不得进入排序分（比较器会失去全序）。
+        let text = (0..200)
+            .map(|i| format!("line {i}: conn pool timeout db error 9f2a"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let cfg = crate::Config {
+            sims: Some(vec![f64::NAN; 200]),
+            ..crate::Config::default()
+        };
+        let out = compress(&text, "conn timeout", &cfg);
+        assert!(out.kept >= 1, "NaN 相似度不应破坏压缩结果");
+        assert!(out.text.is_char_boundary(0));
+    }
+
+    #[test]
+    fn scan_structures_import_block_closed_before_fence() {
+        // 进入 fence 前必须先收尾未结束的结构段，否则 import 段整体丢失。
+        let lines = sample_lines(&["import os", "import sys", "```", "code", "```", "x"]);
+        let map = structures(&lines);
+        let mut spans: Vec<(usize, usize)> = map.regions.iter().map(|r| (r.start, r.end)).collect();
+        spans.sort();
+        assert_eq!(spans, vec![(0, 1), (2, 4)]);
     }
 
     #[test]

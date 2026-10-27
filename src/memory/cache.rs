@@ -19,7 +19,7 @@
 use crate::memory::util::{parts, seconds};
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
@@ -335,11 +335,16 @@ fn normalize(query: &str) -> String {
 /// 读取全部条目（append-only 顺序）。header 损坏/版本不符返回空（可重建）。
 pub(crate) fn load(root: &str) -> std::io::Result<Vec<Entry>> {
     let p = path(root);
-    if !p.exists() {
-        return Ok(Vec::new());
-    }
     let mut buf = Vec::new();
-    fs::File::open(&p)?.read_to_end(&mut buf)?;
+    match fs::File::open(&p) {
+        Ok(mut f) => {
+            f.read_to_end(&mut buf)?;
+        }
+        // 直接 open 而非先 exists 再 open：两步之间并发 delete/merge 删掉文件时，
+        // NotFound 应视为空库，而不是让整次召回失败。
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    }
     Ok(decode(&buf).entries)
 }
 

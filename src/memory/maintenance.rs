@@ -106,6 +106,9 @@ fn write(root: &str, n_docs: usize, df: &[(String, usize)]) {
     let Ok(txt) = fs::read_to_string(&p) else {
         return;
     };
+    // 持 meta.lock 重数一遍：build 起点到此处之间可能有并发 ingest 新增 case 并
+    // 已 recount 回写，用 build 时的 n_docs 会把计数覆盖回旧值。
+    let n_docs = store::list(root).map(|v| v.len()).unwrap_or(n_docs);
     let mut out: Vec<String> = Vec::new();
     let mut wrote_df = false;
     for line in txt.lines() {
