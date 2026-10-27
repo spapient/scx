@@ -371,7 +371,11 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
     );
     v.push((
         "memory_rebuild".into(),
-        vec!["--rebuild", "--mem-dir", Box::leak(rebuild.into_boxed_str())],
+        vec![
+            "--rebuild",
+            "--mem-dir",
+            Box::leak(rebuild.into_boxed_str()),
+        ],
         String::new(),
     ));
 
