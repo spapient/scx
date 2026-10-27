@@ -7,7 +7,7 @@
 //! 不在函数体内硬编码。独立成文件以维持 crate 根 <500 行门禁。
 
 use crate::analysis::{
-    closes, diff, fence, flags, frame, heading, import, lineref, marker, meta, stack,
+    closes, diff, error_line, fence, flags, frame, heading, import, lineref, marker, meta, stack,
 };
 use crate::analysis::{lowercase, normalize};
 use crate::policy::{Limits, Weights, DEFAULT_RISK, DEFAULT_SCORES};
@@ -189,7 +189,14 @@ fn tally(lines: &[&str], total: usize, small_tok: f64, do_tok: bool) -> (Vec<f64
 
 /// 一次逐行×逐词扫描出命中位掩码；错误/标记/守卫/force 判定复用同一小写缓冲（无逐行分配）。
 /// `do_tok` 为真时在循环内累计 token 估算（大输入 + 非针尖档），避免为同一批行再走一趟。
-fn masks(lines: &[&str], terms: &[String], forces: &[Force], small_tok: f64, do_tok: bool) -> Mask {
+fn masks(
+    lines: &[&str],
+    terms: &[String],
+    forces: &[Force],
+    small_tok: f64,
+    do_tok: bool,
+    precise: bool,
+) -> Mask {
     let total = lines.len();
     let words = terms.len().div_ceil(64).max(1);
     let mut mask = vec![0u64; total * words];
@@ -205,7 +212,9 @@ fn masks(lines: &[&str], terms: &[String], forces: &[Force], small_tok: f64, do_
         low.clear();
         lowercase(lines[i], &mut low);
         let ll = low.as_str();
-        (errs[i], guards[i]) = flags(ll);
+        let (err, guard) = flags(ll);
+        errs[i] = err;
+        guards[i] = if precise { error_line(ll) } else { guard };
         marked[i] = marker(ll);
         pinned[i] = forces.iter().any(|p| match p {
             Force::Sub(s) => ll.contains(s.as_str()),
@@ -1282,7 +1291,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
-    let masks = masks(&lines, &uniq_terms, &force_pats, small_tok, do_tok);
+    let masks = masks(
+        &lines,
+        &uniq_terms,
+        &force_pats,
+        small_tok,
+        do_tok,
+        cfg.guard_precise,
+    );
     let (dup, folds) = dedup(&lines, &masks.mask, masks.words, &masks.errs, &masks.pinned);
     let stat = weights(&masks.mask, masks.words, &dup, uniq_terms.len(), folds);
     let seeds = marks(

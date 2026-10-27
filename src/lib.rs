@@ -246,6 +246,10 @@ pub struct Config {
     /// 区域门控风险守卫（`--guard-region`）：HIGH 风险时只保护证据邻域（±window
     /// 区域）内的失败级错误行与事故标记行，而非全量错误行。默认 false = 现状行为。
     pub guard_region: bool,
+    /// 精度优先风险守卫（`--guard-precise`）：HIGH 风险时用结构化错误判定
+    /// （行首错误标签/强结构标记）替代宽召回 `flags().1`，只保护「真正的错误行」
+    /// 而非「提到 error/失败 的行」。默认 false = 现状宽召回行为。
+    pub guard_precise: bool,
     /// 保留行输出时附加原文行号前缀（grep -n 风格 `N: `）；passthrough/fail-open 返回原文时不附加。
     pub lineno: bool,
     /// `--force` 值按 `|` 拆分后的原始子串（大小写不敏感字面匹配）。
@@ -300,6 +304,7 @@ impl Default for Config {
             elide: true,
             gate: true,
             guard_region: false,
+            guard_precise: false,
             lineno: false,
             forces: Vec::new(),
             limit: None,

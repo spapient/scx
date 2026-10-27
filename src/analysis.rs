@@ -143,6 +143,57 @@ pub(crate) fn marker(ll: &str) -> bool {
 fn head(b: u8) -> bool {
     matches!(b, b'r' | b'f' | b'm' | b'a')
 }
+
+/// 结构化错误判定（精度优先）：错误词作为「标签」（行首 / 强结构标记），
+/// 而非正文顺带出现的普通词。供 `--guard-precise` 下风险守卫替代宽召回
+/// `flags().1`，消除文档/注释里「提到 error/失败」造成的误报。
+/// 与 `marker()` 同风格（行首/结构优先），输入为已小写缓冲。
+pub(crate) fn error_line(ll: &str) -> bool {
+    let t = ll.trim_start();
+    if t.is_empty() {
+        return false;
+    }
+    if ERROR_MARKERS.iter().any(|m| t.contains(m)) {
+        return true;
+    }
+    ERROR_LEADS.iter().any(|w| lead_word(t, w))
+}
+
+/// 强结构标记：编译错误码 / panic / traceback / 失败符号（行内出现即命中）。
+const ERROR_MARKERS: &[&str] = &[
+    "error[",
+    "panic!",
+    "traceback (",
+    "exception in",
+    "caused by:",
+    "✗",
+    "❌",
+];
+
+/// 行首错误标签：trim 后以错误词开头（后接边界判定，见 `lead_word`）。
+const ERROR_LEADS: &[&str] = &[
+    "error",
+    "fatal",
+    "panic",
+    "exception",
+    "错误",
+    "失败",
+    "报错",
+    "异常",
+    "超时",
+    "崩溃",
+];
+
+/// 行首标签边界：词后须为非字母数字（空格/标点/行尾），避免 errorless/失败率 等误命中。
+fn lead_word(t: &str, w: &str) -> bool {
+    if !t.starts_with(w) {
+        return false;
+    }
+    match t[w.len()..].chars().next() {
+        Some(c) => !c.is_alphanumeric(),
+        None => true,
+    }
+}
 pub(crate) fn heading(s: &str) -> bool {
     let t = s.trim_start();
     if t.is_empty() {
@@ -644,6 +695,33 @@ mod tests {
         assert_eq!(flags("failed to connect"), (true, true));
         assert_eq!(flags("info heartbeat"), (false, false));
         assert_eq!(flags("warn then error"), (true, true));
+    }
+
+    #[test]
+    fn error_line_precision_over_recall() {
+        // 真错误（行首错误标签 / 强结构标记）命中。
+        for s in [
+            "error: boom",
+            "error db timeout",
+            "错误：数据库超时",
+            "error[e0433]: use of undeclared crate",
+            "panic! at foo.rs:10",
+            "traceback (most recent call last)",
+            "✗ test failed",
+        ] {
+            assert!(error_line(s), "真错误应命中: {s:?}");
+        }
+        // 提到错误/失败的文档正文不命中（误报）。
+        for s in [
+            "错误堆栈、git diff 进入上下文之前",
+            "在编译期失败",
+            "the error rate is high",
+            "errorless",
+            "handle errors gracefully",
+            "info heartbeat ok",
+        ] {
+            assert!(!error_line(s), "误报不应命中: {s:?}");
+        }
     }
 
     #[test]
