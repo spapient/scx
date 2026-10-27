@@ -276,7 +276,7 @@ fn unicode(s: &str, out: &mut String) {
             space(&mut pending_space, out);
             // 整段吞并「普通字符」run 并一次性 push_str：中文日志每行只有少量
             // 数字/空白段，逐字符 push 是 normalize 的主要成本。
-            let end = plain_run(&mut it, start, c);
+            let end = plain(&mut it, start, c);
             out.push_str(&s[start..end]);
         }
     }
@@ -286,7 +286,7 @@ fn unicode(s: &str, out: &mut String) {
 type Cursor<'a> = std::iter::Peekable<std::str::CharIndices<'a>>;
 
 /// 吞并「普通字符」run（非十六进制/数字/空白），返回切片终点（不含）。
-fn plain_run(it: &mut Cursor<'_>, start: usize, first: char) -> usize {
+fn plain(it: &mut Cursor<'_>, start: usize, first: char) -> usize {
     let mut end = start + first.len_utf8();
     while let Some(&(j, d)) = it.peek() {
         if d.is_ascii_hexdigit() || d.is_whitespace() {

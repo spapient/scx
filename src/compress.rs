@@ -162,19 +162,19 @@ fn force(pats: &mut Vec<Force>, p: String) {
 
 /// 逐行 × 逐词位掩码扫描结果：命中掩码、错误/标记/守卫/force 判定与 token 估算。
 struct Mask {
-    mask_v: Vec<u64>,
+    mask: Vec<u64>,
     words: usize,
-    err_v: Vec<bool>,
-    marker_v: Vec<bool>,
-    guard_v: Vec<bool>,
-    force_v: Vec<bool>,
+    errs: Vec<bool>,
+    marked: Vec<bool>,
+    guards: Vec<bool>,
+    pinned: Vec<bool>,
     total_tok: f64,
     /// 每行 token 估算（空 = 未计算，调用方回退现算）。
     tok: Vec<f64>,
 }
 
 /// 每行 token 估算表；`do_tok=false` 时返回空表与 `small_tok`（不扫全篇）。
-fn tok_table(lines: &[&str], total: usize, small_tok: f64, do_tok: bool) -> (Vec<f64>, f64) {
+fn tally(lines: &[&str], total: usize, small_tok: f64, do_tok: bool) -> (Vec<f64>, f64) {
     if !do_tok {
         return (Vec::new(), small_tok);
     }
@@ -192,39 +192,39 @@ fn tok_table(lines: &[&str], total: usize, small_tok: f64, do_tok: bool) -> (Vec
 fn masks(lines: &[&str], terms: &[String], forces: &[Force], small_tok: f64, do_tok: bool) -> Mask {
     let total = lines.len();
     let words = terms.len().div_ceil(64).max(1);
-    let mut mask_v = vec![0u64; total * words];
-    let mut err_v = vec![false; total];
-    let mut marker_v = vec![false; total];
-    let mut guard_v = vec![false; total];
-    let mut force_v = vec![false; total];
+    let mut mask = vec![0u64; total * words];
+    let mut errs = vec![false; total];
+    let mut marked = vec![false; total];
+    let mut guards = vec![false; total];
+    let mut pinned = vec![false; total];
     // 每行 token 估算表：供填充与记账复用（此前同一批行会被 estimate 2–3 次）。
     // do_tok=false（小输入/针尖档）时为空表，调用方回退现算。
-    let (tok, total_tok) = tok_table(lines, total, small_tok, do_tok);
+    let (tok, total_tok) = tally(lines, total, small_tok, do_tok);
     let mut low = String::new();
     for i in 0..total {
         low.clear();
         lowercase(lines[i], &mut low);
         let ll = low.as_str();
-        (err_v[i], guard_v[i]) = flags(ll);
-        marker_v[i] = marker(ll);
-        force_v[i] = forces.iter().any(|p| match p {
+        (errs[i], guards[i]) = flags(ll);
+        marked[i] = marker(ll);
+        pinned[i] = forces.iter().any(|p| match p {
             Force::Sub(s) => ll.contains(s.as_str()),
             Force::Re(n) => n.matches(ll),
         });
         let base = i * words;
         for (k, t) in terms.iter().enumerate() {
             if ll.contains(t.as_str()) {
-                mask_v[base + k / 64] |= 1u64 << (k % 64);
+                mask[base + k / 64] |= 1u64 << (k % 64);
             }
         }
     }
     Mask {
-        mask_v,
+        mask,
         words,
-        err_v,
-        marker_v,
-        guard_v,
-        force_v,
+        errs,
+        marked,
+        guards,
+        pinned,
         total_tok,
         tok,
     }
@@ -239,10 +239,10 @@ fn dedup(
     force: &[bool],
 ) -> (Vec<bool>, usize) {
     let total = lines.len();
-    let mut seen_count: hash::Hash<String, usize> =
+    let mut seen: hash::Hash<String, usize> =
         hash::Hash::with_capacity_and_hasher(total, Default::default());
     let mut dup = vec![false; total];
-    let mut dup_n = 0usize;
+    let mut folds = 0usize;
     let mut key = String::new();
     // 与上一行原文相同（日志里连续重复很常见）时，key 里的归一化结果仍然有效，
     // 省掉一次 normalize。字符串相等先比长度再比字节，差异行通常是廉价判断。
@@ -256,17 +256,17 @@ fn dedup(
         if short(&key) {
             continue;
         }
-        if let Some(n) = seen_count.get_mut(key.as_str()) {
+        if let Some(n) = seen.get_mut(key.as_str()) {
             *n += 1;
             if foldable(n, mask, words, i, err, force) {
                 dup[i] = true;
-                dup_n += 1;
+                folds += 1;
             }
         } else {
-            seen_count.insert(key.clone(), 1);
+            seen.insert(key.clone(), 1);
         }
     }
-    (dup, dup_n)
+    (dup, folds)
 }
 
 /// 归一化键是否过短（短键不参与折叠，保持与 v0.4.1 一致）。
@@ -296,9 +296,9 @@ struct Stat {
     rare_thr: usize,
 }
 
-fn weights(mask: &[u64], words: usize, dup: &[bool], n_terms: usize, dup_n: usize) -> Stat {
+fn weights(mask: &[u64], words: usize, dup: &[bool], n_terms: usize, folds: usize) -> Stat {
     let total = dup.len();
-    let live: usize = total - dup_n;
+    let live: usize = total - folds;
     let n_live = live.max(1) as f64;
     let mut df = vec![0usize; n_terms];
     for (i, &is_dup) in dup.iter().enumerate() {
@@ -1289,22 +1289,22 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
 
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
     let masks = masks(&lines, &uniq_terms, &force_pats, small_tok, do_tok);
-    let (dup, dup_n) = dedup(
+    let (dup, folds) = dedup(
         &lines,
-        &masks.mask_v,
+        &masks.mask,
         masks.words,
-        &masks.err_v,
-        &masks.force_v,
+        &masks.errs,
+        &masks.pinned,
     );
-    let stat = weights(&masks.mask_v, masks.words, &dup, uniq_terms.len(), dup_n);
+    let stat = weights(&masks.mask, masks.words, &dup, uniq_terms.len(), folds);
     let seeds = marks(
-        &masks.mask_v,
+        &masks.mask,
         masks.words,
         &dup,
         &stat.df,
         &stat.weights,
         stat.rare_thr,
-        &masks.force_v,
+        &masks.pinned,
     );
     let seeds_total = (0..total).filter(|&i| seeds.seed[i]).count();
 
@@ -1315,7 +1315,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             total,
             chars_a,
             0.0,
-            dup_n,
+            folds,
             seeds_total,
             Risk::Low,
             0,
@@ -1336,8 +1336,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         &dup,
         &seeds.hits,
         &seeds.sumw,
-        &masks.err_v,
-        &masks.force_v,
+        &masks.errs,
+        &masks.pinned,
         &DEFAULT_SCORES,
     );
     // 语义增强（可选）：feature=semantic 且显式加载权重时，对非 dup 候选行
@@ -1392,7 +1392,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         0.0
     };
 
-    let risk = audit(&keep, &masks.err_v, &seeds.hits, &DEFAULT_RISK);
+    let risk = audit(&keep, &masks.errs, &seeds.hits, &DEFAULT_RISK);
     let mut guarded = 0u8;
     if active(risk, cfg) {
         let guard_region = cfg.guard_region.then_some(regions.in_region.as_slice());
@@ -1400,8 +1400,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             &mut keep,
             &mut keep_count,
             &dup,
-            &masks.guard_v,
-            &masks.marker_v,
+            &masks.guards,
+            &masks.marked,
             guard_region,
             &mut reason,
         );
@@ -1420,7 +1420,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             total,
             chars_a,
             0.0,
-            dup_n,
+            folds,
             seeds_total,
             risk,
             0,
@@ -1440,7 +1440,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         keep_count,
         chars_b,
         cut,
-        dup_n,
+        folds,
         seeds_total,
         risk,
         guarded,
@@ -1870,14 +1870,14 @@ mod tests {
     #[test]
     fn token_table_matches_estimate_and_falls_back() {
         let lines = ["abc", "数据库连接超时", "x y z 42"];
-        let (tok, total) = tok_table(&lines, 3, 0.0, true);
+        let (tok, total) = tally(&lines, 3, 0.0, true);
         let want: f64 = lines.iter().map(|l| crate::terms::estimate(l)).sum();
         assert_eq!(total, want);
         for (i, l) in lines.iter().enumerate() {
             assert_eq!(est(&tok, &lines, i), crate::terms::estimate(l));
         }
         // do_tok=false：空表 + small_tok，调用方回退现算。
-        let (empty, small) = tok_table(&lines, 3, 7.5, false);
+        let (empty, small) = tally(&lines, 3, 7.5, false);
         assert!(empty.is_empty());
         assert_eq!(small, 7.5);
         assert_eq!(est(&empty, &lines, 1), crate::terms::estimate(lines[1]));
