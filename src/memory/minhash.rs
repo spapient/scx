@@ -72,13 +72,14 @@ fn doc_freq(docs: &[&str]) -> HashMap<String, usize> {
 fn shingles(text: &str, df: &HashMap<String, usize>, n: usize) -> HashMap<u64, f64> {
     let mut map = HashMap::new();
     for t in crate::terms::memory(text) {
+        let df_t = df.get(&t).copied().unwrap_or(0);
         // 库级噪声词（出现在全部 doc）不参与：IDF 加权只能降到 1.0、无法剔除，
         // 硬过滤掉可避免它稀释加权 Jaccard 的分母（语义层实测退化根因）。
-        if n >= 2 && df.get(&t).copied().unwrap_or(0) >= n {
+        if n >= 2 && df_t >= n {
             continue;
         }
         let key = crate::memory::util::fnv1a(&t);
-        let w = idf(df.get(&t).copied().unwrap_or(0), n);
+        let w = idf(df_t, n);
         map.entry(key).or_insert(w);
     }
     chargrams(text, &mut map);

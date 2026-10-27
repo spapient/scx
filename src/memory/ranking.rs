@@ -206,7 +206,7 @@ fn sort(cand: &mut [(String, f64)]) {
 /// `cands` 应已按 score 降序；`docs` 与 `scores_norm` 按 doc 下标对齐。
 pub(crate) fn pick(
     cands: &[usize],
-    docs: &[Vec<String>],
+    docs: &[&[String]],
     scores_norm: &[f64],
     k: usize,
     lambda: f64,
@@ -220,7 +220,7 @@ pub(crate) fn pick(
         for (pi, &ci) in pool.iter().enumerate() {
             let mut max_sim = 0.0f64;
             for &pj in &picked {
-                max_sim = max_sim.max(jaccard(&docs[ci], &docs[pj]));
+                max_sim = max_sim.max(jaccard(docs[ci], docs[pj]));
             }
             let value = scores_norm[ci] - lambda * max_sim;
             if value > best_v {
@@ -372,11 +372,12 @@ mod mmr_tests {
 
     #[test]
     fn mmr_removes_redundant_variant() {
-        let docs = vec![
+        let raw = [
             terms(&["alpha", "conn", "db", "errno", "timeout"]),
             terms(&["beta", "conn", "db", "errno", "timeout"]),
             terms(&["disk", "fatal", "full", "space"]),
         ];
+        let docs: Vec<&[String]> = raw.iter().map(|d| d.as_slice()).collect();
         let cands = vec![0usize, 1, 2];
         let scores = vec![1.0, 0.7, 0.6];
         let picked = pick(&cands, &docs, &scores, 2, 0.5);
@@ -390,11 +391,12 @@ mod mmr_tests {
 
     #[test]
     fn mmr_lambda_zero_keeps_topk() {
-        let docs = vec![
+        let raw = [
             terms(&["db", "timeout"]),
             terms(&["db", "timeout"]),
             terms(&["db", "timeout"]),
         ];
+        let docs: Vec<&[String]> = raw.iter().map(|d| d.as_slice()).collect();
         let cands = vec![0usize, 1, 2];
         let scores = vec![1.0, 0.9, 0.8];
         assert_eq!(pick(&cands, &docs, &scores, 3, 0.0), vec![0, 1, 2]);
@@ -402,7 +404,8 @@ mod mmr_tests {
 
     #[test]
     fn mmr_k_larger_than_pool() {
-        let docs = vec![terms(&["a", "b"]), terms(&["c", "d"])];
+        let raw = [terms(&["a", "b"]), terms(&["c", "d"])];
+        let docs: Vec<&[String]> = raw.iter().map(|d| d.as_slice()).collect();
         let cands = vec![1usize, 0];
         let scores = vec![0.8, 0.7];
         let picked = pick(&cands, &docs, &scores, 5, 0.5);

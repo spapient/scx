@@ -266,6 +266,14 @@ fn fingerprint(query: &str, cfg: &Config) -> String {
     crate::hash::hex(&crate::hash::sha256(buf.as_bytes()))
 }
 
+/// 快照 id：SHA-256(payload_sha256 + config_fingerprint) 前 16 hex。
+fn snap_id(payload_sha256: &str, config_fingerprint: &str) -> String {
+    crate::hash::hex(&crate::hash::sha256(
+        format!("{payload_sha256}{config_fingerprint}").as_bytes(),
+    ))[..16]
+        .to_string()
+}
+
 /// 最简入口：分类化载荷分桶压缩并计量。
 ///
 /// `parts` = `[(ContentType, text)]`。`budget` 为 `None` 时预算字段为空态。
@@ -296,10 +304,7 @@ pub fn measure(
         .sum::<f64>();
     let payload_sha256 = payload_hash(parts);
     let config_fingerprint = fingerprint(query, cfg);
-    let id = crate::hash::hex(&crate::hash::sha256(
-        format!("{payload_sha256}{config_fingerprint}").as_bytes(),
-    ))[..16]
-        .to_string();
+    let id = snap_id(&payload_sha256, &config_fingerprint);
     Snapshot {
         id,
         round,
@@ -321,10 +326,7 @@ pub fn snapshot(round: u64, kind: ContentType, text: &str) -> Snapshot {
     let lines = text.lines().count();
     let payload_sha256 = crate::hash::hex(&crate::hash::sha256(text.as_bytes()));
     let config_fingerprint = crate::hash::hex(&crate::hash::sha256(crate::VERSION.as_bytes()));
-    let id = crate::hash::hex(&crate::hash::sha256(
-        format!("{payload_sha256}{config_fingerprint}").as_bytes(),
-    ))[..16]
-        .to_string();
+    let id = snap_id(&payload_sha256, &config_fingerprint);
     Snapshot {
         id,
         round,
