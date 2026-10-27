@@ -1158,19 +1158,24 @@ fn policy(
 }
 
 /// 策略键到 CLI flag 的静态映射（表驱动，避免长 match 链）。
+/// README 的策略键白名单必须与本表一致，由 `readme_policy_keys_match_whitelist` 守护。
+const POLICY_TABLE: &[(&str, &str)] = &[
+    ("ratio", "--ratio"),
+    ("context", "--context"),
+    ("window", "--window"),
+    ("elide", "--elide"),
+    ("risk_gate", "--risk-gate"),
+    ("guard_region", "--guard-region"),
+    ("lineno", "--lineno"),
+    ("max_tokens", "--max-tokens"),
+    ("structure", "--structure"),
+];
+
 fn lookup(key: &str) -> Option<&'static str> {
-    const TABLE: &[(&str, &str)] = &[
-        ("ratio", "--ratio"),
-        ("context", "--context"),
-        ("window", "--window"),
-        ("elide", "--elide"),
-        ("risk_gate", "--risk-gate"),
-        ("guard_region", "--guard-region"),
-        ("lineno", "--lineno"),
-        ("max_tokens", "--max-tokens"),
-        ("structure", "--structure"),
-    ];
-    TABLE.iter().find(|(k, _)| *k == key).map(|(_, flag)| *flag)
+    POLICY_TABLE
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, flag)| *flag)
 }
 
 /// 单键策略值落位：类型 + 范围校验，失败带行号报错。
@@ -1791,6 +1796,30 @@ mod tests {
         ]))
         .is_err());
         assert!(all(args(&["--query", "a", "--stat", "--no-stats"])).is_err());
+    }
+
+    /// README 的策略键白名单必须与 POLICY_TABLE 完全一致：新增策略键却忘了
+    /// 写文档（或反之）会让 `--policy-file` 的用户文档失真。
+    #[test]
+    fn readme_policy_keys_match_whitelist() {
+        let readme = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"))
+            .expect("README.md 必须存在");
+        let marker = "键白名单 `";
+        let start = readme
+            .find(marker)
+            .expect("README 必须列出策略键白名单")
+            + marker.len();
+        // README 以「`key`/`key`/…；」列出：截到中文分号，再按 / 拆分、去反引号。
+        let rest = &readme[start..];
+        let end = rest.find('；').expect("白名单必须以中文分号收尾");
+        let mut doc: Vec<&str> = rest[..end]
+            .split('/')
+            .map(|s| s.trim().trim_matches('`'))
+            .collect();
+        let mut code: Vec<&str> = POLICY_TABLE.iter().map(|(k, _)| *k).collect();
+        doc.sort_unstable();
+        code.sort_unstable();
+        assert_eq!(doc, code, "README 策略键白名单与 POLICY_TABLE 不一致");
     }
 
     #[test]

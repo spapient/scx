@@ -586,8 +586,7 @@ impl Brace {
 
     /// 扫描一行的大括号，块闭合时追加 Span。
     fn scan(&mut self, i: usize, line: &str, regions: &mut Vec<Span>) {
-        let opens = line.matches('{').count();
-        let closes = line.matches('}').count();
+        let (opens, closes) = braces(line);
         if self.start.is_none() {
             if opens > 0 {
                 self.start = Some(i);
@@ -608,6 +607,21 @@ impl Brace {
             }
         }
     }
+}
+
+/// 单趟统计一行里的 `{` 与 `}`：原实现对每行做两次 `matches().count()`
+/// 全行搜索。两者都是 ASCII 字节，字节计数与字符计数一致。
+fn braces(line: &str) -> (usize, usize) {
+    let mut opens = 0usize;
+    let mut closes = 0usize;
+    for &b in line.as_bytes() {
+        match b {
+            b'{' => opens += 1,
+            b'}' => closes += 1,
+            _ => {}
+        }
+    }
+    (opens, closes)
 }
 
 /// 相邻行是否同属一段（同类结构且段未关闭）。
@@ -1942,6 +1956,15 @@ mod tests {
         assert!(import("use crate::policy::DEFAULT_RATIO"));
         assert!(import("#include <stdio.h>"));
         assert!(import("import os"));
+    }
+
+    #[test]
+    fn scan_structures_brace_block_with_multibyte_lines() {
+        // 大括号按字节统计：中文行里的 { } 同样是 ASCII 字节，跨多字节字符不漏算。
+        let lines = sample_lines(&["函数() {", "  返回 42", "}"]);
+        let map = structures(&lines);
+        assert_eq!(map.regions.len(), 1);
+        assert_eq!((map.regions[0].start, map.regions[0].end), (0, 2));
     }
 
     #[test]

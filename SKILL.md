@@ -27,6 +27,7 @@ tools/scx --query "问题关键词" --ratio 0.35 /tmp/out.txt
 - `--policy-file <path>`：策略文本覆盖默认值（ratio/context/window/elide/risk_gate/lineno/max_tokens/structure）；优先级 CLI 显式 > 文件 > DEFAULT。
 - `--lineno 1`：筛选输出附原文行号前缀（`N: `）；passthrough/fail-open 返回原文时不附加。
 - `--risk-gate`（默认开）：风险审计为 HIGH 时额外保护失败级错误行与事故标记行（统计行 `guarded=1`）。
+- `--guard-region 1`（默认关）：HIGH 风险守卫只保护证据邻域内的错误/标记行，远处无关错误行照常裁剪；大日志上可显著提高压减率。
 - `--json` / `--stat` / `--no-stats`：统计输出形态（`--json` 含 dropped 区间明细与 max_tokens/tok_est 字段）。
 - `scx mcp`：进入 MCP stdio server 模式（initialize/tools/list/tools/call；`serverInfo.name=scx`，工具 `compress_context`/`connect_account`/`usage_summary`）——供 Claude/Codex/Cursor 以子进程拉起。
 - `scx setup [--claude|--codex|--cursor] [--project-cursor]`：一键注册 MCP 配置到三种 agent（注册名统一小写 `scx`；幂等、写前备份 `<path>.scx.bak`、写后 tools/list 自检；Claude/Codex 优先官方 CLI、兜底写配置文件）。
