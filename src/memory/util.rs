@@ -2,21 +2,15 @@
 //!
 //! 零依赖、零 I/O、确定性（无随机源、无环境读取）。
 
-/// FNV-1a 64 位哈希（确定性、无随机源）。
+/// FNV-1a 64 位哈希（确定性、无随机源）。实现收敛在 [`crate::hash`]，
+/// 去重分桶与身份键共用同一份算法。
 pub(crate) fn fnv1a(s: &str) -> u64 {
-    parts(&[s.as_bytes()])
+    crate::hash::fnv1a(s.as_bytes())
 }
 
 /// 分片 FNV-1a：避免为复合身份键拼接临时字符串。
 pub(crate) fn parts(parts: &[&[u8]]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for part in parts {
-        for &b in *part {
-            h ^= u64::from(b);
-            h = h.wrapping_mul(0x100_0000_01b3);
-        }
-    }
-    h
+    crate::hash::fnv1a_parts(parts)
 }
 
 /// case id：`<YYYY-MM-DD>_<hash16>`，hash = FNV-1a(query‖\0‖text) 全 64 位 hex。

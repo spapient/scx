@@ -92,6 +92,23 @@ fn block(chunk: &[u8], w: &mut [u32; 64], h: &mut [u32; 8]) {
     h[7] = h[7].wrapping_add(hh);
 }
 
+/// FNV-1a 64 位（字节口径）：稳定的零依赖散列，供去重分桶与记忆库身份键共用。
+pub fn fnv1a(bytes: &[u8]) -> u64 {
+    fnv1a_parts(&[bytes])
+}
+
+/// 分片 FNV-1a：等价于对拼接后的字节流取哈希，避免拼接临时缓冲。
+pub fn fnv1a_parts(parts: &[&[u8]]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for part in parts {
+        for &b in *part {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    h
+}
+
 /// 字节 → 小写十六进制。
 pub fn hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);

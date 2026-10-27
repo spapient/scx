@@ -228,9 +228,15 @@ fn dedup(
     let mut dup = vec![false; total];
     let mut dup_n = 0usize;
     let mut key = String::new();
+    // 与上一行原文相同（日志里连续重复很常见）时，key 里的归一化结果仍然有效，
+    // 省掉一次 normalize。字符串相等先比长度再比字节，差异行通常是廉价判断。
+    let mut prev: Option<&str> = None;
     for i in 0..total {
-        key.clear();
-        normalize(lines[i], &mut key);
+        if prev != Some(lines[i]) {
+            key.clear();
+            normalize(lines[i], &mut key);
+            prev = Some(lines[i]);
+        }
         if short(&key) {
             continue;
         }
@@ -1743,6 +1749,98 @@ mod tests {
         let map = structures(&lines);
         assert_eq!(map.regions.len(), 1);
         assert_eq!((map.regions[0].start, map.regions[0].end), (0, 2));
+    }
+
+    /// 朴素参考实现：线性查找重复，独立于生产实现的 HashMap/复用路径。
+    fn naive_dedup(
+        lines: &[&str],
+        mask: &[u64],
+        words: usize,
+        err: &[bool],
+        force: &[bool],
+    ) -> (Vec<bool>, usize) {
+        let mut keys: Vec<(String, usize)> = Vec::new();
+        let mut dup = vec![false; lines.len()];
+        let mut n = 0usize;
+        for (i, line) in lines.iter().enumerate() {
+            let mut key = String::new();
+            normalize(line, &mut key);
+            if short(&key) {
+                continue;
+            }
+            match keys.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, count)) => {
+                    *count += 1;
+                    if foldable(count, mask, words, i, err, force) {
+                        dup[i] = true;
+                        n += 1;
+                    }
+                }
+                None => keys.push((key, 1)),
+            }
+        }
+        (dup, n)
+    }
+
+    #[test]
+    fn dedup_matches_naive_reference_on_generated_corpora() {
+        // 确定性 LCG 生成含连续重复、数字/十六进制、空白与短行的语料，
+        // 生产实现（含「与上一行相同则复用归一化」快速路径）必须与朴素参考一致。
+        let alphabet = b" abcef0129\t#=:xX-";
+        let mut state = 0x1234_5678u32;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        for _ in 0..300 {
+            let len = (next() as usize >> 8) % 24;
+            let mut raw: Vec<String> = Vec::with_capacity(len);
+            let mut prev = String::new();
+            for _ in 0..len {
+                let roll = next() as usize;
+                // 30% 概率重复上一行，触达快速路径。
+                if roll % 10 < 3 && !prev.is_empty() {
+                    raw.push(prev.clone());
+                    continue;
+                }
+                let n = (next() as usize >> 8) % 20;
+                let mut s = String::new();
+                for _ in 0..n {
+                    s.push(alphabet[(next() as usize >> 16) % alphabet.len()] as char);
+                }
+                prev = s.clone();
+                raw.push(s);
+            }
+            let lines: Vec<&str> = raw.iter().map(String::as_str).collect();
+            // 掩码随机置位（模拟查询命中），错误/force 同理。
+            let mut mask = vec![0u64; lines.len() * 2];
+            for slot in mask.iter_mut() {
+                if next() % 7 == 0 {
+                    *slot = 1;
+                }
+            }
+            let err: Vec<bool> = (0..lines.len()).map(|_| next() % 11 == 0).collect();
+            let force: Vec<bool> = (0..lines.len()).map(|_| next() % 13 == 0).collect();
+            let got = dedup(&lines, &mask, 2, &err, &force);
+            let want = naive_dedup(&lines, &mask, 2, &err, &force);
+            assert_eq!(got, want, "dedup mismatch on {:?}", raw);
+        }
+    }
+
+    #[test]
+    fn dedup_skips_short_and_padded_lines() {
+        // 归一化键 < 6 字符（含首尾空白填充）的行从不参与折叠；长行仍按
+        // 第 3 次起折叠。快速路径（trim 后 < 6 字节直接跳过）不得改变判定。
+        let lines: Vec<&str> = vec![
+            "abc", "   abc   ", "a\tb", "错误", "abcdef", "abcdef", "abcdef", "abcdef",
+        ];
+        let mask = vec![0u64; lines.len()];
+        let err = vec![false; lines.len()];
+        let force = vec![false; lines.len()];
+        let (dup, n) = dedup(&lines, &mask, 0, &err, &force);
+        assert!(!dup[0] && !dup[1] && !dup[2] && !dup[3], "短/填充行不折叠");
+        assert!(dup[6] && dup[7], "长行第 3、4 次出现应折叠");
+        assert_eq!(n, 2);
     }
 
     #[test]
