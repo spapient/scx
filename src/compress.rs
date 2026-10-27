@@ -798,11 +798,21 @@ const R_ANCHOR: u8 = 5;
 
 /// 先落种子与最小可读邻域；预算只约束其后的可选内容。
 /// 两趟：先种子（`Seed`），再邻域（`Context`），保证种子行的原因不被邻域覆盖。
-fn floor(seed: &[bool], context: i64, total: usize, reason: &mut [u8]) -> (Vec<bool>, usize) {
+/// `fill_floor > 0` 时邻域行须达到分数门槛才保留（低价值邻域不再无条件膨胀）。
+fn floor(
+    seed: &[bool],
+    context: i64,
+    total: usize,
+    scores: &[f64],
+    fill_floor: f64,
+    reason: &mut [u8],
+) -> (Vec<bool>, usize) {
     let mut keep = vec![false; total];
     let mut kept = 0usize;
     mark_seeds(seed, &mut keep, &mut kept, reason);
-    mark_context(seed, context, total, &mut keep, &mut kept, reason);
+    mark_context(
+        seed, context, total, scores, fill_floor, &mut keep, &mut kept, reason,
+    );
     (keep, kept)
 }
 
@@ -818,10 +828,14 @@ fn mark_seeds(seed: &[bool], keep: &mut [bool], kept: &mut usize, reason: &mut [
 }
 
 /// 第二趟：种子 ±context 邻域标记 `Context`（已保留的种子行不覆盖）。
+/// `fill_floor > 0`：低于门槛的邻域行不标记，留给可选填充/裁剪处理。
+#[allow(clippy::too_many_arguments)] // 两趟标记按同一套入参形状传递，保持与 mark_seeds 对称。
 fn mark_context(
     seed: &[bool],
     context: i64,
     total: usize,
+    scores: &[f64],
+    fill_floor: f64,
     keep: &mut [bool],
     kept: &mut usize,
     reason: &mut [u8],
@@ -833,6 +847,9 @@ fn mark_context(
         for d in -context..=context {
             let j = i as i64 + d;
             if d != 0 && j >= 0 && (j as usize) < total && !keep[j as usize] {
+                if fill_floor > 0.0 && scores[j as usize] < fill_floor {
+                    continue;
+                }
                 keep[j as usize] = true;
                 *kept += 1;
                 reason[j as usize] = R_CONTEXT;
@@ -917,6 +934,7 @@ fn eligible(sel: &Select, cfg: &Fill, keep: &[bool], i: usize) -> bool {
         && !keep[i]
         && (sel.scores[i] > 0.0 || sel.struct_region[i])
         && (!cfg.region_gate || sel.in_region[i] || i < cfg.edge_head)
+        && sel.scores[i] >= cfg.floor
 }
 
 /// 预算选择：种子区域门控（首两行身份行除外）；独立入选须真实得分（scores > 0）。
@@ -939,6 +957,8 @@ struct Fill {
     ratio: f64,
     edge_head: usize,
     remaining: f64,
+    /// 填充入选分数门槛（`--fill-floor`；0 = 现状）。
+    floor: f64,
 }
 
 /// 预算选择：种子区域门控（首两行身份行除外）；独立入选须真实得分（scores > 0）。
@@ -1099,7 +1119,18 @@ fn ev_retention(
 }
 
 /// 输出：零克隆直装；省略区间以单行 "..." 标记。保留行原始行号同步收集（i+1）。
-fn render(lines: &[&str], keep: &[bool], elide: bool, lineno: bool) -> (String, Vec<usize>) {
+/// `--trim 1` 时对保留行做 token 级重要性裁剪（`trim::trim_line`），
+/// 数字/结构锚/命中词保留、停用词与低信息量 token 按预算摘除。
+#[allow(clippy::cognitive_complexity)] // 单趟渲染循环：gap/elide/lineno/trim 分支直装，拆分反增间接。
+fn render(
+    lines: &[&str],
+    keep: &[bool],
+    elide: bool,
+    lineno: bool,
+    trim: bool,
+    trim_ratio: f64,
+    query_terms: &[String],
+) -> (String, Vec<usize>) {
     let mut out_text = String::new();
     let mut numbers = Vec::new();
     let mut in_gap = false;
@@ -1112,7 +1143,12 @@ fn render(lines: &[&str], keep: &[bool], elide: bool, lineno: bool) -> (String, 
             if lineno {
                 prefix(&mut out_text, i + 1);
             }
-            out_text.push_str(lines[i]);
+            let text = if trim {
+                crate::trim::trim_line(lines[i], query_terms, trim_ratio)
+            } else {
+                lines[i].to_string()
+            };
+            out_text.push_str(&text);
             out_text.push('\n');
             numbers.push(i + 1);
         } else {
@@ -1351,7 +1387,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     // 逐行保留原因（--explain 用）：0=删除，其余见 R_* 常量。
     let mut reason = vec![0u8; total];
-    let (mut keep, mut kept) = floor(&seeds.seed, context, total, &mut reason);
+    let (mut keep, mut kept) = floor(
+        &seeds.seed,
+        context,
+        total,
+        &scores,
+        cfg.fill_floor,
+        &mut reason,
+    );
 
     // 结构锚点（P6 骨架保护）：结构边界行无条件保留，优先级低于证据（seed/context）、
     // 高于可选填充。默认空 kinds 时为空操作，与现状逐字节一致。
@@ -1380,6 +1423,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             ratio,
             edge_head: DEFAULT_SCORES.edge_head,
             remaining: remaining(tok_floor, budget_limit),
+            floor: cfg.fill_floor,
         },
         context,
         overflow,
@@ -1437,7 +1481,15 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         );
     }
 
-    let (out_text, numbers) = render(&lines, &keep, cfg.elide, cfg.lineno);
+    let (out_text, numbers) = render(
+        &lines,
+        &keep,
+        cfg.elide,
+        cfg.lineno,
+        cfg.trim,
+        cfg.trim_ratio,
+        &uniq_terms,
+    );
     let (chars_b, cut) = cut(&out_text, chars_a);
     let mut o = mk(
         out_text,

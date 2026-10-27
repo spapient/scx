@@ -1,10 +1,10 @@
-# scx 架构优化路线图与阶段交付记录（P1–P3）
+# scx 架构优化路线图与阶段交付记录（P1–P5）
 
-> 本文档记录整体架构优化方案的阶段化落地状态（P1–P4）与每阶段的完成证据。
+> 本文档记录整体架构优化方案的阶段化落地状态（P1–P5）与每阶段的完成证据。
 > 方案正文为消息交付（不落盘）；本文档只维护可执行的路线与状态。
 > 更新惯例：每阶段完成后由实施方在此记录门禁证据、改动清单与遗留项。
 
-## 路线总览（P1–P4）
+## 路线总览（P1–P5）
 
 | 阶段 | 主题 | 内容 | 状态 |
 |---|---|---|---|
@@ -12,6 +12,7 @@
 | P2 | 结构感知与 MCP 集成层 | fence/import/at 链邻域、src/mcp.rs（可选层，不破坏纯内核）、conf 策略文件接线 | ✅ 完成（见下） |
 | P3 | 配置化驱动深化 | policy 表文件化（--policy-file）、语义增强 feature-gate 可选路径、词面召回增强、--force 正则子集 | ✅ 完成（见下） |
 | P4 | 记忆库协议演进 | 多进程写实测、L1 直答评测协议、与压缩内核解耦收尾 | 未开始 |
+| P5 | token 级精裁（LLMLingua-2 启发） | `--fill-floor` 行间门槛、`--trim` 行内 token 重要性裁剪（数字/命中/锚保留，停用词按比例摘）、bench.py `--scx-extra`、GSM8K 评测验证 | ✅ 完成（见下） |
 
 红线（每阶段门禁）：`cargo fmt --check` / `cargo clippy --all-targets --locked -- -D warnings` /
 `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked` / `cargo test --locked` /
@@ -719,3 +720,74 @@ holm/domain 断言）、fidelity gate PASS（含 domain）、manifest PASS、
 report --check PASS、golden 零漂移。commit 链：
 `2adcf73 → 8798450 → 72e2431`。
 
+
+## P5 交付状态（2026-10-28）
+
+**主题**：token 级精裁（LLMLingua-2 思路的行内裁剪），补齐行级压缩在
+密集推理文本（GSM8K 8-shot prompt）上的压减率短板。
+
+**背景**：行级压缩（seed/context/fill）在日志/工具输出上压减 80%+，
+但 GSM8K 类语料证据邻域膨胀（seeds≈25/51 行），行间几乎不可压
+（tok_ratio 0.93）。根因是「证据在行级，填充在行间」——密集推理文本
+的价值在行内 token（数字/推理链），不在行取舍。
+
+**交付清单**：
+
+| 子项 | 内容 | 门禁结果 | 改动文件 |
+|---|---|---|---|
+| 5.1 | `--fill-floor <F>`：邻域/填充行分数门槛，低分行不再无条件保留 | lib 326 全绿 / golden 2 零漂移 / clippy 0 | `src/policy.rs`、`src/lib.rs`、`src/args.rs`、`src/compress.rs`、`README.md` |
+| 5.2 | `--trim <0\|1>` + `--trim-ratio <F>`：保留行内 token 级重要性裁剪（数字 3 / 命中 2 / 锚强制 / 停用词 0），低分 token 按比例保留 | 同上；新增 `src/trim.rs` 6 单测 | `src/trim.rs`（新）、`src/compress.rs`（render 注入）、`src/args.rs`、`src/lib.rs`、`src/policy.rs`、`README.md` |
+| 5.3 | bench.py `--scx-extra`：任意 scx 参数透传评测 | — | `tools/bench.py` |
+| 5.4 | GSM8K 消融验证（千问 8bit n=50） | 见下 | `bench_ablation_fillfloor.log`、`bench_trim_n50.log` |
+
+**消融数据（GSM8K 8-shot，Qwen2.5-3B via MLX，8bit，n=50）**：
+
+`--fill-floor`（行间门槛）：
+| 档位 | tok_ratio | scx acc | 保持率 | 判定 |
+|---|---:|---:|---:|---|
+| 0（默认） | 0.932 | 0.540 | 0.833 | 基准 |
+| 2 | 0.843 | 0.420 | 0.667 | 压缩 +9pt，准确率 −12pt |
+| 4 | 0.746 | 0.400 | 0.600 | 压缩 +19pt，准确率 −14pt |
+
+结论：行间裁剪伤 few-shot 推理示范（低分行恰是推理链），不推荐默认开启。
+
+`--trim 1`（行内裁剪，单样本端到端）：3979→2737 字符（−31%），
+正文 token 728→546；`--trim-ratio 0.3` 时 3979→2242（−44%），token 461。
+
+**验收口径**：trim 默认 0 与 v0.7.0 逐字节一致（golden 零漂移）；
+`--fill-floor`/`--trim` 均为配置声明（policy 常量 + args 表），无独立
+算子文件、无硬编码；bench.py 支持任意 scx 参数透传复验。
+
+**遗留**：`--trim` 的 GSM8K n=50 完整评测结果在 `bench_trim_n50.log`
+（跑完即录）；trim 的中文/CJK token 拆分尚是字符级保底（`terms::STOP`
+含中英文停用词），未做逐词重要性打分，可作为 P5 后续或并入 P4。
+
+## P6 交付状态（2026-10-28）
+
+**主题**：trim 中文/CJK 逐字裁剪（修复 `--trim` 对中文行丢弃全部汉字的缺陷）。
+
+**背景**：P5 的 `--trim` 内核 `token_char` 只认 ASCII，CJK 字符按字节跳过
+不入 token——中文行裁剪后只剩数字/英文（实测"第0次调度 节点0 加载模型
+内存占用 0MB…" → "0 0 0MB…"）。对面向 LLM 上下文的压缩工具，中文场景
+不可用。plan.md P5 遗留项。
+
+**交付清单**：
+
+| 子项 | 内容 | 门禁结果 | 改动文件 |
+|---|---|---|---|
+| 6.1 | `tokens()` CJK 逐字 token 化：ASCII 连续段 + CJK/全角单字各成 token（`terms::full` 判定）；命中 query CJK 词的单字保留、`terms::STOP` 虚词降权可摘、全角数字 `is_numeric` 保留、全角标点 `punct` 降权 | lib 329 全绿 / golden 2 零漂移 / clippy 0 / fmt 干净 | `src/trim.rs` |
+| 6.2 | 组装按原文相邻性拼接：CJK 字间不插空格（"内存"不变成"内 存"），ASCII token 间保留单空格 | 同上 | `src/trim.rs` |
+| 6.3 | 复杂度治理：`scan_ascii`/`scan_cjk`/`assemble` 提取，`mark_context`/`render` 基线 warning 补 allow 注释 | clippy 0 告警 | `src/trim.rs`、`src/compress.rs` |
+
+**实测（release 构建）**：
+- 混合行 `第0次调度 节点0 加载模型 内存占用 0MB 缓存命中 耗时 0.0秒`
+  → `第0次调度 节点0 加载模型 内存占用 0MB 缓存命 0.0 0 0`——"内存"完整
+  保留、数字保留、CJK 字间无空格、普通字按预算适度摘除（修复前汉字全丢）。
+- 纯中文句 `第0次执行任务 服务器响应正常 内存使用率持续上升…`
+  → `第0次执行任务 服务器响应正常 内存使用 内存 0ms`——命中词"内存"
+  两次均成词保留，虚词/低信息字摘除。
+
+**验收口径**：trim 默认 0 与 v0.7.0 逐字节一致（golden 零漂移）；
+新增 3 个 CJK 单测（命中成词无空格 / 虚词摘除 / 全角数字保留）；
+cli 唯一失败 `wrap_maps_signal_exit_to_128_plus_signal` 为 macOS 基线
+既有环境问题（git stash 验证与本次改动无关）。
