@@ -1,0 +1,8 @@
+=== floor=1 trim=0.5 ===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.540 (27/50)  ctx_tok=869  tok_ratio=0.653
+scx 保持率（full 答对中 scx 仍答对）: 25/30 = 0.833
+=== floor=1 trim=0.6 ===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.580 (29/50)  ctx_tok=917  tok_ratio=0.688
+scx 保持率（full 答对中 scx 仍答对）: 25/30 = 0.833

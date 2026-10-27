@@ -1,0 +1,12 @@
+=== trim0.5 + floor=1 ===
+full : acc=0.600 (12/20)  ctx_tok=1334
+scx  : acc=0.550 (11/20)  ctx_tok=884  tok_ratio=0.663
+scx 保持率（full 答对中 scx 仍答对）: 10/12 = 0.833
+=== trim0.5 + floor=2 ===
+full : acc=0.600 (12/20)  ctx_tok=1334
+scx  : acc=0.450 (9/20)  ctx_tok=875  tok_ratio=0.656
+scx 保持率（full 答对中 scx 仍答对）: 8/12 = 0.667
+=== trim0.5 + floor=3 ===
+full : acc=0.600 (12/20)  ctx_tok=1334
+scx  : acc=0.200 (4/20)  ctx_tok=800  tok_ratio=0.600
+scx 保持率（full 答对中 scx 仍答对）: 4/12 = 0.333
