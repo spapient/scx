@@ -17,7 +17,7 @@
 //! 库外进程无缓存，多进程共享 `--mem-dir` 仍是受支持场景（每次冷构建 ≤1 次）。
 
 use crate::memory::store;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// 实体 → case id 倒排（实体键精确匹配）。
@@ -29,10 +29,11 @@ impl Edges {
     /// 实体命中的 case id 集合（去重、保序）。
     pub(crate) fn neighbors(&self, ents: &[String]) -> Vec<String> {
         let mut out = Vec::new();
+        let mut seen = HashSet::new();
         for e in ents {
             if let Some(ids) = self.map.get(e) {
                 for id in ids {
-                    if !out.contains(id) {
+                    if seen.insert(id.as_str()) {
                         out.push(id.clone());
                     }
                 }

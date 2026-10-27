@@ -33,9 +33,15 @@ pub(crate) fn scores(query: &str, docs: &[&str]) -> Vec<f64> {
         return Vec::new();
     }
     let n = docs.len();
-    let df = doc_freq(docs);
+    let (df, terms) = doc_freq(docs);
     let q = shingles(query, &df, n);
-    let ds: Vec<HashMap<u64, f64>> = docs.iter().map(|d| shingles(d, &df, n)).collect();
+    // 复用 doc_freq 已切好的词表：同一 doc 在 df 预扫描与 shingle 构建各切一次
+    // 纯属重复（切词是本路径最重的 CPU 部分）。
+    let ds: Vec<HashMap<u64, f64>> = docs
+        .iter()
+        .zip(&terms)
+        .map(|(d, ts)| shingles_of(ts, d, &df, n))
+        .collect();
     if n < LSH_THRESHOLD {
         return ds.iter().map(|d| jaccard(&q, d)).collect();
     }
@@ -55,30 +61,46 @@ pub(crate) fn scores(query: &str, docs: &[&str]) -> Vec<f64> {
 }
 
 /// 词元 df 预扫描：每个词元出现在多少个 doc（单 doc 内去重）。
-fn doc_freq(docs: &[&str]) -> HashMap<String, usize> {
+/// 同时返回各 doc 的去重词表，供 shingle 构建复用（避免重复切词）。
+fn doc_freq(docs: &[&str]) -> (HashMap<String, usize>, Vec<Vec<String>>) {
     let mut df = HashMap::new();
+    let mut per_doc = Vec::with_capacity(docs.len());
     for d in docs {
         let mut seen = std::collections::HashSet::new();
+        let mut uniq = Vec::new();
         for t in crate::terms::memory(d) {
             if seen.insert(t.clone()) {
-                *df.entry(t).or_insert(0) += 1;
+                *df.entry(t.clone()).or_insert(0) += 1;
+                uniq.push(t);
             }
         }
+        per_doc.push(uniq);
     }
-    df
+    (df, per_doc)
 }
 
 /// 单文本加权 shingle 表：词元 → IDF 权重（词元先入为主，字符 gram 不覆盖）。
 fn shingles(text: &str, df: &HashMap<String, usize>, n: usize) -> HashMap<u64, f64> {
+    shingles_of(&crate::terms::memory(text), text, df, n)
+}
+
+/// 已切词文本的加权 shingle 表。词表须是去重后的词元（去重不改变结果：
+/// `map.entry(..).or_insert` 本就只取首次出现，同一词元权重也相同）。
+fn shingles_of(
+    terms: &[String],
+    text: &str,
+    df: &HashMap<String, usize>,
+    n: usize,
+) -> HashMap<u64, f64> {
     let mut map = HashMap::new();
-    for t in crate::terms::memory(text) {
-        let df_t = df.get(&t).copied().unwrap_or(0);
+    for t in terms {
+        let df_t = df.get(t).copied().unwrap_or(0);
         // 库级噪声词（出现在全部 doc）不参与：IDF 加权只能降到 1.0、无法剔除，
         // 硬过滤掉可避免它稀释加权 Jaccard 的分母（语义层实测退化根因）。
         if n >= 2 && df_t >= n {
             continue;
         }
-        let key = crate::memory::util::fnv1a(&t);
+        let key = crate::memory::util::fnv1a(t);
         let w = idf(df_t, n);
         map.entry(key).or_insert(w);
     }

@@ -262,26 +262,17 @@ pub(crate) fn record(root: &str, sim: f64) {
     let Ok(txt) = fs::read_to_string(&p) else {
         return;
     };
-    let mut out: Vec<String> = Vec::new();
-    let mut in_l1 = false;
-    let mut hist_written = false;
-    for line in txt.lines() {
-        let t = line.trim();
-        if t.starts_with('[') && t.ends_with(']') {
-            in_l1 = t == "[l1]";
-        } else if in_l1 && t.starts_with("hist") {
-            out.push(format!("hist = \"{hist_txt}\""));
-            hist_written = true;
-            continue;
+    let key_line = format!("hist = \"{hist_txt}\"");
+    let mut lines: Vec<String> = txt.lines().map(|s| s.to_string()).collect();
+    if let Some(pi) = lines.iter().position(|l| l.trim() == "[l1]") {
+        if !replace(&mut lines, pi, "hist", &key_line) {
+            insert(&mut lines, pi, key_line);
         }
-        out.push(line.to_string());
+    } else {
+        lines.push("[l1]".to_string());
+        lines.push(key_line);
     }
-    if !hist_written {
-        // 无 [l1] 节：在文件末尾追加。
-        out.push("[l1]".to_string());
-        out.push(format!("hist = \"{hist_txt}\""));
-    }
-    let mut body = out.join("\n");
+    let mut body = lines.join("\n");
     body.push('\n');
     let _ = lock::atomic(&p, body.as_bytes());
 }
