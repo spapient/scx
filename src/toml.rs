@@ -100,6 +100,36 @@ pub fn strip(v: &str) -> &str {
 mod tests {
     use super::*;
 
+    /// 确定性模糊：策略文件与 meta.toml 都是外部可写文本，任意行都不得 panic，
+    /// 且返回的切片必须仍属于输入（不越界、不破坏 UTF-8）。
+    #[test]
+    fn parse_never_panics_on_arbitrary_lines() {
+        let pool: Vec<char> = "[]=# \t\n\"abc012中🚀".chars().collect();
+        let mut state = 0xcafe_babeu32;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        for _ in 0..1500 {
+            let n = next() as usize % 5;
+            let mut lines: Vec<String> = Vec::new();
+            for _ in 0..n {
+                let m = next() as usize % 16;
+                let mut s = String::new();
+                for _ in 0..m {
+                    s.push(pool[next() as usize % pool.len()]);
+                }
+                lines.push(s);
+            }
+            for e in parse(lines.iter().map(String::as_str)) {
+                let _ = (e.section, e.key, e.value);
+            }
+            for l in numbered(lines.iter().enumerate().map(|(i, s)| (i + 1, s.as_str()))) {
+                let _ = (l.line, l.entry.section, l.entry.key, l.entry.value);
+            }
+        }
+    }
+
     #[test]
     fn parses_sections_and_values() {
         let src =

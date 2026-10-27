@@ -324,6 +324,34 @@ mod tests {
         assert!(parse(r#"{"q":"\uDE80"}"#).is_err());
     }
 
+    /// 确定性模糊：MCP 请求是外部不可信输入，任意文本都不得 panic；
+    /// 成功解析的值做访问器调用也不得 panic。
+    #[test]
+    fn parse_never_panics_on_arbitrary_input() {
+        let pool: Vec<char> = "{}[]\",:0123456789.eE+-\\/ \n\t\u{0}中文🚀truefalsenull"
+            .chars()
+            .collect();
+        let mut state = 0xfeed_faceu32;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        for _ in 0..2000 {
+            let n = next() as usize % 48;
+            let mut s = String::new();
+            for _ in 0..n {
+                s.push(pool[next() as usize % pool.len()]);
+            }
+            if let Ok(v) = parse(&s) {
+                // 访问器对任意已解析值都必须安全。
+                let _ = v.get("id").and_then(Json::str);
+                let _ = v.get("params").and_then(|p| p.get("name"));
+                let _ = v.str();
+                let _ = v.num();
+            }
+        }
+    }
+
     #[test]
     fn non_finite_numbers_are_rejected() {
         // `1e999` 会解析成 inf；放行会让 MCP 回显 `"id":inf` 这种非法 JSON。

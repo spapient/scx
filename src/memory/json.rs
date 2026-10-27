@@ -374,4 +374,70 @@ mod tests {
         let err = parse(&over).unwrap_err();
         assert!(err.contains("nesting"), "超深应报错而非栈溢出: {err}");
     }
+
+    /// 确定性生成器：覆盖标量、嵌套数组/对象与需要转义的字符串。
+    fn gen(next: &mut dyn FnMut() -> u32, depth: usize) -> Val {
+        match next() % if depth >= 3 { 4 } else { 6 } {
+            0 => Val::Null,
+            1 => Val::Bool(next() % 2 == 0),
+            2 => Val::Num((next() % 10_000) as f64 / 8.0),
+            _ => {
+                if next() % 2 == 0 && depth < 3 {
+                    let n = next() % 4;
+                    Val::Arr((0..n).map(|_| gen(next, depth + 1)).collect())
+                } else if next() % 3 == 0 && depth < 3 {
+                    let n = next() % 4;
+                    Val::Obj(
+                        (0..n)
+                            .map(|i| (format!("k{i}"), gen(next, depth + 1)))
+                            .collect(),
+                    )
+                } else {
+                    // 覆盖需要转义的字符与多字节文本。
+                    let pool: Vec<char> = "a\"\\\n\r\t\u{1}中文🚀 ".chars().collect();
+                    let n = next() as usize % 8;
+                    let mut s = String::new();
+                    for _ in 0..n {
+                        s.push(pool[next() as usize % pool.len()]);
+                    }
+                    Val::Str(s)
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn roundtrip_write_parse_on_generated_values() {
+        let mut state = 0x1234_abcdu32;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        for _ in 0..500 {
+            let v = gen(&mut next, 0);
+            let txt = write(&v);
+            assert_eq!(parse(&txt), Ok(v), "往返不一致: {txt}");
+        }
+    }
+
+    #[test]
+    fn parse_never_panics_on_garbage() {
+        let pool: Vec<char> = "{}[]\",:.-+0123456789eE_ \n\t\\/:中文🚀\u{0}naNs"
+            .chars()
+            .collect();
+        let mut state = 0x0bad_f00du32;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        for _ in 0..1500 {
+            let n = next() as usize % 40;
+            let mut s = String::new();
+            for _ in 0..n {
+                s.push(pool[next() as usize % pool.len()]);
+            }
+            // 不得 panic；Ok/Err 都合法。
+            let _ = parse(&s);
+        }
+    }
 }

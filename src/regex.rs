@@ -461,6 +461,31 @@ mod tests {
         compile(&node).matches(line)
     }
 
+    /// 确定性模糊：`re:` 模式来自命令行/策略文件，任意字符序列都不得 panic；
+    /// 解析成功的模式，编译与匹配任意文本也不得 panic。
+    #[test]
+    fn parse_and_match_never_panic_on_arbitrary_patterns() {
+        let pool: Vec<char> = "abc|[]*+?\\-.^$(){}0123456789 \t中文".chars().collect();
+        let mut state = 0x5eed_1234u32;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        for _ in 0..1500 {
+            let n = next() as usize % 12;
+            let mut pat = String::new();
+            for _ in 0..n {
+                pat.push(pool[next() as usize % pool.len()]);
+            }
+            if let Ok(node) = parse(&pat) {
+                let re = compile(&node);
+                let _ = re.matches("");
+                let _ = re.matches("abc 123 中文");
+                let _ = re.matches(&pat);
+            }
+        }
+    }
+
     #[test]
     fn literal_alt_class_and_quant() {
         assert!(m("err|fatal", "line has err here"));
