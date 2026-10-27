@@ -1,0 +1,19 @@
+[load] MLX 加载模型 Qwen2.5-3B-Instruct（千问） (/Users/fei/model/qwen2.5-3b-instruct) ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[data] 自定义集 bench_zh_cn40.csv: 40 行（demo 14 / test 26）
+[1/26]
+[5/26]
+[10/26]
+[15/26]
+[20/26]
+[25/26]
+[csv] 明细已导出: bench_zh_n26.csv
+
+=== GSM8K 8-shot 三方对照（Qwen2.5-3B-Instruct（千问） via MLX, n=26, seed=20261027）===
+full : acc=0.923 (24/26)  ctx_tok=1181
+scx  : acc=0.923 (24/26)  ctx_tok=279  tok_ratio=0.237
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 24/24 = 1.000
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  >35%: 26 样本

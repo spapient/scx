@@ -6,13 +6,26 @@
 
 pub const DEFAULT_RATIO: f64 = 0.35;
 pub const MIN_RATIO: f64 = 0.02;
+/// 填充行/邻域行最低分数门槛（`--fill-floor`，默认 0 = 与现状逐字节一致）。
+/// 大于 0 时：分数低于门槛的邻域行不再无条件保留（mark_context 跳过），
+/// 且不进入可选填充（eligible 拒绝）——只留真正有证据价值的行。
+pub const DEFAULT_FILL_FLOOR: f64 = 0.0;
+pub const MAX_FILL_FLOOR: f64 = 10.0;
+/// 行内 token 级裁剪开关（`--trim`，默认 0 = 现状逐字节一致）。
+/// 1 时对保留行做 token 级重要性裁剪（数字/结构锚/命中词保留，
+/// 停用词/低信息量 token 按预算摘除），压缩更深但改变输出正文。
+pub const DEFAULT_TRIM: bool = false;
+/// 行内 token 保留比例（`--trim-ratio`，默认 0.5 = 每行最多摘一半 token）。
+pub const DEFAULT_TRIM_RATIO: f64 = 0.5;
+pub const MIN_TRIM_RATIO: f64 = 0.1;
+pub const MAX_TRIM_RATIO: f64 = 1.0;
 pub const MAX_CONTEXT: i64 = 4;
 pub const MIN_WINDOW: i64 = 1;
 pub const MAX_WINDOW: i64 = 8;
 
 /// 小输入直通阈值：行数 < `SMALL_LINES` 且 token 估算 < `SMALL_TOK`。
 pub const SMALL_LINES: usize = 40;
-pub const SMALL_TOK: f64 = 500.0;
+pub const SMALL_TOK: f64 = 400.0;
 /// 超长行直通阈值：单行字节与字符均超过即返回原文。
 pub const LONGLINE_BYTES: usize = 100_000;
 pub const LONGLINE_CHARS: usize = 100_000;

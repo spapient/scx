@@ -190,7 +190,7 @@ def wrap_chat(tok, content: str) -> str:
     )
 
 
-def summarize(rows, spec: ModelSpec, n: int):
+def summarize(rows, spec: ModelSpec, n: int, no_trunc: bool = False):
     full_acc = sum(1 for r in rows if r["full"] == r["gold"]) / n
     scx_acc = sum(1 for r in rows if r["scx"] == r["gold"]) / n
     trunc_acc = sum(1 for r in rows if r["trunc"] == r["gold"]) / n
@@ -199,7 +199,10 @@ def summarize(rows, spec: ModelSpec, n: int):
     print(f"\n=== GSM8K 8-shot 三方对照（{spec.display()} via MLX, n={n}, seed={SEED}）===")
     print(f"full : acc={full_acc:.3f} ({full_acc*n:.0f}/{n})  ctx_tok={sum(r['full_tok'] for r in rows)//n}")
     print(f"scx  : acc={scx_acc:.3f} ({scx_acc*n:.0f}/{n})  ctx_tok={sum(r['scx_tok'] for r in rows)//n}  tok_ratio={tok_ratio:.3f}")
-    print(f"trunc: acc={trunc_acc:.3f} ({trunc_acc*n:.0f}/{n})  ctx_tok=同 scx")
+    if no_trunc:
+        print("trunc: 已跳过（--no-trunc）")
+    else:
+        print(f"trunc: acc={trunc_acc:.3f} ({trunc_acc*n:.0f}/{n})  ctx_tok=同 scx")
     passed = sum(1 for r in rows if r["full"] == r["gold"])
     kept_of_passed = sum(1 for r in rows if r["full"] == r["gold"] and r["scx"] == r["gold"])
     print(f"scx 保持率（full 答对中 scx 仍答对）: {kept_of_passed}/{passed} = {kept_of_passed/max(passed,1):.3f}")
@@ -229,6 +232,13 @@ def main() -> None:
                          "4bit 对准确率伤害大（实测 0.6→0.2），8bit 更稳")
     ap.add_argument("--scx-extra", default="", metavar="ARGS",
                     help="附加 scx 参数（空格分隔，如 '--fill-floor 2'），透传给压缩调用")
+    ap.add_argument("--data", default="", metavar="CSV",
+                    help="自定义评测集 CSV（列 question,answer；默认 openai/gsm8k）。"
+                         "前 --demos 行作 demo，其余作测试集")
+    ap.add_argument("--demos", type=int, default=8, metavar="N",
+                    help="自定义集的 demo 行数（默认 8）；中文/长 prompt 可调大以超过 scx 透传阈值")
+    ap.add_argument("--no-trunc", action="store_true",
+                    help="跳过 trunc 第三轨（省 1/3 生成时间）；trunc 基线仅在完整对照需要")
     args = ap.parse_args()
 
     scx_extra = tuple(args.scx_extra.split()) if args.scx_extra else ()
@@ -240,13 +250,22 @@ def main() -> None:
     print(f"[load] MLX 加载模型 {spec.display()} ({spec.path}) ...", flush=True)
     model, tok = load_model_mlx(spec, quantize=args.quantize)
 
-    ds = load_dataset("openai/gsm8k", "main")
-    # 8-shot demo 用完整答案（含推理链）——LLMLingua-2 论文口径；
-    # 只有超过 scx 500-token 透传阈值，压缩才会真正生效。
-    demos = [{"question": d["question"], "answer": d["answer"]}
-             for d in ds["train"].select(range(8))]
-    test = ds["test"]
-    test = test.shuffle(seed=SEED).select(range(min(args.n, len(test))))
+    if args.data:
+        with open(args.data, encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        demos = [{"question": r["question"], "answer": r["answer"]} for r in rows[: args.demos]]
+        test = [{"question": r["question"], "answer": r["answer"]} for r in rows[args.demos :]]
+        random.shuffle(test)
+        test = test[: min(args.n, len(test))]
+        print(f"[data] 自定义集 {args.data}: {len(rows)} 行（demo {args.demos} / test {len(test)}）", flush=True)
+    else:
+        ds = load_dataset("openai/gsm8k", "main")
+        # 8-shot demo 用完整答案（含推理链）——LLMLingua-2 论文口径；
+        # 只有超过 scx 400-token 透传阈值，压缩才会真正生效。
+        demos = [{"question": d["question"], "answer": d["answer"]}
+                 for d in ds["train"].select(range(8))]
+        test = ds["test"]
+        test = test.shuffle(seed=SEED).select(range(min(args.n, len(test))))
 
     from mlx_lm import generate as mlx_generate
 
@@ -262,10 +281,12 @@ def main() -> None:
         csv_w = csv.DictWriter(csv_fh, fieldnames=["idx", "full", "scx", "trunc", "gold", "full_tok", "scx_tok", "compressed"])
         csv_w.writeheader()
         csv_fh.flush()
+    # demo 前缀缓存：8-shot demo 对每题固定，只拼一次（省重复字符串构造）。
+    demo_prefix = "".join(f"Q: {d['question']}\nA: {d['answer']}\n\n" for d in demos)
     for i, item in enumerate(test):
         q = item["question"]
         gold = extract_answer(item["answer"])
-        prompt = build_prompt(demos, q)
+        prompt = demo_prefix + f"Q: {q}\nA:"
 
         # 三方统一走 chat 格式：instruct 模型答完即输出 eos 停止，
         # 不会生成多余续文（速度与准确率同时受益）。
@@ -276,8 +297,11 @@ def main() -> None:
         scx_tok = len(tok.encode(scx_out))
         full_tok = len(tok.encode(prompt))
         ans_scx = run(wrap_chat(tok, scx_out))
-        trunc = tok.decode(tok.encode(prompt)[:scx_tok], skip_special_tokens=True)
-        ans_trunc = run(wrap_chat(tok, trunc))
+        if args.no_trunc:
+            ans_trunc = ""
+        else:
+            trunc = tok.decode(tok.encode(prompt)[:scx_tok], skip_special_tokens=True)
+            ans_trunc = run(wrap_chat(tok, trunc))
 
         row = {
             "idx": i + 1,
@@ -296,7 +320,7 @@ def main() -> None:
         csv_fh.close()
         print(f"[csv] 明细已导出: {args.csv}", flush=True)
 
-    summarize(rows, spec, len(rows))
+    summarize(rows, spec, len(rows), no_trunc=args.no_trunc)
 
 
 if __name__ == "__main__":
