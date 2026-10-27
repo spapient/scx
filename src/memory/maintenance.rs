@@ -161,7 +161,7 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
     let ids = store::list(root)?;
     let mut buckets: HashMap<String, usize> = HashMap::new();
     let mut statuses: HashMap<String, usize> = HashMap::new();
-    let mut fix_n = 0usize;
+    let mut fixes = 0usize;
     let mut quality_sum = 0.0f64;
     let mut disk = 0u64;
     for id in &ids {
@@ -170,7 +170,7 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
             id,
             &mut buckets,
             &mut statuses,
-            &mut fix_n,
+            &mut fixes,
             &mut quality_sum,
             &mut disk,
         )?;
@@ -182,12 +182,12 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
     lines.push(format!("  status: {}", join(&statuses)));
     lines.push(format!(
         "  fix: {}/{} ({:.0}%)",
-        fix_n,
+        fixes,
         n,
         if n == 0 {
             0.0
         } else {
-            100.0 * fix_n as f64 / n as f64
+            100.0 * fixes as f64 / n as f64
         }
     ));
     lines.push(format!(
@@ -203,7 +203,7 @@ fn sample(
     id: &str,
     buckets: &mut HashMap<String, usize>,
     statuses: &mut HashMap<String, usize>,
-    fix_n: &mut usize,
+    fixes: &mut usize,
     quality_sum: &mut f64,
     disk: &mut u64,
 ) -> io::Result<()> {
@@ -211,7 +211,7 @@ fn sample(
     *buckets.entry(c.bucket.clone()).or_insert(0) += 1;
     *statuses.entry(c.status.clone()).or_insert(0) += 1;
     if !c.fix.is_empty() {
-        *fix_n += 1;
+        *fixes += 1;
     }
     *quality_sum += c.quality;
     let dir = store::path(root, id)
