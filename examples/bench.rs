@@ -117,7 +117,9 @@ fn max_tokens_bench(text: &str, query: &str, repeats: usize) {
 /// 此处为字段级近似（ratio/context/limit/structure 代表字段）。
 fn policy_bench(text: &str, query: &str, repeats: usize) {
     let body = "ratio = 0.5\ncontext = 1\nmax_tokens = 4000\nstructure = 1\n";
+    let t = Instant::now();
     let entries = scx::toml::parse(body.lines());
+    let parse_us = t.elapsed().as_micros();
     let mut cfg = Config::default();
     for e in &entries {
         match e.key {
@@ -128,9 +130,6 @@ fn policy_bench(text: &str, query: &str, repeats: usize) {
             _ => {}
         }
     }
-    let t = Instant::now();
-    let _ = compress(text, query, &cfg);
-    let parse_us = t.elapsed().as_micros();
     let mut samples: Vec<u128> = Vec::with_capacity(repeats);
     for _ in 0..repeats {
         let t = Instant::now();

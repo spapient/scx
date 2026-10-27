@@ -49,7 +49,7 @@ pub(crate) fn rate(root: &str, id: &str, good: bool) -> std::io::Result<Case> {
     c.updated_at = stamp();
     // 词环：该 case 词表 ±Δ（仅质量≥0.5 的 good / bad 参与，防误标污染）。
     let terms = terms(&c);
-    if good || c.status == "regressed" {
+    if (good && c.quality >= 0.5) || c.status == "regressed" {
         meta::learn(root, &terms, good);
     }
     // 写回 case（原子写；save 内部 bump gen，qmap/缓存随之失效）。

@@ -113,6 +113,19 @@ fn policy_file_max_tokens_overflow_evidence() {
 }
 
 #[test]
+fn policy_file_window_zero_normalizes_like_cli() {
+    // 文档契约：`--window` 范围 0..=8，0 归一化为 1；策略文件必须同口径
+    // （此前文件路径拒绝 0，与 CLI 不一致）。
+    let pf = write_tmp("window0.toml", "window = 0\n");
+    let (ok, out_f, err) = run(&["--query", "conn broken", "--policy-file", &pf], &corpus());
+    assert!(ok, "policy window=0 must be accepted: {err}");
+    let (ok2, out_c, _e2) = run(&["--query", "conn broken", "--window", "0"], &corpus());
+    assert!(ok2);
+    assert_eq!(stat_field(&out_f, "window"), "1", "out: {out_f}");
+    assert_eq!(out_f, out_c, "策略文件 window=0 必须与 --window 0 等价");
+}
+
+#[test]
 fn invalid_policy_reports_line_number() {
     let cases = [
         ("ratio = 99\n", "ratio must be in 0.02..=1.0"),

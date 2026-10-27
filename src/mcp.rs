@@ -84,7 +84,8 @@ fn dispatch(method: &str, id: Option<Json>, msg: &Json, usage: &mut Usage) -> Op
         "ping" => Some(ping(&key)),
         "tools/list" => Some(tools(&key)),
         "tools/call" => call(id, msg, usage),
-        _ => Some(error(id, -32601, &format!("method not found: {method}"))),
+        // JSON-RPC 2.0：notification（无 id）不得回复，即使 method 未知。
+        _ => id.map(|id| error(Some(id), -32601, &format!("method not found: {method}"))),
     }
 }
 
@@ -132,7 +133,11 @@ fn call(id: Option<Json>, msg: &Json, usage: &mut Usage) -> Option<String> {
         "ledger_summary" => ledger_summary(id, usage),
         "connect_account" => account(id),
         "usage_summary" => summary(id, usage),
-        _ => error(id, -32602, &format!("unknown tool: {name}")),
+        _ => {
+            // 无 id 即 notification：按 JSON-RPC 2.0 不得回复。
+            id.as_ref()?;
+            error(id, -32602, &format!("unknown tool: {name}"))
+        }
     })
 }
 
@@ -359,11 +364,16 @@ pub fn serve() -> i32 {
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut usage = Usage::default();
-    let mut line = String::new();
     let mut reader = stdin.lock();
     let mut writer = stdout.lock();
-    while read(&mut reader, &mut line) {
-        if let Some(resp) = handle(line.trim_end(), &mut usage) {
+    loop {
+        let resp = match read(&mut reader, MAX_FRAME) {
+            Frame::Eof => break,
+            Frame::Line(line) => handle(line.trim_end(), &mut usage),
+            // 超长/非 UTF-8 帧：回 -32700 后继续下一帧（保持行同步），不静默退出。
+            Frame::Invalid(msg) => Some(error(None, -32700, &msg)),
+        };
+        if let Some(resp) = resp {
             if !send(&mut writer, &resp) {
                 break;
             }
@@ -372,9 +382,59 @@ pub fn serve() -> i32 {
     0
 }
 
-fn read(reader: &mut impl BufRead, line: &mut String) -> bool {
-    line.clear();
-    matches!(reader.read_line(line), Ok(n) if n > 0)
+/// 单帧读取结果。
+enum Frame {
+    Line(String),
+    Invalid(String),
+    Eof,
+}
+
+/// 单帧上限：与 CLI 输入上限（64 MiB）一致，防 MCP 客户端用超长单行放大内存。
+const MAX_FRAME: usize = 64 * 1024 * 1024;
+
+fn read(reader: &mut impl BufRead, max: usize) -> Frame {
+    read_bounded(reader, max)
+}
+
+/// 以 `dyn BufRead` 接收：`&mut dyn BufRead: Read` 走 `take`，避免把具体类型 move 出去。
+fn read_bounded(reader: &mut dyn BufRead, max: usize) -> Frame {
+    let mut buf = Vec::new();
+    let n = {
+        // UFCS：`take` 要求 Sized 接收者，`&mut dyn BufRead` 通过 `Read for &mut R`
+        // 的转发实现生效。
+        let mut limited = std::io::Read::take(&mut *reader, max as u64 + 1);
+        match limited.read_until(b'\n', &mut buf) {
+            Ok(n) => n,
+            Err(_) => return Frame::Eof,
+        }
+    };
+    if n == 0 {
+        return Frame::Eof;
+    }
+    if n > max {
+        discard_line(reader);
+        return Frame::Invalid(format!("request exceeds {max} bytes"));
+    }
+    match String::from_utf8(buf) {
+        Ok(s) => Frame::Line(s),
+        Err(_) => Frame::Invalid("request is not valid UTF-8".to_string()),
+    }
+}
+
+/// 丢弃当前帧剩余字节直到换行，保证超限帧之后仍按行同步。
+/// 必须用 `read_until` 精确停在第一个换行：`read` 一次可能带回后续多行，
+/// 会把下一帧一起吞掉。
+fn discard_line(reader: &mut dyn BufRead) {
+    let mut sink = Vec::new();
+    loop {
+        sink.clear();
+        match reader.read_until(b'\n', &mut sink) {
+            Ok(0) => return,
+            Ok(_) if sink.last() == Some(&b'\n') => return,
+            Ok(_) => {}
+            Err(_) => return,
+        }
+    }
 }
 
 fn send(writer: &mut impl Write, response: &str) -> bool {
@@ -388,6 +448,38 @@ use std::io::{self, BufRead, Write};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notification_with_unknown_method_gets_no_reply() {
+        // JSON-RPC 2.0：notification（无 id）不得回复。
+        let mut usage = Usage::default();
+        assert!(handle(r#"{"jsonrpc":"2.0","method":"nope"}"#, &mut usage).is_none());
+        assert!(handle(r#"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"nope"}}"#, &mut usage)
+            .is_none());
+        // 带 id 的未知 method 仍需回错误。
+        assert!(handle(r#"{"jsonrpc":"2.0","id":7,"method":"nope"}"#, &mut usage)
+            .is_some_and(|r| r.contains("-32601")));
+    }
+
+    #[test]
+    fn frames_are_bounded_and_utf8_checked() {
+        use std::io::Cursor;
+        // 超限帧：回 Invalid，且后续帧仍能按行同步读取。
+        let mut src = Cursor::new(b"12345678901234567890\nok\n".to_vec());
+        match read(&mut src, 8) {
+            Frame::Invalid(msg) => assert!(msg.contains("exceeds"), "{msg}"),
+            _ => panic!("oversized frame must be Invalid"),
+        }
+        match read(&mut src, 8) {
+            Frame::Line(l) => assert_eq!(l, "ok\n"),
+            _ => panic!("stream must stay line-synced after oversize"),
+        }
+        // 非法 UTF-8：Invalid 而非静默 EOF。
+        let mut bad = Cursor::new(vec![0xff, 0xfe, b'\n']);
+        assert!(matches!(read(&mut bad, 64), Frame::Invalid(_)));
+        // 空输入：EOF。
+        assert!(matches!(read(&mut Cursor::new(Vec::new()), 64), Frame::Eof));
+    }
 
     #[test]
     fn apply_ratio_is_a_fraction_not_permille() {

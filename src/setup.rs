@@ -219,7 +219,10 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
     );
     let section = "[mcp_servers.scx]";
     let mut text = existing.unwrap_or_default();
-    if text.contains(section) {
+    // 只认真实的段头行：`# [mcp_servers.scx]` 之类的注释行曾被 contains 误判为
+    // 已注册，导致 update_toml_command 找不到段而最终静默不注册。
+    let has_section = text.lines().any(|l| l.trim() == section);
+    if has_section {
         // 已注册：原位更新 command 行（args 恒为 ["mcp"]，无需重写）。
         let updated = update_toml_command(&text, &command);
         if updated != text {
@@ -416,6 +419,10 @@ fn backup_path(path: &Path) -> PathBuf {
 
 /// 原子写：临时文件 + rename（避免半写文件被 agent 读到）。
 fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
+    // 目标是符号链接（dotfiles 管理的配置）时写到真实文件：rename 不跟随软链，
+    // 直接写会把用户的软链替换成普通文件。
+    let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let path = resolved.as_path();
     let parent = match path.parent() {
         Some(p) if p.as_os_str().is_empty() => Path::new("."),
         Some(p) => p,

@@ -147,9 +147,15 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
         let raw = std::str::from_utf8(&self.src[start..self.pos]).map_err(|e| e.to_string())?;
-        raw.parse::<f64>()
-            .map(Json::Num)
-            .map_err(|e| format!("bad number {raw}: {e}"))
+        let n: f64 = raw
+            .parse()
+            .map_err(|e| format!("bad number {raw}: {e}"))?;
+        // JSON 无 Infinity/NaN：`1e999` 会解析成 inf，放行会导致回显 `"id":inf`
+        // 这类非法 JSON（MCP 客户端整流解析失败）。
+        if !n.is_finite() {
+            return Err(format!("number out of range: {raw}"));
+        }
+        Ok(Json::Num(n))
     }
 
     fn string(&mut self) -> Result<String, String> {
@@ -316,6 +322,16 @@ mod tests {
     fn str_u_escape_high_surrogate_without_pair_errors() {
         assert!(parse(r#"{"q":"\uD83D"}"#).is_err());
         assert!(parse(r#"{"q":"\uDE80"}"#).is_err());
+    }
+
+    #[test]
+    fn non_finite_numbers_are_rejected() {
+        // `1e999` 会解析成 inf；放行会让 MCP 回显 `"id":inf` 这种非法 JSON。
+        assert!(parse(r#"{"id":1e999}"#).is_err());
+        assert!(parse(r#"{"id":-1e999}"#).is_err());
+        // 1.5e308 仍在 f64 范围内（有限），必须照常接受。
+        assert!(parse(r#"{"id":1.5e308}"#).is_ok());
+        assert!(parse(r#"{"id":1e10}"#).is_ok());
     }
 
     #[test]

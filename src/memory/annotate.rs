@@ -254,32 +254,58 @@ fn force(out: &mut String, replaced: &mut bool) {
     }
 }
 
+/// 忽略大小写匹配 needle：返回 hay 前缀对应的字节长度。
+/// 逐 char 比较（而非先 `to_lowercase()` 整串再取偏移）：小写映射会改变字节长度
+/// （如 `İ`），用副本偏移切原串会越界或落在非 char 边界上 panic。
+fn ci_prefix_len(hay: &str, needle: &str) -> Option<usize> {
+    let mut used = 0usize;
+    let mut h = hay.chars();
+    for n in needle.chars() {
+        let c = h.next()?;
+        if c != n && !c.to_lowercase().eq(n.to_lowercase()) {
+            return None;
+        }
+        used += c.len_utf8();
+    }
+    Some(used)
+}
+
+/// 在 hay 中找 needle 的首次忽略大小写出现，返回原串字节区间 `(start, end)`。
+/// 返回的边界一定是原串的 char 边界，可直接用于切片/替换。
+fn ci_find(hay: &str, needle: &str) -> Option<(usize, usize)> {
+    if needle.is_empty() {
+        return None;
+    }
+    for (i, _) in hay.char_indices() {
+        if let Some(len) = ci_prefix_len(&hay[i..], needle) {
+            return Some((i, i + len));
+        }
+    }
+    None
+}
+
 /// 大小写不敏感字面替换（首次命中即替换，避免同词多轮扰动）。
-/// 边界检查必须走 char 边界安全切片：pos 由 lower（与 s 字节对齐）求得，
-/// 前后各取一个完整 char 判断——中文 query 场景下字节切片会 panic。
 fn replace(s: &mut String, from: &str, to: &str) -> bool {
     if from.is_empty() || to.is_empty() {
         return false;
     }
-    let lower = s.to_lowercase();
-    if let Some(pos) = lower.find(from) {
-        // 词边界检查：替换点前/后须非 ascii 字母数字（防 "database" 里的 "db" 被替换）。
-        // s[..pos] / s[after..] 均为 char 边界（pos 是 from 起始边界，after=pos+from.len 同理）。
-        let before_ok = pos == 0
-            || !s[..pos]
-                .chars()
-                .next_back()
-                .is_some_and(|c| c.is_ascii_alphanumeric());
-        let after = pos + from.len();
-        let after_ok = after >= s.len()
-            || !s[after..]
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_alphanumeric());
-        if before_ok && after_ok {
-            s.replace_range(pos..after, to);
-            return true;
-        }
+    let Some((pos, after)) = ci_find(s, from) else {
+        return false;
+    };
+    // 词边界检查：替换点前/后须非 ascii 字母数字（防 "database" 里的 "db" 被替换）。
+    let before_ok = pos == 0
+        || !s[..pos]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_alphanumeric());
+    let after_ok = after >= s.len()
+        || !s[after..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric());
+    if before_ok && after_ok {
+        s.replace_range(pos..after, to);
+        return true;
     }
     false
 }
@@ -289,7 +315,7 @@ fn replace(s: &mut String, from: &str, to: &str) -> bool {
 fn query(c: &Case) -> String {
     let hay = c.evidence.join("\n");
     for kw in ["root cause", "root-cause", "cause:", "原因"] {
-        if let Some(idx) = hay.to_lowercase().find(kw) {
+        if let Some((idx, _)) = ci_find(&hay, kw) {
             let line = hay[idx..].split('\n').next().unwrap_or("");
             let terms = crate::terms::memory(line);
             if !terms.is_empty() {
@@ -803,6 +829,20 @@ mod tests {
         let mut t = "磁盘空间不足".to_string();
         assert!(!replace(&mut t, "空间不足x", "disk"), "无命中不 panic");
         assert_eq!(t, "磁盘空间不足");
+    }
+
+    /// 回归：小写映射改变字节长度时不得用小写副本的偏移切原串。
+    /// KELVIN SIGN (U+212A) 原 3 字节、小写 'k' 1 字节；旧实现会落在
+    /// 非 char 边界上 panic。
+    #[test]
+    fn replace_ci_safe_when_lowercase_changes_byte_length() {
+        let mut s = "\u{212A} db error".to_string();
+        assert!(replace(&mut s, "db", "database"));
+        assert_eq!(s, "\u{212A} database error");
+        // 同一类字符出现在 query() 的关键词路径上同样须返回原串的 char 边界。
+        let hay = "root cause: \u{212A} db";
+        let (i, j) = ci_find(hay, "cause").expect("match");
+        assert_eq!(&hay[i..j], "cause");
     }
 
     /// raw 模式不过自检——输出必须 ⊇ 自检模式（含自检丢弃的变体），
