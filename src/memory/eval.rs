@@ -358,13 +358,16 @@ impl Acc {
         l1_margin: f64,
         verbose: bool,
     ) {
-        if let Some(top) = a.first() {
-            if contains(&c.expected, &top.id) {
-                self.l1_total += 1;
-                let margin_ok = a
-                    .get(1)
-                    .is_none_or(|second| top.score - second.score >= l1_margin);
-                if top.sim >= l1_base && margin_ok {
+        // L1 自答率：分母是全部有期望结果的 case。旧口径只在 top1 命中时计入
+        // 分母，等于把"答错"整体剔除，命中率虚高；间距也必须与生产
+        // `feedback::qualified` 同口径（sim 差，而不是 BM25 绝对分差）。
+        if !c.expected.is_empty() {
+            self.l1_total += 1;
+            if let Some(top) = a.first() {
+                let second = a.get(1).map_or(0.0, |h| h.sim);
+                if crate::memory::feedback::qualified(top.sim, second, l1_base, l1_margin)
+                    && contains(&c.expected, &top.id)
+                {
                     self.l1_hit += 1;
                 }
             }
@@ -705,6 +708,45 @@ mod tests {
         let cases = baseline(&v).unwrap();
         assert_eq!(cases[0].rel.len(), 1, "{:?}", cases[0].rel);
         assert_eq!(relation(&cases[0], "2026-10-24_abcdef0123456789"), 2.0);
+    }
+
+    #[test]
+    fn l1_accuracy_denominator_covers_all_expected_cases() {
+        let mut rel = HashMap::new();
+        rel.insert("c1".to_string(), 2.0);
+        let mk = |expected: &[&str]| Case {
+            query: "q".to_string(),
+            layer: "literal".to_string(),
+            expected: expected.iter().map(|s| s.to_string()).collect(),
+            rel: rel.clone(),
+            judged_by: None,
+            judged_date: None,
+            judged_method: None,
+            judge_items: HashMap::new(),
+        };
+        let mut acc = Acc::default();
+        // 例 1：top1 正确且自信（sim 0.9，间距 0.4）→ 自答命中。
+        acc.fold(
+            &mk(&["c1"]),
+            vec![hit("c1", 0.9), hit("c2", 0.5)],
+            vec![],
+            0.55,
+            0.15,
+            false,
+        );
+        // 例 2：top1 答错（分数很高）→ 必须计入分母且算未命中。
+        acc.fold(&mk(&["c1"]), vec![hit("c9", 0.95)], vec![], 0.55, 0.15, false);
+        // 例 3：top1 正确但间距 0.1 < 0.15 → 不自答。
+        acc.fold(
+            &mk(&["c1"]),
+            vec![hit("c1", 0.9), hit("c2", 0.85)],
+            vec![],
+            0.55,
+            0.15,
+            false,
+        );
+        assert_eq!(acc.l1_total, 3, "所有有期望结果的 case 都要计入分母");
+        assert_eq!(acc.l1_hit, 1, "只有正确且自信的 case 计入命中");
     }
 
     #[test]
