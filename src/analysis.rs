@@ -132,8 +132,16 @@ pub(crate) fn fails(ll: &str) -> bool {
 }
 // 事故诊断标记行(行首、大小写不敏感):risk HIGH 且 gate 时与错误行一同受守卫;不参与种子判定。
 pub(crate) fn marker(ll: &str) -> bool {
+    // 首字节闸门：事故标记全部以 root/fix/mitigation/recommendation/action/
+    // assertionerror 开头，其余首字母直接排除，省掉 6 次 starts_with。
     let t = ll.trim_start();
-    INCIDENT_MARKERS.iter().any(|m| t.starts_with(m))
+    t.as_bytes().first().is_some_and(|&b| head(b))
+        && INCIDENT_MARKERS.iter().any(|m| t.starts_with(m))
+}
+
+/// 事故标记可能的首字节（小写，输入已归一化为小写）。
+fn head(b: u8) -> bool {
+    matches!(b, b'r' | b'f' | b'm' | b'a')
 }
 pub(crate) fn heading(s: &str) -> bool {
     let t = s.trim_start();
@@ -632,6 +640,21 @@ mod tests {
         assert_eq!(flags("failed to connect"), (true, true));
         assert_eq!(flags("info heartbeat"), (false, false));
         assert_eq!(flags("warn then error"), (true, true));
+    }
+
+    #[test]
+    fn marker_head_gate_covers_all_markers() {
+        // 首字节闸门必须覆盖全部标记词，否则新增标记会被静默漏判。
+        for m in INCIDENT_MARKERS {
+            let b = *m.as_bytes().first().expect("非空");
+            assert!(head(b), "标记 {m:?} 的首字节 {b:?} 未被闸门覆盖");
+            assert!(marker(m), "标记 {m:?} 必须命中");
+            // 调用方传入的已是小写文本；缩进必须被 trim 掉后仍命中。
+            assert!(marker(&format!("   {m}")), "缩进后的标记仍需命中");
+        }
+        assert!(!marker(""));
+        assert!(!marker("   "));
+        assert!(!marker("error: boom"), "非标记行不得命中闸门");
     }
 
     #[test]

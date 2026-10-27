@@ -412,7 +412,7 @@ fn read_bounded(reader: &mut dyn BufRead, max: usize) -> Frame {
         return Frame::Eof;
     }
     if n > max {
-        discard_line(reader);
+        discard(reader);
         return Frame::Invalid(format!("request exceeds {max} bytes"));
     }
     match String::from_utf8(buf) {
@@ -424,7 +424,7 @@ fn read_bounded(reader: &mut dyn BufRead, max: usize) -> Frame {
 /// 丢弃当前帧剩余字节直到换行，保证超限帧之后仍按行同步。
 /// 必须用 `read_until` 精确停在第一个换行：`read` 一次可能带回后续多行，
 /// 会把下一帧一起吞掉。
-fn discard_line(reader: &mut dyn BufRead) {
+fn discard(reader: &mut dyn BufRead) {
     let mut sink = Vec::new();
     loop {
         sink.clear();

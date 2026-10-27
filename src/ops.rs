@@ -597,7 +597,7 @@ fn risk_zh(r: crate::Risk) -> &'static str {
 }
 
 /// 模式中文标签与一句话说明（效果报告用）。
-fn mode_label(m: Mode) -> (&'static str, &'static str) {
+fn title(m: Mode) -> (&'static str, &'static str) {
     match m {
         Mode::Sieve => ("sieve 智能筛选", "按问题逐行召回证据"),
         Mode::PassSmall => ("小输入透传", "无需压缩"),
@@ -615,7 +615,7 @@ fn mode_label(m: Mode) -> (&'static str, &'static str) {
 pub fn recall_report(r: &Outcome, query: &str) -> String {
     let mut s = String::from("✦ SCX 压缩召回 ✦\n\n");
     s.push_str(&row("📌", "查询", &clip(query, 40)));
-    let (label, desc) = mode_label(r.mode);
+    let (label, desc) = title(r.mode);
     s.push_str(&row("⚙️", "模式", &format!("{label} · {desc}")));
     match r.mode {
         Mode::Sieve | Mode::OverflowEvidence | Mode::OverflowFill => {
