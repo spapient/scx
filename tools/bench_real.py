@@ -14,11 +14,11 @@ import subprocess
 import sys
 
 
-def scx_json(binary, path, query, ctx, gate, ratio, gr):
+def scx_json(binary, path, query, ctx, gate, ratio, sc):
     cmd = [
         binary, path, "--query", query,
         "--context", str(ctx), "--risk-gate", str(gate),
-        "--guard-region", str(gr),
+        "--scoped", str(sc),
         "--ratio", str(ratio), "--json",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -40,20 +40,20 @@ def main():
     if not files:
         sys.exit(f"no .dump.txt under {args.dumps}")
 
-    print(f"{'dump':12s} {'ctx':>3s} {'gate':>4s} {'gr':>3s} {'cut%':>6s} {'kept':>6s} "
+    print(f"{'dump':12s} {'ctx':>3s} {'gate':>4s} {'sc':>3s} {'cut%':>6s} {'kept':>6s} "
           f"{'seeds':>6s} {'guard':>5s} {'risk':>5s}")
     for path in files:
         base = os.path.basename(path).replace(".dump.txt", "")[:12]
         for ctx in (0, 1):
             for gate in (0, 1):
-                for gr in (0, 1):
+                for sc in (0, 1):
                     data = scx_json(
-                        args.binary, path, args.query, ctx, gate, args.ratio, gr
+                        args.binary, path, args.query, ctx, gate, args.ratio, sc
                     )
                     if not data:
-                        print(f"{base} ctx={ctx} gate={gate} gr={gr}  ERROR: no scxjson")
+                        print(f"{base} ctx={ctx} gate={gate} sc={sc}  ERROR: no scxjson")
                         continue
-                    print(f"{base:12s} {ctx:3d} {gate:4d} {gr:3d} "
+                    print(f"{base:12s} {ctx:3d} {gate:4d} {sc:3d} "
                           f"{data['cut_pct']:5.1f}% {data['kept']:6d} {data['seeds']:6d} "
                           f"{data['guarded']:5d} {data['risk']:>5s}")
 

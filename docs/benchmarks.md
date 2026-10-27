@@ -79,13 +79,13 @@ export SCX_BENCH_REPEAT=21                              # 自定义采样数
 口径注意：三行压减率被"同 kept 字节预算"构造为近似相等，对照差异在证据存活率；
 scx 列为子进程端到端 wall-clock（含进程启动），两基线为进程内纯 Python 计算。
 
-## 真实转储：`--guard-region` 收益（2026-10-27）
+## 真实转储：`--scoped` 收益（2026-10-27）
 
 语料：本仓库 Claude Code 会话转储中工具输出最大的 3 份（`tools/extract_dumps.py
 --extract 3`，17.6k–26.4k 行 / 1.1–1.4 MB）。命令：`tools/bench_real.py
 --binary target/release/scx`（query 默认 `compress dedup evidence`，ratio 0.35）。
 
-`--guard-region 1` 只在 `--risk-gate 1` 且风险 HIGH 时生效：HIGH 风险下风险守卫会把
+`--scoped 1` 只在 `--risk-gate 1` 且风险 HIGH 时生效：HIGH 风险下风险守卫会把
 **全文所有**错误/标记行都保留，区域门控则只保留证据邻域内的，远处无关错误行照常裁剪。
 
 | 转储 | ctx | gate | gr=0 压减 / kept | gr=1 压减 / kept | 压减提升 |
