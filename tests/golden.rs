@@ -77,12 +77,12 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
     let mut v: Vec<(String, Vec<&str>, String)> = Vec::new();
 
     // 记忆用例的库目录：固定、隔离、每次运行前重置。
-    let mem_store_dir = std::env::temp_dir().join("scx-golden-mem-store");
-    let mem_recall_dir = std::env::temp_dir().join("scx-golden-mem-recall");
-    let _ = std::fs::remove_dir_all(&mem_store_dir);
-    let _ = std::fs::remove_dir_all(&mem_recall_dir);
-    let mem_store = mem_store_dir.to_string_lossy().into_owned();
-    let mem_recall = mem_recall_dir.to_string_lossy().into_owned();
+    let store_dir = std::env::temp_dir().join("scx-golden-mem-store");
+    let recall_dir = std::env::temp_dir().join("scx-golden-mem-recall");
+    let _ = std::fs::remove_dir_all(&store_dir);
+    let _ = std::fs::remove_dir_all(&recall_dir);
+    let store = store_dir.to_string_lossy().into_owned();
+    let recall = recall_dir.to_string_lossy().into_owned();
 
     // 1) 小输入自动 passthrough
     let small: String = (0..10)
@@ -288,7 +288,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_store.clone().into_boxed_str()),
+            Box::leak(store.clone().into_boxed_str()),
         ],
         seed_log.to_string(),
     ));
@@ -301,7 +301,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_recall.clone().into_boxed_str()),
+            Box::leak(recall.clone().into_boxed_str()),
         ],
         seed_log,
     );
@@ -314,15 +314,15 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--recall",
             "2",
             "--mem-dir",
-            Box::leak(mem_recall.into_boxed_str()),
+            Box::leak(recall.into_boxed_str()),
         ],
         String::new(),
     ));
 
     // 19) 反馈标注旁路（--rate good <case-id>：状态机 + 质量分，不影响正文）
-    let mem_rate_dir = std::env::temp_dir().join("scx-golden-mem-rate");
-    let _ = std::fs::remove_dir_all(&mem_rate_dir);
-    let mem_rate = mem_rate_dir.to_string_lossy().into_owned();
+    let rate_dir = std::env::temp_dir().join("scx-golden-mem-rate");
+    let _ = std::fs::remove_dir_all(&rate_dir);
+    let rate = rate_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -330,12 +330,12 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_rate.clone().into_boxed_str()),
+            Box::leak(rate.clone().into_boxed_str()),
         ],
         seed_log,
     );
     let rate_id = {
-        let cases = Path::new(&mem_rate).join("cases");
+        let cases = Path::new(&rate).join("cases");
         let id = std::fs::read_dir(&cases)
             .unwrap()
             .find_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
@@ -349,15 +349,15 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "good",
             Box::leak(rate_id.into_boxed_str()),
             "--mem-dir",
-            Box::leak(mem_rate.into_boxed_str()),
+            Box::leak(rate.into_boxed_str()),
         ],
         String::new(),
     ));
 
     // 20) 索引重建旁路（--rebuild：postings 全量重建 + qmap 合并 + index_force=1）
-    let mem_rb_dir = std::env::temp_dir().join("scx-golden-mem-rebuild");
-    let _ = std::fs::remove_dir_all(&mem_rb_dir);
-    let mem_rb = mem_rb_dir.to_string_lossy().into_owned();
+    let rb_dir = std::env::temp_dir().join("scx-golden-mem-rebuild");
+    let _ = std::fs::remove_dir_all(&rb_dir);
+    let rb = rb_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -365,20 +365,20 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_rb.clone().into_boxed_str()),
+            Box::leak(rb.clone().into_boxed_str()),
         ],
         seed_log,
     );
     v.push((
         "memory_rebuild".into(),
-        vec!["--rebuild", "--mem-dir", Box::leak(mem_rb.into_boxed_str())],
+        vec!["--rebuild", "--mem-dir", Box::leak(rb.into_boxed_str())],
         String::new(),
     ));
 
     // 21) 过期清理旁路（--gc：无过期 case → removed=0 报告行）
-    let mem_gc_dir = std::env::temp_dir().join("scx-golden-mem-gc");
-    let _ = std::fs::remove_dir_all(&mem_gc_dir);
-    let mem_gc = mem_gc_dir.to_string_lossy().into_owned();
+    let gc_dir = std::env::temp_dir().join("scx-golden-mem-gc");
+    let _ = std::fs::remove_dir_all(&gc_dir);
+    let gc = gc_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -386,21 +386,21 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_gc.clone().into_boxed_str()),
+            Box::leak(gc.clone().into_boxed_str()),
         ],
         seed_log,
     );
     v.push((
         "memory_gc".into(),
-        vec!["--gc", "--mem-dir", Box::leak(mem_gc.into_boxed_str())],
+        vec!["--gc", "--mem-dir", Box::leak(gc.into_boxed_str())],
         String::new(),
     ));
 
     // 22) 坏段自愈：store + --rebuild 建索引 → 截断 postings.bin 尾部 →
     //     普通召回自动重建；随后 recall-only 输出确定且不写库。
-    let mem_cor_dir = std::env::temp_dir().join("scx-golden-mem-corrupt");
-    let _ = std::fs::remove_dir_all(&mem_cor_dir);
-    let mem_cor = mem_cor_dir.to_string_lossy().into_owned();
+    let cor_dir = std::env::temp_dir().join("scx-golden-mem-corrupt");
+    let _ = std::fs::remove_dir_all(&cor_dir);
+    let cor = cor_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -408,7 +408,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_cor.clone().into_boxed_str()),
+            Box::leak(cor.clone().into_boxed_str()),
         ],
         seed_log,
     );
@@ -416,12 +416,12 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
         &[
             "--rebuild",
             "--mem-dir",
-            Box::leak(mem_cor.clone().into_boxed_str()),
+            Box::leak(cor.clone().into_boxed_str()),
         ],
         "",
     );
     {
-        let p = Path::new(&mem_cor).join("index").join("postings.bin");
+        let p = Path::new(&cor).join("index").join("postings.bin");
         let b = std::fs::read(&p).unwrap();
         std::fs::write(&p, &b[..b.len() - 5]).unwrap(); // 截断 crc+body 尾部 → 校验失败
     }
@@ -432,7 +432,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--recall",
             "1",
             "--mem-dir",
-            Box::leak(mem_cor.clone().into_boxed_str()),
+            Box::leak(cor.clone().into_boxed_str()),
         ],
         "",
     );
@@ -443,16 +443,16 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "db timeout conn_id",
             "--recall-only",
             "--mem-dir",
-            Box::leak(mem_cor.into_boxed_str()),
+            Box::leak(cor.into_boxed_str()),
         ],
         String::new(),
     ));
 
     // 23) qmap 记忆图重放：store + 一次普通 recall 预热（qmap 回流落盘）→
     //     二次同 query recall-only 走 qmap 直达，输出逐字节稳定。
-    let mem_qm_dir = std::env::temp_dir().join("scx-golden-mem-qmap");
-    let _ = std::fs::remove_dir_all(&mem_qm_dir);
-    let mem_qm = mem_qm_dir.to_string_lossy().into_owned();
+    let qm_dir = std::env::temp_dir().join("scx-golden-mem-qmap");
+    let _ = std::fs::remove_dir_all(&qm_dir);
+    let qm = qm_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -460,7 +460,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_qm.clone().into_boxed_str()),
+            Box::leak(qm.clone().into_boxed_str()),
         ],
         seed_log,
     );
@@ -471,7 +471,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--recall",
             "1",
             "--mem-dir",
-            Box::leak(mem_qm.clone().into_boxed_str()),
+            Box::leak(qm.clone().into_boxed_str()),
         ],
         "",
     );
@@ -482,16 +482,16 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "db timeout conn_id",
             "--recall-only",
             "--mem-dir",
-            Box::leak(mem_qm.into_boxed_str()),
+            Box::leak(qm.into_boxed_str()),
         ],
         String::new(),
     ));
 
     // 24) 评估系统旁路（--eval：A 完整管线 vs B 朴素 BM25，分层报告行确定性）。
     //     baseline.json 的 expected 用 hash8 后缀（免日期漂移）。
-    let mem_ev_dir = std::env::temp_dir().join("scx-golden-mem-eval");
-    let _ = std::fs::remove_dir_all(&mem_ev_dir);
-    let mem_ev = mem_ev_dir.to_string_lossy().into_owned();
+    let ev_dir = std::env::temp_dir().join("scx-golden-mem-eval");
+    let _ = std::fs::remove_dir_all(&ev_dir);
+    let ev = ev_dir.to_string_lossy().into_owned();
     let ev_seeds: [(&str, &str); 3] = [
         ("db timeout conn_id", seed_log),
         (
@@ -511,13 +511,13 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
                 "--store",
                 "1",
                 "--mem-dir",
-                Box::leak(mem_ev.clone().into_boxed_str()),
+                Box::leak(ev.clone().into_boxed_str()),
             ],
             t,
         );
     }
     let ev_id = |q: &str| -> String {
-        let cases = Path::new(&mem_ev).join("cases");
+        let cases = Path::new(&ev).join("cases");
         let mut out = String::new();
         for e in std::fs::read_dir(&cases).unwrap().filter_map(|e| e.ok()) {
             let id = e.file_name().to_string_lossy().into_owned();
@@ -547,7 +547,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--eval",
             Box::leak(baseline_path.clone().into_boxed_str()),
             "--mem-dir",
-            Box::leak(mem_ev.clone().into_boxed_str()),
+            Box::leak(ev.clone().into_boxed_str()),
         ],
         String::new(),
     ));
@@ -561,15 +561,15 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             Box::leak(baseline_path.into_boxed_str()),
             "--eval-verbose",
             "--mem-dir",
-            Box::leak(mem_ev.into_boxed_str()),
+            Box::leak(ev.into_boxed_str()),
         ],
         String::new(),
     ));
 
     // 26) L1 要点摘要旁路（--recall-detail：mem 段追加 summary 行，字段+证据首行）。
-    let mem_sm_dir = std::env::temp_dir().join("scx-golden-mem-summary");
-    let _ = std::fs::remove_dir_all(&mem_sm_dir);
-    let mem_sm = mem_sm_dir.to_string_lossy().into_owned();
+    let sm_dir = std::env::temp_dir().join("scx-golden-mem-summary");
+    let _ = std::fs::remove_dir_all(&sm_dir);
+    let sm = sm_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -577,7 +577,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_sm.clone().into_boxed_str()),
+            Box::leak(sm.clone().into_boxed_str()),
         ],
         seed_log,
     );
@@ -591,15 +591,15 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "1",
             "--recall-detail",
             "--mem-dir",
-            Box::leak(mem_sm.into_boxed_str()),
+            Box::leak(sm.into_boxed_str()),
         ],
         String::new(),
     ));
 
     // 27) L1 本地直答：--store 配 --fix 保存修复结论，recall-detail 输出 fix 行。
-    let mem_fix_dir = std::env::temp_dir().join("scx-golden-mem-fix");
-    let _ = std::fs::remove_dir_all(&mem_fix_dir);
-    let mem_fix = mem_fix_dir.to_string_lossy().into_owned();
+    let fix_dir = std::env::temp_dir().join("scx-golden-mem-fix");
+    let _ = std::fs::remove_dir_all(&fix_dir);
+    let fix = fix_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -609,7 +609,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--fix",
             "enlarge pool to 64 conns, restart daemon",
             "--mem-dir",
-            Box::leak(mem_fix.clone().into_boxed_str()),
+            Box::leak(fix.clone().into_boxed_str()),
         ],
         seed_log,
     );
@@ -623,7 +623,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "1",
             "--recall-detail",
             "--mem-dir",
-            Box::leak(mem_fix.into_boxed_str()),
+            Box::leak(fix.into_boxed_str()),
         ],
         String::new(),
     ));
@@ -631,9 +631,9 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
     // 28) 库盘点：--stats 输出 case/桶/状态/fix 覆盖率/质量/磁盘。
     // 两个 case 用隔离日志：db 场景（seed_log）+ 磁盘场景（专用日志），
     // 让基线展示多桶（failopen 全文保留会把无关家族词带进 text，同库会互相污染桶归属）。
-    let mem_st_dir = std::env::temp_dir().join("scx-golden-mem-stats");
-    let _ = std::fs::remove_dir_all(&mem_st_dir);
-    let mem_st = mem_st_dir.to_string_lossy().into_owned();
+    let st_dir = std::env::temp_dir().join("scx-golden-mem-stats");
+    let _ = std::fs::remove_dir_all(&st_dir);
+    let st = st_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -643,7 +643,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--fix",
             "enlarge pool to 64 conns",
             "--mem-dir",
-            Box::leak(mem_st.clone().into_boxed_str()),
+            Box::leak(st.clone().into_boxed_str()),
         ],
         seed_log,
     );
@@ -655,20 +655,20 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_st.clone().into_boxed_str()),
+            Box::leak(st.clone().into_boxed_str()),
         ],
         seed_disk,
     );
     v.push((
         "memory_stats".into(),
-        vec!["--stats", "--mem-dir", Box::leak(mem_st.into_boxed_str())],
+        vec!["--stats", "--mem-dir", Box::leak(st.into_boxed_str())],
         String::new(),
     ));
 
     // 29) 智能标注器：--annotate 三层标注与自检证据，仅用于回归集。
-    let mem_an_dir = std::env::temp_dir().join("scx-golden-mem-annotate");
-    let _ = std::fs::remove_dir_all(&mem_an_dir);
-    let mem_an = mem_an_dir.to_string_lossy().into_owned();
+    let an_dir = std::env::temp_dir().join("scx-golden-mem-annotate");
+    let _ = std::fs::remove_dir_all(&an_dir);
+    let an = an_dir.to_string_lossy().into_owned();
     let _ = run_scx(
         &[
             "--query",
@@ -678,7 +678,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--fix",
             "enlarge pool to 64 conns",
             "--mem-dir",
-            Box::leak(mem_an.clone().into_boxed_str()),
+            Box::leak(an.clone().into_boxed_str()),
         ],
         seed_log,
     );
@@ -689,7 +689,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--store",
             "1",
             "--mem-dir",
-            Box::leak(mem_an.clone().into_boxed_str()),
+            Box::leak(an.clone().into_boxed_str()),
         ],
         seed_disk,
     );
@@ -700,7 +700,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
             "--seed",
             "0",
             "--mem-dir",
-            Box::leak(mem_an.into_boxed_str()),
+            Box::leak(an.into_boxed_str()),
         ],
         String::new(),
     ));

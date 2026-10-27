@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--guard-region 1] [--guard-precise 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -33,12 +33,12 @@ pub fn usage() -> String {
     );
     s.push_str("  --structure 1        structural-aware neighborhood: fenced blocks, import/use/#include\n");
     s.push_str("                       blocks, stack-trace at-chains (default off, byte-identical to v0.4.1)\n");
-    s.push_str("  --guard-precise 1    HIGH-risk guard detects structural errors only (leading\n");
+    s.push_str("  --strict 1    HIGH-risk guard detects structural errors only (leading\n");
     s.push_str(
         "                       error label / strong markers), not lines that merely mention\n",
     );
     s.push_str("                       'error' (default off = wide recall)\n");
-    s.push_str("  --guard-region 1     HIGH-risk guard only keeps error/marker lines inside the\n");
+    s.push_str("  --scoped 1     HIGH-risk guard only keeps error/marker lines inside the\n");
     s.push_str(
         "                       evidence neighborhood (default off = keep all, byte-identical)\n",
     );
@@ -330,7 +330,7 @@ static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
-        name: "--guard-region",
+        name: "--scoped",
         once: true,
         kind: Kind::Bool01,
         what: "",
@@ -339,7 +339,7 @@ static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
-        name: "--guard-precise",
+        name: "--strict",
         once: true,
         kind: Kind::Bool01,
         what: "",
@@ -1163,7 +1163,7 @@ fn policy(
         let v = le.entry.value;
         let Some(flag) = lookup(key) else {
             return Err(format!(
-                "{}: {}:{}: unknown policy key `{}` (allowed: ratio/context/window/elide/risk_gate/guard_region/guard_precise/lineno/max_tokens/structure)",
+                "{}: {}:{}: unknown policy key `{}` (allowed: ratio/context/window/elide/risk_gate/scoped/strict/lineno/max_tokens/structure)",
                 f.name, path, le.line, key
             ));
         };
@@ -1186,8 +1186,8 @@ const POLICY_TABLE: &[(&str, &str)] = &[
     ("window", "--window"),
     ("elide", "--elide"),
     ("risk_gate", "--risk-gate"),
-    ("guard_region", "--guard-region"),
-    ("guard_precise", "--guard-precise"),
+    ("scoped", "--scoped"),
+    ("strict", "--strict"),
     ("lineno", "--lineno"),
     ("max_tokens", "--max-tokens"),
     ("structure", "--structure"),
@@ -1204,7 +1204,7 @@ fn lookup(key: &str) -> Option<&'static str> {
 fn apply(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Result<(), String> {
     match key {
         "ratio" | "context" | "window" => number(s, key, v, path, line)?,
-        "elide" | "risk_gate" | "guard_region" | "guard_precise" | "lineno" | "structure" => {
+        "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" => {
             toggle(s, key, v, path, line)?
         }
         "max_tokens" => tokens(s, v, path, line)?,
@@ -1273,8 +1273,8 @@ fn toggle(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Re
     match key {
         "elide" => s.config.elide = b,
         "risk_gate" => s.config.gate = b,
-        "guard_region" => s.config.guard_region = b,
-        "guard_precise" => s.config.guard_precise = b,
+        "scoped" => s.config.scoped = b,
+        "strict" => s.config.strict = b,
         "lineno" => s.config.lineno = b,
         "structure" => s.config.structure = b,
         _ => unreachable!("bool policy key whitelist"),
@@ -1323,8 +1323,8 @@ fn either(
     match f.name {
         "--elide" => s.config.elide = b,
         "--risk-gate" => s.config.gate = b,
-        "--guard-region" => s.config.guard_region = b,
-        "--guard-precise" => s.config.guard_precise = b,
+        "--scoped" => s.config.scoped = b,
+        "--strict" => s.config.strict = b,
         "--lineno" => s.config.lineno = b,
         "--structure" => s.config.structure = b,
         _ => s.store = b,
@@ -2071,8 +2071,8 @@ mod tests {
         assert!(!o.config.gate);
         let o2 = all(args(&["--force=--json"])).unwrap();
         assert_eq!(o2.config.forces, vec!["--json".to_string()]);
-        let o2b = all(args(&["--query", "a", "--guard-region", "1"])).unwrap();
-        assert!(o2b.config.guard_region);
+        let o2b = all(args(&["--query", "a", "--scoped", "1"])).unwrap();
+        assert!(o2b.config.scoped);
         let o3 = all(args(&["--query", "a", "--lineno", "1"])).unwrap();
         assert!(o3.config.lineno);
         let o4 = all(args(&["--query", "a", "--lineno=0"])).unwrap();

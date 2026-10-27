@@ -292,12 +292,12 @@ query + input
 | `--context` | `1` | 证据行两侧最小保留邻域，范围 `0..=4`；`0` 为针尖模式 |
 | `--window` | `2` | 种子区域扩展与邻域排序半径，范围 `0..=8`；`0` 规范化为 `1` |
 | `--risk-gate` | `1` | 风险为 HIGH 时保护失败级错误行和事故标记行 |
-| `--guard-region` | `0` | 与 `--risk-gate` 联动：`1` 时 HIGH 风险守卫只保留证据邻域内的错误/标记行，远处无关错误行照常裁剪（真实转储上压减率提升 11.7–20.1 个百分点，见 benchmarks） |
+| `--scoped` | `0` | 与 `--risk-gate` 联动：`1` 时 HIGH 风险守卫只保留证据邻域内的错误/标记行，远处无关错误行照常裁剪（真实转储上压减率提升 11.7–20.1 个百分点，见 benchmarks） |
 | `--lineno` | `0` | 为筛选输出添加 `N: ` 原文行号前缀 |
 | `--force` | 无 | 强制保留匹配行；大小写不敏感的字面子串；`re:` 前缀进入有限正则子集 |
 | `--max-tokens` | 无 | 输出 token 硬上限；证据行及其最小邻域优先，超限报 `overflow:evidence`/`overflow:fill`，绝不静默丢弃证据 |
 | `--structure` | `0` | `1` 时启用结构感知邻域：fence 代码块、`import`/`use`/`#include` 块、堆栈 `at` 链整体并入 |
-| `--policy-file` | 无 | 策略文本覆盖默认值（`ratio`/`context`/`window`/`elide`/`risk_gate`/`guard_region`/`guard_precise`/`lineno`/`max_tokens`/`structure`）；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--policy-file` | 无 | 策略文本覆盖默认值（`ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`）；优先级 CLI 显式 > 文件 > DEFAULT |
 
 ### 四条行为保证
 
@@ -339,7 +339,7 @@ scx --query "..." [OPTIONS] [file...]
 | `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计；含 `dropped` 区间明细（`--max-tokens`/预算裁剪）与 `max_tokens`/`tok_est` 字段 |
 | `--max-tokens <N>` | 输出 token 硬上限；证据地板最高优先，超限报 `overflow:evidence`/`overflow:fill` |
 | `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
-| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`guard_region`/`guard_precise`/`lineno`/`max_tokens`/`structure`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
 | `--force <P>` | 强制保留匹配行；字面子串（大小写不敏感）；`re:` 前缀进入有限正则子集（`\|` 交替、`[...]` 字符类、`*` `+` `?` 量词，Thompson NFA，非法模式报错并提示支持子集） |
 | `--semantic <WEIGHTS>` | 可选神经重打分（需 `cargo build --features semantic` 构建）；权重文件自描述 JSON `{schema,dim,weights,sha256}`，SHA256 校验失败即拒绝运行；不启用时默认路径逐字节不变 |
 | `--help`, `--version` | 显示用法或版本 |

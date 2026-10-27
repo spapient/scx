@@ -27,8 +27,8 @@ struct Usage {
 const TOOLS: &[(&str, &str, &str)] = &[
     (
         "compress_context",
-        "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1), guard_region (bool or 0/1), guard_precise (bool or 0/1), kind (str: static-contract/system-definition/session-message/tool-output/auto)",
-        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"},\"guard_region\":{\"type\":\"boolean\"},\"guard_precise\":{\"type\":\"boolean\"},\"kind\":{\"type\":\"string\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\"]}}},\"required\":[\"query\",\"text\"]}",
+        "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1), scoped (bool or 0/1), strict (bool or 0/1), kind (str: static-contract/system-definition/session-message/tool-output/auto)",
+        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"},\"scoped\":{\"type\":\"boolean\"},\"strict\":{\"type\":\"boolean\"},\"kind\":{\"type\":\"string\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\"]}}},\"required\":[\"query\",\"text\"]}",
     ),
     (
         "context_snapshot",
@@ -249,8 +249,8 @@ fn apply(cfg: &mut crate::Config, args: &Json) {
         cfg.limit = Some(m);
     }
     cfg.structure = flag(args, "structure");
-    cfg.guard_region = flag(args, "guard_region");
-    cfg.guard_precise = flag(args, "guard_precise");
+    cfg.scoped = flag(args, "scoped");
+    cfg.strict = flag(args, "strict");
     evidence(cfg, args);
 }
 
@@ -541,23 +541,23 @@ mod tests {
     }
 
     #[test]
-    fn apply_guard_region_flag() {
-        // guard_region 与 structure 同为 bool/0/1 开关；缺省 false，显式落位。
+    fn apply_scoped_flag() {
+        // scoped 与 structure 同为 bool/0/1 开关；缺省 false，显式落位。
         let mut cfg = crate::Config::default();
-        apply(&mut cfg, &parse(r#"{"guard_region":1}"#).unwrap());
-        assert!(cfg.guard_region, "guard_region=1 应落位");
+        apply(&mut cfg, &parse(r#"{"scoped":1}"#).unwrap());
+        assert!(cfg.scoped, "scoped=1 应落位");
 
         let mut off = crate::Config::default();
-        apply(&mut off, &parse(r#"{"guard_region":0}"#).unwrap());
-        assert!(!off.guard_region, "guard_region=0 应关闭");
+        apply(&mut off, &parse(r#"{"scoped":0}"#).unwrap());
+        assert!(!off.scoped, "scoped=0 应关闭");
 
         let mut absent = crate::Config::default();
         apply(&mut absent, &parse(r#"{"query":"q"}"#).unwrap());
-        assert!(!absent.guard_region, "缺省应为 false");
+        assert!(!absent.scoped, "缺省应为 false");
 
         let mut bool_form = crate::Config::default();
-        apply(&mut bool_form, &parse(r#"{"guard_region":true}"#).unwrap());
-        assert!(bool_form.guard_region, "布尔 true 也应落位");
+        apply(&mut bool_form, &parse(r#"{"scoped":true}"#).unwrap());
+        assert!(bool_form.scoped, "布尔 true 也应落位");
     }
 
     #[test]

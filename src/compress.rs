@@ -1297,7 +1297,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         &force_pats,
         small_tok,
         do_tok,
-        cfg.guard_precise,
+        cfg.strict,
     );
     let (dup, folds) = dedup(&lines, &masks.mask, masks.words, &masks.errs, &masks.pinned);
     let stat = weights(&masks.mask, masks.words, &dup, uniq_terms.len(), folds);
@@ -1399,14 +1399,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let risk = audit(&keep, &masks.errs, &seeds.hits, &DEFAULT_RISK);
     let mut guarded = 0u8;
     if active(risk, cfg) {
-        let guard_region = cfg.guard_region.then_some(regions.in_region.as_slice());
+        let scoped = cfg.scoped.then_some(regions.in_region.as_slice());
         guarded = guard(
             &mut keep,
             &mut kept,
             &dup,
             &masks.guards,
             &masks.marked,
-            guard_region,
+            scoped,
             &mut reason,
         );
     }
@@ -2123,7 +2123,7 @@ mod tests {
     }
 
     #[test]
-    fn guard_region_gates_far_errors() {
+    fn scoped_gates_far_errors() {
         // 全量守卫（None）保留所有错误行；区域门控（Some）只保留证据邻域内的错误行。
         let keep = vec![false; 5];
         let dup = vec![false; 5];
