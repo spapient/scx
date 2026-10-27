@@ -163,7 +163,49 @@ pub(crate) fn append(
         return Ok(());
     }
     f.write_all(&buf)?;
-    Ok(())
+    compact(&p, f, decoded, q, hits, recency, gen)
+}
+
+/// 死条目压缩阈值：累计到这么多条、且占比过半时，在同一次 append 的锁内
+/// 原子重写整个 qmap。死条目永远命中不了 lookup，只让每次全量解码越来越贵。
+const COMPACT_MIN_STALE: usize = 64;
+
+/// 追加后的顺带压缩：阈值 + 占比双条件，避免小库每次 append 都重写文件。
+fn compact(
+    p: &Path,
+    f: fs::File,
+    decoded: Decoded,
+    q: String,
+    hits: &[(String, f64, f64)],
+    recency: u32,
+    gen: u64,
+) -> std::io::Result<()> {
+    let mut entries = decoded.entries;
+    entries.push(Entry {
+        q,
+        hits: hits
+            .iter()
+            .map(|(id, score, sim)| Hit {
+                id: id.clone(),
+                score: *score as f32,
+                sim: *sim as f32,
+            })
+            .collect(),
+        recency,
+        gen,
+    });
+    let now = recency as u64;
+    let dead = entries
+        .iter()
+        .filter(|e| e.gen < gen || !fresh(e.recency, now))
+        .count();
+    if dead < COMPACT_MIN_STALE || dead * 2 < entries.len() {
+        return Ok(());
+    }
+    // 先关文件再原子替换（Windows 上 rename 覆盖打开中的文件会失败）。
+    drop(f);
+    retain_live(&mut entries, gen, now);
+    write_sorted(p, entries)
 }
 
 fn parent(p: &std::path::Path) -> std::io::Result<()> {
@@ -414,29 +456,42 @@ fn serialize(sorted: &[Entry]) -> Vec<u8> {
     buf
 }
 
-/// 合并重写（--rebuild）：同归一化 query 只留最新一条（同秒按写入顺序取后者）；
-/// 按 query 字典序写回。
+/// 合并重写（--rebuild）：丢弃死条目（旧代际/超 TTL），同归一化 query 只留
+/// 最新一条（同秒按写入顺序取后者）；按 query 字典序写回。
 pub(crate) fn merge(root: &str) -> std::io::Result<()> {
     // 锁必须在 load 之前：否则 append 在 load 与 write 之间进来的记录会被合并覆盖。
     let _g = crate::memory::lock::acquire(root, "qmap.lock")?;
-    let entries = load(root)?;
+    let mut entries = load(root)?;
+    // meta 不可读时按 gen=0 处理（不丢条目）：qmap 只是缓存，不能因元数据
+    // 缺失让合并失败。
+    let gen = crate::memory::meta::load(root).map(|m| m.gen).unwrap_or(0);
+    retain_live(&mut entries, gen, seconds());
+    let p = path(root);
     if entries.is_empty() {
         // 损坏/空 qmap 在 rebuild 时直接丢弃，避免下一次 append 继续追加到坏 header 后。
-        let p = path(root);
         if p.exists() {
             let _ = fs::remove_file(p);
         }
         return Ok(());
     }
+    write_sorted(&p, entries)
+}
+
+/// lookup 永远不会命中的条目：旧代际或已超 TTL（recency 不随时间回退）。
+fn retain_live(entries: &mut Vec<Entry>, gen: u64, now: u64) {
+    entries.retain(|e| e.gen >= gen && fresh(e.recency, now));
+}
+
+/// 去重 + 按 query 字典序原子写回。
+fn write_sorted(p: &Path, entries: Vec<Entry>) -> std::io::Result<()> {
     let best = dedup(entries);
     let mut sorted: Vec<Entry> = best.into_values().collect();
     sorted.sort_by(|a, b| a.q.cmp(&b.q));
-    let p = path(root);
     if let Some(d) = p.parent() {
         crate::memory::lock::mkdir(d)?;
     }
     let buf = serialize(&sorted);
-    crate::memory::lock::atomic(&p, &buf)
+    crate::memory::lock::atomic(p, &buf)
 }
 
 /// 进程内会话缓存容量：同会话连续追问只需保留最近少量 query。
@@ -619,6 +674,23 @@ mod tests {
         // append-only 顺序即写入顺序；精确命中取最后一条（最新写入）。
         let hit = lookup(&root, "q", 1, 1).unwrap().unwrap();
         assert_eq!(hit.1[0].id, "b");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn qmap_compacts_dead_entries_on_append() {
+        let root = root("compact");
+        for i in 0..65 {
+            append(&root, &format!("q{i}"), &[("a".to_string(), 1.0, 0.9)], 1).unwrap();
+        }
+        assert_eq!(load(&root).unwrap().len(), 65, "阈值前保持 append-only");
+        // 代际前进：旧条目全部变为死条目，追加新代际条目时触发压缩。
+        append(&root, "fresh", &[("a".to_string(), 1.0, 0.9)], 2).unwrap();
+        let all = load(&root).unwrap();
+        assert_eq!(all.len(), 1, "死条目应在 append 时被压缩掉");
+        assert_eq!(all[0].q, "fresh");
+        // 压缩不改变查询语义：活条目仍可命中。
+        assert!(lookup(&root, "fresh", 1, 2).unwrap().is_some());
         let _ = fs::remove_dir_all(&root);
     }
 
