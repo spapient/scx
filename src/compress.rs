@@ -791,18 +791,18 @@ const R_ANCHOR: u8 = 5;
 /// 两趟：先种子（`Seed`），再邻域（`Context`），保证种子行的原因不被邻域覆盖。
 fn floor(seed: &[bool], context: i64, total: usize, reason: &mut [u8]) -> (Vec<bool>, usize) {
     let mut keep = vec![false; total];
-    let mut keep_count = 0usize;
-    mark_seeds(seed, &mut keep, &mut keep_count, reason);
-    mark_context(seed, context, total, &mut keep, &mut keep_count, reason);
-    (keep, keep_count)
+    let mut kept = 0usize;
+    mark_seeds(seed, &mut keep, &mut kept, reason);
+    mark_context(seed, context, total, &mut keep, &mut kept, reason);
+    (keep, kept)
 }
 
 /// 第一趟：种子行标记 `Seed`。
-fn mark_seeds(seed: &[bool], keep: &mut [bool], keep_count: &mut usize, reason: &mut [u8]) {
+fn mark_seeds(seed: &[bool], keep: &mut [bool], kept: &mut usize, reason: &mut [u8]) {
     for (i, &is_seed) in seed.iter().enumerate() {
         if is_seed {
             keep[i] = true;
-            *keep_count += 1;
+            *kept += 1;
             reason[i] = R_SEED;
         }
     }
@@ -814,7 +814,7 @@ fn mark_context(
     context: i64,
     total: usize,
     keep: &mut [bool],
-    keep_count: &mut usize,
+    kept: &mut usize,
     reason: &mut [u8],
 ) {
     for (i, &is_seed) in seed.iter().enumerate() {
@@ -825,7 +825,7 @@ fn mark_context(
             let j = i as i64 + d;
             if d != 0 && j >= 0 && (j as usize) < total && !keep[j as usize] {
                 keep[j as usize] = true;
-                *keep_count += 1;
+                *kept += 1;
                 reason[j as usize] = R_CONTEXT;
             }
         }
@@ -876,11 +876,11 @@ fn yaml_anchor(t: &str) -> bool {
 }
 
 /// 把锚点行标记为保留（不覆盖已保留的种子/邻域/守卫）。
-fn mark_anchors(anchors: &[bool], keep: &mut [bool], keep_count: &mut usize, reason: &mut [u8]) {
+fn mark_anchors(anchors: &[bool], keep: &mut [bool], kept: &mut usize, reason: &mut [u8]) {
     for (i, &a) in anchors.iter().enumerate() {
         if a && !keep[i] {
             keep[i] = true;
-            *keep_count += 1;
+            *kept += 1;
             reason[i] = R_ANCHOR;
         }
     }
@@ -891,14 +891,14 @@ fn mark_structure_anchors(
     cfg: &Config,
     lines: &[&str],
     keep: &mut [bool],
-    keep_count: &mut usize,
+    kept: &mut usize,
     reason: &mut [u8],
 ) {
     if cfg.structure_anchors.is_empty() {
         return;
     }
     let anchor_mask = anchors(lines, &cfg.structure_anchors);
-    mark_anchors(&anchor_mask, keep, keep_count, reason);
+    mark_anchors(&anchor_mask, keep, kept, reason);
 }
 
 /// 预算填充候选资格：非折叠、未保留，且有真实得分或位于结构区间
@@ -940,7 +940,7 @@ fn fill(
     sel: &Select,
     cfg: &Fill,
     keep: &mut [bool],
-    keep_count: &mut usize,
+    kept: &mut usize,
     reason: &mut [u8],
 ) -> f64 {
     let total = sel.lines.len();
@@ -965,7 +965,7 @@ fn fill(
         }
         if !keep[i] {
             keep[i] = true;
-            *keep_count += 1;
+            *kept += 1;
             reason[i] = R_FILL;
         }
         used += t;
@@ -991,11 +991,11 @@ fn tokens(lines: &[&str], keep: &[bool], tok: &[f64]) -> f64 {
     sum
 }
 
-/// 风险审计：统计被丢弃的失败级错误行与命中行，按 `keep_count` 归一化得出 risk_raw。
+/// 风险审计：统计被丢弃的失败级错误行与命中行，按 `kept` 归一化得出 risk_raw。
 fn audit(keep: &[bool], err: &[bool], hits: &[usize], tbl: &Limits) -> Risk {
     let (err_dropped, hit_dropped) = dropped(keep, err, hits);
-    let keep_count = keep.iter().filter(|&&k| k).count();
-    let risk_raw = (err_dropped + hit_dropped * tbl.hit_drop_w) as f64 / keep_count.max(1) as f64;
+    let kept = keep.iter().filter(|&&k| k).count();
+    let risk_raw = (err_dropped + hit_dropped * tbl.hit_drop_w) as f64 / kept.max(1) as f64;
     level(risk_raw, tbl)
 }
 
@@ -1031,7 +1031,7 @@ fn level(raw: f64, tbl: &Limits) -> Risk {
 /// 风险守卫：HIGH 时保护失败级错误行与事故标记行（warn/警告 级除外）。
 fn guard(
     keep: &mut [bool],
-    keep_count: &mut usize,
+    kept: &mut usize,
     dup: &[bool],
     guard: &[bool],
     marker: &[bool],
@@ -1050,7 +1050,7 @@ fn guard(
         }
         if guard[i] || marker[i] {
             keep[i] = true;
-            *keep_count += 1;
+            *kept += 1;
             reason[i] = R_GUARD;
             guarded = 1;
         }
@@ -1171,13 +1171,13 @@ fn optional(
     context: i64,
     overflow: Option<Mode>,
     keep: &mut [bool],
-    keep_count: &mut usize,
+    kept: &mut usize,
     reason: &mut [u8],
 ) -> f64 {
     if context == 0 || overflow.is_some() {
         return 0.0;
     }
-    fill(sel, cfg, keep, keep_count, reason)
+    fill(sel, cfg, keep, kept, reason)
 }
 
 /// 风险守卫触发条件（HIGH 且未关闭 `--risk-gate`）。
@@ -1347,11 +1347,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     // 逐行保留原因（--explain 用）：0=删除，其余见 R_* 常量。
     let mut reason = vec![0u8; total];
-    let (mut keep, mut keep_count) = floor(&seeds.seed, context, total, &mut reason);
+    let (mut keep, mut kept) = floor(&seeds.seed, context, total, &mut reason);
 
     // 结构锚点（P6 骨架保护）：结构边界行无条件保留，优先级低于证据（seed/context）、
     // 高于可选填充。默认空 kinds 时为空操作，与现状逐字节一致。
-    mark_structure_anchors(cfg, &lines, &mut keep, &mut keep_count, &mut reason);
+    mark_structure_anchors(cfg, &lines, &mut keep, &mut kept, &mut reason);
 
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
@@ -1380,7 +1380,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         context,
         overflow,
         &mut keep,
-        &mut keep_count,
+        &mut kept,
         &mut reason,
     );
     // 可选预算利用率（%）：实际填充 ÷ 预算上限，展示 `--ratio` 的实际作用。
@@ -1398,7 +1398,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         let guard_region = cfg.guard_region.then_some(regions.in_region.as_slice());
         guarded = guard(
             &mut keep,
-            &mut keep_count,
+            &mut kept,
             &dup,
             &masks.guards,
             &masks.marked,
@@ -1414,7 +1414,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     // 预算过紧或只有高频单查询命中时可能选不出任何行；此时回退原文，不返回静默空结果。
-    if keep_count == 0 {
+    if kept == 0 {
         return mk(
             original.to_string(),
             total,
@@ -1437,7 +1437,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let (chars_b, cut) = cut(&out_text, chars_a);
     let mut o = mk(
         out_text,
-        keep_count,
+        kept,
         chars_b,
         cut,
         folds,

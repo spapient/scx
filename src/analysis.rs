@@ -264,7 +264,7 @@ fn unicode(s: &str, out: &mut String) {
     let mut it: Cursor = s.char_indices().peekable();
     while let Some((start, c)) = it.next() {
         if c.is_ascii_hexdigit() {
-            let end = hex_end(&mut it, start, c);
+            let end = hex(&mut it, start, c);
             space(&mut pending_space, out);
             let run = &s[start..end];
             // 无数字的 hex 段折叠后与原文一致，直接拷贝（省掉 fold 的逐字符处理）。
@@ -307,7 +307,7 @@ fn plain(it: &mut Cursor<'_>, start: usize, first: char) -> usize {
 }
 
 /// 连续十六进制 run 的终点（不含），首字符已消费。
-fn hex_end(it: &mut Cursor<'_>, start: usize, first: char) -> usize {
+fn hex(it: &mut Cursor<'_>, start: usize, first: char) -> usize {
     let mut end = start + first.len_utf8();
     while let Some(&(j, n)) = it.peek() {
         if !n.is_ascii_hexdigit() {
