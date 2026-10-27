@@ -588,6 +588,17 @@ fn row(icon: &str, field: &str, value: &str) -> String {
 }
 
 /// 风险等级中文（效果报告用）。
+/// 风险行文案：`guarded` 是 0/1 标志位（是否触发风险守卫），不是被守卫行数，
+/// 因此不得写成「N 条额外守护」。
+fn guard_note(risk: crate::Risk, guarded: u8) -> String {
+    let risk = risk_zh(risk);
+    if guarded > 0 {
+        format!("{risk} · 已启用额外守护")
+    } else {
+        risk.to_string()
+    }
+}
+
 fn risk_zh(r: crate::Risk) -> &'static str {
     match r {
         crate::Risk::Low => "低",
@@ -665,11 +676,7 @@ pub fn recall_report(r: &Outcome, query: &str) -> String {
                 "裁剪",
                 &format!("{} 段无关内容已移除", r.dropped.len()),
             ));
-            s.push_str(&row(
-                "🛡️",
-                "风险",
-                &format!("{} · {} 条额外守护", risk_zh(r.risk), r.guarded),
-            ));
+            s.push_str(&row("🛡️", "风险", &guard_note(r.risk, r.guarded)));
         }
         Mode::PassSmall | Mode::PassLongline | Mode::PassTooManyLines | Mode::PassNoKept => {
             s.push_str(&row(
@@ -1213,6 +1220,15 @@ mod tests {
     }
 
     /// token_cut 边界：输入 0 安全返回 0；正常削减百分比正确。
+    #[test]
+    fn guard_note_reports_flag_not_count() {
+        // guarded 是 0/1 标志位：不得渲染成「N 条额外守护」。
+        assert_eq!(guard_note(crate::Risk::High, 1), "高 · 已启用额外守护");
+        assert_eq!(guard_note(crate::Risk::High, 0), "高");
+        assert_eq!(guard_note(crate::Risk::Low, 0), "低");
+        assert!(!guard_note(crate::Risk::High, 1).contains("1 条"));
+    }
+
     #[test]
     fn token_cut_is_safe_and_exact() {
         assert_eq!(token_cut(0.0, 999.0), 0.0);

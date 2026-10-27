@@ -777,7 +777,11 @@ struct ParseState {
     redact: Vec<crate::redact::RedactKind>,
     /// `--kind auto` 标记：正文类型在 ops 层按 infer 推断。
     kind_auto: bool,
+    /// CLI 显式给出的参数名（`once` 与优先级判定用）。
     seen: HashSet<&'static str>,
+    /// 由 `--policy-file` 提供过的键对应 flag：优先级高于类型默认值，
+    /// 但低于 CLI 显式参数。与 `seen` 分开，避免文件键被当成重复的 CLI 参数。
+    sourced: HashSet<&'static str>,
 }
 
 impl ParseState {
@@ -822,6 +826,7 @@ impl ParseState {
             redact: Vec::new(),
             kind_auto: false,
             seen: HashSet::new(),
+            sourced: HashSet::new(),
         }
     }
 }
@@ -1153,6 +1158,8 @@ fn policy(
             continue;
         }
         apply(s, key, v, &path, le.line)?;
+        // 记录来源：后续参数（如 --kind 的类型默认 ratio）不得覆盖文件值。
+        s.sourced.insert(flag);
     }
     Ok(())
 }
@@ -1475,8 +1482,9 @@ fn content_kind(
         )
     })?;
     s.config.kind = kind;
-    // 显式 `--ratio` 优先（CLI > 缺省）；未显式给出时才用该类型的价值梯度默认。
-    if !s.seen.contains("--ratio") {
+    // 优先级 CLI > 策略文件 > 类型默认：`--ratio` 无论来自 CLI 还是文件，
+    // 都不得被类型默认值覆盖（此前文件值在 --kind 之后出现时会被静默覆盖）。
+    if !s.seen.contains("--ratio") && !s.sourced.contains("--ratio") {
         s.config.ratio = kind.default_ratio();
     }
     Ok(())
@@ -1832,6 +1840,57 @@ mod tests {
             "session-message"
         ]))
         .is_err());
+    }
+
+    /// 回归：策略文件的 ratio 不得被 `--kind` 的类型默认值覆盖，且结果与参数
+    /// 顺序无关（CLI > 文件 > DEFAULT）。此前文件在前时会被静默覆盖。
+    #[test]
+    fn policy_ratio_survives_kind_in_any_order() {
+        let p = std::env::temp_dir().join(format!("scx-policy-kind-{}.toml", std::process::id()));
+        std::fs::write(&p, "ratio = 0.02\n").unwrap();
+        let path = p.to_str().unwrap();
+        let file = all(args(&[
+            "--query",
+            "q",
+            "--policy-file",
+            path,
+            "--kind",
+            "static-contract",
+        ]))
+        .unwrap();
+        assert!(
+            (file.config.ratio - 0.02).abs() < 1e-9,
+            "文件 ratio 必须胜过 kind 默认: {}",
+            file.config.ratio
+        );
+        let kind = all(args(&[
+            "--query",
+            "q",
+            "--kind",
+            "static-contract",
+            "--policy-file",
+            path,
+        ]))
+        .unwrap();
+        assert!(
+            (kind.config.ratio - 0.02).abs() < 1e-9,
+            "顺序不得影响结果: {}",
+            kind.config.ratio
+        );
+        // CLI 显式 --ratio 仍然最高优先。
+        let cli = all(args(&[
+            "--query",
+            "q",
+            "--policy-file",
+            path,
+            "--kind",
+            "static-contract",
+            "--ratio",
+            "0.5",
+        ]))
+        .unwrap();
+        assert!((cli.config.ratio - 0.5).abs() < 1e-9);
+        let _ = std::fs::remove_file(&p);
     }
 
     #[test]
