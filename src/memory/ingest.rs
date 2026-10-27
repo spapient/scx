@@ -77,16 +77,22 @@ fn rebuild(root: &str) -> io::Result<()> {
     crate::memory::lock::atomic(&ready(root), ids.len().to_string().as_bytes())
 }
 
+/// 追加一条索引并推进 ready。ready 记的是**索引实际行数**，不是库 case_count：
+/// 并发写库时 case_count 可能已包含别的进程刚写入、本索引尚无行的 case，
+/// 拿它当 ready 会让 ensure 误判索引完整而漏判重（重复 case 入库）。
 fn remember(root: &str, fp: &str, id: &str) -> io::Result<()> {
     let _lock = crate::memory::lock::acquire(root, FP_LOCK)?;
+    // ready 缺失（删除后失效/尚未构建）：整表重建，避免把半新索引标成完整。
+    let Some(next) = total(root).map(|n| n + 1) else {
+        return rebuild(root);
+    };
     let path = index(root);
     if !path.exists() {
         return rebuild(root);
     }
     let mut file = fs::OpenOptions::new().append(true).open(path)?;
     writeln!(file, "{fp}\t{id}")?;
-    let count = crate::memory::meta::load(root)?.case_count;
-    crate::memory::lock::atomic(&ready(root), count.to_string().as_bytes())
+    crate::memory::lock::atomic(&ready(root), next.to_string().as_bytes())
 }
 
 /// case 删除后让去重索引在下一次写入时惰性重建。
@@ -714,6 +720,44 @@ mod tests {
         .unwrap();
         assert!(!dup.0, "旧 fp 也应通过动态身份键去重");
         assert_eq!(store::list(&root).unwrap().len(), 2);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// 回归：remember 按索引行数推进 ready。并发进程若已写入新 case（case_count
+    /// 变大、索引尚未含该行），ready 不得直接等于 case_count，否则 ensure 会信任
+    /// 残缺索引而漏判重，重复 case 入库。
+    #[test]
+    fn remember_does_not_claim_unindexed_cases() {
+        let root = root("ready-race");
+        let s = store::sample();
+        let (_, id_a) = ingest(
+            &root,
+            "qa conn",
+            vec![],
+            TEXT,
+            vec!["/x/build.log".into()],
+            &s,
+            vec![],
+        )
+        .unwrap();
+        let base = store::load(&root, &id_a).unwrap();
+        // 模拟并发：另外两个 case 已落库并推进 case_count，但索引尚无它们的行。
+        let mut b = base.clone();
+        b.id = "2026-01-01_bbbbbbbbbbbbbbbb".to_string();
+        b.query = "qb conn".to_string();
+        let mut c = base.clone();
+        c.id = "2026-01-01_cccccccccccccccc".to_string();
+        c.query = "qc conn".to_string();
+        for case in [&b, &c] {
+            store::save(&root, case).unwrap();
+            store::bump(&root).unwrap();
+        }
+        // 迟到的 remember：只追加自己的一行，索引此时仍不覆盖 C。
+        let fp_b = fingerprint(&b.query, &b.text);
+        remember(&root, &fp_b, &b.id).unwrap();
+        // 索引不完整 → ensure 必须重建；find(C) 应命中而不是漏判。
+        let fp_c = fingerprint(&c.query, &c.text);
+        assert_eq!(find(&root, &fp_c).unwrap().as_deref(), Some(c.id.as_str()));
         let _ = fs::remove_dir_all(&root);
     }
 
