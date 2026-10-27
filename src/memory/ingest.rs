@@ -31,9 +31,8 @@ const FP_LOCK: &str = "index/fingerprints.lock";
 pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut q = String::new();
     crate::analysis::canonical(query, &mut q);
-    let mut run = String::new();
     let mut t = String::new();
-    crate::analysis::normalize(text, &mut t, &mut run);
+    crate::analysis::normalize(text, &mut t);
     let h = store::parts(&[q.as_bytes(), b"\0", t.as_bytes()]);
     format!("{:016x}", h)
 }

@@ -242,23 +242,29 @@ pub(crate) fn lineref(s: &str) -> bool {
 
 // 单趟归一化：8+ 位十六进制串折叠为 '#'；其余数字段折叠为 '#'；空白段折叠为单空格；首尾去空。
 // run 为复用的十六进制串中转缓冲。
-pub(crate) fn normalize(s: &str, out: &mut String, run: &mut String) {
+pub(crate) fn normalize(s: &str, out: &mut String) {
     if s.is_ascii() {
-        ascii(s.as_bytes(), out);
+        ascii(s, out);
         return;
     }
-    unicode(s, out, run);
+    unicode(s, out);
 }
 
 /// 通用 Unicode 归一化；`ascii` 的语义基准。
-fn unicode(s: &str, out: &mut String, run: &mut String) {
+fn unicode(s: &str, out: &mut String) {
     let mut pending_space = false;
     let mut it: Cursor = s.char_indices().peekable();
     while let Some((start, c)) = it.next() {
         if c.is_ascii_hexdigit() {
-            hex(&mut it, c, run);
+            let end = hex_end(&mut it, start, c);
             space(&mut pending_space, out);
-            fold(run, out);
+            let run = &s[start..end];
+            // 无数字的 hex 段折叠后与原文一致，直接拷贝（省掉 fold 的逐字符处理）。
+            if run.bytes().any(|b| b.is_ascii_digit()) {
+                fold(run, out);
+            } else {
+                out.push_str(run);
+            }
         } else if c.is_ascii_digit() {
             skip(&mut it, |c| c.is_ascii_digit());
             space(&mut pending_space, out);
@@ -292,17 +298,17 @@ fn plain_run(it: &mut Cursor<'_>, start: usize, first: char) -> usize {
     end
 }
 
-/// 收集一段连续十六进制 run（首字符已消费）。
-fn hex(it: &mut Cursor<'_>, first: char, run: &mut String) {
-    run.clear();
-    run.push(first);
-    while let Some(&(_, n)) = it.peek() {
+/// 连续十六进制 run 的终点（不含），首字符已消费。
+fn hex_end(it: &mut Cursor<'_>, start: usize, first: char) -> usize {
+    let mut end = start + first.len_utf8();
+    while let Some(&(j, n)) = it.peek() {
         if !n.is_ascii_hexdigit() {
             break;
         }
-        run.push(n);
+        end = j + n.len_utf8();
         it.next();
     }
+    end
 }
 
 /// 跳过满足谓词的连续字符。
@@ -345,7 +351,8 @@ fn space(pending: &mut bool, out: &mut String) {
 }
 
 /// ASCII 快路径：与通用路径语义一致，跳过 Unicode 解码与临时十六进制缓冲。
-fn ascii(s: &[u8], out: &mut String) {
+fn ascii(s: &str, out: &mut String) {
+    let s = s.as_bytes();
     out.reserve(s.len());
     let mut i = 0usize;
     let mut pending_space = false;
@@ -613,7 +620,7 @@ mod tests {
         ];
         for input in cases {
             let mut got = String::new();
-            normalize(input, &mut got, &mut String::new());
+            normalize(input, &mut got);
             assert_eq!(got, naive_unicode(input), "normalize mismatch for {input:?}");
         }
     }
@@ -679,9 +686,9 @@ mod tests {
         ];
         for input in cases {
             let mut expected = String::new();
-            unicode(input, &mut expected, &mut String::new());
+            unicode(input, &mut expected);
             let mut actual = String::new();
-            normalize(input, &mut actual, &mut String::new());
+            normalize(input, &mut actual);
             assert_eq!(actual, expected, "normalize mismatch for {input:?}");
             let mut generic_id = String::new();
             wide(input, &mut generic_id);
@@ -690,7 +697,7 @@ mod tests {
             assert_eq!(actual_id, generic_id, "canonical mismatch for {input:?}");
             if input.is_ascii() {
                 let mut fast = String::new();
-                ascii(input.as_bytes(), &mut fast);
+                ascii(input, &mut fast);
                 assert_eq!(fast, expected, "ASCII fast path mismatch for {input:?}");
                 let mut fast_id = String::new();
                 simple(input, &mut fast_id);
@@ -716,9 +723,9 @@ mod tests {
                 input.push(alphabet[(state as usize >> 16) % alphabet.len()] as char);
             }
             let mut expected = String::new();
-            unicode(&input, &mut expected, &mut String::new());
+            unicode(&input, &mut expected);
             let mut actual = String::new();
-            ascii(input.as_bytes(), &mut actual);
+            ascii(&input, &mut actual);
             assert_eq!(actual, expected, "chunked mismatch for {input:?}");
         }
     }
@@ -726,11 +733,7 @@ mod tests {
     #[test]
     fn normalization_folds_numbers_but_identity_keeps_them() {
         let mut norm = String::new();
-        normalize(
-            " cafe 1234 deadbeef 42 错误\t运行 ",
-            &mut norm,
-            &mut String::new(),
-        );
+        normalize(" cafe 1234 deadbeef 42 错误\t运行 ", &mut norm);
         // 数字段（1234/42）折叠为 #；纯字母 hex（deadbeef）保留词面，不误当数字。
         assert_eq!(norm, "cafe # deadbeef # 错误 运行");
 

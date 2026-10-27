@@ -733,8 +733,7 @@ mod tests {
     fn norm_into_semantics() {
         let n = |t: &str| {
             let mut o = String::new();
-            let mut r = String::new();
-            normalize(t, &mut o, &mut r);
+            normalize(t, &mut o);
             o
         };
         assert_eq!(n("  a   b  "), "a b");

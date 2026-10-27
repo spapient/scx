@@ -228,10 +228,9 @@ fn dedup(
     let mut dup = vec![false; total];
     let mut dup_n = 0usize;
     let mut key = String::new();
-    let mut run = String::new();
     for i in 0..total {
         key.clear();
-        normalize(lines[i], &mut key, &mut run);
+        normalize(lines[i], &mut key);
         if short(&key) {
             continue;
         }

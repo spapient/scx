@@ -41,12 +41,10 @@ pub(crate) fn extract(text: &str) -> Fields {
     let mut f = Fields::default();
     let mut seen: Vec<String> = Vec::new();
     let mut buf = String::new();
-    let mut run = String::new();
     let mut ll = String::new();
     for raw in text.lines() {
         buf.clear();
-        run.clear();
-        normalize(raw, &mut buf, &mut run);
+        normalize(raw, &mut buf);
         ll.clear();
         lowercase(raw, &mut ll);
         if ll.trim().is_empty() {
