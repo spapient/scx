@@ -1166,6 +1166,9 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let small_tok = survey(&lines, total);
     let chars_a = chars(original);
     let evidence = &cfg.evidence;
+    // 输入 token 估算只依赖原文，且 Outcome.tokens_in 与单桶 tokens_in 同值：
+    // 算一次共用（CJK 输入上 estimate 是整篇 O(n) 扫描）。
+    let tokens_in = crate::terms::estimate(original);
 
     let mk = |text_owned: String,
               kept: usize,
@@ -1204,13 +1207,13 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             mode,
             limit,
             tokens,
-            tokens_in: crate::terms::estimate(original),
+            tokens_in,
             dropped,
             budget_used_pct: 0.0,
             ev_retention: ev,
             buckets: vec![crate::BucketStat {
                 kind,
-                tokens_in: crate::terms::estimate(original),
+                tokens_in,
                 tokens_out,
                 kept,
                 total,
@@ -1221,7 +1224,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     };
 
     // 直通早退：小输入 / 超长行（无查询参与，原样返回）。
-    if let Some(mode) = shape(total, small_tok, long(&lines)) {
+    if let Some(mode) = shape(total, small_tok, &lines) {
         return mk(
             original.to_string(),
             total,
@@ -1512,12 +1515,14 @@ fn long(lines: &[&str]) -> bool {
 }
 
 /// 直通判定：行数超限 / 小输入（行数与 token 估算双低）/ 超长行，返回对应模式；否则 None。
-fn shape(total: usize, small_tok: f64, has_longline: bool) -> Option<Mode> {
+fn shape(total: usize, small_tok: f64, lines: &[&str]) -> Option<Mode> {
+    // long() 是全行扫描，放在最便宜的两个判定之后：行数超限/小输入直接短路，
+    // 不必为必然直通的输入再扫一遍全部行。
     if total >= crate::policy::MAX_LINES {
         Some(Mode::PassTooManyLines)
     } else if total < crate::policy::SMALL_LINES && small_tok < crate::policy::SMALL_TOK {
         Some(Mode::PassSmall)
-    } else if has_longline {
+    } else if long(lines) {
         Some(Mode::PassLongline)
     } else {
         None
@@ -1889,12 +1894,12 @@ mod tests {
     #[test]
     fn too_many_lines_returns_passthrough() {
         assert_eq!(
-            shape(crate::policy::MAX_LINES, 0.0, false),
+            shape(crate::policy::MAX_LINES, 0.0, &[]),
             Some(Mode::PassTooManyLines),
             "行数达到上限应直通"
         );
         assert_eq!(
-            shape(crate::policy::MAX_LINES - 1, 0.0, false),
+            shape(crate::policy::MAX_LINES - 1, 0.0, &[]),
             None,
             "上限内不触发行数直通"
         );

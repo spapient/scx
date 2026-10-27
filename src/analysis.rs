@@ -8,6 +8,9 @@ pub(crate) const EXTS: &[&str] = &[
     "c", "cc", "cpp", "h", "hpp", "cu", "cuh", "rs", "py", "js", "ts", "go", "java", "mm", "m",
     "swift", "zig",
 ];
+/// 错误词表（测试用单一事实源）：`fast_path_covers_all_needles` 逐项校验分派表
+/// 与之完全一致（含反向检查），生产路径只读 `ERR_NEEDLES_BY_FIRST`。
+#[cfg(test)]
 pub(crate) const ERR_NEEDLES: &[&str] = &[
     "error",
     "fail",
@@ -47,24 +50,14 @@ pub(crate) const INCIDENT_MARKERS: &[&str] = &[
 /// 一次扫描同时得到“是否错误行”和“是否失败级（可受风险守卫）”。
 /// warn/警告只参与错误判定，不成批进入守卫；遇到失败级词即可提前返回。
 pub(crate) fn flags(ll: &str) -> (bool, bool) {
-    if ll.is_ascii() {
-        return fast(ll);
-    }
-    let mut err = false;
-    for n in ERR_NEEDLES {
-        if ll.contains(n) {
-            err = true;
-            if !matches!(*n, "warn" | "警告") {
-                return (true, true);
-            }
-        }
-    }
-    (err, false)
+    // 单趟字节扫描覆盖全部词表（含中文/符号）：此前非 ASCII 行退化为对每行
+    // 做 20+ 次整串 contains，中文日志上是主要热点。
+    fast(ll)
 }
 
 /// ASCII 快路径：按首字节分组做单趟扫描，避免对每行执行 20+ 次完整 contains。
 ///
-/// 每个 ASCII 词必须在这里有对应分支；`ascii_fast_path_covers_all_needles`
+/// 每个词（ASCII 与中文/符号）必须在这里有对应分支；`fast_path_covers_all_needles`
 /// 测试会在新增词表项而忘记接线时失败。
 fn fast(ll: &str) -> (bool, bool) {
     let bytes = ll.as_bytes();
@@ -101,6 +94,17 @@ const ERR_S: &[(&[u8], bool)] = &[(b"segfault", true)];
 const ERR_F: &[(&[u8], bool)] = &[(b"fail", true), (b"fatal", true)];
 const ERR_N: &[(&[u8], bool)] = &[(b"npm err", true)];
 const ERR_W: &[(&[u8], bool)] = &[(b"warn", false)];
+// 非 ASCII 词按 UTF-8 首字节分组（✗/❌=E2，失败/异常/崩溃=E5，报错=E6，
+// 超时/警告=E8，错误=E9）；`bytes.starts_with` 对多字节序列同样成立。
+const ERR_E2: &[(&[u8], bool)] = &[("✗".as_bytes(), true), ("❌".as_bytes(), true)];
+const ERR_E5: &[(&[u8], bool)] = &[
+    ("失败".as_bytes(), true),
+    ("异常".as_bytes(), true),
+    ("崩溃".as_bytes(), true),
+];
+const ERR_E6: &[(&[u8], bool)] = &[("报错".as_bytes(), true)];
+const ERR_E8: &[(&[u8], bool)] = &[("超时".as_bytes(), true), ("警告".as_bytes(), false)];
+const ERR_E9: &[(&[u8], bool)] = &[("错误".as_bytes(), true)];
 const ERR_NEEDLES_BY_FIRST: [&[(&[u8], bool)]; 256] = {
     let mut table = [ERR_EMPTY; 256];
     table[b'e' as usize] = ERR_E;
@@ -115,6 +119,11 @@ const ERR_NEEDLES_BY_FIRST: [&[(&[u8], bool)]; 256] = {
     table[b'f' as usize] = ERR_F;
     table[b'n' as usize] = ERR_N;
     table[b'w' as usize] = ERR_W;
+    table[0xE2] = ERR_E2;
+    table[0xE5] = ERR_E5;
+    table[0xE6] = ERR_E6;
+    table[0xE8] = ERR_E8;
+    table[0xE9] = ERR_E9;
     table
 };
 
@@ -409,6 +418,18 @@ fn wide(s: &str, out: &mut String) {
 
 // 分析用小写缓冲：剥离 ANSI 转义并折叠裸 CR。输出仍保留原始行，因此只影响匹配/排序，
 // 不影响"保留行逐字原文"的承诺。进度条常用裸 \r 回写，按空白处理避免污染词面。
+/// 无大小写映射的常用非 ASCII 文字块（CJK/假名/谚文及其扩展）。
+fn uncased(c: char) -> bool {
+    matches!(
+        c as u32,
+        0x3040..=0x30FF
+            | 0x3400..=0x4DBF
+            | 0x4E00..=0x9FFF
+            | 0xAC00..=0xD7AF
+            | 0xF900..=0xFAFF
+    )
+}
+
 pub(crate) fn lowercase(s: &str, out: &mut String) {
     // 日志分析最常见的是无控制符 ASCII 行。按字节小写可跳过 Unicode
     // 大小写迭代与 ESC/CR 状态机；输出语义与通用路径完全一致。
@@ -421,6 +442,11 @@ pub(crate) fn lowercase(s: &str, out: &mut String) {
         out.extend(s.bytes().map(|b| b.to_ascii_lowercase() as char));
         return;
     }
+    lower_general(s, out);
+}
+
+/// 通用路径：ESC 序列清理 + CR 折叠 + 逐字符小写（无大小写文字走快分支）。
+fn lower_general(s: &str, out: &mut String) {
     let mut it = s.chars().peekable();
     while let Some(c) = it.next() {
         if c == '\u{1b}' {
@@ -429,6 +455,12 @@ pub(crate) fn lowercase(s: &str, out: &mut String) {
         }
         if c == '\r' {
             out.push(' ');
+            continue;
+        }
+        // 无大小写映射的文字块（CJK/假名/谚文）直接输出，省掉逐字 to_lowercase
+        // 迭代器；这些区块不含大小写字符，输出与通用路径逐字节一致。
+        if uncased(c) {
+            out.push(c);
             continue;
         }
         for lc in c.to_lowercase() {
@@ -513,13 +545,29 @@ mod tests {
     }
 
     #[test]
-    fn ascii_fast_path_covers_all_needles() {
-        for needle in ERR_NEEDLES.iter().filter(|n| n.is_ascii()) {
-            let expected = (true, *needle != "warn");
+    fn fast_path_covers_all_needles() {
+        // 反向一致性：分派表不得含词表之外的词（防止接线漂移）。
+        let mut wired: Vec<&[u8]> = ERR_NEEDLES_BY_FIRST
+            .iter()
+            .flat_map(|g| g.iter().map(|(n, _)| *n))
+            .collect();
+        wired.sort_unstable();
+        let mut listed: Vec<&[u8]> = ERR_NEEDLES.iter().map(|n| n.as_bytes()).collect();
+        listed.sort_unstable();
+        assert_eq!(wired, listed, "dispatch table drifted from ERR_NEEDLES");
+        for needle in ERR_NEEDLES.iter() {
+            let expected = (true, !matches!(*needle, "warn" | "警告"));
             assert_eq!(
                 flags(needle),
                 expected,
-                "ASCII fast path mismatch for needle {needle:?}"
+                "fast path mismatch for needle {needle:?}"
+            );
+            // 词出现在句中（前有中文/ASCII 前缀）时同样命中。
+            let embedded = format!("中文前缀 log {needle} 后续");
+            assert_eq!(
+                flags(&embedded),
+                expected,
+                "embedded needle mismatch: {needle:?}"
             );
         }
     }
