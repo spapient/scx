@@ -243,6 +243,9 @@ pub struct Config {
     pub window: i64,
     pub elide: bool,
     pub gate: bool,
+    /// 区域门控风险守卫（`--guard-region`）：HIGH 风险时只保护证据邻域（±window
+    /// 区域）内的失败级错误行与事故标记行，而非全量错误行。默认 false = 现状行为。
+    pub guard_region: bool,
     /// 保留行输出时附加原文行号前缀（grep -n 风格 `N: `）；passthrough/fail-open 返回原文时不附加。
     pub lineno: bool,
     /// `--force` 值按 `|` 拆分后的原始子串（大小写不敏感字面匹配）。
@@ -296,6 +299,7 @@ impl Default for Config {
             window: Self::DEFAULT_WINDOW,
             elide: true,
             gate: true,
+            guard_region: false,
             lineno: false,
             forces: Vec::new(),
             limit: None,
