@@ -8,7 +8,7 @@
   "config/gauge.human.labels.json": "43c5976bc91872b4ba049ab8e08cc6c43de8103687c3818e90cbcac3ca992f87",
   "config/gauge.blind40.packet.tsv": "b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f",
   "config/ci-baseline.json": "96728a485deda5deeade3d092a22dde6f550109d2c6f26d1a4c200447061b551",
-  "config/ci-verbose.txt": "847212e68aa04e25fd39ddd26e0e31cef528c950c5b340c5b95f189f371f65aa",
+  "config/ci-verbose.txt": "9fa8c4afd7734233f4ea0f2895c171633cb0ec72d974130020e6904079fc9262",
   "config/real.corpus.json": "3314a0906ba923f013ce1f5c8f61b46d5d4e5dfa0e1e1421c3ab6600dd0d695e",
   "config/real.labels.json": "e29a27547bc036095540dbfcaae6495d2623209d9e45f2e22db3319e99367d30"
  },
