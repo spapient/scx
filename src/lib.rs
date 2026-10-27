@@ -894,19 +894,19 @@ mod tests {
     }
 
     #[test]
-    fn small_guard_cuts_at_600_not_1200() {
-        // 39 行 × 65 字符 ≈ 660 token：位于新阈值 600 之上、旧阈值 1200 之下 → 必须压缩。
+    fn small_guard_cuts_at_500_not_1200() {
+        // 39 行 × 65 字符 ≈ 660 token：位于新阈值 500 之上、旧阈值 1200 之下 → 必须压缩。
         let line = "alpha filler line with padding text for token estimation purposes".to_string();
         let text: String = (0..39).map(|_| line.clone()).collect::<Vec<_>>().join("\n");
         let o = compress(&text, "alpha", &cfg());
         assert_ne!(
             o.mode,
             Mode::PassSmall,
-            "token≈660 必须进入压缩（阈值已降至 600）"
+            "token≈660 必须进入压缩（阈值已降至 500）"
         );
         assert!(o.kept > 0 && o.kept < 39, "压缩应保留部分证据行");
 
-        // 39 行 × 8 字符 ≈ 80 token < 600 → 仍透传。
+        // 39 行 × 8 字符 ≈ 80 token < 500 → 仍透传。
         let tiny: String = (0..39)
             .map(|i| format!("alpha {i}"))
             .collect::<Vec<_>>()

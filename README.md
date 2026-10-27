@@ -217,7 +217,7 @@ compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence
 🛡️ 风险      低
 ```
 
-- 小输入（<40 行且 <600 token）与查询零命中时同样出卡：结论分别是
+- 小输入（<40 行且 <500 token）与查询零命中时同样出卡：结论分别是
   「小输入透传 · 无需压缩」与「无命中保护 · 零丢失」，附一句人话说明为什么没有压缩。
 - token 为 scx 内部估算口径（`terms::estimate`：ASCII 约 4 字符/token，中文约 0.6 token/字），
   数字带"约"字；行/字符/token 三口径同时给出，中文日志时三者的缩减率独立计算。
@@ -311,7 +311,7 @@ query + input
 | `mode` | 含义 |
 |---|---|
 | `sieve` | 已执行证据筛选 |
-| `passthrough:small` | 输入同时少于 40 行且少于约 600 token，直接返回原文 |
+| `passthrough:small` | 输入同时少于 40 行且少于约 500 token，直接返回原文 |
 | `passthrough:longline` | 输入包含超长行（> 约 5000 字符）无法安全切块，直接返回原文 |
 | `passthrough:no-kept` | 预算或 `--context 0` 下没有可保留行，返回原文 |
 | `failopen:zero-signal` | 查询没有命中，返回原文 |

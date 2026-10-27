@@ -12,7 +12,7 @@ pub const MAX_WINDOW: i64 = 8;
 
 /// 小输入直通阈值：行数 < `SMALL_LINES` 且 token 估算 < `SMALL_TOK`。
 pub const SMALL_LINES: usize = 40;
-pub const SMALL_TOK: f64 = 600.0;
+pub const SMALL_TOK: f64 = 500.0;
 /// 超长行直通阈值：单行字节与字符均超过即返回原文。
 pub const LONGLINE_BYTES: usize = 100_000;
 pub const LONGLINE_CHARS: usize = 100_000;
