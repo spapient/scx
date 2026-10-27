@@ -1,0 +1,18 @@
+=== KEEP-KERNEL trim-ratio 0.55 ===
+=== GSM8K 8-shot 三方对照（Qwen2.5-3B-Instruct（千问） via MLX, n=50, seed=20261027）===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.560 (28/50)  ctx_tok=989  tok_ratio=0.743
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 26/30 = 0.867
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 47 样本
+  >35%: 3 样本
+=== KEEP-KERNEL trim-ratio 0.6 ===
+=== GSM8K 8-shot 三方对照（Qwen2.5-3B-Instruct（千问） via MLX, n=50, seed=20261027）===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.600 (30/50)  ctx_tok=1009  tok_ratio=0.757
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 27/30 = 0.900
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 47 样本
+  >35%: 3 样本

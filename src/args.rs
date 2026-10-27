@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -56,6 +56,21 @@ pub fn usage() -> String {
     );
     s.push_str("  --force P            keep lines matching substring (case-insensitive); prefix re: enters\n");
     s.push_str("                       a finite regex subset: | alternation, [..] classes, * + ? quantifiers\n");
+    s.push_str(
+        "  --fill-floor F       min score for context/fill lines (default 0 = current behavior);\n",
+    );
+    s.push_str(
+        "                       F>0 drops low-value neighborhood/fill lines for deeper compression\n",
+    );
+    s.push_str(
+        "  --trim 1             token-level trim of kept lines (default 0 = current behavior);\n",
+    );
+    s.push_str(
+        "                       keeps numerics/structure anchors/query hits, drops stopwords\n",
+    );
+    s.push_str(
+        "  --trim-ratio F       per-line token keep ratio for --trim (default 0.5; 0.1..=1.0)\n",
+    );
     s.push_str("  --preserve T         keep lines with builtin entity T (url/ip/email/errno); repeatable\n");
     s.push_str("  --evidence N|substr  declare must-keep evidence: positive int = line no, else substring;\n");
     s.push_str(
@@ -426,6 +441,33 @@ static FLAGS: &[Flag] = &[
         kind: Kind::Force,
         what: "",
         err_empty: "requires a type (url/ip/email/errno)",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--fill-floor",
+        once: true,
+        kind: Kind::F64,
+        what: "a number",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--trim",
+        once: true,
+        kind: Kind::Bool01,
+        what: "",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--trim-ratio",
+        once: true,
+        kind: Kind::F64,
+        what: "a number",
+        err_empty: "",
         err_zero: "",
         min: 0,
     },
@@ -1055,6 +1097,27 @@ fn float(
             }
             s.minhash_weight = parsed;
         }
+        "--fill-floor" => {
+            if !(0.0..=crate::policy::MAX_FILL_FLOOR).contains(&parsed) {
+                return Err(format!(
+                    "{} must be a finite number in 0..={}",
+                    f.name,
+                    crate::policy::MAX_FILL_FLOOR
+                ));
+            }
+            s.config.fill_floor = parsed;
+        }
+        "--trim-ratio" => {
+            if !(crate::policy::MIN_TRIM_RATIO..=crate::policy::MAX_TRIM_RATIO).contains(&parsed) {
+                return Err(format!(
+                    "{} must be a finite number in {}..={}",
+                    f.name,
+                    crate::policy::MIN_TRIM_RATIO,
+                    crate::policy::MAX_TRIM_RATIO
+                ));
+            }
+            s.config.trim_ratio = parsed;
+        }
         _ => unreachable!("F64 flag without arm: {}", f.name),
     }
     Ok(())
@@ -1191,6 +1254,9 @@ const POLICY_TABLE: &[(&str, &str)] = &[
     ("lineno", "--lineno"),
     ("max_tokens", "--max-tokens"),
     ("structure", "--structure"),
+    ("fill_floor", "--fill-floor"),
+    ("trim", "--trim"),
+    ("trim_ratio", "--trim-ratio"),
 ];
 
 fn lookup(key: &str) -> Option<&'static str> {
@@ -1204,10 +1270,12 @@ fn lookup(key: &str) -> Option<&'static str> {
 fn apply(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Result<(), String> {
     match key {
         "ratio" | "context" | "window" => number(s, key, v, path, line)?,
-        "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" => {
+        "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" | "trim" => {
             toggle(s, key, v, path, line)?
         }
         "max_tokens" => tokens(s, v, path, line)?,
+        "fill_floor" => fill_floor(s, v, path, line)?,
+        "trim_ratio" => trim_ratio_key(s, v, path, line)?,
         _ => unreachable!("policy key whitelist"),
     }
     Ok(())
@@ -1277,6 +1345,7 @@ fn toggle(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Re
         "strict" => s.config.strict = b,
         "lineno" => s.config.lineno = b,
         "structure" => s.config.structure = b,
+        "trim" => s.config.trim = b,
         _ => unreachable!("bool policy key whitelist"),
     }
     Ok(())
@@ -1291,6 +1360,53 @@ fn tokens(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), St
         )
     })?;
     s.config.limit = Some(m);
+    Ok(())
+}
+
+/// `fill_floor` 策略键：0..=MAX_FILL_FLOOR 的有限 f64。
+fn fill_floor(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let f: f64 = crate::toml::float(v).ok_or_else(|| {
+        error(
+            path,
+            line,
+            format!("fill_floor must be a finite f64, got {v:?}"),
+        )
+    })?;
+    if !(0.0..=crate::policy::MAX_FILL_FLOOR).contains(&f) {
+        return Err(error(
+            path,
+            line,
+            format!(
+                "fill_floor must be in 0..={}",
+                crate::policy::MAX_FILL_FLOOR
+            ),
+        ));
+    }
+    s.config.fill_floor = f;
+    Ok(())
+}
+
+/// `trim_ratio` 策略键：MIN..=MAX 的有限 f64。
+fn trim_ratio_key(s: &mut ParseState, v: &str, path: &str, line: usize) -> Result<(), String> {
+    let f: f64 = crate::toml::float(v).ok_or_else(|| {
+        error(
+            path,
+            line,
+            format!("trim_ratio must be a finite f64, got {v:?}"),
+        )
+    })?;
+    if !(crate::policy::MIN_TRIM_RATIO..=crate::policy::MAX_TRIM_RATIO).contains(&f) {
+        return Err(error(
+            path,
+            line,
+            format!(
+                "trim_ratio must be in {}..={}",
+                crate::policy::MIN_TRIM_RATIO,
+                crate::policy::MAX_TRIM_RATIO
+            ),
+        ));
+    }
+    s.config.trim_ratio = f;
     Ok(())
 }
 
@@ -1327,6 +1443,7 @@ fn either(
         "--strict" => s.config.strict = b,
         "--lineno" => s.config.lineno = b,
         "--structure" => s.config.structure = b,
+        "--trim" => s.config.trim = b,
         _ => s.store = b,
     }
     Ok(())

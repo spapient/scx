@@ -16,6 +16,20 @@ pub(crate) const STOP: &[&str] = &[
     "帮", "一下", "一个", "这个", "那个", "怎么", "如何", "什么",
 ];
 
+/// 语义敏感词：裁剪时**永不摘除**（score ≥ 2，同命中词）。
+/// 否定/比较/转折/程度词一旦被摘会反转或削弱推理语义
+/// （"not divisible"→"divisible"），数值语义词（each/per/total）是
+/// 数学推理链的语义骨架。与 `STOP` 有交集（如 `not`）时 KEEP 优先。
+pub(crate) const KEEP: &[&str] = &[
+    // 否定
+    "not", "no", "never", "without", "except", "不", "没", "无", "非",
+    // 比较/转折
+    "than", "more", "less", "least", "most", "but", "however", "although", "yet", "still",
+    "only", "just", "exactly", "但", "而", "虽", "却", "更", "最",
+    // 数值语义（推理链骨架）
+    "each", "per", "every", "total", "每", "共", "总",
+];
+
 pub(crate) fn ideograph(c: char) -> bool {
     let u = c as u32;
     (0x3400..=0x4DBF).contains(&u)

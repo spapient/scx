@@ -33,6 +33,9 @@ pub(crate) struct Tokens {
     pub(crate) hit: Vec<bool>,
     /// 是否停用词（`terms::STOP` 命中）。
     pub(crate) stop: Vec<bool>,
+    /// 是否语义敏感词（`terms::KEEP` 命中）：否定/比较/转折/数值语义，
+    /// 永不摘除（与命中同级 score 2）。
+    pub(crate) keep: Vec<bool>,
     /// 是否低信息量单字符（单 ASCII 字符/全角标点）：得分 0，优先摘除。
     pub(crate) punct: Vec<bool>,
 }
@@ -51,6 +54,7 @@ pub(crate) fn tokens(line: &str, query_terms: &[String]) -> Tokens {
         anchor: Vec::new(),
         hit: Vec::new(),
         stop: Vec::new(),
+        keep: Vec::new(),
         punct: Vec::new(),
     };
     let bytes = line.as_bytes();
@@ -97,6 +101,7 @@ fn scan_ascii(
     t.hit
         .push(query_terms.iter().any(|q| q.as_str() == tok_lower));
     t.stop.push(crate::terms::STOP.contains(&tok_lower));
+    t.keep.push(crate::terms::KEEP.contains(&tok_lower));
     // 单 ASCII 字符（字母/标点）非数字非锚：低信息量（保持旧口径）。
     t.punct
         .push(tok.len() == 1 && !tok.bytes().any(|b| b.is_ascii_digit()));
@@ -121,6 +126,8 @@ fn scan_cjk(line: &str, query_terms: &[String], cur: usize, t: &mut Tokens) -> u
             // 在词表 → "内"/"存" 均命中）。
             t.hit.push(query_terms.iter().any(|q| q.contains(ch)));
             t.stop.push(crate::terms::STOP.contains(&tok));
+            // CJK 无大小写：单字命中任一 KEEP 词（"不/没/无/每/共/总"等）。
+            t.keep.push(crate::terms::KEEP.contains(&tok));
             // 全角标点（非表意/非数字）：低信息量，可摘除。
             t.punct
                 .push(!crate::terms::ideograph(ch) && !ch.is_numeric());
@@ -132,7 +139,7 @@ fn scan_cjk(line: &str, query_terms: &[String], cur: usize, t: &mut Tokens) -> u
 }
 
 fn token_char(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b"_./:\\@-<>|[]{}".contains(&b)
+    b.is_ascii_alphanumeric() || b"_./:\\@-<>|[]{}".contains(&b) || b == b'%' || b == b'$'
 }
 
 /// 结构锚：单字节括号/尖括号/管道/大括号（JSON/XML/chat 骨架），
@@ -208,11 +215,11 @@ fn assemble(line: &str, t: &Tokens, keep: &[bool]) -> String {
 }
 
 fn score(t: &Tokens, i: usize) -> i32 {
-    if t.numeric[i] {
-        3
-    } else if t.anchor[i] {
+    if t.anchor[i] {
         4
-    } else if t.hit[i] {
+    } else if t.numeric[i] {
+        3
+    } else if t.hit[i] || t.keep[i] {
         2
     } else if t.stop[i] || t.punct[i] {
         0
@@ -309,6 +316,39 @@ mod tests {
             out.chars().count() < line.chars().count(),
             "虚词应被摘除: {out}"
         );
+    }
+
+    #[test]
+    fn keeps_semantic_sensitive_words() {
+        let terms: Vec<String> = vec![];
+        // not 在 STOP 里（0 分最易摘），但 KEEP 强制保留——语义反转不可接受。
+        let line = "8 is not divisible by 5, but 10 is";
+        let out = trim_line(line, &terms, 0.2);
+        assert!(out.to_lowercase().contains("not"), "否定词必须保留: {out}");
+        assert!(out.to_lowercase().contains("but"), "转折词必须保留: {out}");
+        assert!(out.contains("8"), "数字必须保留: {out}");
+        assert!(out.contains("10"), "数字必须保留: {out}");
+    }
+
+    #[test]
+    fn cjk_negation_kept() {
+        let terms: Vec<String> = vec![];
+        let line = "这个数不能被 5 整除，但可以被 10 整除";
+        let out = trim_line(line, &terms, 0.2);
+        assert!(out.contains('不'), "中文否定字必须保留: {out}");
+        assert!(out.contains('但'), "中文转折字必须保留: {out}");
+        assert!(out.contains('5'), "数字必须保留: {out}");
+        assert!(out.contains('1'), "数字必须保留: {out}");
+    }
+    #[test]
+    fn percent_and_dollar_stay_with_numbers() {
+        let terms: Vec<String> = vec![];
+        // "30% of the trees die"：% 必须随数字保留，否则 30% 变成 30 棵（语义反转）。
+        // "$2 per ticket"：$ 随数字保留，价格语义不丢。
+        let line = "30% of the trees die, each costs $2";
+        let out = trim_line(line, &terms, 0.2);
+        assert!(out.contains("30%"), "百分比必须保留: {out}");
+        assert!(out.contains("$2"), "货币符号必须随数字保留: {out}");
     }
 
     #[test]

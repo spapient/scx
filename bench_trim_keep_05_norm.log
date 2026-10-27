@@ -1,0 +1,6 @@
+scx  : acc=0.560 (28/50)  ctx_tok=966  tok_ratio=0.725
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 26/30 = 0.867
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 43 样本
+  >35%: 7 样本

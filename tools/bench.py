@@ -129,12 +129,22 @@ def last_number(text: str) -> Optional[str]:
     nums = FINAL_NUM.findall(text)
     if not nums:
         return None
-    return nums[-1].replace(",", "")
+    return norm_num(nums[-1].replace(",", ""))
+
+
+def norm_num(s: str) -> str:
+    """数字归一化：'34.00'→'34'、'34.50'→'34.5'、'1.25'→'1.25'。
+
+    EM 匹配前统一去尾零，避免同值异形（34 vs 34.00）被误判为答错。
+    """
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s
 
 
 def extract_answer(raw: str) -> Optional[str]:
     m = re.search(r"####\s*([-+]?\d+(?:\.\d+)?)", raw)
-    return m.group(1) if m else None
+    return norm_num(m.group(1)) if m else None
 
 
 def load_model_mlx(spec: ModelSpec, quantize: int = 0):

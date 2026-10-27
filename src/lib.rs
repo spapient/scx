@@ -25,6 +25,7 @@ mod policy;
 mod terms;
 /// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。
 pub mod toml;
+mod trim;
 
 /// CLI 与集成层模块（库内可用）：`args` 声明式参数解析、`input` 输入读取、
 /// `ops` 操作编排（Op 枚举 + run + 纯渲染）。`ops::render` 供 MCP 等
@@ -279,6 +280,13 @@ pub struct Config {
     /// 结构锚点种类（P6 骨架保护，默认空 = 现状行为不变）：结构边界行标记为
     /// 保留锚点，优先级低于证据行、高于普通噪声行。
     pub structure_anchors: Vec<AnchorKind>,
+    /// 填充/邻域行最低分数门槛（`--fill-floor`，默认 0.0 = 现状逐字节一致）。
+    /// 大于 0 时低分行既不无条件保留为上下文、也不进入可选填充。
+    pub fill_floor: f64,
+    /// 行内 token 级裁剪（`--trim 1`，默认 0 = 现状逐字节一致）。
+    /// 1 时保留行内部按重要性摘除低信息量 token；`trim_ratio` 控制保留比例。
+    pub trim: bool,
+    pub trim_ratio: f64,
     /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
     /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
     /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
@@ -316,6 +324,9 @@ impl Default for Config {
             evidence: Vec::new(),
             structure_anchors: Vec::new(),
             kind: ContentType::ToolOutput,
+            fill_floor: crate::policy::DEFAULT_FILL_FLOOR,
+            trim: crate::policy::DEFAULT_TRIM,
+            trim_ratio: crate::policy::DEFAULT_TRIM_RATIO,
         }
     }
 }
