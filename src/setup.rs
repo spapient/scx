@@ -221,7 +221,7 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
     let mut text = existing.unwrap_or_default();
     // 只认真实的段头行：`# [mcp_servers.scx]` 之类的注释行曾被 contains 误判为
     // 已注册，导致 update_toml_command 找不到段而最终静默不注册。
-    let has_section = text.lines().any(|l| l.trim() == section);
+    let has_section = text.lines().any(|l| header(l.trim()));
     if has_section {
         // 已注册：原位更新 command 行（args 恒为 ["mcp"]，无需重写）。
         let updated = update_toml_command(&text, &command);
@@ -244,13 +244,23 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 段头判定：`[mcp_servers.scx]` 允许行尾注释（`# note`），但不匹配更长的段名。
+/// 只用精确匹配会把「段头带注释」当成未注册，进而追加重复段使配置损坏。
+fn header(t: &str) -> bool {
+    t.strip_prefix("[mcp_servers.scx]")
+        .is_some_and(|rest| {
+            let rest = rest.trim_start();
+            rest.is_empty() || rest.starts_with('#')
+        })
+}
+
 /// 段内更新 command 行（保持文件其余内容逐字节不变）。
 fn update_toml_command(text: &str, command: &str) -> String {
     let mut out = String::new();
     let mut in_scx = false;
     for line in text.lines() {
         let t = line.trim();
-        if t == "[mcp_servers.scx]" {
+        if header(t) {
             in_scx = true;
             out.push_str(line);
             out.push('\n');
@@ -491,6 +501,39 @@ pub fn handshake(exe: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn header_accepts_trailing_comment_but_not_longer_names() {
+        assert!(header("[mcp_servers.scx]"));
+        assert!(header("[mcp_servers.scx] # keep this note"));
+        assert!(header("[mcp_servers.scx]#note"));
+        assert!(!header("[mcp_servers.scx2]"), "更长的段名不得误判");
+        assert!(!header("# [mcp_servers.scx]"), "注释行不是段头");
+    }
+
+    #[test]
+    fn commented_section_header_is_updated_in_place() {
+        // 段头带行尾注释时也必须原位更新，不得追加第二个同名段（TOML 重复表会损坏配置）。
+        let dir = std::env::temp_dir().join(format!("scx-setup-hdr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.toml");
+        std::fs::write(
+            &cfg,
+            "[mcp_servers.scx] # keep this note\ncommand = \"/old/bin\"\nargs = [\"mcp\"]\n",
+        )
+        .unwrap();
+        toml_reg(&cfg, Path::new("/new/bin")).unwrap();
+        let text = std::fs::read_to_string(&cfg).unwrap();
+        assert_eq!(
+            text.matches("[mcp_servers.scx]").count(),
+            1,
+            "不得追加重复段: {text}"
+        );
+        assert!(text.contains("command = \"/new/bin\""), "应原位更新: {text}");
+        assert!(text.contains("# keep this note"), "段头注释保留: {text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn update_toml_command_matches_any_whitespace_and_skips_comments() {

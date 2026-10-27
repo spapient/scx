@@ -411,8 +411,14 @@ fn read_bounded(reader: &mut dyn BufRead, max: usize) -> Frame {
     if n == 0 {
         return Frame::Eof;
     }
-    if n > max {
-        discard(reader);
+    // 上限按「帧内容字节数」计，不含换行符：恰好 max 字节 + '\n' 是合法帧
+    // （总数 max+1）。只有读满上限且未见到换行时，才需要丢弃本行剩余字节。
+    let nl = buf.last() == Some(&b'\n');
+    let content = n - usize::from(nl);
+    if content > max {
+        if !nl {
+            discard(reader);
+        }
         return Frame::Invalid(format!("request exceeds {max} bytes"));
     }
     match String::from_utf8(buf) {
@@ -459,6 +465,28 @@ mod tests {
         // 带 id 的未知 method 仍需回错误。
         assert!(handle(r#"{"jsonrpc":"2.0","id":7,"method":"nope"}"#, &mut usage)
             .is_some_and(|r| r.contains("-32601")));
+    }
+
+    #[test]
+    fn boundary_frame_keeps_next_line() {
+        use std::io::Cursor;
+        // 恰好 max 字节内容 + 换行是合法帧，且不得吞掉下一帧。
+        let mut src = Cursor::new(b"12345678\nnext\n".to_vec());
+        match read(&mut src, 8) {
+            Frame::Line(l) => assert_eq!(l, "12345678\n"),
+            _ => panic!("exact-max frame must be a Line"),
+        }
+        match read(&mut src, 8) {
+            Frame::Line(l) => assert_eq!(l, "next\n"),
+            _ => panic!("next frame must survive an exact-max frame"),
+        }
+        // 超限帧（无换行）丢弃到行尾后，下一帧仍然完整。
+        let mut src = Cursor::new(b"123456789\nok\n".to_vec());
+        assert!(matches!(read(&mut src, 8), Frame::Invalid(_)));
+        match read(&mut src, 8) {
+            Frame::Line(l) => assert_eq!(l, "ok\n"),
+            _ => panic!("stream must stay line-synced after an oversize frame"),
+        }
     }
 
     #[test]
