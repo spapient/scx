@@ -1,0 +1,35 @@
+[load] MLX 加载模型 Qwen2.5-3B-Instruct（千问） (/Users/fei/model/qwen2.5-3b-instruct) ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+Using the latest cached version of the dataset since openai/gsm8k couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'main' at /Users/fei/.cache/huggingface/datasets/openai___gsm8k/main/0.0.0/740312add88f781978c0658806c59bc2815b9866 (last modified on Wed Oct 28 00:01:26 2026).
+[1/100]
+[5/100]
+[10/100]
+[15/100]
+[20/100]
+[25/100]
+[30/100]
+[35/100]
+[40/100]
+[45/100]
+[50/100]
+[55/100]
+[60/100]
+[65/100]
+[70/100]
+[75/100]
+[80/100]
+[85/100]
+[90/100]
+[95/100]
+[100/100]
+
+=== GSM8K 8-shot 三方对照（Qwen2.5-3B-Instruct（千问） via MLX, n=100, seed=20261027）===
+full : acc=0.500 (50/100)  ctx_tok=1332
+scx  : acc=0.590 (59/100)  ctx_tok=968  tok_ratio=0.727
+trunc: 已跳过（--no-trunc）
+scx 保持率（full 答对中 scx 仍答对）: 47/50 = 0.940
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 87 样本
+  >35%: 13 样本
