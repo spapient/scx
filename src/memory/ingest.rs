@@ -77,22 +77,28 @@ fn rebuild(root: &str) -> io::Result<()> {
     crate::memory::lock::atomic(&ready(root), ids.len().to_string().as_bytes())
 }
 
-/// 追加一条索引并推进 ready。ready 记的是**索引实际行数**，不是库 case_count：
-/// 并发写库时 case_count 可能已包含别的进程刚写入、本索引尚无行的 case，
-/// 拿它当 ready 会让 ensure 误判索引完整而漏判重（重复 case 入库）。
+/// 追加一条索引并把 ready 对齐到**索引实际行数**（不是库 case_count：并发写库时
+/// case_count 可能已包含别的进程刚写入、本索引尚无行的 case，拿它会误判完整）。
+///
+/// 幂等：同一 (fp, id) 若已被并发 rebuild 收录，则不再追加重复行——否则行数会
+/// 超过 case 数，ready 与 case_count 永远对不上，触发无谓的全表重建。
 fn remember(root: &str, fp: &str, id: &str) -> io::Result<()> {
     let _lock = crate::memory::lock::acquire(root, FP_LOCK)?;
-    // ready 缺失（删除后失效/尚未构建）：整表重建，避免把半新索引标成完整。
-    let Some(next) = total(root).map(|n| n + 1) else {
-        return rebuild(root);
-    };
-    let path = index(root);
-    if !path.exists() {
+    // ready 缺失（删除后失效/尚未构建）或索引不存在：整表重建。
+    if total(root).is_none() {
         return rebuild(root);
     }
-    let mut file = fs::OpenOptions::new().append(true).open(path)?;
-    writeln!(file, "{fp}\t{id}")?;
-    crate::memory::lock::atomic(&ready(root), next.to_string().as_bytes())
+    let Some(body) = read(root)? else {
+        return rebuild(root);
+    };
+    let mut lines = body.lines().count();
+    let already = body.lines().any(|l| l.split_once('\t') == Some((fp, id)));
+    if !already {
+        let mut file = fs::OpenOptions::new().append(true).open(index(root))?;
+        writeln!(file, "{fp}\t{id}")?;
+        lines += 1;
+    }
+    crate::memory::lock::atomic(&ready(root), lines.to_string().as_bytes())
 }
 
 /// case 删除后让去重索引在下一次写入时惰性重建。
@@ -726,6 +732,35 @@ mod tests {
     /// 回归：remember 按索引行数推进 ready。并发进程若已写入新 case（case_count
     /// 变大、索引尚未含该行），ready 不得直接等于 case_count，否则 ensure 会信任
     /// 残缺索引而漏判重，重复 case 入库。
+    /// remember 必须幂等：并发 rebuild 已收录同一 (fp, id) 时不得再追加重复行，
+    /// 否则索引行数超过 case 数、ready 与 case_count 永远对不上。
+    #[test]
+    fn remember_is_idempotent_for_same_case() {
+        let root = root("ready-idem");
+        let (_, id) = ingest(
+            &root,
+            "qa conn",
+            vec![],
+            TEXT,
+            vec!["/x/build.log".into()],
+            &store::sample(),
+            vec![],
+        )
+        .unwrap();
+        let fp = fingerprint("qa conn", TEXT);
+        // 模拟并发 rebuild 已收录该行后，迟到的 remember 再次执行。
+        remember(&root, &fp, &id).unwrap();
+        remember(&root, &fp, &id).unwrap();
+        let body = fs::read_to_string(index(&root)).unwrap();
+        assert_eq!(body.lines().count(), 1, "同一 (fp,id) 只能有一行");
+        assert_eq!(
+            fs::read_to_string(ready(&root)).unwrap().trim(),
+            "1",
+            "ready 必须等于索引真实行数"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn remember_does_not_claim_unindexed_cases() {
         let root = root("ready-race");

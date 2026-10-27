@@ -169,6 +169,22 @@ struct Mask {
     guard_v: Vec<bool>,
     force_v: Vec<bool>,
     total_tok: f64,
+    /// 每行 token 估算（空 = 未计算，调用方回退现算）。
+    tok: Vec<f64>,
+}
+
+/// 每行 token 估算表；`do_tok=false` 时返回空表与 `small_tok`（不扫全篇）。
+fn tok_table(lines: &[&str], total: usize, small_tok: f64, do_tok: bool) -> (Vec<f64>, f64) {
+    if !do_tok {
+        return (Vec::new(), small_tok);
+    }
+    let mut tok = vec![0.0; total];
+    let mut sum = 0.0;
+    for (i, line) in lines.iter().enumerate() {
+        tok[i] = crate::terms::estimate(line);
+        sum += tok[i];
+    }
+    (tok, sum)
 }
 
 /// 一次逐行×逐词扫描出命中位掩码；错误/标记/守卫/force 判定复用同一小写缓冲（无逐行分配）。
@@ -181,12 +197,11 @@ fn masks(lines: &[&str], terms: &[String], forces: &[Force], small_tok: f64, do_
     let mut marker_v = vec![false; total];
     let mut guard_v = vec![false; total];
     let mut force_v = vec![false; total];
-    let mut total_tok = if do_tok { 0.0 } else { small_tok };
+    // 每行 token 估算表：供填充与记账复用（此前同一批行会被 estimate 2–3 次）。
+    // do_tok=false（小输入/针尖档）时为空表，调用方回退现算。
+    let (tok, total_tok) = tok_table(lines, total, small_tok, do_tok);
     let mut low = String::new();
     for i in 0..total {
-        if do_tok {
-            total_tok += crate::terms::estimate(lines[i]);
-        }
         low.clear();
         lowercase(lines[i], &mut low);
         let ll = low.as_str();
@@ -211,6 +226,7 @@ fn masks(lines: &[&str], terms: &[String], forces: &[Force], small_tok: f64, do_
         guard_v,
         force_v,
         total_tok,
+        tok,
     }
 }
 
@@ -889,6 +905,8 @@ struct Select<'a> {
     dup: &'a [bool],
     in_region: &'a [bool],
     struct_region: &'a [bool],
+    /// 每行 token 估算（masks 预计算；空时回退现算）。
+    tok: &'a [f64],
 }
 
 /// 预算填充的标量配置。
@@ -927,7 +945,7 @@ fn fill(
     });
     let mut used = 0.0f64;
     for &(i, _) in &order {
-        let t = crate::terms::estimate(sel.lines[i]);
+        let t = est(sel.tok, sel.lines, i);
         if used + t > cap {
             continue;
         }
@@ -941,12 +959,19 @@ fn fill(
     used
 }
 
+/// 单行 token：优先取 masks 的预计算表，未计算（小输入/针尖档）时现算。
+fn est(tok: &[f64], lines: &[&str], i: usize) -> f64 {
+    tok.get(i)
+        .copied()
+        .unwrap_or_else(|| crate::terms::estimate(lines[i]))
+}
+
 /// 已保留行的 token 估算总和（`--max-tokens` 记账口径）。
-fn tokens(lines: &[&str], keep: &[bool]) -> f64 {
+fn tokens(lines: &[&str], keep: &[bool], tok: &[f64]) -> f64 {
     let mut sum = 0.0f64;
     for (i, &k) in keep.iter().enumerate() {
         if k {
-            sum += crate::terms::estimate(lines[i]);
+            sum += est(tok, lines, i);
         }
     }
     sum
@@ -1317,7 +1342,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
     // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
-    let tok_floor = tokens(&lines, &keep);
+    let tok_floor = tokens(&lines, &keep, &masks.tok);
     let mut overflow = cap(tok_floor, cfg.limit);
 
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
@@ -1329,6 +1354,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             dup: &dup,
             in_region: &regions.in_region,
             struct_region: &regions.struct_region,
+            tok: &masks.tok,
         },
         &Fill {
             region_gate: regions.gate,
@@ -1368,7 +1394,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     // 守卫后最终检查：填充受上限约束，但风险守卫可能追加证据性行；如实报告 OverflowFill。
-    let final_tok = tokens(&lines, &keep);
+    let final_tok = tokens(&lines, &keep, &masks.tok);
     if overflow.is_none() {
         overflow = last(final_tok, cfg.limit);
     }
@@ -1825,6 +1851,22 @@ mod tests {
             let want = naive_dedup(&lines, &mask, 2, &err, &force);
             assert_eq!(got, want, "dedup mismatch on {:?}", raw);
         }
+    }
+
+    #[test]
+    fn token_table_matches_estimate_and_falls_back() {
+        let lines = ["abc", "数据库连接超时", "x y z 42"];
+        let (tok, total) = tok_table(&lines, 3, 0.0, true);
+        let want: f64 = lines.iter().map(|l| crate::terms::estimate(l)).sum();
+        assert_eq!(total, want);
+        for (i, l) in lines.iter().enumerate() {
+            assert_eq!(est(&tok, &lines, i), crate::terms::estimate(l));
+        }
+        // do_tok=false：空表 + small_tok，调用方回退现算。
+        let (empty, small) = tok_table(&lines, 3, 7.5, false);
+        assert!(empty.is_empty());
+        assert_eq!(small, 7.5);
+        assert_eq!(est(&empty, &lines, 1), crate::terms::estimate(lines[1]));
     }
 
     #[test]
