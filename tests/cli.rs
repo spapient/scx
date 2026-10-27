@@ -488,3 +488,109 @@ fn concurrent_store_processes_keep_all_cases_and_meta_updates() {
     }
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn wrap_passes_child_exit_code_and_keeps_body_on_stdout() {
+    // 契约：退出码沿用 CMD；正文写 stdout，效果卡写 stderr。
+    // 用一个跨平台子命令（scx 自身）：未知参数退出 2。
+    let out = run(&["wrap", "--", bin(), "--no-such-flag"]);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "child exit code must pass through, stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // 小输出自动透传：正文仍在 stdout，效果卡在 stderr，退出码 0。
+    let out = run(&["wrap", "--", bin(), "--version"]);
+    assert!(
+        out.status.success(),
+        "wrap of a successful command must exit 0"
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("scx "),
+        "stdout must carry the command output: {text}"
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("SCX 压缩召回"),
+        "effect card must be on stderr: {err}"
+    );
+}
+
+#[test]
+fn subcommands_tolerate_a_closed_stdout() {
+    use std::io::Write;
+    for args in [vec!["bucket"], vec!["hook"]] {
+        let mut c = Command::new(bin())
+            .args(&args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        // 先关读端再喂输入：子进程写 stdout 时必然 EPIPE。
+        drop(c.stdout.take());
+        let mut si = c.stdin.take().unwrap();
+        let _ = si.write_all(b"{\"query\":\"conn\",\"parts\":[]}\n");
+        drop(si);
+        let st = c.wait().unwrap();
+        assert_eq!(
+            st.code(),
+            Some(0),
+            "{args:?} must treat a closed stdout as end of output"
+        );
+    }
+    let mut c = Command::new(bin())
+        .args(["wrap", "--", bin(), "--version"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    drop(c.stdout.take());
+    let st = c.wait().unwrap();
+    assert_eq!(st.code(), Some(0), "wrap must tolerate a closed stdout");
+}
+
+#[test]
+fn wrap_hands_its_stdin_to_the_child() {
+    use std::io::Write;
+    let mut c = Command::new(bin())
+        .args(["wrap", "--query", "conn", "--", bin(), "--query", "conn"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    c.stdin
+        .take()
+        .unwrap()
+        .write_all(b"hello conn boom\n")
+        .unwrap();
+    let out = c.wait_with_output().unwrap();
+    assert!(out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("hello"),
+        "child stdin must be inherited: {:?}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn wrap_maps_signal_exit_to_128_plus_signal() {
+    let out = Command::new(bin())
+        .args(["wrap", "--", "sh", "-c", "kill -TERM $$"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(143), "SIGTERM must map to 128+15");
+}
+
+#[test]
+fn bucket_record_requires_a_path() {
+    let out = run(&["bucket", "--record"]);
+    assert_eq!(out.status.code(), Some(2));
+}

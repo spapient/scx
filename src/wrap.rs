@@ -9,6 +9,21 @@
 use std::process::Command;
 
 /// 主入口：解析 `--` 分隔的压缩选项与命令，执行后压缩输出。返回进程退出码。
+/// 退出码沿用被包装命令；信号终止按 shell 惯例映射为 128+信号值。
+fn exit_code(status: std::process::ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(sig) = status.signal() {
+            return 128 + sig;
+        }
+    }
+    1
+}
+
 pub fn run(args: &[String]) -> i32 {
     let Some(sep) = args.iter().position(|a| a == "--") else {
         eprintln!("scx wrap: usage: scx wrap [--query Q] [--ratio R] [--context N] [--force P] [--preserve T] [--evidence N|substr] -- CMD...");
@@ -28,10 +43,25 @@ pub fn run(args: &[String]) -> i32 {
     };
 
     // 执行命令，合并 stdout+stderr（命令的 stderr 也是排障证据，一并参与筛选）。
-    let output = match Command::new(&cmd[0]).args(&cmd[1..]).output() {
-        Ok(o) => o,
+    // stdin 必须继承：`echo x | scx wrap -- cat` 的输入要交给被包装命令
+    // （`Command::output()` 会把 stdin 置空，故手动 spawn + wait_with_output）。
+    let child = match Command::new(&cmd[0])
+        .args(&cmd[1..])
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
         Err(e) => {
             eprintln!("scx wrap: cannot run {}: {e}", cmd[0]);
+            return 1;
+        }
+    };
+    let output = match child.wait_with_output() {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("scx wrap: cannot read {} output: {e}", cmd[0]);
             return 1;
         }
     };
@@ -40,14 +70,16 @@ pub fn run(args: &[String]) -> i32 {
 
     // 压缩（小输入 passthrough、无信号 fail-open 均由内核保证）。
     let outcome = crate::compress(&text, &query, &config);
-    print!("{}", outcome.text);
+    if let Err(e) = crate::ops::out_text(&outcome.text) {
+        eprintln!("scx wrap: write stdout failed: {e}");
+    }
     if !outcome.text.is_empty() && !outcome.text.ends_with('\n') {
-        println!();
+        let _ = crate::ops::out_text("\n");
     }
     eprintln!("{}", crate::ops::recall_report(&outcome, &query));
 
-    // 退出码沿用被包装命令。
-    output.status.code().unwrap_or(1)
+    // 退出码沿用被包装命令；信号终止按 shell 惯例映射为 128+信号值。
+    exit_code(output.status)
 }
 
 /// 解析 `--` 前的压缩选项（有限的声明式集合，与 args 表解耦）。

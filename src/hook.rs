@@ -54,7 +54,7 @@ fn render_hook(resp: &Json, stdout: &str) -> String {
 }
 
 fn passthrough() -> i32 {
-    println!("{{\"continue\":true}}");
+    let _ = crate::ops::out_line("{\"continue\":true}");
     0
 }
 
@@ -66,7 +66,7 @@ pub fn run() -> i32 {
     }
     match transform(&input) {
         Some(out) => {
-            println!("{out}");
+            let _ = crate::ops::out_line(&out);
             0
         }
         None => passthrough(),

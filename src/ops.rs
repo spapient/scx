@@ -858,6 +858,26 @@ fn lines_out(lines: Vec<String>) -> Reply {
     Ok(())
 }
 
+/// 写 stdout 原文；BrokenPipe 视为正常结束（下游关闭，如 `| head`）。
+pub(crate) fn out_text(text: &str) -> io::Result<()> {
+    let mut out = io::stdout().lock();
+    match out.write_all(text.as_bytes()) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+/// 写一行 stdout（含换行）；BrokenPipe 语义同 [`out_text`]。
+pub(crate) fn out_line(text: &str) -> io::Result<()> {
+    let mut out = io::stdout().lock();
+    match writeln!(out, "{text}") {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
 /// 单行 stdout 输出（BrokenPipe 语义同 [`lines_out`]）。
 fn say(text: String) -> Reply {
     lines_out(vec![text])

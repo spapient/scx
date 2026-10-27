@@ -104,14 +104,6 @@ def require_line(label, value):
         sys.exit(f"{label}: must be one line without tabs or NUL")
 
 
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def sha256_text(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 

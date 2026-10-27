@@ -55,13 +55,13 @@ pub fn run(args: &[String]) -> i32 {
         eprintln!("scx setup: {bad} agent(s) failed (see above; backups kept at *.scx.bak)");
         1
     } else {
-        println!("scx setup: all agents registered (server name: scx)");
+        let _ = crate::ops::out_line("scx setup: all agents registered (server name: scx)");
         0
     }
 }
 
 fn print_usage() {
-    println!(
+    let _ = crate::ops::out_line(
         "usage: scx setup [--claude] [--codex] [--cursor] [--project-cursor] [--help]\n\
          \n\
          Register the scx MCP stdio server into agent configs (idempotent).\n\
@@ -69,7 +69,7 @@ fn print_usage() {
          --project-cursor                write Cursor config to ./.cursor/mcp.json\n\
                                         (default: ~/.cursor/mcp.json).\n\
          Config files are backed up to <path>.scx.bak before writing;\n\
-         a tools/list handshake runs after each successful registration."
+         a tools/list handshake runs after each successful registration.",
     );
 }
 
@@ -82,10 +82,10 @@ fn reg_and_check(name: &str, r: Result<String, String>, exe: &Path) -> i32 {
             return 1;
         }
     };
-    println!("scx setup: [{name}] {line}");
+    let _ = crate::ops::out_line(&format!("scx setup: [{name}] {line}"));
     match handshake(exe) {
         Ok(h) => {
-            println!("scx setup: [{name}] {h}");
+            let _ = crate::ops::out_line(&format!("scx setup: [{name}] {h}"));
             0
         }
         Err(e) => {

@@ -17,7 +17,11 @@ pub fn run(args: &[String]) -> i32 {
         match args[i].as_str() {
             "--record" => {
                 i += 1;
-                record_path = args.get(i).map(|s| s.as_str());
+                let Some(p) = args.get(i) else {
+                    eprintln!("scx bucket: --record requires a path");
+                    return 2;
+                };
+                record_path = Some(p.as_str());
             }
             other => {
                 eprintln!("scx bucket: unknown argument {other}");
@@ -41,7 +45,10 @@ pub fn run(args: &[String]) -> i32 {
     let refs: Vec<(ContentType, &str)> = parts.iter().map(|(t, s)| (*t, s.as_str())).collect();
     let cfg = crate::Config::default();
     let outcome = compress_bucketed(&refs, &query, &cfg);
-    println!("{}", crate::ops::render(&outcome));
+    if let Err(e) = crate::ops::out_line(&crate::ops::render(&outcome)) {
+        eprintln!("scx bucket: write stdout failed: {e}");
+        return 1;
+    }
     if let Some(path) = record_path {
         // 收益记录写 Snapshot JSONL（与 `scx ledger --summarize` 同格式、确定性、无 wall-clock）。
         let snap = crate::meter::measure(0, &refs, &query, &cfg, None);
