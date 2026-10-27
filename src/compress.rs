@@ -991,8 +991,7 @@ fn guard(
     dup: &[bool],
     guard: &[bool],
     marker: &[bool],
-    in_region: &[bool],
-    region_gate: bool,
+    region: Option<&[bool]>,
     reason: &mut [u8],
 ) -> u8 {
     let mut guarded = 0u8;
@@ -1001,8 +1000,8 @@ fn guard(
             continue;
         }
         // 区域门控：只保护证据邻域内的错误/标记行（根因聚集在证据附近），
-        // 丢弃远处无关错误行；region_gate=false 时为现状全量保护。
-        if region_gate && !in_region[i] {
+        // 丢弃远处无关错误行；None 时为现状全量保护。
+        if region.is_some_and(|r| !r[i]) {
             continue;
         }
         if guard[i] || marker[i] {
@@ -1348,14 +1347,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let risk = audit(&keep, &masks.err_v, &seeds.hits, &DEFAULT_RISK);
     let mut guarded = 0u8;
     if active(risk, cfg) {
+        let guard_region = cfg.guard_region.then_some(regions.in_region.as_slice());
         guarded = guard(
             &mut keep,
             &mut keep_count,
             &dup,
             &masks.guard_v,
             &masks.marker_v,
-            &regions.in_region,
-            cfg.guard_region,
+            guard_region,
             &mut reason,
         );
     }
@@ -1947,7 +1946,7 @@ mod tests {
 
     #[test]
     fn guard_region_gates_far_errors() {
-        // 全量守卫保留所有错误行；区域门控只保留证据邻域内的错误行。
+        // 全量守卫（None）保留所有错误行；区域门控（Some）只保留证据邻域内的错误行。
         let keep = vec![false; 5];
         let dup = vec![false; 5];
         let guard_lines = vec![true, true, true, true, true];
@@ -1957,12 +1956,28 @@ mod tests {
 
         let mut k_full = keep.clone();
         let mut kc = 0;
-        guard(&mut k_full, &mut kc, &dup, &guard_lines, &marker, &in_region, false, &mut reason);
+        guard(
+            &mut k_full,
+            &mut kc,
+            &dup,
+            &guard_lines,
+            &marker,
+            None,
+            &mut reason,
+        );
         assert_eq!(kc, 5, "全量守卫保留所有错误行");
 
         let mut k_region = keep.clone();
         let mut kc2 = 0;
-        guard(&mut k_region, &mut kc2, &dup, &guard_lines, &marker, &in_region, true, &mut reason);
+        guard(
+            &mut k_region,
+            &mut kc2,
+            &dup,
+            &guard_lines,
+            &marker,
+            Some(&in_region),
+            &mut reason,
+        );
         assert_eq!(kc2, 1, "区域门控只保留证据邻域内的错误行");
         assert!(k_region[2], "in-region 错误行保留");
     }

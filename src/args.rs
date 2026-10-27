@@ -34,7 +34,9 @@ pub fn usage() -> String {
     s.push_str("  --structure 1        structural-aware neighborhood: fenced blocks, import/use/#include\n");
     s.push_str("                       blocks, stack-trace at-chains (default off, byte-identical to v0.4.1)\n");
     s.push_str("  --guard-region 1     HIGH-risk guard only keeps error/marker lines inside the\n");
-    s.push_str("                       evidence neighborhood (default off = keep all, byte-identical)\n");
+    s.push_str(
+        "                       evidence neighborhood (default off = keep all, byte-identical)\n",
+    );
     s.push_str("  --policy-file PATH   policy text override: ratio/context/window/elide/risk_gate/lineno/\n");
     s.push_str("                       max_tokens/structure; precedence CLI > file > DEFAULT\n");
     s.push_str(
@@ -1175,7 +1177,9 @@ fn lookup(key: &str) -> Option<&'static str> {
 fn apply(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Result<(), String> {
     match key {
         "ratio" | "context" | "window" => number(s, key, v, path, line)?,
-        "elide" | "risk_gate" | "guard_region" | "lineno" | "structure" => toggle(s, key, v, path, line)?,
+        "elide" | "risk_gate" | "guard_region" | "lineno" | "structure" => {
+            toggle(s, key, v, path, line)?
+        }
         "max_tokens" => tokens(s, v, path, line)?,
         _ => unreachable!("policy key whitelist"),
     }
