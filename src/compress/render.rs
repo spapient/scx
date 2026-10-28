@@ -197,6 +197,7 @@ pub(crate) fn explain(reason: &[u8], dup: &[bool]) -> Vec<crate::Explain> {
             R_ANCHOR => crate::Explain::Anchor,
             R_NUM_LINE => crate::Explain::NumLine,
             R_SYM_LINE => crate::Explain::SymLine,
+            R_ZH_LINE => crate::Explain::ZhLine,
             _ => {
                 if dup[i] {
                     crate::Explain::Dedup

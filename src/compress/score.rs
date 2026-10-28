@@ -11,6 +11,7 @@ pub(crate) const R_GUARD: u8 = 4;
 pub(crate) const R_ANCHOR: u8 = 5;
 pub(crate) const R_NUM_LINE: u8 = 6;
 pub(crate) const R_SYM_LINE: u8 = 7;
+pub(crate) const R_ZH_LINE: u8 = 8;
 
 /// 标记阶段共享可变上下文：keep 位图 / 计数 / 原因，与只读 scores/fill_floor。
 pub(crate) struct Ctx<'a> {
@@ -446,4 +447,63 @@ pub(crate) fn ev_retention(
         }
     }
     hit as f64 / evidence.len() as f64
+}
+
+/// 中文问句行识别（--zh-keep）：含疑问词/问号的中文行。
+/// 疑问词表覆盖中文问答题干（多少/什么/如何/为什么/是否/哪个/哪里/哪些/
+/// 请用/请回答/输出什么/等于多少/值是多少 等）；无 CJK 的行直接拒绝，
+/// 英文/代码行不受影响。
+pub(crate) fn zh_line(t: &str) -> bool {
+    const Q: &[&str] = &[
+        "多少",
+        "什么",
+        "如何",
+        "为什么",
+        "是否",
+        "哪个",
+        "哪里",
+        "哪些",
+        "哪种",
+        "请用",
+        "请回答",
+        "请给出",
+        "请输出",
+        "输出什么",
+        "等于多少",
+        "值是多少",
+        "是多少",
+        "哪一",
+        "几次",
+        "几个",
+        "的区别",
+    ];
+    if !t.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c)) {
+        return false;
+    }
+    Q.iter().any(|w| t.contains(w)) || t.trim_end().ends_with('？') || t.trim_end().ends_with('?')
+}
+
+/// 中文问句行整行保留并标记 raw（跳过行内 trim）——问句行是题目的
+/// 语义核心，trim 逐字摘碎后模型无法理解（P8-E 实测保持率 0.2 根因）。
+pub(crate) fn mark_zh_lines(
+    lines: &[&str],
+    dup: &[bool],
+    keep: &mut [bool],
+    kept: &mut usize,
+    reason: &mut [u8],
+    raw: &mut [bool],
+) {
+    for (i, line) in lines.iter().enumerate() {
+        if dup[i] {
+            continue;
+        }
+        if zh_line(line.trim()) {
+            if !keep[i] {
+                keep[i] = true;
+                *kept += 1;
+            }
+            reason[i] = R_ZH_LINE;
+            raw[i] = true;
+        }
+    }
 }

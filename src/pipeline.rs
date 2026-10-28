@@ -28,6 +28,7 @@ pub struct Trim {
     pub ratio: Option<f64>,
     pub op_keep: Option<bool>,
     pub code_keep: Option<bool>,
+    pub zh_keep: Option<bool>,
     pub num_line_keep: Option<bool>,
     pub sym_line_keep: Option<bool>,
 }
@@ -56,6 +57,7 @@ const TRIM_KEYS: &[&str] = &[
     "ratio",
     "op_keep",
     "code_keep",
+    "zh_keep",
     "num_line_keep",
     "sym_line_keep",
 ];
@@ -108,6 +110,7 @@ fn from_json(root: &Json, path: &str) -> Result<Pipeline, String> {
         p.trim.ratio = f64_of(obj, "ratio", path, "trim")?;
         p.trim.op_keep = bool_of(obj, "op_keep", path, "trim")?;
         p.trim.code_keep = bool_of(obj, "code_keep", path, "trim")?;
+        p.trim.zh_keep = bool_of(obj, "zh_keep", path, "trim")?;
         p.trim.num_line_keep = bool_of(obj, "num_line_keep", path, "trim")?;
         p.trim.sym_line_keep = bool_of(obj, "sym_line_keep", path, "trim")?;
     }
@@ -266,6 +269,11 @@ fn apply_trim_keep(t: &Trim, cfg: &mut Config, set: &dyn Fn(&str) -> bool) -> Ve
     if t.code_keep.is_some() {
         set1(&mut a, cfg, set, "--code-keep", |c| {
             c.code_keep = t.code_keep.unwrap()
+        });
+    }
+    if t.zh_keep.is_some() {
+        set1(&mut a, cfg, set, "--zh-keep", |c| {
+            c.zh_keep = t.zh_keep.unwrap()
         });
     }
     if t.num_line_keep.is_some() {

@@ -1,106 +1,133 @@
 {
-  "schema": 1,
-  "frozen_at": "2026-10-29",
-  "note": "定稿评测结果冻结（不可变基线）。修改/重跑后必须重新冻结并提交；check_bench.sh 校验 sha256+行数。",
-  "frozen": {
-    "bench_arch_v3.csv": {
-      "sha256": "f878161f654dfce28568328332d7181b9a3ff590f24eb8892fc0c60ebd13d871",
-      "bytes": 7873,
-      "rows": 21
-    },
-    "bench_code_cuda60.csv": {
-      "sha256": "64d402fa76cdace33a5590babf092eb1264c1f9da9356960aa945517b78071c8",
-      "bytes": 92750,
-      "rows": 1669
-    },
-    "bench_code_js60.csv": {
-      "sha256": "6bd75abe0e6079dfc1d2ede8b54a3d91746b48ddd630b4fed362df402d96a773",
-      "bytes": 80430,
-      "rows": 2157
-    },
-    "bench_code_shape30.csv": {
-      "sha256": "60d31cdbbd98a1a15a76fee9c7c9a274478c277b46d90e4881dc683becaf7ed1",
-      "bytes": 36487,
-      "rows": 961
-    },
-    "bench_code_layers15.csv": {
-      "sha256": "b5351c911b1339351b34b1aaecc87f96d39230eb8253f8aec58127eb82339369",
-      "bytes": 26229,
-      "rows": 391
-    }
+ "schema": 1,
+ "frozen_at": "2026-10-29",
+ "note": "定稿评测结果冻结（不可变基线）。修改/重跑后必须重新冻结并提交；check_bench.sh 校验 sha256+行数。",
+ "frozen": {
+  "bench_arch_v3.csv": {
+   "sha256": "f878161f654dfce28568328332d7181b9a3ff590f24eb8892fc0c60ebd13d871",
+   "bytes": 7873,
+   "rows": 21
   },
-  "present": [
-    {
-      "file": "bench_arch_both_v1.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_arch_both_v2.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_ds_v1.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_ds_v2.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_nb.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_qwen.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_qwen_v3.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_qwen_v5.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_qwen_v6.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_qwen_v7.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_kernel_qwen_v8.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_qwen_n100.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_zh_n26.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_zh_n30.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_code_cuda60.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_code_js60.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_code_shape30.csv",
-      "min_rows": 2
-    },
-    {
-      "file": "bench_code_layers15.csv",
-      "min_rows": 2
-    }
-  ]
+  "bench_code_cuda60.csv": {
+   "sha256": "6bbde0633607f7b6dd9096e7f26484541b115cbe9d7b31478a501ce6e96ef1fe",
+   "bytes": 94672,
+   "rows": 1622
+  },
+  "bench_code_js60.csv": {
+   "sha256": "cce26c3c228ad345f751f3319d0824c478ff2d69cf6e784779075f21fd3f55d1",
+   "bytes": 82272,
+   "rows": 2211
+  },
+  "bench_code_shape30.csv": {
+   "sha256": "b4c348e172a8757826444483317dcbd3cec42832c14e1710e31713474d069c4e",
+   "bytes": 34549,
+   "rows": 795
+  },
+  "bench_code_layers15.csv": {
+   "sha256": "e8c4697d5581f17839acf6bd05875fc1747fa84aa46d5245d6c43a61bfd5ec4d",
+   "bytes": 24694,
+   "rows": 365
+  },
+  "bench_code_cuda60_r28.csv": {
+   "sha256": "a2ba5104eb75764132405647da2c1c71c3064c650546b5c15e936a98b50bfed3",
+   "bytes": 93763,
+   "rows": 1615
+  },
+  "bench_code_zh_cn30_r28.csv": {
+   "sha256": "746c40cf796a01c14c50eeba2c1c8ea8f3e777dfb90672681b05e5f90d6d99e2",
+   "bytes": 25267,
+   "rows": 435
+  },
+  "bench_code_zh_cn40_r28.csv": {
+   "sha256": "b3781262569796ec7c322aa9a8c4d6e4b0d50400d4b54e5f199a676cbf232357",
+   "bytes": 32899,
+   "rows": 586
+  }
+ },
+ "present": [
+  {
+   "file": "bench_arch_both_v1.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_arch_both_v2.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_ds_v1.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_ds_v2.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_nb.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_qwen.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_qwen_v3.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_qwen_v5.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_qwen_v6.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_qwen_v7.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_kernel_qwen_v8.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_qwen_n100.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_zh_n26.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_zh_n30.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_code_cuda60.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_code_js60.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_code_shape30.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_code_layers15.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_code_cuda60_r28.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_code_zh_cn30_r28.csv",
+   "min_rows": 2
+  },
+  {
+   "file": "bench_code_zh_cn40_r28.csv",
+   "min_rows": 2
+  }
+ ]
 }

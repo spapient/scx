@@ -313,6 +313,10 @@ pub struct Config {
     /// 其 `fn`/`->`/`&`/`(` 符号在 token 级低重要会被摘行（P6l 实测保持率
     /// 0.500 根因：签名行整行消失，模型不知签名生成错误代码）。
     pub sym_line_keep: bool,
+    /// 中文问句行保护（`--zh-keep`，默认 0）。含疑问词/问号的中文行
+    /// 整行保留并跳过行内 trim（防 trim 逐字摘碎中文题干）——中文代码
+    /// 问答场景 P8 实测 r=0.3 档保持率 0.2 根因：题干被裁成"线 线程 ？"。
+    pub zh_keep: bool,
     /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
     /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
     /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
@@ -357,6 +361,7 @@ impl Default for Config {
             code_keep: crate::policy::DEFAULT_CODE_KEEP,
             num_line_keep: crate::policy::DEFAULT_NUM_LINE_KEEP,
             sym_line_keep: crate::policy::DEFAULT_SYM_LINE_KEEP,
+            zh_keep: crate::policy::DEFAULT_ZH_KEEP,
         }
     }
 }
@@ -568,6 +573,8 @@ pub enum Explain {
     NumLine,
     /// 符号/签名行（`--sym-line-keep`：函数/类型声明行整行保留，行内仍 trim）。
     SymLine,
+    /// 中文问句行（`--zh-keep`：含疑问词/问号的中文行整行保留并跳过行内 trim）。
+    ZhLine,
     /// 去重折叠（第 3 次起的重复行）。
     Dedup,
     /// 删除（预算不足/结构裁剪/硬上限，细粒度见 `dropped`）。
@@ -585,6 +592,7 @@ impl Explain {
             Explain::Anchor => "anchor",
             Explain::NumLine => "numline",
             Explain::SymLine => "symline",
+            Explain::ZhLine => "zhline",
             Explain::Dedup => "dedup",
             Explain::Dropped => "dropped",
         }

@@ -2,9 +2,9 @@ model,idx,question,full,scx,full_ans,scx_ans,gold,full_chars,scx_chars,compresse
 deepseek,3,"以下 JS 代码输出什么（var 循环捕获）？
 ```js
 const fns = [];
-for (var i = 0; i < 3; i++) fns.pu",True,False,"`var` 声明的 `i` 是函数作用域，三个箭头函数共享同一个 `i`。循环结束后 `i` 变为 3，因此调用 `fns[0]()` 输出 3。
+for (var i = 0; i < 3; i++) fns.pu",True,False,"`var` 声明的 `i` 是函数作用域，所有箭头函数捕获的是同一个 `i`。循环结束后 `i` 变为 3，因此 `fns[0]()` 输出 3。
 
-答案是 3 #### 3","你贴出的代码片段不完整且语法有缺失，像是经典的 `var` 闭包题。按常见完整写法：
+答案是 3 #### 3","按经典的 `var` 循环捕获代码理解：
 
 ```js
 const fns = [];
@@ -14,29 +14,51 @@ for (var i = 0; i < 3; i++) {
   });
 }
 
-console.log(fns[0]());
+console.log(fns[0](), fns[1](), fns[2]());
 ```
 
-会输出：
+输出：
 
 ```text
-3
+3 3 3
 ```
 
-原因是 `va",3,1211,102,True
+原因：`va",3,1211,113,True
+deepseek,0,"以下 JS 代码输出什么？
+```js
+var a = 1;
+function f() { console.log(a); var a = 2; }
+f();
+",True,True,"函数 `f` 内部的 `var a` 会被提升到函数作用域顶部，但赋值 `a = 2` 仍在其后执行。因此执行 `console.log(a)` 时，访问的是函数内尚未赋值的局部变量 `a`，结果为 `undefined`。
+
+答案是 undefined #### undefined","你贴出的代码不完整且有语法错误：
+
+```js
+var a = 1
+function { console.log var = 2 }
+```
+
+`function { ... }` 缺少函数名/参数/函数体格式，`console.log var = 2` 也不是合法 JS，因此这段代码不能正常运行，**不会产生输出**，会直接 `SyntaxError`。
+
+如果你原本想问的是常见的变量提升题：
+",undefined,1175,89,True
 deepseek,2,"以下 JS 代码输出什么（闭包）？
 ```js
 function make() {
   let n = 0;
   return () => ++n;
 }
-con",True,False,"`a` 和 `b` 各自调用 `make()`，因此拥有独立的闭包变量 `n`。  
-`console.log` 参数从左到右求值：`a()` 第一次返回 1，第二次返回 2；`b()` 第一次返回 1。  
-最终输出为 `1 2 1`。
+con",True,False,"每次调用 `make()` 都会创建独立闭包，因此 `a` 和 `b` 各自维护自己的 `n`。  
+调用顺序为 `a(), a(), b()`：`a` 第一次返回 1，第二次返回 2；`b` 第一次返回 1。  
+`console.log` 输出 `1 2 1`。
 
-答案是 1 2 1 #### 1 2 1","你贴的代码不完整，**无法唯一确定输出**。关键看 `n` 定义在哪里，以及 `make()` 返回了什么。
+答案是 1 2 1 #### 1 2 1","这段代码不完整，无法确定唯一输出。关键缺少：
 
-常见闭包题如下：
+- `make` 函数的实现
+- `let n = 0` 到底是在 `make` 外部还是内部
+- 后面调用的 `console.log(...)` 是什么
+
+如果是经典闭包题：
 
 ```js
 function make() {
@@ -46,26 +68,15 @@ function make() {
   };
 }
 
-const a = make();
-const b = make();
-
-console.log(a",1 2 1,1236,100,True
+c",1 2 1,1236,104,True
 deepseek,1,"以下 JS 代码输出什么？
 ```js
 let x = 10;
 const f = () => { console.log(x); x = 20; };
-f()",True,False,"`f()` 先输出当时的 `x=10`，随后把 `x` 改为 20；所以第二次 `console.log(x)` 输出 20。
+f()",True,False,"执行 `f()` 时先输出当前 `x` 的值 `10`，随后把 `x` 改为 `20`；函数返回后再次输出 `x`，得到 `20`。  
+答案是 10\n20 #### 10\n20","你给出的代码片段不完整：目前只有 `f` 的定义，没有调用它，所以**不会输出任何内容**。
 
-答案是 10\n20 #### 10\n20","按你贴出的这段代码本身：
-
-```js
-let x = 10
-const f = () => { console.log(x); x = 20; };
-```
-
-**没有任何输出**，因为 `f` 只是被定义，没有被调用；`x` 仍然是 `10`。
-
-如果后面还有：
+如果后续代码是：
 
 ```js
 f();
@@ -74,54 +85,59 @@ console.log(x);
 
 则输出：
 
-```txt
+```text
 10
 20
 ```
 
-原因：调用 `f(",10 然后 20,1193,96,True
-deepseek,0,"以下 JS 代码输出什么？
-```js
-var a = 1;
-function f() { console.log(a); var a = 2; }
-f();
-",True,False,"函数 `f` 内部声明了 `var a`，变量声明会提升到函数作用域顶部，但赋值不会提升。因此执行 `console.log(a)` 时，局部变量 `a` 已存在但值为 `undefined`，会遮蔽外层全局变量 `a`。
+解释：
 
-答案是 undefined #### undefined","按你贴出的代码字面来看，它是有语法错误的：
+- `let x = 10` 定义了外层变量 `x`。
+- `f` 是箭头函数，内部访问的是外层作用域的 `x`。
+- 调用 `f()` 时先执行 `conso",10 然后 20,1193,102,True
+deepseek,4,"以下 JS 代码输出什么（let 循环捕获）？
+```js
+const fns = [];
+for (let i = 0; i < 3; i++) fns.pu",True,True,"`let` 在 `for` 循环中为每次迭代创建新的绑定，因此每个箭头函数捕获的是各自迭代时的 `i`。`fns[1]` 对应第二次迭代，此时 `i = 1`，所以输出 `1`。
+
+答案是 1 #### 1","你贴出的代码有语法错误，不能直接运行：
 
 ```js
-function { console.log var = 2 }
+const fns = [];
+for let = 0 < 3 i++ fns.push i
+fns[1]();
 ```
 
-`function` 后面缺少函数名/参数列表，`console.log var = 2` 也不是合法语法，因此会直接抛出 **SyntaxError**，**没有输出**。
-
-如果你原本想写的是经典变量提升题：
+如果题意是经典的 `let` 循环捕获问题，通常正确代码应为：
 
 ```js
-var a = 1
-function ",undefined,1175,83,True
+const fns = [];
+for (let i = 0; i < 3; i++) {
+  fns.push(() => i);
+}
+con",1,1211,113,True
 deepseek,5,"以下 JS 代码输出什么（严格模式 this）？
 ```js
 'use strict';
-function f() { console.log(this); }",True,False,"严格模式下，普通函数直接调用 `f()` 时，`this` 不会指向全局对象，而是 `undefined`，因此 `console.log(this)` 输出 `undefined`。
+function f() { console.log(this); }",True,False,"在严格模式下，普通函数直接调用 `f()` 时，函数内部的 `this` 不会自动指向全局对象，而是 `undefined`。因此 `console.log(this)` 输出 `undefined`。
 
-答案是 undefined #### undefined","你贴出的 JS 代码块里只有 `...`，没有实际代码，所以无法判断输出。
+答案是 undefined #### undefined","代码块里只有 `...`，没有实际 JS 代码，所以无法判断输出结果。
 
-如果代码真的就是：
+在**严格模式**下，`this` 的核心规则可以先给你：
 
-```js
-...
-```
+1. **普通函数直接调用**
+   ```js
+   ""use strict"";
+   function f() { console.log(this); }
+   f(); // undefined
+   ```
 
-那它是语法错误，会抛出 `SyntaxError`。
-
-请把完整的 JS 代码发出来，我才能准确告诉你输出结果。",undefined,1181,45,True
+2. **作为对象方法调用**
+   ```",undefined,1181,57,True
 deepseek,7,"以下 JS 代码输出什么（字符串拼接）？
 ```js
 console.log('3' + 4, '3' - 4);
-```",True,True,"第一个表达式 `'3' + 4` 中，`+` 遇到字符串会做字符串拼接，得到 `""34""`。  
-第二个表达式 `'3' - 4` 中，`-` 会触发数值转换，`3 - 4 = -1`。  
-`console.log` 输出两个参数时会以空格分隔。
+```",True,False,"`'3' + 4` 中 `+` 有字符串时执行拼接，得到 `""34""`；`'3' - 4` 中 `-` 会触发数值转换，得到 `-1`。`console.log` 多个参数以空格分隔输出。
 
 答案是 34 -1 #### 34 -1","输出：
 
@@ -131,242 +147,223 @@ console.log('3' + 4, '3' - 4);
 
 解释：
 
-- `'3' + 4`：`+` 遇到字符串会做字符串拼接，得到 `'34'`
-- `'3' - 4`：`-` 会触发隐式类型转换，把 `'3'` 转成数字 `3`，所以 `3 - 4 = -1`",34 -1,1153,76,True
-deepseek,9,"以下 JS 代码输出什么（NaN）？
-```js
-console.log(NaN === NaN, Number.isNaN(NaN));
-```",True,False,"`NaN === NaN` 使用严格相等比较，规定 NaN 与任何值（包括自身）都不相等，因此结果为 `false`；`Number.isNaN(NaN)` 专门判断是否为 NaN，结果为 `true`。`console.log` 用空格分隔多个参数。
-答案是 false true #### false true","你这条消息里 **JS 代码没有贴出来**，代码块显示为空的：
+- `'3' + 4`：有字符串参与 `+`，发生字符串拼接，得到 `'34'`
+- `'3' - 4`：`-` 会触发数值转换，等价于 `3 - 4`，得到 `-1`
 
-```js
-...
-```
+所以 `console.log('3' + 4, '3' - 4)` 输出：
 
-无法判断输出。请把完整代码发上来（包括变量定义、异步代码、运行环境如 Node/browser 等），我就能直接告诉你输出并解释原因。",false 然后 true,1165,43,True
+```text
+34 -1
+```",34 -1,1153,84,True
 deepseek,6,"以下 JS 代码输出什么（对象方法 this）？
 ```js
 const o = { v: 5, get() { return this.v; } };
-con",True,False,"第一个 `o.get()` 以对象方法形式调用，`this` 指向 `o`，返回 `5`。  
-第二个 `g()` 是普通函数调用，未绑定 `this`，非严格模式下 `this` 指向全局对象，全局对象没有 `v`，返回 `undefined`。
+con",True,False,"`o.get()` 调用时 `this` 指向 `o`，返回 `5`。  
+`g()` 是普通函数调用；非严格模式下 `this` 指向全局对象，而全局对象没有 `v`，因此返回 `undefined`。
 
-答案是 5 和 undefined #### 5 和 undefined","仅凭你贴出的这两行没有 `console.log`，所以**不会输出任何东西**。
-
-如果题目实际是：
+答案是 5 和 undefined #### 5 和 undefined","关键看调用方式：
 
 ```js
 const o = { v: 5, get() { return this.v; } };
 const g = o.get;
-console.log(g());
 ```
 
-则输出：
+- `o.get()`：`this` 指向 `o`，返回 `5`
+- `g()`：只是取出函数再普通调用，`this` 不再指向 `o`
+  - 非严格模式下：`this` 指向全局对象，`this.v` 通常是 `undefine",5 然后 undefined,1229,124,True
+deepseek,9,"以下 JS 代码输出什么（NaN）？
+```js
+console.log(NaN === NaN, Number.isNaN(NaN));
+```",True,False,"`NaN === NaN` 为 `false`，因为 `NaN` 不等于任何值，包括自身；`Number.isNaN(NaN)` 为 `true`。因此 `console.log` 输出 `false true`。
+
+答案是 false true #### false true","你贴出的代码块里没有实际代码（只有 `...`），所以无法判断输出。
+
+- 如果实际执行的内容就是：
+  ```js
+  ...
+  ```
+  那会抛出 **SyntaxError**（`Unexpected token '...'`），不会输出 `NaN`。
+- 如果你怀疑结果是 `NaN`，需要把完整 JS 代码贴出来，我才能根据运算符、类型转换和短路逻辑准确解释。
+
+请补充代码，例如：
+`",false 然后 true,1165,51,True
+deepseek,10,"以下 JS 代码输出什么（原型链）？
+```js
+function A() {}
+A.prototype.x = 1;
+const a = new A();
+c",True,False,"`a` 是通过 `new A()` 创建的实例，自身没有属性 `x`；`x` 定义在 `A.prototype` 上，因此通过原型链访问到 `a.x === 1`。`a.hasOwnProperty('x')` 检查自身属性，因此为 `false`。
+
+答案是 1 false #### 1 false","这段代码被省略了（`...`），目前只看到：
 
 ```js
-undefined
+A.prototype.x = 1;
+const a = new A();
 ```
 
-原因是：`o.get` 赋给 `g` 后，`g()` 是",5 然后 undefined,1229,112,True
+没有看到：
+
+- `A` 的定义
+- 中间的赋值/修改原型链代码
+- `console.log(...)` 等输出语句
+
+所以**无法确定最终输出**。
+
+如果只问这两行之后 `a.x` 的值，并且 `A` 是普通构造函数、`A.prototype` 没",1 然后 false,1215,93,True
 deepseek,11,"以下 JS 代码输出什么（class 继承）？
 ```js
 class A { constructor() { this.v = 'a'; } }
-class ",True,False,"`super()` 先调用父类 `A` 的构造函数，把 `this.v` 设为 `'a'`；随后 `B` 中执行 `this.v += 'b'`，得到 `'ab'`。
+class ",True,False,"`new B()` 调用 `B` 的构造函数，先通过 `super()` 调用 `A` 的构造函数，此时 `this.v = 'a'`；随后执行 `this.v += 'b'`，得到 `'ab'`。
 
-答案是 ab #### ab","仅凭你贴出的代码：
+答案是 ab #### ab","你贴的代码不完整（后面是 `...`），所以严格来说**当前代码没有任何输出**，因为还没有实例化或 `console.log`。
+
+就目前这两行类定义而言：
 
 ```js
 class A { constructor() { this.v = 'a'; } }
 class B extends A { constructor() { super(); this.v += 'b'; } }
 ```
 
-**不会输出任何内容**，因为这里只是定义了两个类，没有创建实例，也没有 `console.log`。
-
-如果后面还有代码，例如：
-
-```",ab,1257,153,True
+",ab,1257,164,True
 deepseek,8,"以下 JS 代码输出什么（== vs ===）？
 ```js
 console.log(0 == false, 0 === false);
-```",True,False,"`0 == false` 会进行类型转换，`false` 转为 `0`，结果为 `true`；`0 === false` 要求类型和值都相同，二者类型不同，结果为 `false`。因此输出 `true false`。
+```",True,True,"`0 == false` 会进行类型转换，`false` 转为 `0`，因此为 `true`；  
+`0 === false` 同时比较类型和值，二者类型不同，因此为 `false`。
 
-答案是 true false #### true false","按你贴的原文：
+答案是 true false #### true false","你贴出来的这段代码本身是不合法的：
 
 ```js
 console.log 0 == 0 false
 ```
 
-这不是合法 JS，会报语法错误（`SyntaxError`）。
+它缺少括号和参数分隔，JS 会直接报 **SyntaxError**，不会输出结果。
 
-如果你原本想写的是：
+如果你原本想问的是常见的 `==` vs `===`：
 
 ```js
-console.log(0 == 0, false);
+console.log(0 == '0');      // true
+console.log(0 === '0');     //",true false,1164,82,True
+deepseek,12,以下 JS 代码中，instanceof 判断什么？,False,False,"`instanceof` 用于判断左侧对象是否是右侧构造函数（或其原型链上）的实例；由于题目未给出具体 JS 代码，只能给出该通用含义。
+
+答案是 判断对象是否为指定构造函数（或其原型链上）的实例 #### 判断对象是否为指定构造函数（或其原型链上）的实例","未提供具体 JS 代码，因此无法指出这行 `instanceof` 的具体判断对象；但从语义上，`a instanceof B` 用于判断 `a` 的原型链中是否包含构造函数 `B` 的 `prototype`，即 `a` 是否为 `B` 的实例。
+
+答案是 判断左侧对象是否为右侧构造函数的实例（其原型链上是否包含右侧的 prototype） #### 判断左侧对象是否为右侧构造函数的实例（其原型",对象是否属于某构造器原型链,1118,1118,False
+deepseek,14,"以下 JS 代码输出什么（getter）？
+```js
+const o = { get v() { return 7; } };
+console.log(o.v",True,False,"对象字面量中 `get v()` 定义了 getter；访问 `o.v` 时会调用该 getter，返回 `7`，因此 `console.log` 输出 `7`。
+
+答案是 7 #### 7","仅这段代码 **不会输出任何内容**，因为它只定义了一个带 getter 的对象，没有调用 `console.log` 等输出。
+
+如果后续是：
+
+```js
+console.log(o.v);
 ```
 
 则输出：
 
-```txt
-true false
-```",true false,1164,70,True
-deepseek,10,"以下 JS 代码输出什么（原型链）？
 ```js
-function A() {}
-A.prototype.x = 1;
-const a = new A();
-c",True,False,"`a` 没有自有属性 `x`，但通过原型链继承 `A.prototype.x = 1`；`a.hasOwnProperty('x')` 检查自有属性，结果为 `false`。
-
-答案是 1 false #### 1 false","这段代码**本身没有 `console.log`，所以不会有输出**。  
-如果问的是原型关系：
-
-```js
-A.prototype.x = 1;
-const a = new A();
+7
 ```
 
-在 `A` 是普通构造函数、且 `new A()` 没有返回其他对象的前提下：
+注意：getter 只有在 **读取属性** `o.v` 时才会执行；`console.log(o)` 一般不会触发 getter，而是显示对象本身/访问器",7,1178,91,True
+deepseek,16,"以下 JS 代码输出什么（Object.assign 浅拷贝）？
+```js
+const a = { x: { y: 1 } };
+const b = Obje",True,False,"Object.assign 执行的是浅拷贝，`b.x` 与 `a.x` 指向同一个嵌套对象。因此修改 `b.x.y = 9` 也会改变 `a.x.y`。
+
+答案是 9 #### 9","这段代码是**浅拷贝**：
 
 ```js
-a.__proto__ === A.prototype; // true
-A.prototype.x;   ",1 然后 false,1215,88,True
-deepseek,12,以下 JS 代码中，instanceof 判断什么？,False,False,"推理：题目中没有给出具体的 JS 代码，因此无法确定 `instanceof` 右侧具体判断的是哪个构造函数/类。`instanceof` 的通用语义是判断一个对象是否在指定构造函数的原型链上，即是否为该构造函数/类的实例。
+const a = { x: { y: 1 } };
+const b = Object.assign({}, a);
+b.x.y = 9;
+```
 
-答案是 缺少具体 JS 代码，无法确定具体判断目标；一般 `instanceof` 判断对象是否为指定构造函数/类的实例（其原型链上是否存在该构造函数的 `prototyp","`instanceof` 不是单纯判断“类型名称”，而是检查右侧构造函数的 `prototype` 是否出现在左侧对象的原型链中；由于题目未给出具体 JS 代码，无法确定它具体判断的是哪个构造函数。
+`Object.assign({}, a)` 只复制了 `a` 的第一层属性。  
+所以 `b.x` 和 `a.x` 指向的是**同一个对象**。
 
-答案是 判断对象是否为指定构造函数的实例（即其原型链上是否包含该构造函数的 prototype） #### 判断对象是否为指定构造函数的实例（即其原型链上是否包含该构造函数的 prototype）",对象是否属于某构造器原型链,1118,1118,False
+执行 `b.x.y = 9` 后：
+
+```js
+cons",9（浅拷贝共享嵌套对象）,1224,135,True
 deepseek,13,"以下 JS 代码输出什么（Object.create）？
 ```js
 const base = { greet() { return 'hi'; } };
-co",True,False,"`o` 的原型是 `base`，因此 `o.greet()` 会沿原型链找到 `base.greet`，返回 `'hi'`。`hasOwnProperty('greet')` 只检查 `o` 自身属性，`greet` 是继承来的，不在 `o` 自身属性上，所以返回 `false`。
+co",True,False,"`o` 通过 `Object.create(base)` 创建，原型是 `base`，所以 `o.greet()` 会沿原型链找到并返回 `'hi'`。  
+`hasOwnProperty('greet')` 只检查 `o` 自身属性，而 `greet` 在原型上，因此返回 `false`。
 
-答案是 hi false #### hi false","代码不完整，目前 **没有任何输出**（因为还没有 `console.log` 等输出语句）。
+答案是 hi false #### hi false","你贴的代码在 `...` 处截断了，缺少具体 `console.log(...)`，所以严格来说**无法确定最终输出**。
 
-已知效果：
+但关键是：
 
 ```js
 const base = { greet() { return 'hi'; } };
 const o = Object.create(base);
 ```
 
-- `o` 的原型是 `base`
-- `o.greet()` 会通过原型链找到 `base.greet`，返回 `'",hi 然后 false,1255,117,True
-deepseek,14,"以下 JS 代码输出什么（getter）？
+`Object.create(base)` 会创建一个新对象 `o`，并让 `o` 的原型",hi 然后 false,1255,135,True
+deepseek,15,"以下 JS 代码输出什么（Symbol.iterator）？
 ```js
-const o = { get v() { return 7; } };
-console.log(o.v",True,False,"对象 `o` 定义了 getter 属性 `v`，访问 `o.v` 时会执行 getter 并返回 `7`，因此 `console.log(o.v)` 输出 `7`。
+const o = { [Symbol.iterator]: function* ()",True,True,"该对象实现了 `Symbol.iterator`，其 generator 依次产出 `1` 和 `2`。展开 `[...o]` 得到 `[1, 2]`，长度为 `2`。
 
-答案是 7 #### 7","仅凭你贴出的这几行：
+答案是 2 #### 2","这段代码本身**不会输出任何内容**，它只是定义了一个可迭代对象 `o`：
 
 ```js
-const o = { get v() { return 7; } };
+const o = {
+  [Symbol.iterator]: function* () {
+    yield 1;
+    yield 2;
+  }
+};
 ```
 
-**不会输出任何内容**。它只是定义了一个对象 `o`，其中 `v` 是一个 getter。getter 在定义时不会执行，只有访问 `o.v` 时才会返回 `7`。
-
-例如：
+如果后面的 `...` 是：
 
 ```js
-const o = { get v() { return 7; } };
-console",7,1178,80,True
-deepseek,16,"以下 JS 代码输出什么（Object.assign 浅拷贝）？
-```js
-const a = { x: { y: 1 } };
-const b = Obje",True,False,"`Object.assign` 只做浅拷贝，`b.x` 与 `a.x` 指向同一个嵌套对象，因此修改 `b.x.y` 会同时改变 `a.x.y`。
-
-答案是 9 #### 9","输出是：
-
-```js
-9
+console.log([...o]);
 ```
 
-原因：`Object.assign({}, a)` 只做**浅拷贝**。
+则输出：
 
 ```js
-const a = { x: { y: 1 } };
-const b = Object.assign({}, a);
-
-b.x.y = 9;
-
-console.log(a.x.y); // 9
-console.log(b.x.y); // 9
-console.log(a.x",9（浅拷贝共享嵌套对象）,1224,115,True
+[1, 2]
+``",2,1229,132,True
 deepseek,17,"以下 JS 代码输出什么（静态方法）？
 ```js
 class A { static s() { return 's'; } }
-console.log(A.s",True,False,"类 `A` 定义了静态方法 `s()`，通过 `A.s()` 调用会返回字符串 `'s'`，因此 `console.log` 输出 `s`。
+console.log(A.s",True,False,"静态方法 `s` 定义在类 `A` 上，可通过 `A.s()` 调用并返回字符串 `'s'`；`console.log` 打印时显示为 `s`（不带引号）。
 
-答案是 s #### s","仅根据你贴出的这段代码：
+答案是 s #### s","仅凭你贴出的这部分代码：
 
 ```js
 class A { static s() { return 's'; } }
 ```
 
-**没有任何输出**。
+**不会输出任何内容**，因为它只是定义了一个类和一个静态方法，没有调用或打印。
 
-原因：它只是声明了一个类 `A`，并定义了一个静态方法 `s`，但没有调用：
+补充说明：
 
 ```js
-A.s();
+console.log(A.s()); // 输出：s
 ```
 
-也没有使用：
+静态方法会被子类继承：
 
 ```js
-console.log(A.s());
-```
-
-如果是在浏览器控制台直接执行这段声明，通常显示返回值",s,1180,84,True
-deepseek,18,以下 JS 代码中，Object.freeze 的作用是什么？,False,False,"简短推理：`Object.freeze` 会把对象标记为不可扩展，并使既有自有属性不可配置、不可写，从而阻止新增、删除和修改属性；但它只做浅冻结，不会递归冻结嵌套对象。
-
-答案是 冻结对象，使其不可扩展且既有属性不可新增、修改或删除，但仅浅冻结、不递归冻结嵌套对象 #### 冻结对象，使其不可扩展且既有属性不可新增、修改或删除，但仅浅冻结、不递归冻结嵌套对象","`Object.freeze(obj)` 用于冻结对象：阻止新增、删除或修改对象自身属性，并使已有属性变为不可配置、不可写；它是浅冻结，不会递归冻结嵌套对象。
-
-答案是 冻结对象，防止其自身属性被新增、删除或修改，并返回该对象（浅冻结） #### 冻结对象，防止其自身属性被新增、删除或修改，并返回该对象（浅冻结）",对象不可扩展且属性不可改（只读）,1123,1123,False
-deepseek,15,"以下 JS 代码输出什么（Symbol.iterator）？
-```js
-const o = { [Symbol.iterator]: function* ()",True,False,"对象 `o` 实现了 `Symbol.iterator`，展开运算符 `[...o]` 会调用该生成器并得到 `[1, 2]`，其长度为 2。
-
-答案是 2 #### 2","严格看你贴出的代码：**没有输出**，只是创建了一个可迭代对象 `o`。
-
-```js
-const o = { [Symbol.iterator]: function* () { yield 1; yield 2; } };
-```
-
-因为 `o[Symbol.iterator]` 是 generator，所以：
-
-```js
-[...o]        // [1, 2]
-console.log",2,1229,112,True
-deepseek,19,"以下 JS 代码输出什么（instanceof 跨原型）？
-```js
-function A() {}
-const a = new A();
-console.l",True,False,"`new A()` 创建的实例 `a` 的原型链为：`a -> A.prototype -> Object.prototype -> null`，因此 `a` 同时是 `A` 和 `Object` 的实例。`console.log` 输出两个布尔值，以空格分隔。
-
-答案是 true true #### true true","你贴出的代码不完整，只看到：
-
-```js
-const a = new A();
-```
-
-但缺少：
-1. `A` 是怎么定义的；
-2. 后面 `console.log(...)` 输出的是什么；
-3. `A` 是普通构造函数、class，还是箭头函数等。
-
-因此目前无法确定具体输出。
-
-不过对于普通构造函数：
-
-```js
-function A() {}
-const a = new A();
-
-",true 然后 true,1216,69,True
+class B extends A {}
+console.",s,1180,91,True
 deepseek,20,"以下 JS 代码输出顺序是什么（microtask 优先）？
 ```js
 console.log(1);
-Promise.resolve().then(() =",True,True,"同步代码先执行，输出 `1`、`4`；随后清空微任务队列，输出 `2`；最后执行定时器宏任务，输出 `3`。
+Promise.resolve().then(() =",True,True,"同步代码先执行：输出 1、4。  
+随后清空微任务队列：Promise.then 输出 2。  
+最后执行宏任务：setTimeout 输出 3。  
+因此顺序为 1 4 2 3。
 
-答案是 1,4,2,3 #### 1,4,2,3","如果这段代码的意图是下面这种标准形式：
+答案是 1 4 2 3 #### 1 4 2 3","假设代码实际是：
 
 ```js
 console.log(1);
@@ -378,7 +375,7 @@ setTimeout(() => console.log(3), 0);
 console.log(4);
 ```
 
-那么输出顺序是：
+则输出顺序是：
 
 ```text
 1
@@ -389,203 +386,185 @@ console.log(4);
 
 原因：
 
-1. `console.lo",1 4 2 3,1247,119,True
-deepseek,23,"以下 JS 代码输出什么（Promise.all 失败）？
+1. 先执行同步代码：`console.log(1)",1 4 2 3,1247,137,True
+deepseek,19,"以下 JS 代码输出什么（instanceof 跨原型）？
 ```js
-Promise.all([Promise.resolve(1), Promise.rej",True,True,"`Promise.all` 只要有一个 Promise 进入 rejected 状态，就会立即 reject，并把第一个失败原因传给 `.catch`。因此 `.catch` 收到 `2` 并打印。
+function A() {}
+const a = new A();
+console.l",True,False,"`a` 由 `new A()` 创建，因此 `a` 的原型链中包含 `A.prototype`，所以 `a instanceof A` 为 `true`。同时 `A.prototype` 默认继承自 `Object.prototype`，因此 `a instanceof Object` 也为 `true`。
 
-答案是 2 #### 2","输出：
+答案是 true true #### true true","这段代码被你省略了（只有 `const a = new A();` 和 `...`），因此**无法确定输出**，甚至没有 `console.log` 时本身不会输出任何内容。
+
+判断 `instanceof` 的关键规则是：
+
+> `a instanceof A` 会检查 `A.prototype` 是否存在于 `a` 的原型链上。
+
+例如：
 
 ```js
-2
+function A() {}
+cons",true 然后 true,1216,85,True
+deepseek,18,以下 JS 代码中，Object.freeze 的作用是什么？,False,False,"Object.freeze 会把对象设为不可变：不能新增、删除或重新赋值现有属性，也不能修改属性的可写/可配置等特性；它返回被冻结的对象。注意它是浅冻结，不会递归冻结嵌套对象。
+
+答案是 冻结对象，使其不可扩展且现有属性不可写、不可配置，防止新增、删除或修改属性（浅冻结，不递归冻结嵌套对象） #### 冻结对象，使其不可扩展且现有属性不可写、不可配置，防止新增、删除或修改属性（浅冻结，不递归冻结嵌","推理：`Object.freeze` 会冻结对象，使其不能新增、删除或修改属性，也不能修改原型；它是浅冻结，嵌套对象仍可能被修改；并返回被冻结的对象。若代码用于常量/配置，则作用是防止运行时被意外修改。
+
+答案是 Object.freeze 用于冻结对象，阻止增删改属性及修改原型，实现浅层不可变，并返回该对象 #### Object.freeze 用于冻结对象，阻止增删改属性及修改原型，实现浅层不",对象不可扩展且属性不可改（只读）,1123,1123,False
+deepseek,24,"以下 JS 代码输出什么（Promise.race）？
+```js
+Promise.race([Promise.resolve('a'), Promise.re",True,True,"Promise.race 会选择第一个进入 settled 状态的 Promise；两个 Promise 都已 resolve，按数组顺序先注册并先执行 `'a'` 的回调，因此输出 `a`。
+
+答案是 a #### a","你贴出的代码里只有 `...`，没有实际的 JS 内容，所以无法判断输出。
+
+请把完整的 `Promise.race` 代码贴出来（包括所有 Promise、定时器、`console.log` 等），我才能给出准确输出和执行顺序分析。",a,1215,60,True
+deepseek,22,"以下 JS 代码输出什么（async/await）？
+```js
+async function f() { return 42; }
+f().then(v =>",True,False,"`async` 函数总是返回一个 Promise；`return 42` 使该 Promise 以值 `42` 兑现。随后 `.then(v => console.log(v))` 在微任务中注册回调，最终打印 `42`。
+
+答案是 42 #### 42","这段代码本身是 **非法 JS 语法**，不会正常执行，也不会输出 `42` 或 Promise 相关结果。
+
+`async function { 42 }` 缺少函数名、参数列表，语法不合法。合法的异步函数声明应类似：
+
+```js
+async function foo() {
+  return 42;
+}
 ```
 
-原因：`Promise.all` 中只要有一个 Promise 变成 `rejected`，整体就会立即以该原因 reject。这里 `Promise.reject(2)` 的拒绝原因是 `2`，所以 `.catch(e => console.log(e))` 会打印 `2`。",2,1212,97,True
+因此这段代码会在解析阶段直接抛出类似错误：
+
+```js
+SyntaxErro",42,1193,81,True
 deepseek,21,"以下 JS 代码输出什么（Promise 链）？
 ```js
-Promise.resolve(1).then(v => v + 1).then(v => con",True,False,"`Promise.resolve(1)` 得到已完成状态，值为 `1`；第一个 `.then` 返回 `1 + 1 = 2`；第二个 `.then` 接收到 `2` 并执行 `console.log(v)`，因此控制台输出 `2`。
+Promise.resolve(1).then(v => v + 1).then(v => con",True,True,"Promise 链中第一个 `.then` 将 `1` 变为 `2`，第二个 `.then` 执行 `console.log(2)`，因此控制台输出 `2`。
 
-答案是 2 #### 2","你贴出的代码似乎被截断/转义了，按字面 `Promise.resolve 1 .then => + 1 .then v` 不是合法 JS，不能运行。
+答案是 2 #### 2","你贴出的代码不完整，按字面写 `Promise.resolve 1 .then => + 1 .then v` 是 **语法错误（SyntaxError）**，不会输出结果。
 
-如果你指的是常见写法：
+如果原意是常见的这段：
 
 ```js
 Promise.resolve(1)
   .then(v => v + 1)
-  .then(v => console.log(v))
+  .then(v => console.log(v));
 ```
 
-输出是：
+那么输出是：
+
+```text
+2
+",2,1189,96,True
+deepseek,23,"以下 JS 代码输出什么（Promise.all 失败）？
+```js
+Promise.all([Promise.resolve(1), Promise.rej",True,False,"`Promise.all` 遇到其中一个 Promise 拒绝时，会以第一个拒绝原因整体失败。这里的拒绝原因是数字 `2`，随后 `.catch` 捕获并执行 `console.log(e)`，因此输出 `2`。
+
+答案是 2 #### 2","按你这段代码可还原为：
+
+```js
+Promise.all([Promise.resolve(1), Promise.reject(2)])
+  .then(res => console.log(res))
+  .catch(err => console.log(err));
+```
+
+输出：
 
 ```js
 2
 ```
 
-注意：`.then` 是微",2,1189,82,True
-deepseek,22,"以下 JS 代码输出什么（async/await）？
-```js
-async function f() { return 42; }
-f().then(v =>",True,False,"`f()` 返回一个已 resolve 为 `42` 的 Promise；`.then` 注册的回调会在微任务中执行，因此控制台输出 `42`。
+原因：
 
-答案是 42 #### 42","会直接抛出 **SyntaxError**，不会输出 `42`。
-
-例如浏览器/Node 中通常会报：
-
-```js
-Uncaught SyntaxError: Unexpected token '{'
-```
-
-原因：`async function` 后需要合法的函数声明/表达式结构，例如：
-
-```js
-async function foo() {
-  return 42
-}
-```
-
-或匿名",42,1193,65,True
+- `Promise.all` 只要任意一个 Promise 失",2,1212,114,True
 deepseek,25,"以下 JS 代码输出什么（catch 后继续）？
 ```js
-Promise.reject('e').catch(e => 'ok').then(v => co",True,False,"`catch` 会捕获拒绝，并返回已兑现的值 `'ok'`；随后 `then` 的回调收到该值并打印。
+Promise.reject('e').catch(e => 'ok').then(v => co",True,False,"`.catch` 捕获拒绝并返回 `'ok'`，使后续 `.then` 收到已兑现值 `'ok'`，因此 `console.log(v)` 输出 `ok`。
 
-答案是 ok #### ok","请补全具体的 JS 代码。当前代码块里只有 `...`，没有实际代码，无法判断输出结果。
+答案是 ok #### ok","代码没有贴出来（当前只有 ```js ... ```），所以无法判断输出。
 
-你可以把完整代码贴出来，并说明运行环境（浏览器 / Node.js、是否严格模式等，如相关）。",ok,1190,45,True
-deepseek,24,"以下 JS 代码输出什么（Promise.race）？
-```js
-Promise.race([Promise.resolve('a'), Promise.re",True,False,"`Promise.race` 会采用最先完成（fulfilled/rejected）的 Promise 的结果。两个 Promise 都已立即 resolve，内部按数组顺序注册回调，因此 `'a'` 先被处理，结果为 `'a'`。
-
-答案是 a #### a","你贴的代码块里只有 `...`，没有实际 JS 代码。
-
-如果代码真的就是：
-
-```js
-...
-```
-
-那么它 **不会输出任何结果**，而会在解析阶段直接报语法错误，例如：
-
-```text
-SyntaxError: Unexpected token '...'
-```
-
-请把完整的 JS 代码贴出来，我才能判断具体输出。",a,1215,43,True
+请把完整的 JS 代码发出来，尤其是包含 `try/catch`、`Promise`、`async/await` 或 `throw` 的部分，我才能准确告诉你输出什么。",ok,1190,57,True
 deepseek,27,"以下 JS 代码输出什么（async 内 throw）？
 ```js
-async function f() { throw new Error('boom');",True,False,"`async function f()` 中抛出异常会使返回的 Promise 变为 rejected；随后 `.catch(...)` 捕获该异常并输出错误信息 `boom`。
+async function f() { throw new Error('boom');",True,False,"`async` 函数中 `throw` 会返回一个 rejected Promise；随后 `.catch(...)` 捕获该错误并打印 `e.message`，即 `boom`。
 
-答案是 boom #### boom","这段代码**不会产生任何输出**，因为它在语法解析阶段就会报错，根本不会执行。
-
-问题代码：
+答案是 boom #### boom","按你贴出的代码：
 
 ```js
 async function { throw }
+```
+
+这是**语法错误（SyntaxError）**，因为它不是合法的函数声明/表达式：`async function` 后面需要函数名，`throw` 后面也需要一个表达式。所以这段代码**不会正常执行，也不会输出任何内容**，而是直接解析失败。
+
+如果你的意思是下面这种：
+
+```js
+async funct",boom,1218,86,True
+deepseek,29,"以下 JS 代码输出什么（Promise 构造函数立即执行）？
+```js
+new Promise(res => { console.log('a'); res",True,True,"Promise 构造函数的执行器会同步立即执行，因此先输出 `a`；随后继续执行同步代码输出 `b`。`res()` 只改变 Promise 状态，这里没有注册 `.then`，不会产生可见输出。
+
+答案是 a\nb #### a\nb","代码块内容为空/被省略了，无法判断具体输出。请把完整的 JS 代码贴出来。
+
+可以确定的原则是：**Promise 构造函数里的 executor 会立即同步执行**，而 `.then` / `.catch` / `.finally` 回调会进入微任务队列，在当前同步代码执行完后执行。",a 然后 b,1201,64,True
+deepseek,26,以下 JS 代码中，await 的作用是什么？,True,True,"简短推理：题目未附具体 JS 代码，只能说明通用语义。`await` 只能在 `async` 函数中使用，用于等待一个 Promise（或值）落定；它会暂停当前 `async` 函数的执行，但不阻塞整个事件循环，完成后返回结果或抛出拒绝异常。
+
+答案是 `await` 用于等待 Promise 完成并恢复 `async` 函数执行：成功时返回结果，失败时抛出异常；未提供具体代码，无法判断其在该代码","推理：题目未附具体 JS 代码，无法结合上下文分析；就 JS 语义而言，`await` 只能用于 `async` 函数中。它会暂停当前 `async` 函数的执行，等待右侧表达式（通常是 Promise）完成，不阻塞整个 JS 线程；成功时返回 resolved 值，失败时以异常形式抛出，从而使异步代码可按近似同步的顺序书写。
+
+答案是 `await` 用于在 `async` 函数中等待 Prom",暂停 async 函数直到 Promise 完成,1115,1115,False
+deepseek,28,"以下 JS 代码输出什么（微任务嵌套）？
+```js
+Promise.resolve().then(() => console.log(1))
+  .then(",True,False,"先注册第一个链的微任务 `log(1)`，再把第一个链的 `log(2)` 作为下一环；第二个链注册 `log(3)`。微任务队列初始为 `[log(1), log(3)]`。执行 `log(1)` 后，才把 `log(2)` 加入队尾，因此顺序是 `1, 3, 2`。
+
+答案是 1 3 2 #### 1 3 2","这段代码被截断/格式丢失了，当前内容不是合法 JS：
+
+```js
+Promise.resolve .then 1
+.then => 2
+Promise.resolve .then 3
 ...
 ```
 
-有几处非法语法：
+因此**无法确定输出结果**，缺少 `.then(...)` 的回调函数、`console.log`、箭头函数体以及是否 `return` 了新的 Promise 等关键信息。
 
-1. `async function { ... }` 缺少函数名：
-   应该是类似 `async function foo() { ... }`。
-2. 即使写成匿名函数表达式，也必须是：
-   ``",boom,1218,70,True
-deepseek,26,以下 JS 代码中，await 的作用是什么？,True,False,"未提供具体代码，无法结合上下文判断；一般而言，`await` 用于等待 Promise（或 thenable）完成，暂停当前 `async` 函数后续执行，待其 resolve 后恢复并取得结果；若 reject 则以异常形式抛出，且不会阻塞整个事件循环。
-
-答案是 用于暂停 async 函数并等待 Promise 完成，resolve 后恢复执行并返回其结果（reject 会抛出异常），且不阻塞","题目中没有给出具体的 JS 代码，因此无法分析某一行 `await` 的具体上下文作用。按一般语义，`await` 用于在 `async` 函数中暂停当前函数的执行，等待其后的 Promise（或 thenable）完成：成功时得到 resolve 值继续执行，失败时以异常形式抛出；它不会阻塞整个 JS 线程，只是挂起当前 async 函数。若用于具体代码，还需结合该行上下文判断。
-
-答案是 aw",暂停 async 函数直到 Promise 完成,1115,1115,False
-deepseek,29,"以下 JS 代码输出什么（Promise 构造函数立即执行）？
-```js
-new Promise(res => { console.log('a'); res",True,True,"Promise 构造函数中的执行器会同步立即执行，因此先打印 `a`；`res()` 只是将 Promise 置为完成状态，不会异步执行任何回调；随后同步执行到 `console.log('b')`，打印 `b`。输出顺序为 `a`、`b`。
-
-答案是 a\nb #### a\nb","题目中的 JS 代码没有显示出来（只有 ```js ... ``` 占位），因此无法判断输出结果。
-
-请把完整的 JavaScript 代码贴出来，我可以按执行顺序、事件循环、类型转换、作用域等逐行分析并给出最终输出。",a 然后 b,1201,45,True
+Promise ",1 3 2,1244,112,True
 deepseek,31,"以下 JS 代码输出什么（filter+map）？
 ```js
-console.log([1, 2, 3, 4].filter(x => x % 2 === 0",True,False,"`filter` 先保留偶数 `[2, 4]`，再经 `map` 每个元素乘 10，得到 `[20, 40]`。
+console.log([1, 2, 3, 4].filter(x => x % 2 === 0",True,False,"`filter` 先保留偶数得到 `[2, 4]`，再 `map` 每个元素乘 10，得到 `[20, 40]`。
 
-答案是 [20, 40] #### [20, 40]","如果你原本想写的是：
+答案是 [20, 40] #### [20, 40]","按常见意图还原代码为：
 
 ```js
-console.log([1, 2, 3, 4].filter(x => x % 2 === 0).map(x => x * 10))
+console.log([1, 2, 3, 4].filter(x => x % 2 === 0).map(x => x * 10));
 ```
 
-那么输出是：
+输出：
 
 ```js
 [20, 40]
 ```
 
-过程：
+解释：
 
-```js
-[1, 2, 3, 4]
-  .filter(x => x % 2 === 0) // [2, 4]
-  .map(x => x * 10)","[ 20, 40 ]",1196,93,True
-deepseek,4,"以下 JS 代码输出什么（let 循环捕获）？
-```js
-const fns = [];
-for (let i = 0; i < 3; i++) fns.pu",True,True,"`for (let i = ...)` 会在每次迭代中创建新的块级作用域绑定，因此每个闭包捕获各自迭代的 `i`。`fns[1]` 捕获的是第二次迭代的 `i`，值为 1。
-
-答案是 1 #### 1","按常见完整代码应为：
-
-```js
-const fns = [];
-for (let i = 0; i < 3; i++) {
-  fns.push(() => i);
-}
-console.log(fns[1]());
-```
-
-输出：
-
-```text
-1
-```
-
-原因：`for` 中使用 `let`，每次迭代都会创建新的块级作用域，闭包分别捕获当次迭代的 `i`，所以 `fns[1]()` ",1,1211,102,True
-deepseek,32,"以下 JS 代码输出什么（sort 数字）？
-```js
-console.log([10, 2, 1].sort());
-console.log([10, 2,",True,True,"默认 `sort()` 会将元素转成字符串按字典序比较，所以 `[10, 2, 1]` 变为 `[1, 10, 2]`；传入 `(a,b)=>a-b` 后按数值升序排列，得到 `[1, 2, 10]`。
-
-答案是 `[1, 10, 2]` 和 `[1, 2, 10]` #### `[1, 10, 2]` 和 `[1, 2, 10]`","如果第二行想写的是：
-
-```js
-console.log([10, 2, 1].sort());
-console.log([10, 2, 1].sort((a, b) => a - b));
-```
-
-输出是：
-
-```js
-[1, 10, 2]
-[1, 2, 10]
-```
-
-原因：
-
-- `.sort()` 默认会把元素转成字符串，再按字典序排序：
-  `""1"" < ""10"" < ""2""`，","[ 1, 10, 2 ] 然后 [ 1, 2, 10 ]",1203,112,True
+1. `filter(x => x % 2 === 0)` 过滤出偶数：`[2, 4]`
+2. `map(x => x * 10)` 每个元素乘 10：`","[ 20, 40 ]",1196,108,True
 deepseek,33,"以下 JS 代码输出什么（解构）？
 ```js
 const [a, , b] = [1, 2, 3];
 console.log(a + b);
-```",True,False,"解构数组 `[1, 2, 3]` 时，`a` 取第一个元素 `1`，中间空位跳过 `2`，`b` 取第三个元素 `3`。因此 `a + b = 1 + 3 = 4`。
+```",True,False,"数组解构中，`a` 取第 1 个元素 `1`，中间空位跳过第 2 个元素，`b` 取第 3 个元素 `3`，所以 `a + b = 4`。
 
-答案是 4 #### 4","这段代码本身 **没有输出**，因为它只是变量解构声明，没有调用 `console.log`。
+答案是 4 #### 4","这段代码本身没有 `console.log`，所以不会直接输出内容。
 
 解构结果：
 
 ```js
-const [a, , b] = [1, 2, 3];
-// a = 1
-// 中间空位跳过 2
-// b = 3
+a === 1
+b === 3
 ```
 
-如果后面有：
+中间的逗号空位跳过了数组第 2 个元素 `2`。
+
+如果后面是：
 
 ```js
 console.log(a, b);
@@ -593,82 +572,116 @@ console.log(a, b);
 
 则输出：
 
-```text
+```js
 1 3
-```",4,1167,71,True
+```
+
+如果输出 `[a, , b]`，则是：
+
+```js
+[1, empty, 3]
+```
+",4,1167,78,True
+deepseek,30,"以下 JS 代码输出什么（reduce）？
+```js
+console.log([1, 2, 3].reduce((a, b) => a + b, 0));
+`",True,True,"数组 `[1, 2, 3]` 使用初始累加值 `0`，依次相加：`0+1=1`，`1+2=3`，`3+3=6`，因此输出 `6`。
+
+答案是 6 #### 6","按你贴出的字面代码，**无法运行，会报 SyntaxError**，因为缺少括号、逗号等符号。
+
+如果你原本想写的是常见写法：
+
+```js
+console.log([1, 2, 3].reduce((a, b) => a + b, 0));
+```
+
+那么输出：
+
+```txt
+6
+```
+
+因为 `reduce` 从初始值 `0` 开始累加：`0 + 1 + 2 + 3 = 6`。",6,1174,90,True
 deepseek,34,"以下 JS 代码输出什么（展开）？
 ```js
 console.log(Math.max(...[1, 5, 3]));
-```",True,False,"数组 `[1, 5, 3]` 被展开为参数 `Math.max(1, 5, 3)`，返回最大值 `5`，因此控制台输出 `5`。
+```",True,True,"`Math.max(...[1, 5, 3])` 会把数组展开为 `Math.max(1, 5, 3)`，返回最大值 `5`，并由 `console.log` 输出。
 
-答案是 5 #### 5","如果题目实际代码是：
+答案是 5 #### 5","输出 **`5`**。
+
+题意代码应为：
 
 ```js
 console.log(Math.max(...[1, 5, 3]));
 ```
 
-则输出：
-
-```js
-5
-```
-
-因为 `...[1, 5, 3]` 会把数组展开成参数，等价于：
+`...[1, 5, 3]` 会把数组展开成参数，等价于：
 
 ```js
 console.log(Math.max(1, 5, 3)); // 5
 ```
 
-但如果你贴的代码严格就是：
+所以结果是：
 
 ```js
-console.log Math.m",5,1156,75,True
+5
+```
+
+如果代码真的写成 `console.log Math.max",5,1156,82,True
+deepseek,32,"以下 JS 代码输出什么（sort 数字）？
+```js
+console.log([10, 2, 1].sort());
+console.log([10, 2,",True,False,"默认 `sort()` 会把元素转成字符串按字典序比较，因此 `""1"" < ""10"" < ""2""`，结果为 `[1, 10, 2]`；传入 `(a,b)=>a-b` 时按数值升序，结果为 `[1, 2, 10]`。
+
+答案是 [1, 10, 2] 和 [1, 2, 10] #### [1, 10, 2] 和 [1, 2, 10]","如果代码是：
+
+```js
+console.log([10, 2, 1].sort());
+```
+
+输出：
+
+```js
+[1, 10, 2]
+```
+
+原因：`Array.prototype.sort()` 默认会把元素转成字符串，再按字符串字典序排序：
+
+```js
+[""10"", ""2"", ""1""].sort()
+// [""1"", ""10"", ""2""]
+```
+
+所以对应数字是：
+
+```j","[ 1, 10, 2 ] 然后 [ 1, 2, 10 ]",1203,122,True
 deepseek,35,"以下 JS 代码输出什么（可选链）？
 ```js
 const o = { a: { b: 1 } };
-console.log(o.a?.b, o.x?.y);",True,False,"`o.a` 存在，所以 `o.a?.b` 返回 `1`；`o.x` 为 `undefined`，可选链短路，因此 `o.x?.y` 返回 `undefined`。`console.log` 输出两者以空格分隔。
+console.log(o.a?.b, o.x?.y);",True,False,"`o.a?.b` 中 `o.a` 存在，所以结果为 `1`；`o.x?.y` 中 `o.x` 为 `undefined`，可选链短路，结果为 `undefined`。因此输出为 `1 undefined`。
 
-答案是 1 undefined #### 1 undefined","你贴出的代码不完整，目前只有：
+答案是 1 undefined #### 1 undefined","这段代码不完整，`...` 不是可执行表达式，因此无法判断输出。
+
+单独这一段：
 
 ```js
 const o = { a: { b: 1 } };
-...
 ```
 
-如果仅执行这一句，没有任何 `console.log`、`console.dir` 等输出语句，所以 **JavaScript 程序本身不会输出内容**。
+只是声明对象，**不会输出任何内容**。
 
-如果是在浏览器 DevTools 控制台直接执行，控制台可能会显示 `undefined`，但那不是程序的标准输出。
-
-请把",1 undefined,1176,72,True
-deepseek,28,"以下 JS 代码输出什么（微任务嵌套）？
-```js
-Promise.resolve().then(() => console.log(1))
-  .then(",True,False,"初始微任务队列先按注册顺序排入“打印1”和“打印3”；执行“打印1”后，其链式 `.then` 的“打印2”才入队，排在“打印3”之后，因此顺序为 1、3、2。
-
-答案是 1 3 2 #### 1 3 2","你贴出来的代码被截断/缺少括号，按原样不是合法 JS。
-
-如果你指的是这个经典题：
+如果后续是常见可选链写法，例如：
 
 ```js
-Promise.resolve().then(() => console.log(1))
-  .then(() => console.log(2));
-
-Promise.resolve().then(() => console.log(3));
-```
-
-输出是：
-
-```text
-1
-3
-2
-```",1 3 2,1244,104,True
+console.log(o?.a?.b); // 1
+console.log(o?.c?.b); // undefined
+console.log(",1 undefined,1176,78,True
 deepseek,38,"以下 JS 代码输出什么（Set 去重）？
 ```js
 console.log(new Set([1, 1, 2, 3, 3]).size);
-```",True,True,"Set 会去除数组中的重复元素，留下的唯一值是 1、2、3，共 3 个。
+```",True,True,"`Set` 会去除重复元素，数组 `[1, 1, 2, 3, 3]` 去重后为 `{1, 2, 3}`，因此 `size` 为 3。
 
-答案是 3 #### 3","如果代码是：
+答案是 3 #### 3","按题意应为：
 
 ```js
 console.log(new Set([1, 1, 2, 3, 3]).size)
@@ -676,17 +689,47 @@ console.log(new Set([1, 1, 2, 3, 3]).size)
 
 输出：
 
-```js
+```text
 3
 ```
 
-因为 `Set` 会自动去重，`[1, 1, 2, 3, 3]` 变成 `{1, 2, 3}`，`.size` 为 `3`。",3,1167,79,True
+因为 `Set` 会自动去重，得到 `{1, 2, 3}`，所以 `.size` 是 `3`。
+
+注意：你贴出的代码片段 `console.log new [1 1 2 3 3] .size` 本身语法不完整；如果原样运行会报语法错误。",3,1167,88,True
+deepseek,36,"以下 JS 代码输出什么（空值合并）？
+```js
+console.log(null ?? 'd', 0 ?? 'd', '' ?? 'd');
+```",True,True,"`??` 只在左侧为 `null` 或 `undefined` 时取右侧。因此：`null ?? 'd'` 得 `'d'`，`0 ?? 'd'` 得 `0`，`'' ?? 'd'` 得 `''`。`console.log` 用空格分隔多个参数，空字符串不可见，故显示为 `d 0`（末尾有一个空字符串参数）。
+
+答案是 d 0（第三项为空字符串） #### d 0（第三项为空字符串）","如果代码是：
+
+```js
+console.log(null ?? 0 ?? d)
+```
+
+输出：
+
+```js
+0
+```
+
+原因：`??` 是空值合并运算符，只有左边是 `null` 或 `undefined` 时才取右边。
+
+- `null ?? 0` 得到 `0`
+- `0` 不是 `null` / `undefined`，所以直接短路返回 `0`
+- 后面的 `d` 不会被求值，因此即",d 0 空字符串,1168,73,True
 deepseek,37,"以下 JS 代码输出什么（flatMap）？
 ```js
 console.log([[1], [2, 3]].flatMap(x => x));
-```",True,False,"`flatMap` 会先对每个元素执行回调（原样返回子数组），再将结果展平一层，因此 `[[1], [2,3]]` 变为 `[1, 2, 3]`。
+```",True,True,"`flatMap` 会先映射每个元素，再将结果展开一层。每个元素本身是数组，因此最终把 `[1]` 和 `[2, 3]` 连接为 `[1, 2, 3]`。
 
-答案是 [1, 2, 3] #### [1, 2, 3]","如果题目代码原本是：
+答案是 [1, 2, 3] #### [1, 2, 3]","你贴的代码本身少了逗号/括号，严格按这个写是 **语法错误（SyntaxError）**，不会输出结果：
+
+```js
+console.log [[1] [2 3]].flatMap => x
+```
+
+如果你的原意是：
 
 ```js
 console.log([[1], [2, 3]].flatMap(x => x));
@@ -698,336 +741,233 @@ console.log([[1], [2, 3]].flatMap(x => x));
 [1, 2, 3]
 ```
 
-原因：`flatMap` 会先对每个元素执行 `x => x`，得到 `[[1], [2, 3]]`，然后自动拍平一层，变成 `[1, 2, 3]`。
-
-不过你贴出来的代码：
-
-```js
-console.l","[ 1, 2, 3 ]",1168,80,True
-deepseek,40,"以下 TS 代码中，x 的类型推断是什么？
-```ts
-let x = 10;
-x = 'str';  // 报错吗？
-```",True,False,"简短推理：`let x = 10` 中，字面量 `10` 会被类型拓宽为 `number`，因此 `x` 的类型是 `number`。再将 `'str'` 赋给 `x` 会触发 TypeScript 类型错误。
-
-答案是 x 被推断为 number，x = 'str' 会报错 #### x 被推断为 number，x = 'str' 会报错","如果代码是：
-
-```ts
-let x = 10
-```
-
-那么 TypeScript 推断 `x` 的类型是：
-
-```ts
-number
-```
-
-不是字面量类型 `10`。因为 `let` 声明的变量可以重新赋值，TypeScript 会把字面量类型拓宽为 `number`。
-
-对比：
-
-```ts
-let x = 10
-// x: number
-
-const y = 10
-// y: 10",number；赋 string 报错,1155,56,True
+原因：`","[ 1, 2, 3 ]",1168,92,True
 deepseek,39,"以下 JS 代码输出什么（对象键顺序）？
 ```js
 const o = { 2: 'b', 1: 'a', x: 'c' };
-console.log(Obj",True,False,"整数键会按数值升序排列，字符串键按插入顺序排列，因此 `Object.keys(o)` 为 `[""1"", ""2"", ""x""]`，拼接结果是 `1,2,x`。
+console.log(Obj",True,True,"JavaScript 对象的自有可枚举字符串键顺序为：数组索引形式的键按数值升序排列，其他字符串键按插入顺序排列。因此 `Object.keys(o)` 得到 `['1', '2', 'x']`，`join(',')` 输出 `1,2,x`。
 
-答案是 1,2,x #### 1,2,x","你给的代码只声明了对象，**没有任何 `console.log` 等输出语句，所以本身不会输出内容**。
+答案是 1,2,x #### 1,2,x","你贴的代码在 `const o = ...` 后面被截断了，不过根据这个对象可以确定键顺序：
 
 ```js
 const o = { 2: 'b', 1: 'a', x: 'c' };
 ```
 
-如果后面是：
+JS 对象键的遍历顺序规则是：
 
-```js
-console.log(o);
-```
-
-浏览器/Node 中通常显示为：
-
-```js
-{ '1': 'a', '2': 'b', x: 'c' }
-```
-
-注意","1,2,x（整数键升序优先）",1199,83,True
+1. 先遍历“数组索引键”（类似 `""0""`, `""1""`, `""2""` 的规范化数字字符串），按数值升序；
+2. 再按插入顺序遍历其他字符串键；
+3. Symbol 键按","1,2,x（整数键升序优先）",1199,91,True
 deepseek,42,"以下 TS 代码中，联合类型的写法是什么？
 ```ts
 let v: string | number;
-```",True,False,"联合类型使用竖线 `|` 将多个类型连接起来，表示变量可以是其中任意一种类型。这里表示 `v` 可以是 `string` 或 `number`。
+```",True,False,"联合类型使用竖线 `|` 将多个类型连接起来，表示变量可以是其中任意一种类型。该代码中的联合类型写法是 `string | number`。
 
-答案是 string | number #### string | number","你提供的 TypeScript 代码没有贴出来（```ts 代码块里是空的 `...`），我无法判断类型或类型错误。
+答案是 string | number #### string | number","你贴出的代码块是空的（只有 ```ts，没有代码内容），所以无法指出“以下代码中”具体哪一处是联合类型。
 
-请把完整代码贴出来，并说明你想问的是哪一类：
+在 TypeScript 中，联合类型的写法是使用竖线 `|` 连接多个类型：
 
-1. 某个变量的**推断类型**是什么？  
-2. 是否有**类型报错**？  
-3. 泛型/重载/条件类型推导结果是什么？  
-4. 如何写出更准确的类型声明？
-
-把代码发来后我可以直接给你分析结果。",string 或 number,1147,46,True
-deepseek,41,"以下 TS 代码中，泛型 T 的推断结果是什么？
 ```ts
-function id<T>(v: T): T { return v; }
-const a = i",True,True,"调用 `id(42)` 时，数字字面量 `42` 在普通泛型参数推断中会拓宽为 `number`，因此 `T` 被推断为 `number`。
+type ID = string | number;
 
-答案是 number #### number","TS 从实参 `42` 推断泛型参数 `T`。普通数字字面量在泛型推断中会拓宽为 `number`（除非使用 `as const`），因此 `T` 推断为 `number`，`a` 的类型也是 `number`。
+let value: string | number;
 
-答案是 number #### number",number,1182,1182,False
-deepseek,43,以下 TS 代码中，keyof 的作用是什么？,False,False,"`keyof T` 会提取类型 `T` 的所有公共属性名，形成字符串/数字字面量联合类型，常用于泛型约束（如 `K extends keyof T`）和映射类型，确保访问的键合法。
-
-答案是 `keyof` 用于获取某个类型的所有属性名（键）组成的联合类型，常配合泛型约束确保键名合法 #### `keyof` 用于获取某个类型的所有属性名（键）组成的联合类型，常配合泛型约束确保键名合法","题目未贴出具体 TS 代码，因此只能说明通用作用：`keyof T` 用于获取类型 `T` 的所有公共属性名组成的联合类型，常用于约束属性名、索引访问和映射类型等类型安全操作。
-
-答案是 keyof 用于获取类型的所有公共属性键的联合类型 #### keyof 用于获取类型的所有公共属性键的联合类型",取类型的所有键的联合,1115,1115,False
-deepseek,44,以下 TS 代码中，ReturnType 的作用是什么？,False,False,"简短推理：在 TypeScript 中，`ReturnType<T>` 是内置工具类型；当 `T` 是函数类型时，它通过条件类型和 `infer` 推导并提取该函数的返回值类型。常见写法如 `type R = ReturnType<typeof fn>`，用于避免手动重复声明返回类型、让类型与函数实现自动保持一致。
-
-答案是 提取函数类型 T 的返回值类型 #### 提取函数类型 T 的返回值类型","ReturnType<T> 是 TypeScript 内置工具类型，用于从函数类型 `T` 中推断并提取其返回值类型，常用于泛型封装、函数返回值推导和避免重复书写类型；它只在类型层面生效，运行时无作用。
-
-答案是 提取函数类型 T 的返回值类型 #### 提取函数类型 T 的返回值类型",取函数类型的返回值类型,1120,1120,False
-deepseek,36,"以下 JS 代码输出什么（空值合并）？
-```js
-console.log(null ?? 'd', 0 ?? 'd', '' ?? 'd');
-```",True,True,"`??` 只在左侧为 `null` 或 `undefined` 时取右侧；`0` 和 `''` 都会保留。因此输出三个参数：`d`、`0`、空字符串，用空格分隔显示为 `d 0 `（末尾有一个空格）。
-
-答案是 `d 0 ` #### `d 0 `","按你贴出的代码：
-
-```js
-console.log null 0 d
+function fn(x: boolean | null) {}
 ```
 
-这不是合法 JavaScript，缺少括号、逗号/运算符等，运行时会直接抛 `SyntaxError`，**不会输出结果**。
+所以通",string 或 number,1147,54,True
+deepseek,44,以下 TS 代码中，ReturnType 的作用是什么？,True,True,"ReturnType 是 TypeScript 内置工具类型，用于从给定函数类型中提取其返回值类型；常见形式如 `ReturnType<typeof fn>` 表示获取函数 `fn` 的返回类型。
 
-如果原意是：
+答案是 ReturnType 用于获取函数类型的返回值类型 #### ReturnType 用于获取函数类型的返回值类型","`ReturnType<T>` 是 TypeScript 内置工具类型，用于提取函数类型 `T` 的返回值类型。例如 `ReturnType<() => string>` 得到 `string`。
 
-```js
-console.log(null, 0, d)
-```
+答案是 提取函数类型的返回值类型 #### 提取函数类型的返回值类型",取函数类型的返回值类型,1120,1120,False
+deepseek,43,以下 TS 代码中，keyof 的作用是什么？,False,False,"`keyof` 是 TypeScript 的类型运算符，用于获取某个类型的所有公共属性名（键）组成的联合类型；常与泛型、索引访问类型等配合，实现类型安全的属性约束与映射。
 
-那还要看 `d` 是否已定义；未定义则抛 `ReferenceError: d is not def",d 0 空字符串,1168,66,True
-deepseek,45,以下 TS 代码中，接口与类型别名的关键区别是什么？,False,False,"简要推理：TypeScript 中 `interface` 主要用于描述对象结构，支持同名声明合并和 `extends` 扩展；`type` 是类型别名，可表示联合、交叉、元组、原始类型等任意类型，但不能声明合并。多数对象类型场景二者可互换，但声明合并能力是关键区别。
+答案是 获取类型的所有公共属性名组成的联合类型 #### 获取类型的所有公共属性名组成的联合类型","简短推理：`keyof` 是 TypeScript 的类型运算符，用于取得某个类型的所有公共属性名，并形成这些属性名的联合类型；例如 `keyof { a: number; b: string }` 得到 `""a"" | ""b""`，常用于泛型约束、索引访问和映射类型。题目未给出具体 TS 代码，因此按通用语义作答。
 
-答案是 接口支持声明合并且主要描述对象形状，类型别名可为任意类型但不可声明合并 #### 接口支持声明合并且主要描述对象形状，类","推理：你的问题中没有给出具体的 TypeScript 代码片段，因此无法判断其中的类型。
+答案是 `keyof` 用于获取某个类型的所有公共属性名，并返回这些属性名组成的联",取类型的所有键的联合,1115,1115,False
+deepseek,46,"以下 TS 代码中，Pick<T, K> 的作用是什么？",True,True,"`Pick<T, K>` 是 TypeScript 内置工具类型，用于从类型 `T` 中挑选由 `K` 指定的属性，构造一个新的对象类型；其中 `K` 通常是 `keyof T` 的子集。它等价于 `{ [P in K]: T[P] }`，不会改变被选中属性的类型。
 
-最终答案：请提供完整 TS 代码，我才能给出准确类型。",接口可合并声明，类型别名不可,1118,61,True
-deepseek,46,"以下 TS 代码中，Pick<T, K> 的作用是什么？",True,True,"Pick<T, K> 是 TypeScript 内置的工具类型，用于从已有类型 T 中挑选出由 K 指定的属性，生成一个新的子类型；K 必须是 keyof T 的子集，且只影响类型层面，不改变运行时对象。
+答案是 从类型 T 中挑选 K 指定的属性组成新类型 #### 从类型 T 中挑选 K 指定的属性组成新类型","`Pick<T, K>` 是 TypeScript 内置工具类型，用于从类型 `T` 中挑选出键集合 `K` 所指定的属性，构造并返回一个新的子类型；其中 `K` 必须受 `keyof T` 约束。
 
-答案是 从类型 T 中选取键集合 K 对应的属性，构造一个新类型（K 必须为 keyof T 的子集） #### 从类型 T 中选取键集合 K 对应的属性，构造一个新类型（K 必须为 keyo","`Pick<T, K>` 是 TypeScript 内置工具类型，用于从已有类型 `T` 中挑选出键集合 `K` 对应的属性，生成一个新的对象类型；其中 `K` 必须是 `keyof T` 的子集。
+答案是 从类型 T 中选出 K 指定的属性并构成新类型 #### 从类型 T 中选出 K 指定的属性并构成新类型",从 T 中挑选键 K 组成新类型,1120,1120,False
+deepseek,45,以下 TS 代码中，接口与类型别名的关键区别是什么？,False,False,"简短推理：`interface` 主要用于描述对象形状，并支持声明合并、被类实现和通过 `extends` 扩展；`type` 只是类型别名，不能声明合并，但能表达联合、交叉、元组、条件类型等更广泛的类型组合。
 
-答案是 从类型 T 中选取键集合 K 对应的属性并构造新类型 #### 从类型 T 中选取键集合 K 对应的属性并构造新类型",从 T 中挑选键 K 组成新类型,1120,1120,False
-deepseek,47,以下 TS 代码中，类型守卫 typeof 的作用是什么？,False,False,"推理：`typeof` 类型守卫通过 `typeof x === ""string""` 等运行时判断，让 TypeScript 在对应条件分支内自动收窄变量类型；常用于原始类型、函数等判断，但不能精确区分数组、`null` 或具体对象类型。
+答案是 接口可被声明合并并可被类实现/扩展，更偏向对象契约；类型别名不能声明合并，可表示任意类型并支持联合、交叉、条件等组合。 #### 接口可被声明合并并可被类实现/扩展，更偏向对象契","简短推理：未见具体代码，但从通用语义看，`interface` 支持声明合并、`extends`（可被类实现/扩展），适合描述可扩展对象契约；`type` 可表示联合、交叉、元组、映射、条件等任意类型，但不能同名声明合并。对象形状场景下二者多数等价，关键差别在“可合并/扩展性”与“类型表达能力”。
 
-答案是 `typeof` 类型守卫用于在条件分支中根据运行时的 `typeof` 检查缩小变量的静态类型范围（类型收窄），提高类型安全 #### `typeo","你未提供具体的 TS 代码，因此无法判断其类型。
+结论：若代码分别是 `interface A { x: string }` 与 `type A =",接口可合并声明，类型别名不可,1118,73,True
+deepseek,47,以下 TS 代码中，类型守卫 typeof 的作用是什么？,False,False,"未提供具体的 TS 代码，因此无法分析该代码中的具体用法。一般而言，`typeof` 类型守卫用于在运行时判断值是 `string`、`number`、`boolean` 等原始类型，并在相应分支中将联合类型收窄为具体类型，从而让后续访问和调用通过 TypeScript 类型检查。
 
-请粘贴完整代码。",在联合类型中收窄类型分支,1121,60,True
-deepseek,49,以下 TS 代码中，as const 的作用是什么？,False,False,"`as const` 是 TypeScript 的类型断言，用于让编译器把表达式推断为最窄的字面量类型，并将对象属性、数组等变为 `readonly`（数组可能是只读元组），从而阻止后续的类型拓宽或意外修改。
+答案是 `typeof` 类型守卫用于运行时检查值的原始类型，并在条件分支中收窄 TypeScript 静态类型；","未附具体代码，但 TypeScript 中 `typeof` 类型守卫的通用作用是：在运行时判断值的原始类型，并让编译器在对应分支中**收窄联合类型**。例如 `typeof x === ""string""` 后，分支内 `x` 被推断为 `string`。它适用于 `string`、`number`、`boolean`、`symbol`、`bigint`、`undefined`、`function",在联合类型中收窄类型分支,1121,76,True
+deepseek,48,以下 TS 代码中，readonly 的作用是什么？,False,False,"`readonly` 是 TypeScript 的编译期只读修饰符：用于属性时禁止重新赋值，用于数组/元组类型时禁止 `push`、修改元素等写操作；它不会改变 JavaScript 运行时行为，只在类型检查阶段报错。
 
-答案是 `as const` 会把表达式推断为最具体的字面量/只读类型，并阻止类型拓宽。 #### `as const` 会把表达式推断为最具体的字面量/只读类型，并阻止类型拓宽。","推理：`as const` 是 TypeScript 的常量断言，让编译器把表达式推断为尽可能窄的字面量类型，并把数组/对象推断为只读元组/只读属性；它只影响类型检查，不改变运行时值。
+答案是 readonly 表示只读，编译期禁止修改，仅类型检查有效，运行时无影响 #### readonly 表示只读，编译期禁止修改，仅类型检查有效，运行时无影响","未附具体代码，无法结合上下文精确判断；通常 TS 的 `readonly` 是**编译期只读约束**：被修饰的属性/索引只能在声明或构造函数中初始化，之后不能重新赋值；它没有运行时强制，也不代表对象内容深度不可变。
 
-答案是 as const 是 TypeScript 的常量断言，用于将字面量收窄为字面量类型，并把数组/对象推断为 readonly 元组或只读结构；仅影响类型，不改变运行时。 #### as const 是 T",字面量类型收窄（不可变字面量）,1118,1118,False
-deepseek,48,以下 TS 代码中，readonly 的作用是什么？,False,False,"推理：题目未提供具体 TS 代码，无法确定 `readonly` 修饰的是接口属性、类字段、数组/元组还是参数属性；但 TypeScript 中 `readonly` 本质是编译期只读约束，允许读取，禁止重新赋值或修改（对数组/元组也会限制 push 等变更），运行时无强制约束。
+答案是 TypeScript 的 `readonly` 是编译期只读约束，禁止重新赋值/修改被修饰属性，通常仅可在声明或构造函数中初始化，但不提供运行时强制，也不等于深不可变。 ##",属性只读（编译期检查）,1118,1118,False
+deepseek,49,以下 TS 代码中，as const 的作用是什么？,False,False,"`as const` 是 TypeScript 的 const 断言，只在类型层面生效：它阻止类型被拓宽，把字面量推断为更精确的字面量类型，并对对象/数组递归加上 `readonly`（数组会变成只读元组）。常用于需要精确联合类型、不可变配置或避免 `string`/`number` 泛化推断的场景。
 
-答案是 缺少具体 TS 代码，无法确定；一般而言 readonly 表示编译期只读，禁止重新赋值/修改，运行时无强制","`readonly` 是 TypeScript 的编译期只读约束，用于声明属性或数组/元组等不能被重新赋值或修改；它不会生成运行时检查，也不会在运行时真正阻止修改。题目未给出具体代码，但作用就是只读保护。
-答案是 readonly 表示只读，编译期禁止重新赋值/修改，运行时不生效 #### readonly 表示只读，编译期禁止重新赋值/修改，运行时不生效",属性只读（编译期检查）,1118,1118,False
+答案是 将表达式收窄为最精确的字面量类型并递归只读，且无运行时效果 #### 将表达式收窄为最","题干未附具体代码，按 TypeScript 通用语义：`as const` 是常量断言，用于让字面量保持最窄的字面量类型，并把对象属性、数组元素递归推断为 `readonly`，从而避免类型拓宽和意外修改。
+
+答案是 `as const` 会把字面量/对象/数组推断为最窄的字面量类型，并递归添加 `readonly`，防止类型拓宽和修改。 #### `as const` 会把字面量/对象/数组推断",字面量类型收窄（不可变字面量）,1118,1118,False
 deepseek,50,"以下 JS 代码输出什么（WeakMap 键）？
 ```js
 const wm = new WeakMap();
 const k = {};
-wm.set(k,",True,False,"由于 `k` 是同一个对象引用，`WeakMap` 中以该对象为键存储了值 `1`，因此 `wm.get(k)` 返回 `1`。
+wm.set(k,",True,False,"WeakMap 使用对象 `k` 作为键，并设置对应值为 `1`；随后用同一个对象 `k` 调用 `get`，因此返回 `1`。
 
-答案是 1 #### 1","你给的代码不完整，而且 `wm.set k 1` 不是合法 JS 语法，应该写成：
+答案是 1 #### 1","你贴的代码不完整：`wm.set k 1 ...` 缺少括号和后续 `console.log`，所以**无法唯一确定输出**。
 
-```js
-wm.set(k, 1);
-```
-
-如果完整代码只是：
+WeakMap 的关键点：
 
 ```js
 const wm = new WeakMap();
 const k = {};
+
 wm.set(k, 1);
-```
 
-那么 **没有任何输出**，因为没有 `console.log`。
-
-如果后面是：
-
-```js
-console",1,1204,94,True
+console.log(wm.get(k));   // 1
+console.log(wm.get({}));  /",1,1204,108,True
 deepseek,51,"以下 JS 代码输出什么（Proxy）？
 ```js
-const p = new Proxy({}, { get(t, k) { return 'proxy';",True,False,"访问 `p.anything` 会触发 Proxy 的 `get` 陷阱；该陷阱无条件返回字符串 `'proxy'`，因此 `console.log` 输出 `proxy`。
+const p = new Proxy({}, { get(t, k) { return 'proxy';",True,False,"Proxy 的 `get` 陷阱拦截对 `p.anything` 的属性读取，并始终返回字符串 `'proxy'`，因此 `console.log` 输出 `proxy`。
 
-答案是 proxy #### proxy","你贴出的代码不完整，末尾只有 `...`，所以无法确定最终输出。
-
-就目前这一行：
+答案是 proxy #### proxy","你贴出的代码不完整：
 
 ```js
 const p = new Proxy({}, { get(t, k) { return 'proxy'; } });
+...
 ```
 
-它只是创建了一个代理对象 `p`，本身**不会输出任何内容**。
+如果 `...` 只是表示“省略”，并且后面没有 `console.log` / `console.log(p.xxx)` 之类的输出语句，那么**不会输出任何东西**。
 
-行为是：读取 `p` 的任意属性都会返回字符串 `'proxy'`，例如：
-
-```js
-console",proxy,1207,103,True
-deepseek,53,"以下 JS 代码输出什么（JSON 序列化）？
-```js
-console.log(JSON.stringify({ a: 1, b: undefined })",True,False,"对象属性值为 `undefined` 时，`JSON.stringify` 会忽略该属性，因此结果为 `{""a"":1}`。
-
-答案是 {""a"":1} #### {""a"":1}","如果代码是：
+如果后续访问任意属性，例如：
 
 ```js
-console.log(JSON.stringify({ a: 1 }))
-```
-
-输出：
-
-```text
-{""a"":1}
-```
-
-注意：如果严格写成你贴的：
-
-```js
-console.log JSON.stringify { a: 1 }
-```
-
-由于缺少括号，这是 **语法错误 SyntaxError**，不会正常输出。","{""a"":1}",1178,81,True
-deepseek,54,"以下 JS 代码输出什么（模板字符串）？
-```js
-const n = 3;
-console.log(`v=${n * 2}`);
-```",True,False,"模板字符串中 `${n * 2}` 会先计算 `3 * 2 = 6`，因此输出字符串为 `v=6`。
-
-答案是 v=6 #### v=6","如果代码实际是：
-
-```js
-const n = 3;
-console.log(`v=${n * 2}`);
-```
-
-那么输出：
-
-```text
-v=6
-```
-
-因为 `n * 2` 为 `6`，模板字符串会把它拼进去。
-
-但如果你贴的代码确实没有反引号和括号，即：
-
-```js
-console.log v=${n * 2}
-```
-
-这不是合法 JavaScript，会报 `Syntax",v=6,1162,81,True
-deepseek,55,"以下 JS 代码输出什么（for...of vs for...in）？
-```js
-const o = { a: 1, b: 2 };
-console.log(",True,False,"`Object.keys(o)` 返回可迭代数组 `[""a"",""b""]`，因此第一部分得到 `""a,b""`。但 `o` 是普通对象，默认不可迭代，数组展开 `[...o]` 会尝试调用其 `Symbol.iterator`，从而抛出 `TypeError: o is not iterable`，所以 `console.log` 不会执行，也就没有正常输出。
-
-答案是 无输出，抛出 TypeErro","你贴出的代码不完整，只有：
-
-```js
-const o = { a: 1, b: 2 };
-```
-
-如果代码就到这里，它**不会输出任何内容**，因为没有任何 `console.log` 等输出语句。
-
-如果是在浏览器控制台直接执行这一行，控制台可能返回：
-
-```js
-undefined
-```
-
-请把 `...` 后面完整的代码也贴出来，才能判断最终输出。","a,b 然后 抛 TypeError（对象不可迭代）",1222,71,True
-deepseek,56,"以下 JS 代码输出什么（闭包计数器封装）？
-```js
-function counter() { let n = 0; return { inc: () =>",True,True,"每次调用 `inc` 都会通过闭包修改同一个变量 `n`；连续调用两次后 `n` 从 0 变为 2，因此 `c.get()` 返回并打印 2。
-
-答案是 2 #### 2","你贴出的代码本身有语法错误，**不会输出任何结果，而是直接抛出 `SyntaxError`**：
-
-```js
-function counter { let = 0 return { } }
-const c = counter();
-```
-
-主要问题：
-
-1. `function counter {` 缺少参数括号，应为 `function counter() {`
-2. `let = 0` 缺",2,1260,109,True
+cons",proxy,1207,113,True
 deepseek,52,"以下 JS 代码输出什么（生成器）？
 ```js
 function* g() { yield 1; yield 2; }
 const it = g();
-con",True,False,"第一次 `next()` 从开头执行到 `yield 1`，返回 `.value` 为 1；第二次 `next()` 继续执行到 `yield 2`，返回 `.value` 为 2。`console.log` 按参数顺序输出，因此结果为 `1 2`。
+con",True,False,"生成器按顺序执行 `yield`。第一次 `it.next()` 得到 `{ value: 1, done: false }`，第二次得到 `{ value: 2, done: false }`，因此 `console.log` 输出 `1 2`。
 
-答案是 1 2 #### 1 2","按你贴出的代码：
+答案是 1 2 #### 1 2","严格按你贴出的代码：
 
 ```js
 function* { yield 1 2 }
 const it = g();
 ```
 
-这段代码有语法错误：
+这段代码 **不会输出任何结果**，因为它在解析阶段就会报 `SyntaxError`：
 
-- `function*` 后面缺少生成器函数名或合法形式
-- `yield 1 2` 也缺少分隔符/分号
+- `function*` 后面缺少函数名，例如 `g()`
+- `yield 1 2` 也缺少分隔，应写成 `yield 1; yield 2;`
 
-所以整个脚本会直接抛出 **SyntaxError**，**不会输出任何内容**。
+也就是整段脚本根本不会执行。
+",1 2,1219,91,True
+deepseek,53,"以下 JS 代码输出什么（JSON 序列化）？
+```js
+console.log(JSON.stringify({ a: 1, b: undefined })",True,True,"对象属性 `b` 的值为 `undefined`，`JSON.stringify` 会忽略该属性，因此序列化结果为 `{""a"":1}`。
 
-如果你原本想写的是：
+答案是 {""a"":1} #### {""a"":1}","如果代码字面写为：
 
 ```js
-function* g",1 2,1219,85,True
-deepseek,58,以下 JS 代码中，void 0 的值是什么？,True,True,"`void` 运算符会计算其后的表达式并返回 `undefined`，因此 `void 0` 的值是 `undefined`。
+console.log JSON.stringify { a: 1 }
+```
 
-答案是 undefined #### undefined","`void` 运算符会执行其后的表达式并返回 `undefined`，因此 `void 0` 的值就是 `undefined`。
+这是 **语法错误**，会抛出 `SyntaxError`，不会输出 JSON。
+
+如果原意是：
+
+```js
+console.log(JSON.stringify({ a: 1 }))
+```
+
+则输出：
+
+```text
+{""a"":1}
+```
+
+注意：`JSON.stringi","{""a"":1}",1178,92,True
+deepseek,55,"以下 JS 代码输出什么（for...of vs for...in）？
+```js
+const o = { a: 1, b: 2 };
+console.log(",True,True,"`Object.keys(o)` 返回 `['a','b']`，展开后 `join(',')` 得到 `""a,b""`。但普通对象 `o` 没有实现迭代器，因此 `[...o]` 会抛出 `TypeError`；由于参数在调用 `console.log` 前求值，所以不会正常输出 `""a,b""`。
+
+答案是 TypeError: o is not iterable（无正常 console.log 输","你贴出的代码似乎被截断了，只看到：
+
+```js
+const o = { a: 1, b: 2 };
+```
+
+如果完整代码是常见的对比写法：
+
+```js
+const o = { a: 1, b: 2 };
+
+for (const key in o) {
+  console.log(key, o[key]);
+}
+
+for (const value of o) {
+  console.log(v","a,b 然后 抛 TypeError（对象不可迭代）",1222,94,True
+deepseek,56,"以下 JS 代码输出什么（闭包计数器封装）？
+```js
+function counter() { let n = 0; return { inc: () =>",True,False,"`counter()` 创建了私有变量 `n = 0`，并通过闭包保留。连续调用 `c.inc()` 两次后，`n` 变为 2，因此 `c.get()` 返回 2。
+
+答案是 2 #### 2","这段代码**不会输出任何结果**，因为它本身存在语法错误，运行时会直接抛出 `SyntaxError`。
+
+例如：
+
+```js
+function counter { let = 0 return { } }
+```
+
+问题包括：
+
+1. `function counter` 缺少 `()`：
+   ```js
+   function counter() { ... }
+   ```
+
+2. `l",2,1260,116,True
+deepseek,54,"以下 JS 代码输出什么（模板字符串）？
+```js
+const n = 3;
+console.log(`v=${n * 2}`);
+```",True,False,"模板字符串会将表达式 `n * 2` 求值并插入，得到 `""v=6""`，随后由 `console.log` 输出。
+
+答案是 v=6 #### v=6","如果代码原意是：
+
+```js
+const n = 3;
+console.log(`v=${n * 2}`);
+```
+
+则输出：
+
+```text
+v=6
+```
+
+注意：你贴出的 `console.log v=${n * 2}` 本身缺少括号和反引号，按字面写会 **语法错误**。",v=6,1162,89,True
+deepseek,41,"以下 TS 代码中，泛型 T 的推断结果是什么？
+```ts
+function id<T>(v: T): T { return v; }
+const a = i",True,True,"`id(42)` 传入的是数字字面量，但在普通泛型参数推断中，TypeScript 通常会将其拓宽为 `number`，因此 `T` 推断为 `number`，`a` 的类型也是 `number`。
+
+答案是 number #### number","函数 `id<T>(v: T)` 的参数直接使用泛型 `T`，传入字面量 `42` 时，TypeScript 会将数值字面量拓宽为基本类型 `number`，因此 `T` 推断为 `number`，`a` 的类型也是 `number`。
+
+答案是 number #### number",number,1182,1182,False
+deepseek,58,以下 JS 代码中，void 0 的值是什么？,True,True,"`void` 运算符会先求值操作数（这里是 `0`），然后始终返回 `undefined`，因此 `void 0` 的值是 `undefined`。
+
+答案是 undefined #### undefined","`void` 运算符会执行其后的表达式，然后返回原始 `undefined`，因此 `void 0` 的结果是 `undefined`。
 
 答案是 undefined #### undefined",undefined,1115,1115,False
-deepseek,30,"以下 JS 代码输出什么（reduce）？
-```js
-console.log([1, 2, 3].reduce((a, b) => a + b, 0));
-`",True,False,"`reduce` 从初始值 `0` 开始依次累加数组元素：`0 + 1 + 2 + 3 = 6`。
-
-答案是 6 #### 6",,6,1174,79,True
-deepseek,57,"以下 JS 代码输出什么（正则）？
-```js
-console.log('a1b2'.replace(/\d/g, '#'));
-```",True,False,"正则 `/\d/g` 会全局匹配每个数字字符，并将 `1` 和 `2` 都替换为 `#`，因此 `'a1b2'` 变为 `'a#b#'`。
-
-答案是 a#b# #### a#b#","如果完整代码是：
-
-```js
-console.log(""a1b2"".replace(/\d/g, """"))
-```
-
-输出：
-
-```js
-ab
-```
-
-因为 `/\d/g` 会匹配所有数字 `1` 和 `2`，并把它们替换成空字符串，所以剩下 `ab`。
-
-如果你贴的代码确实省略了第二个参数，如：
-
-```js
-console.log(""a1b2"".replace(/\d/g))
-```
-
-",a#b#,1160,75,True
 deepseek,59,"以下 JS 代码输出什么（BigInt）？
 ```js
 console.log(2n ** 10n);
-```",True,False,"2n ** 10n 表示 BigInt 的 2 的 10 次方，结果为 1024n。
+```",True,False,"`2n ** 10n` 是 BigInt 幂运算，结果为 \(2^{10}=1024\)，输出时带有 `n` 后缀。
 
 答案是 1024n #### 1024n","如果代码是：
 
@@ -1041,95 +981,91 @@ console.log(2n ** 10n)
 1024n
 ```
 
-因为这是 BigInt 运算，结果是 BigInt 类型的 `1024n`。
+因为 `2n ** 10n` 是 BigInt 的幂运算，即 \(2^{10}=1024\)，结果带 `n` 后缀。
 
-但如果你严格写成：
+但你贴出的写法：
 
 ```js
 console.log 2n ** 10n
 ```
 
-这是语法错误，会抛出 `SyntaxError`，因为 `console.log` 后缺少函数调用括号。",1024n,1147,65,True
-qwen,2,"以下 JS 代码输出什么（闭包）？
-```js
-function make() {
-  let n = 0;
-  return () => ++n;
-}
-con",True,False,"每次调用 `make()` 都会创建独立的闭包，因此 `a` 和 `b` 各自维护自己的 `n`。`a()` 两次分别返回 `1`、`2`，`b()` 返回 `1`。
-
-答案是 1 2 1 #### 1 2 1","你贴的代码被省略号截断了，**无法唯一确定输出**。但这类题通常考的是：`make()` 每次调用是否创建独立闭包变量 `n`。
-
-## 常见写法 1：`n` 在 `make()` 内部声明
+缺少函数调用括号，会报语法错误：
 
 ```js
-function make() {
-  let n = 0;
-  return () => ++n;
-}
+SyntaxErr",1024n,1147,76,True
+deepseek,57,"以下 JS 代码输出什么（正则）？
+```js
+console.log('a1b2'.replace(/\d/g, '#'));
+```",True,False,"正则 `/\d/g` 匹配所有数字字符（`g` 表示全局替换），因此 `a1b2` 中的 `1` 和 `2` 都被替换为 `#`，得到 `a#b#`。
 
-const a = make();
-const b = make();
+答案是 a#b# #### a#b#","你贴出来的代码：
 
-consol",1 2 1,1236,100,True
+```js
+console.log a1b2 .replace /\d/g
+```
+
+按原样不是合法 JavaScript，运行会报语法错误（`SyntaxError`），不会输出结果。
+
+如果你原本想写的是常见形式：
+
+```js
+console.log(""a1b2"".replace(/\d/g, """"))
+```
+
+那么 `/\d/g` 会全局匹配所有数字并替换为空字符串，",a#b#,1160,82,True
+deepseek,40,"以下 TS 代码中，x 的类型推断是什么？
+```ts
+let x = 10;
+x = 'str';  // 报错吗？
+```",True,False,"`let x = 10` 中 TypeScript 会把 `x` 推断为 `number`（let 声明会对字面量类型进行拓宽）。因此 `x = 'str'` 类型不兼容，会报错：不能将 `string` 赋给 `number`。
+
+答案是 x 被推断为 number，将 'str' 赋给 x 会报错 #### x 被推断为 number，将 'str' 赋给 x 会报错","```ts
+let x = 10;
+x = 'str';
+```
+
+- `x` 的类型推断为：`number`
+- `'str'` 赋值给 `x` 会报错，错误类似：
+
+```ts
+Type 'string' is not assignable to type 'number'. // TS2322
+```
+
+原因：`let x = 10` 中数字字面量 `10` 会被拓宽为 `number`，而",number；赋 string 报错,1155,85,True
 qwen,3,"以下 JS 代码输出什么（var 循环捕获）？
 ```js
 const fns = [];
-for (var i = 0; i < 3; i++) fns.pu",True,True,"`var i` 是函数作用域，三个箭头函数共享同一个 `i`；循环结束后 `i` 为 3，因此调用 `fns[0]()` 输出 3。
+for (var i = 0; i < 3; i++) fns.pu",True,False,"简短推理：`var i` 是函数作用域，循环结束后 `i` 变为 `3`；所有闭包共享同一个 `i`，因此调用 `fns[0]()` 输出的是最终值 `3`。
 
-答案是 3 #### 3","这段代码**不完整/不是合法 JS**，所以按你贴出的原文直接运行会报 **`SyntaxError`**。
-
-你贴的是：
+答案是 3 #### 3","这段代码如果按常见 JS 语法补全，应该是：
 
 ```js
 const fns = [];
-for var = 0 < 3 i++ fns.push i
-fns[0]();
-```
 
-JS 的 `for` 语句必须有括号，`push` 也必须带括号，例如：
+for (var i = 0; i < 3; i++) {
+  fns.push(function () {
+    return i;
+  });
+}
 
-```js
-for (var i = 0; i < 3; i+",3,1211,102,True
-qwen,1,"以下 JS 代码输出什么？
-```js
-let x = 10;
-const f = () => { console.log(x); x = 20; };
-f()",True,False,"箭头函数 `f` 与外部共享同一个 `x`：调用 `f()` 时先输出当前值 `10`，然后把 `x` 改为 `20`；随后外部 `console.log(x)` 输出 `20`。
-
-答案是 10, 20 #### 10, 20","这段代码如果只定义 `x` 和 `f`，**不会输出任何东西**，因为 `f()` 没有被调用。
-
-如果后面有调用：
-
-```js
-let x = 10;
-
-const f = () => {
-  console.log(x);
-  x = 20;
-};
-
-f();
+console.log(fns[0]());
 ```
 
 输出是：
 
 ```js
-10
+3
 ```
 
 原因：
 
-1. `x` 初始值是 `10`。
-2. `f` 是一个箭头函数，它通过",10 然后 20,1193,96,True
+- `var` 是函数作用域，不是块级作用域。",3,1211,113,True
 qwen,4,"以下 JS 代码输出什么（let 循环捕获）？
 ```js
 const fns = [];
-for (let i = 0; i < 3; i++) fns.pu",True,False,"for 循环使用 let，每次迭代都会创建一个新的 i 绑定；fns[1] 对应第二次迭代时 i = 1 的闭包，因此调用它输出 1。
+for (let i = 0; i < 3; i++) fns.pu",True,True,"`let i` 在每次循环迭代中都会创建独立的块级绑定，闭包捕获的是各自迭代时的 `i`；`fns[1]` 对应 `i === 1` 的闭包，因此调用后输出 `1`。
 
-答案是 1 #### 1","这段代码本身不是合法 JavaScript，语法错误，不会输出 `1`。
-
-原代码：
+答案是 1 #### 1","按你写的这段代码：
 
 ```js
 const fns = [];
@@ -1137,56 +1073,111 @@ for let = 0 < 3 i++ fns.push i
 fns[1]();
 ```
 
-问题：
+严格来说 **语法错误**，不能运行。
 
-1. `for let = 0 < 3 i++` 语法不合法。
-2. `fns.push i` 缺少括号。
-3. 如果意图是经典闭包题，通常应该写成：
+如果你实际想问的是经典的 `let` 循环闭包捕获问题，通常代码应该是：
 
 ```js
-",1,1211,102,True
-qwen,5,"以下 JS 代码输出什么（严格模式 this）？
+const fns = [];
+
+for (let i = 0; i < 3; i++) {
+  fns.pus",1,1211,113,True
+qwen,2,"以下 JS 代码输出什么（闭包）？
 ```js
-'use strict';
-function f() { console.log(this); }",True,False,"在严格模式下，普通函数调用不会把 `this` 绑定到全局对象，`this` 为 `undefined`。
+function make() {
+  let n = 0;
+  return () => ++n;
+}
+con",True,False,"每次 `make()` 都会创建独立的闭包变量 `n`。`a()` 两次分别返回 `1`、`2`，`b()` 返回 `1`。
 
-答案是 undefined #### undefined","你提供的代码部分被省略成了 `...`，所以无法确定具体输出。
+答案是 1 2 1 #### 1 2 1","你贴的代码被 `...` 省略了，**无法唯一确定输出**，因为关键信息缺失：
 
-如果这段 JS 代码字面意思就是：
+- `make()` 函数体是什么？
+- `a` / `b` 后面怎么调用？
+- 调用顺序是什么？
+
+不过，如果这是常见的 JS 闭包题，代码通常是：
 
 ```js
+let n = 0
+
+function make() {
+  let m = 0
+  return () => ++n + ++m
+}
+
+const a",1 2 1,1236,104,True
+qwen,1,"以下 JS 代码输出什么？
+```js
+let x = 10;
+const f = () => { console.log(x); x = 20; };
+f()",True,True,"f 调用时 x 仍为 10，打印后改为 20；外层再打印为 20。
+答案是 10\n20 #### 10\n20","仅凭你贴出的这段代码，**不会有任何输出**，因为 `f` 没有被调用：
+
+```js
+let x = 10
+const f = () => { console.log(x); x = 20; };
+```
+
+如果省略号里是调用 `f()`，则要看调用次数：
+
+### 1. 调用一次
+
+```js
+f();
+```
+
+输出：
+
+```js
+10
+```
+
+执行过程：
+
+1. `console.lo",10 然后 20,1193,102,True
+qwen,0,"以下 JS 代码输出什么？
+```js
+var a = 1;
+function f() { console.log(a); var a = 2; }
+f();
+",True,False,"函数 `f` 内的 `var a` 会被提升到函数作用域顶部，初始值为 `undefined`，因此 `console.log(a)` 输出的是局部变量 `a` 的 `undefined`，而不是全局的 `1`。
+
+答案是 undefined #### undefined","按你贴出来的这段 JS 代码：
+
+```js
+var a = 1
+function { console.log var = 2 }
 ...
 ```
 
-那么它不会输出正常结果，而是会抛出语法错误，例如：
+**它不会正常输出任何结果，而是会直接报语法错误（SyntaxError）**。
 
-```js
-SyntaxError: Unexpected token '...'
-```
+原因：
 
-因为单独的 `...` 在 JavaScript 中不是合法语句。
+1. `function { ... }` 不合法  
+   JavaScript 中函数声明必须有函数名和参数列表，例如：
 
-请补充完整代码，我可以帮你分析输出结果。",undefined,1181,45,True
+   ```js
+   fu",undefined,1175,89,True
 qwen,6,"以下 JS 代码输出什么（对象方法 this）？
 ```js
 const o = { v: 5, get() { return this.v; } };
-con",True,False,"推理：`o.get()` 作为对象方法调用，`this` 指向 `o`，返回 `5`；`g = o.get` 只是把函数引用取出，`g()` 独立调用时 `this` 不再是 `o`，在非严格模式下指向全局对象，`this.v` 为 `undefined`。
+con",True,False,"`o.get()` 通过对象调用，`this` 指向 `o`，返回 `5`；`g()` 是脱离对象的方法引用，在非严格模式下 `this` 指向全局对象，`v` 不存在，返回 `undefined`。
 
-答案是 5 undefined #### 5 undefined","如果省略号里是：
-
-```js
-console.log(g())
-```
-
-那结果要看运行环境/模式：
+答案是 5 undefined #### 5 undefined","如果代码是：
 
 ```js
-const o = { v: 5, get() { return this.v; } };
+const o = {
+  v: 5,
+  get() {
+    return this.v;
+  }
+};
+
 const g = o.get;
 console.log(g());
 ```
-
-### 1. 普通非严格模式脚本中
 
 输出通常是：
 
@@ -1194,83 +1185,96 @@ console.log(g());
 undefined
 ```
 
-原因：`g()",5 然后 undefined,1229,112,True
-qwen,8,"以下 JS 代码输出什么（== vs ===）？
+原因：`o.get` 被赋值给 `g` 后，`g()` 是普通函数调用，`this` 不再指向 `o`。
+
+- 非严格模",5 然后 undefined,1229,124,True
+qwen,7,"以下 JS 代码输出什么（字符串拼接）？
 ```js
-console.log(0 == false, 0 === false);
-```",True,False,"`==` 会进行类型转换，`false` 转为 `0`，所以 `0 == false` 为 `true`；`===` 不进行类型转换，`0` 是 number，`false` 是 boolean，所以 `0 === false` 为 `false`。
+console.log('3' + 4, '3' - 4);
+```",True,False,"`'3' + 4` 中 `+` 遇到字符串会执行拼接，得到 `'34'`；`'3' - 4` 中 `-` 会强制转数字，得到 `-1`。`console.log` 多参数用空格分隔输出。
 
-答案是 true false #### true false","你贴的代码不完整/语法不明确，所以不能唯一确定输出。按几种常见可能解释：
-
-```js
-console.log 0 == 0 false
-```
-
-如果就是这一行字面代码，**会报 SyntaxError**，因为 `console.log` 后面直接跟 `0` 不合法，缺少括号或逗号，例如：
-
-```js
-console.log(0 == 0)
-```
-
-或：
-
-```js
-console.lo",true false,1164,70,True
-qwen,9,"以下 JS 代码输出什么（NaN）？
-```js
-console.log(NaN === NaN, Number.isNaN(NaN));
-```",True,False,"`NaN === NaN` 为 `false`，因为 IEEE 754 规定 NaN 不等于任何值（包括自身）；`Number.isNaN(NaN)` 为 `true`。`console.log` 输出两个参数，以空格分隔。
-
-答案是 false true #### false true","你提供的 JS 代码被省略了（只有 `...`），所以无法判断输出。
-
-如果代码字面上就是：
-
-```js
-...
-```
-
-那么在 JavaScript 中单独运行 `...` 会抛出语法错误：
+答案是 34 -1 #### 34 -1","输出：
 
 ```text
-SyntaxError: Unexpected token '...'
+34 -1
 ```
 
-请贴出完整 JS 代码，我可以帮你分析输出、执行顺序和作用域。",false 然后 true,1165,43,True
+解释：
+
+```js
+console.log('3' + 4, '3' - 4);
+```
+
+- `'3' + 4`：`+` 遇到字符串 `'3'`，会把数字 `4` 转成字符串，然后拼接，得到 `'34'`
+- `'3' - 4`：`-` 会尝试把操作符转成数字，`'3'` 变成 `3`，然后计算 `3 - 4`，得到 `-1`
+- `consol",34 -1,1153,84,True
 qwen,10,"以下 JS 代码输出什么（原型链）？
 ```js
 function A() {}
 A.prototype.x = 1;
 const a = new A();
-c",True,False,"`a.x` 沿原型链查找，`A.prototype.x = 1`，所以为 `1`；`a.hasOwnProperty('x')` 只检查实例自身属性，`x` 在原型上而非实例上，所以为 `false`。
+c",True,False,"`a.x` 通过原型链找到 `A.prototype.x`，值为 `1`；`hasOwnProperty('x')` 只检查实例自身属性，`x` 不在实例上，所以为 `false`。
 
-答案是 1 false #### 1 false","从你给出的片段看：
-
-```js
-A.prototype.x = 1;
-const a = new A();
-```
-
-如果 `A` 是一个普通构造函数，例如：
+答案是 1 false #### 1 false","你给出的代码片段被 `...` 截断了，所以**无法确定最终完整输出**。  
+但如果省略的部分是类似：
 
 ```js
 function A() {}
+
 A.prototype.x = 1;
 const a = new A();
+
+console.log(a.x);
 ```
 
-那么结果通常是：
+那么输出是：
 
 ```js
-console.log(a.x); // 1
+1
 ```
 
-因为 `a` 本身",1 然后 false,1215,88,True
+原因是：`a` 本身没有 `x` 属性，但它的原型链上 `A.prototype",1 然后 false,1215,93,True
+qwen,8,"以下 JS 代码输出什么（== vs ===）？
+```js
+console.log(0 == false, 0 === false);
+```",True,True,"推理：`0 == false` 使用宽松相等，`false` 会被转换为数字 `0`，所以结果为 `true`；`0 === false` 使用严格相等，同时比较值和类型，`0` 是 number，`false` 是 boolean，所以结果为 `false`。
+
+答案是 true false #### true false","按你贴出的字面代码：
+
+```js
+console.log 0 == 0 false
+```
+
+这是 **语法错误**，不会正常输出。因为 `console.log` 后面缺少括号/逗号，`0 == 0 false` 也不是合法表达式。
+
+---
+
+## 如果你原意是问 `==` vs `===`
+
+常见几个例子：
+
+```js
+console.log(0 == 0);      // true
+",true false,1164,82,True
 qwen,11,"以下 JS 代码输出什么（class 继承）？
 ```js
 class A { constructor() { this.v = 'a'; } }
-class ",True,False,"`new B()` 调用 `B` 的构造函数，`super()` 执行父类 `A` 构造函数，将 `this.v` 初始化为 `'a'`；随后 `this.v += 'b'` 得到 `'ab'`。
+class ",True,False,"`new B()` 会先调用父类 `A` 的构造函数，设置 `this.v = 'a'`；随后在 `B` 的构造函数中执行 `this.v += 'b'`，得到 `'ab'`。
 
-答案是 ab #### ab","如果完整代码是：
+答案是 ab #### ab","如果省略号部分是类似：
+
+```js
+const b = new B();
+console.log(b.v);
+```
+
+输出是：
+
+```js
+'ab'
+```
+
+原因：
 
 ```js
 class A {
@@ -1281,121 +1285,95 @@ class A {
 
 class B extends A {
   constructor() {
-    super();
-    this.v += 'b';
-  }
+    super();   ",ab,1257,164,True
+qwen,5,"以下 JS 代码输出什么（严格模式 this）？
+```js
+'use strict';
+function f() { console.log(this); }",True,False,"在严格模式下，普通函数调用不会把 `this` 绑定到全局对象，而是保持为 `undefined`。
+
+答案是 undefined #### undefined","你提供的代码部分是省略号 `...`，所以**无法判断具体输出**。请贴出完整 JS 代码。
+
+如果你问的是 **严格模式下 `this` 的通用规则**，可以这样判断：
+
+```js
+'use strict';
+
+function foo() {
+  console.log(this);
 }
 
-console.log(new B().v);
+foo(); // undefined
+```
+
+严格模式下常见 `this` 规则：
+
+1. **普",undefined,1181,57,True
+qwen,9,"以下 JS 代码输出什么（NaN）？
+```js
+console.log(NaN === NaN, Number.isNaN(NaN));
+```",True,False,"`NaN === NaN` 在 JavaScript 中为 `false`，因为 `NaN` 不等于任何值，包括它自身；`Number.isNaN(NaN)` 为 `true`，因为它显式检查值是否为 `NaN`。
+
+答案是 false true #### false true","你的消息里 JS 代码部分被省略成 `...` 了，所以我无法准确判断这段代码为什么输出 `NaN`。
+
+请把完整代码贴出来，例如：
+
+```js
+const a = ...;
+const b = ...;
+console.log(...);
+```
+
+我可以直接分析：
+
+- 为什么结果是 `NaN`
+- 哪一步产生了 `NaN`
+- 如何修复
+- 是否涉及隐式类型转换、`Number()`、`p",false 然后 true,1165,51,True
+qwen,14,"以下 JS 代码输出什么（getter）？
+```js
+const o = { get v() { return 7; } };
+console.log(o.v",True,False,"对象 `o` 定义了 getter `v`，访问 `o.v` 时会调用该 getter 并返回 `7`，因此 `console.log(o.v)` 输出 `7`。
+
+答案是 7 #### 7","这段代码：
+
+```js
+const o = { get v() { return 7; } };
+```
+
+定义了一个对象 `o`，其中 `v` 是一个 **getter**，读取 `o.v` 时会执行函数并返回 `7`。
+
+如果完整代码类似：
+
+```js
+const o = { get v() { return 7; } };
+console.log(o.v);
 ```
 
 输出是：
 
-```js
-""ab""
-```
-
-解释：",ab,1257,153,True
-qwen,0,"以下 JS 代码输出什么？
-```js
-var a = 1;
-function f() { console.log(a); var a = 2; }
-f();
-",True,False,"在 `f` 中，`var a = 2;` 会被提升为 `var a;`，因此函数内存在局部变量 `a`，初始值为 `undefined`；`console.log(a)` 输出局部 `a`，不是全局 `a = 1`。
-
-答案是 undefined #### undefined","你这段代码**不完整 / 有语法错误**，不能直接运行。
-
-```js
-var a = 1
-function { console.log var = 2 }
-```
-
-问题至少有两个：
-
-1. `function { ... }` 语法错误，函数名或箭头函数写法不完整。
-2. `console.log var = 2` 语法错误，`console.log` 后面缺少括号。
-
----
-
-如果你问的是",undefined,1175,83,True
-qwen,12,以下 JS 代码中，instanceof 判断什么？,False,False,"`instanceof` 用于判断一个对象是否是某个构造函数（或类）的实例，本质是检查该对象的原型链上是否存在构造函数的 `prototype`。
-
-答案是 对象是否为某构造函数的实例（原型链包含其 prototype） #### 对象是否为某构造函数的实例（原型链包含其 prototype）","推理：`instanceof` 不是判断“值相等”，而是判断左侧对象的原型链中是否包含右侧构造函数的 `prototype`，即左侧对象是否可被视为右侧构造函数/类的实例。
-
-答案是 对象是否为某个构造函数/类的实例（原型链包含其 prototype） #### 对象是否为某个构造函数/类的实例（原型链包含其 prototype）",对象是否属于某构造器原型链,1118,1118,False
-qwen,13,"以下 JS 代码输出什么（Object.create）？
-```js
-const base = { greet() { return 'hi'; } };
-co",True,False,"`Object.create(base)` 创建的对象 `o` 没有自有属性 `greet`，但通过原型链继承 `base` 的方法，因此 `o.greet()` 返回 `'hi'`；`o.hasOwnProperty('greet')` 检查的是自有属性，结果为 `false`。
-
-答案是 hi false #### hi false","你给的代码被 `...` 截断了，所以**无法确定完整输出**。
-
-如果省略部分只是：
-
-```js
-console.log(o.greet());
-```
-
-那么输出是：
-
-```js
-'hi'
-```
-
-原因：
-
-```js
-const base = { greet() { return 'hi'; } };
-const o = Object.create(base);
-```
-
-`Objec",hi 然后 false,1255,117,True
-qwen,14,"以下 JS 代码输出什么（getter）？
-```js
-const o = { get v() { return 7; } };
-console.log(o.v",True,False,"访问 `o.v` 会触发 getter，返回 `7`，因此 `console.log` 输出 `7`。
-
-答案是 7 #### 7","仅凭你贴出的这段代码，**无法确定最终输出**，因为 `...` 后面的代码缺失了。
-
-```js
-const o = { get v() { return 7; } };
-```
-
-这里 `o.v` 是一个 **getter 属性**，读取它时会执行 getter 函数并返回 `7`。
-
-所以：
-
-```js
-console.log(o.v); // 输出 7
-```
-
-如果后面还有赋值，例如：",7,1178,80,True
+```",7,1178,91,True
 qwen,15,"以下 JS 代码输出什么（Symbol.iterator）？
 ```js
-const o = { [Symbol.iterator]: function* ()",True,False,"`[...o]` 会调用 `o[Symbol.iterator]()`，得到生成器迭代器，依次产出 `1` 和 `2`，形成数组 `[1, 2]`，其 `length` 为 `2`。
+const o = { [Symbol.iterator]: function* ()",True,False,"`[Symbol.iterator]` 返回一个生成器函数，展开 `[...o]` 会依次 `yield` 得到 `1` 和 `2`，所以数组长度为 `2`。
 
-答案是 2 #### 2","你给的代码片段被截断了（`...` 之后没有完整内容），所以**无法确定最终输出**。
-
-目前可见部分是：
+答案是 2 #### 2","这段代码本身**不会输出**。
 
 ```js
-const o = {
-  [Symbol.iterator]: function* () {
-    yield 1;
-    yield 2;
-  }
-};
+const o = { [Symbol.iterator]: function* () { yield 1; yield 2; } };
 ```
 
-这段代码本身**没有输出**，它只是定义了一个可迭代对象 `o`。
+它只是创建了一个对象 `o`，并给对象定义了一个 `Symbol.iterator` 方法，这个方法是一个 generator 函数，返回一个可迭代对象。
 
-如果后面有类似下面的代码，输出会不同",2,1229,112,True
+如果后续代码是：
+
+```js
+console.",2,1229,132,True
 qwen,16,"以下 JS 代码输出什么（Object.assign 浅拷贝）？
 ```js
 const a = { x: { y: 1 } };
-const b = Obje",True,False,"Object.assign({}, a) 只进行浅拷贝，b.x 与 a.x 引用同一个嵌套对象，因此修改 b.x.y 会影响 a.x.y。
+const b = Obje",True,False,"`Object.assign` 只做浅拷贝，`b.x` 和 `a.x` 指向同一个嵌套对象，因此修改 `b.x.y` 会影响 `a.x.y`。
 
-答案是 9 #### 9","这段代码涉及 **浅拷贝**：
+答案是 9 #### 9","这段代码的关键点是：**`Object.assign({}, a)` 是浅拷贝**。
 
 ```js
 const a = { x: { y: 1 } };
@@ -1403,31 +1381,20 @@ const b = Object.assign({}, a);
 b.x.y = 9;
 ```
 
-`Object.assign({}, a)` 只拷贝 `a` 的第一层属性。
-
-所以：
-
-```js
-a = { x: { y: 1 } }
-b = { x: { y: 1 } }
-```
-
-但 `a.x",9（浅拷贝共享嵌套对象）,1224,115,True
+`Object.assign` 会把 `a` 的第一层属性复制到新对象 `b` 中。  
+但是 `a.x` 是一个对象，复制的是它的**引用**，不是",9（浅拷贝共享嵌套对象）,1224,135,True
 qwen,17,"以下 JS 代码输出什么（静态方法）？
 ```js
 class A { static s() { return 's'; } }
-console.log(A.s",True,False,"静态方法 `s()` 通过类名 `A.s()` 调用，返回字符串 `'s'`，`console.log` 输出该字符串。
+console.log(A.s",True,False,"`static s()` 定义在类 `A` 上，可通过 `A.s()` 调用，返回字符串 `'s'`，`console.log` 输出 `s`。
 
-答案是 s #### s","仅凭你给出的这段 JS 代码：
+答案是 s #### s","按你贴出的片段：
 
 ```js
 class A { static s() { return 's'; } }
-...
 ```
 
-**没有输出**。
-
-原因：这里只是定义了一个类 `A` 和一个静态方法 `s`，但没有调用它，也没有 `console.log` 之类的输出语句。
+**它本身不会输出任何内容**。因为只是定义了一个类和一个静态方法，没有调用 `console.log` 或其他输出语句。
 
 如果后续代码是：
 
@@ -1435,35 +1402,44 @@ class A { static s() { return 's'; } }
 console.log(A.s());
 ```
 
-那么输出会是：
-
-```",s,1180,84,True
-qwen,7,"以下 JS 代码输出什么（字符串拼接）？
-```js
-console.log('3' + 4, '3' - 4);
-```",True,True,"`+` 遇到字符串会做拼接，所以 `'3' + 4` 得到 `'34'`；`-` 会把字符串转成数字，所以 `'3' - 4` 得到 `-1`。`console.log` 多个参数之间以空格分隔输出。
-
-答案是 34 -1 #### 34 -1","输出：
+那么输出是：
 
 ```js
-34 -1
+s
 ```
 
-解释：
+说明：
 
-- `'3' + 4`：因为有一个是字符串，`+` 会做字符串拼接，结果是 `'34'`
-- `'3' - 4`：`-` 会尝试把字符串转成数字，所以 `'3'` 变成 `3`，结果是 `-1`",34 -1,1153,76,True
-qwen,18,以下 JS 代码中，Object.freeze 的作用是什么？,False,False,"Object.freeze 用于将 JS 对象“冻结”，使其变为不可变对象：不能新增属性、删除属性或修改已有属性的值；它是浅冻结，嵌套对象不会被递归冻结。
+- `static ",s,1180,91,True
+qwen,12,以下 JS 代码中，instanceof 判断什么？,False,False,"`instanceof` 在 JS 中不是检查“类型标签”，而是检查原型链：判断某个对象的原型链上是否存在目标构造函数的 `prototype`。
 
-答案是 Object.freeze 用于浅冻结对象，使其不可变（不能添加、删除或修改属性） #### Object.freeze 用于浅冻结对象，使其不可变（不能添加、删除或修改属性）","Object.freeze 用于“冻结”一个对象，使其不能再被添加属性、删除属性或修改现有属性的值；它是浅冻结，嵌套对象本身不会被递归冻结。
+答案是 对象是否为某构造函数的实例 #### 对象是否为某构造函数的实例","`instanceof` 用于判断一个对象是否为某个构造函数的实例，其原理是检查该对象的原型链中是否包含该构造函数的 `prototype`。
 
-答案是 将对象冻结为不可变（浅冻结） #### 将对象冻结为不可变（浅冻结）",对象不可扩展且属性不可改（只读）,1123,1123,False
+答案是 一个对象是否为某个构造函数的实例（即其原型链是否包含该构造函数的 prototype） #### 一个对象是否为某个构造函数的实例（即其原型链是否包含该构造函数的 prototype）",对象是否属于某构造器原型链,1118,1118,False
+qwen,13,"以下 JS 代码输出什么（Object.create）？
+```js
+const base = { greet() { return 'hi'; } };
+co",True,False,"`Object.create(base)` 创建一个新对象 `o`，其原型是 `base`。`greet` 是 `base` 的自有属性，不是 `o` 的自有属性，因此 `o.greet()` 通过原型链返回 `'hi'`，而 `o.hasOwnProperty('greet')` 返回 `false`。
+
+答案是 hi false #### hi false","你贴出的代码后面被省略号截断了，所以**唯一输出要看省略号里的语句**。
+
+但这段代码的核心知识点是：
+
+```js
+const base = { greet() { return 'hi'; } };
+const o = Object.create(base);
+```
+
+`Object.create(base)` 会创建一个新对象 `o`，并把 `base` 设为 `o` 的原型。
+
+因此：
+",hi 然后 false,1255,135,True
 qwen,20,"以下 JS 代码输出顺序是什么（microtask 优先）？
 ```js
 console.log(1);
-Promise.resolve().then(() =",True,True,"简短推理：`console.log(1)` 和 `console.log(4)` 是同步代码先执行；`Promise.resolve().then` 属于 microtask，会在当前同步代码结束后优先执行，输出 `2`；`setTimeout` 属于 macrotask，在 microtask 队列清空后才执行，输出 `3`。
+Promise.resolve().then(() =",True,False,"同步执行先输出 1 和 4；`Promise.then` 是 microtask，在同步代码后立即执行输出 2；`setTimeout` 是 macrotask，在 microtask 之后执行输出 3。
 
-答案是 1 4 2 3 #### 1 4 2 3","如果这段代码的完整写法是：
+答案是 1 4 2 3 #### 1 4 2 3","你贴的代码片段有省略/乱码，我按最常见的版本理解：
 
 ```js
 console.log(1);
@@ -1479,7 +1455,7 @@ setTimeout(() => {
 console.log(4);
 ```
 
-输出是：
+输出顺序是：
 
 ```js
 1
@@ -1488,45 +1464,60 @@ console.log(4);
 3
 ```
 
-原因：
+原因：",1 4 2 3,1247,137,True
+qwen,21,"以下 JS 代码输出什么（Promise 链）？
+```js
+Promise.resolve(1).then(v => v + 1).then(v => con",True,False,"`Promise.resolve(1)` 初始值为 1，第一个 `then` 返回 `1 + 1 = 2`，第二个 `then` 打印该值。
 
-1. `console.",1 4 2 3,1247,119,True
+答案是 2 #### 2","你贴出的代码片段不完整，按字面看：
+
+```js
+Promise.resolve 1 .then => + 1 .then v
+```
+
+这不是合法 JS 语法，会直接报 **SyntaxError**，所以不会输出任何结果。
+
+如果你问的是常见 Promise 链写法，比如：
+
+```js
+Promise.resolve(1)
+  .then(v => v + 1)
+  .then(v => c",2,1189,96,True
 qwen,22,"以下 JS 代码输出什么（async/await）？
 ```js
 async function f() { return 42; }
-f().then(v =>",True,False,"`async function f()` 返回一个 Promise，`return 42` 会使该 Promise 以 `42` 解决；`then` 回调接收 `42` 并打印。
+f().then(v =>",True,True,"async 函数返回 Promise，`return 42` 会被解析为 Promise 的 fulfilled 值，因此 `.then` 回调收到 42 并打印。
 
-答案是 42 #### 42","按你给出的代码：
+答案是 42 #### 42","你贴出的代码不完整，而且按当前写法：
 
 ```js
 async function { 42 }
 ```
 
-**不会输出任何值，会直接报语法错误：**
+在 JavaScript 中是 **语法错误**，不会输出任何结果。
+
+原因：`async function` 后面要么需要函数名，要么需要参数列表，例如：
 
 ```js
-SyntaxError: Unexpected token '{'
+async function foo() { 42 }
 ```
 
-原因：`async function` 作为函数声明时，必须写成：
+或
 
 ```js
-async function name() {
-  return 42;
-}
-```
-
-或者作为",42,1193,65,True
+async function () {",42,1193,81,True
 qwen,23,"以下 JS 代码输出什么（Promise.all 失败）？
 ```js
-Promise.all([Promise.resolve(1), Promise.rej",True,False,"Promise.all 在任一 Promise 拒绝时立即拒绝，拒绝原因取第一个拒绝的 Promise 的 reason；这里第二个 Promise 以 2 拒绝，因此 catch 输出 2。
+Promise.all([Promise.resolve(1), Promise.rej",True,False,"简短推理：`Promise.all` 在任一 Promise 被拒绝时会立即拒绝，并传递第一个拒绝原因。这里 `Promise.reject(2)` 导致整体 Promise 被拒绝，`catch` 捕获到 `2` 并打印。
 
-答案是 2 #### 2","你贴的代码不完整/语法有误。按常见题意，应该是：
+答案是 2 #### 2","你这段代码看起来被截断了。按常见写法，我推断你想问的是类似：
 
 ```js
-Promise.all([Promise.resolve(1), Promise.reject(2)])
-  .then(e => console.log(e))
-  .catch(e => console.log(e));
+Promise.all([
+  Promise.resolve(1),
+  Promise.reject(2)
+]).then(res => console.log(res))
+  .catch(err => console.log(err));
 ```
 
 输出是：
@@ -1535,403 +1526,543 @@ Promise.all([Promise.resolve(1), Promise.reject(2)])
 2
 ```
 
-解释：
-
-- `Promise.all` 只要数组中任意一个 ",2,1212,97,True
-qwen,21,"以下 JS 代码输出什么（Promise 链）？
-```js
-Promise.resolve(1).then(v => v + 1).then(v => con",True,False,"`Promise.resolve(1)` 立即 resolve 为 1，第一个 `then` 返回 2，第二个 `then` 打印 2。
-
-答案是 2 #### 2","如果你给出的代码是字面这段：
-
-```js
-Promise.resolve 1 .then => + 1 .then v
-```
-
-那它**不是合法 JS 语法**，会报 `SyntaxError`。
-
-如果你实际想问的是这类常见写法：
-
-```js
-Promise.resolve(1).then(() => +1).then(v => console.log(v));
-```
-
-那么输出是：
-
-",2,1189,82,True
-qwen,25,"以下 JS 代码输出什么（catch 后继续）？
-```js
-Promise.reject('e').catch(e => 'ok').then(v => co",True,False,"`Promise.reject('e')` 被 `catch` 捕获，回调返回 `'ok'`，因此后续 `then` 收到值 `ok` 并打印。
-
-答案是 ok #### ok","请提供完整的 JS 代码。你给出的代码块里只有 `...`，缺少实际语句，所以我无法判断输出结果。
-
-把类似下面的完整代码贴出来即可：
-
-```js
-console.log(1 + ""2"");
-```",ok,1190,45,True
-qwen,24,"以下 JS 代码输出什么（Promise.race）？
-```js
-Promise.race([Promise.resolve('a'), Promise.re",True,True,"`Promise.race` 会返回最先 settle 的 Promise。这里两个 Promise 都已经是 resolved，但 `Promise.race` 按数组顺序依次注册回调，因此 `'a'` 的回调先执行并让 race Promise 以 `'a'` 完成，后续 `'b'` 被忽略。
-
-答案是 a #### a","无法确定输出，因为代码块里只有 `...`。
-
-- 如果 `...` 是占位符：请贴出完整 JS 代码。
-- 如果代码真的只有 `...`：在 JS 中它是语法错误，会抛出 `SyntaxError: Unexpected token '...'`，不会输出结果。",a,1215,43,True
-qwen,26,以下 JS 代码中，await 的作用是什么？,True,True,"推理：没有给出具体代码，但按 JS 语义，`await` 用于在 `async` 函数中暂停执行，等待一个 Promise 完成，并拿到其 resolved 值。
-
-答案是 await 用于等待 Promise 完成并获取其结果 #### await 用于等待 Promise 完成并获取其结果","await 用于在 async 函数中等待一个 Promise 完成，使异步操作可以按顺序书写，并返回 Promise 的结果。
-
-答案是 等待 Promise 完成并返回其结果 #### 等待 Promise 完成并返回其结果",暂停 async 函数直到 Promise 完成,1115,1115,False
-qwen,19,"以下 JS 代码输出什么（instanceof 跨原型）？
-```js
-function A() {}
-const a = new A();
-console.l",True,False,"`new A()` 创建的对象 `a` 的原型链为 `a -> A.prototype -> Object.prototype -> null`，因此 `a instanceof A` 和 `a instanceof Object` 都为 `true`。
-
-答案是 true true #### true true","仅凭你贴出的片段：
-
-```js
-const a = new A();
-```
-
-无法给出“唯一确定”的输出，因为关键取决于 **`A` 是什么**、**`A.prototype` 是否被修改**、以及 **构造函数是否返回对象**。
-
-但一般规则如下。
-
----
-
-## 1. 如果 `A` 是普通函数构造函数
-
-```js
-function A() {}
-
-const a = new A();
-",true 然后 true,1216,69,True
-qwen,29,"以下 JS 代码输出什么（Promise 构造函数立即执行）？
-```js
-new Promise(res => { console.log('a'); res",True,False,"Promise 构造函数中的 executor 会立即同步执行，因此先输出 `a`；随后执行外部语句输出 `b`。
-
-答案是 a\nb #### a\nb",请把完整的 JS 代码贴出来，我才能判断它的输出。,a 然后 b,1201,45,True
-qwen,27,"以下 JS 代码输出什么（async 内 throw）？
-```js
-async function f() { throw new Error('boom');",True,False,"`async function` 中 `throw` 会使返回的 Promise 变为 rejected；`.catch` 捕获错误并输出 `e.message`。
-
-答案是 boom #### boom","这段代码 **不会有正常输出**，因为 `async function { throw }` 不是合法的 JavaScript 语法，运行时会直接抛出 **SyntaxError**。
-
 原因：
 
-1. `async function` 后面必须跟：
-   - 函数名 + 参数列表，例如：
-     ```js
-     async function foo() {}
-     ```
-   - ",boom,1218,70,True
-qwen,28,"以下 JS 代码输出什么（微任务嵌套）？
+- `Promis",2,1212,114,True
+qwen,24,"以下 JS 代码输出什么（Promise.race）？
 ```js
-Promise.resolve().then(() => console.log(1))
-  .then(",True,False,"推理：`Promise.resolve().then(1)` 先把打印 `1` 的微任务入队；随后链式 `.then(2)` 是在 `1` 完成后才入队。第二行的 `Promise.resolve().then(3)` 在同步执行阶段就把打印 `3` 的微任务入队。因此微任务顺序是：`1` → `3` → `2`。
+Promise.race([Promise.resolve('a'), Promise.re",True,False,"`Promise.race` 会返回最先完成的 Promise。这里两个 Promise 都已经 resolve，按数组顺序第一个 `'a'` 先被处理，因此 `console.log` 输出 `a`。
 
-答案是 1 3 2 #### 1 3 2","你贴出的代码本身不完整/语法不合法，例如：
+答案是 a #### a","你提供的代码被省略了（`...`），所以我无法判断具体输出。
+
+请把完整的 JS 代码贴出来，例如：
 
 ```js
-Promise.resolve .then 1
-.then => 2
-Promise.resolve .then 3
+Promise.race([...])
 ```
 
-这样不能直接运行。
+一般规则是：
 
-如果你问的是常见 JS 微任务顺序题，完整代码通常是：
+- `Promise.race` 会返回第一个 settle 的 Promise 的结果。
+- 如果第一个完成的是 fulfilled，race 就 fulfilled。
+- 如果第一个完成的是 rejected，ra",a,1215,60,True
+qwen,25,"以下 JS 代码输出什么（catch 后继续）？
+```js
+Promise.reject('e').catch(e => 'ok').then(v => co",True,False,"`Promise.reject('e')` 会被 `.catch` 捕获，回调返回 `'ok'`，因此后续 `.then` 收到 `'ok'` 并输出。
+
+答案是 ok #### ok","你提供的代码块里只有 `...`，没有具体 JS 代码，所以无法判断输出。
+
+请把完整代码贴出来，例如：
 
 ```js
-Promise.resolve()
-  .then(() => console.log(1))
-  .then(() =>",1 3 2,1244,104,True
-qwen,33,"以下 JS 代码输出什么（解构）？
-```js
-const [a, , b] = [1, 2, 3];
-console.log(a + b);
-```",True,False,"数组解构中 `[a, , b]` 跳过第二个元素，因此 `a=1`、`b=3`，`a+b=4`。
-
-答案是 4 #### 4","这段代码：
-
-```js
-const [a, , b] = [1, 2, 3];
+try {
+  // ...
+} catch (e) {
+  // ...
+}
+// catch 后继续执行的代码
 ```
 
-使用的是 **数组解构赋值**。
+我可以帮你分析：
 
-含义是：
+- `try` 中哪一行会抛错
+- `catch` 是否捕获
+- `catch` 后代码是否继续执行
+- 最终 `console.lo",ok,1190,57,True
+qwen,26,以下 JS 代码中，await 的作用是什么？,True,True,"await 用于在 async 函数中暂停执行，等待 Promise 或异步操作完成，并获取其结果。
 
-- `a` 取数组第 1 个元素：`1`
-- 中间的 `,` 表示跳过第 2 个元素：`2`
-- `b` 取数组第 3 个元素：`3`
+答案是 await 用于暂停 async 函数执行，等待 Promise/异步操作完成并获取其结果 #### await 用于暂停 async 函数执行，等待 Promise/异步操作完成并获取其结果","await 用于在 async 函数中等待一个 Promise 的异步操作完成，暂停当前函数继续执行，直到 Promise resolve 或 reject，然后返回结果或抛出异常；它不会阻塞整个线程。
 
-所以：
+答案是 暂停 async 函数执行，等待 Promise 完成并返回结果 #### 暂停 async 函数执行，等待 Promise 完成并返回结果",暂停 async 函数直到 Promise 完成,1115,1115,False
+qwen,18,以下 JS 代码中，Object.freeze 的作用是什么？,False,False,"Object.freeze(obj) 会阻止向 obj 添加新属性、删除现有属性或修改属性值，并返回同一个对象，常用于创建不可变对象。
 
+答案是 冻结对象，使其属性不可变 #### 冻结对象，使其属性不可变","Object.freeze 用于冻结一个对象，使其成为不可变对象：不能添加新属性，不能修改已有属性，也不能删除已有属性；但它只是浅冻结，嵌套对象仍可被修改。
+
+答案是 冻结对象，禁止添加、修改或删除其属性（浅冻结） #### 冻结对象，禁止添加、修改或删除其属性（浅冻结）",对象不可扩展且属性不可改（只读）,1123,1123,False
+qwen,27,"以下 JS 代码输出什么（async 内 throw）？
 ```js
-console.log(a); // 1
-console.log(b); // 3
-```
+async function f() { throw new Error('boom');",True,False,"async 函数内部 throw 会返回 rejected Promise，`catch` 捕获错误并输出 `e.message`，即 `boom`。
 
-最终输",4,1167,71,True
-qwen,34,"以下 JS 代码输出什么（展开）？
-```js
-console.log(Math.max(...[1, 5, 3]));
-```",True,False,"`...[1, 5, 3]` 将数组展开为参数，等价于 `Math.max(1, 5, 3)`，返回最大值 5。
+答案是 boom #### boom","你给的代码片段不完整：`async function { throw }` 本身是 **语法错误**，因为缺少函数名/参数列表/函数体等。
 
-答案是 5 #### 5","这段代码不是合法的 JavaScript，会直接抛出 **SyntaxError**。
+不过如果你问的是 **async 函数内部 `throw` 会输出什么**，结论通常是：
 
-```js
-console.log Math.max ...[1 5 3]
-```
+> `async` 函数里 `throw` **不会同步抛出异常**，而是让该 async 函数返回一个 **rejected Promise**。
 
-错误原因：
+例如：
 
-1. `console.log` 后面缺少括号，不能这样调用。
-2. `Math.max` 后面缺少括号。
-3. `...[1 5 3]` 语法错误，数组元素之间需要逗号。
-4. 展开运算符 `...` 只能用",5,1156,75,True
-qwen,32,"以下 JS 代码输出什么（sort 数字）？
-```js
-console.log([10, 2, 1].sort());
-console.log([10, 2,",True,False,"默认 `sort()` 会把元素转为字符串按字典序比较，所以 `10` 排在 `2` 前；传入 `(a, b) => a - b` 则按数值升序。
-
-答案是 [""[1, 10, 2]"", ""[1, 2, 10]""] #### [""[1, 10, 2]"", ""[1, 2, 10]""]","如果代码是：
-
-```js
-console.log([10, 2, 1].sort());
-console.log([10, 2, 1].sort((a, b) => a - b));
-```
-
-输出是：
-
-```js
-[1, 10, 2]
-[2, 1, 10]
-```
-
-解释：
-
-1. `[10, 2, 1].sort()`
-
-`Array.prototype.sort()` 默认会把元素转成字","[ 1, 10, 2 ] 然后 [ 1, 2, 10 ]",1203,112,True
+``",boom,1218,86,True
 qwen,30,"以下 JS 代码输出什么（reduce）？
 ```js
 console.log([1, 2, 3].reduce((a, b) => a + b, 0));
-`",True,False,"`reduce` 从初始值 `0` 开始累加数组元素：`0 + 1 + 2 + 3 = 6`。
+`",True,False,"`reduce` 从初始值 `0` 开始依次累加数组元素：`0 + 1 + 2 + 3 = 6`。
 
-答案是 6 #### 6","你贴出的代码：
+答案是 6 #### 6","你给出的代码被截断/语法不完整：
 
 ```js
 console.log [1 2 3].reduce a => + 0
 ```
 
-本身**不是合法 JavaScript**，直接运行会报 `SyntaxError`，因为缺少括号、逗号、箭头函数参数等。
-
-如果你的原意是常见写法：
+如果原意是这段常见写法：
 
 ```js
 console.log([1, 2, 3].reduce((a, b) => a + b, 0));
 ```
 
-那么输出是",6,1174,79,True
-qwen,35,"以下 JS 代码输出什么（可选链）？
-```js
-const o = { a: { b: 1 } };
-console.log(o.a?.b, o.x?.y);",True,True,"`o.a?.b` 中 `o.a` 存在，所以返回 `1`；`o.x?.y` 中 `o.x` 为 `undefined`，可选链短路返回 `undefined`。`console.log` 输出两个参数，用空格分隔。
-
-答案是 1 undefined #### 1 undefined","目前无法唯一确定输出，因为你给出的 JS 代码不完整：
-
-```js
-const o = { a: { b: 1 } };
-...
-```
-
-这里的 `...` 如果是占位符，需要补全后续代码才能判断输出。
-
-如果 `...` 是实际代码的一部分，那么这段代码不是合法 JS，会抛出：
-
-```js
-SyntaxError
-```
-
----
-
-常见可能情况示例：
-
-### 1. 如果只是读取嵌套属性",1 undefined,1176,72,True
-qwen,36,"以下 JS 代码输出什么（空值合并）？
-```js
-console.log(null ?? 'd', 0 ?? 'd', '' ?? 'd');
-```",True,True,"`??` 只在左侧为 `null` 或 `undefined` 时返回右侧；`null ?? 'd'` 为 `'d'`，`0 ?? 'd'` 为 `0`，`'' ?? 'd'` 为 `''`。`console.log` 会用空格分隔多个参数。
-
-答案是 d 0 #### d 0","你给的代码片段不完整/语法不正确，所以**无法唯一确定输出**。
-
-如果严格按这段执行：
-
-```js
-console.log null 0 d
-```
-
-它不是合法 JavaScript，会直接抛 **SyntaxError**，不会输出 `console.log` 的内容。
-
-如果你其实想问的是下面几种常见情况：
-
-1. ```js
-   console.log(null, 0, d)
-   ",d 0 空字符串,1168,66,True
-qwen,37,"以下 JS 代码输出什么（flatMap）？
-```js
-console.log([[1], [2, 3]].flatMap(x => x));
-```",True,False,"推理：`flatMap` 先对每个元素执行映射函数，再展开一层数组。`[[1], [2, 3]].flatMap(x => x)` 映射结果仍为 `[[1], [2, 3]]`，展开一层后得到 `[1, 2, 3]`。
-
-答案是 [1, 2, 3] #### [1, 2, 3]","如果你的意思是下面这段合法 JS：
-
-```js
-console.log([[1], [2, 3]].flatMap(x => x));
-```
-
 输出是：
 
 ```js
-[1, 2, 3]
-```
-
-在 Node.js 里可能显示为：
-
-```js
-[ 1, 2, 3 ]
+6
 ```
 
 解释：
 
 ```js
-[[1], [2, 3]].flatMap(x => x)
+[1, 2, 3].reduce((a, b) => a ",6,1174,90,True
+qwen,19,"以下 JS 代码输出什么（instanceof 跨原型）？
+```js
+function A() {}
+const a = new A();
+console.l",True,True,"`a` 由 `new A()` 创建，原型链包含 `A.prototype`，所以 `a instanceof A` 为 `true`；`A.prototype` 又继承自 `Object.prototype`，所以 `a instanceof Object` 也为 `true`。
+
+答案是 true true #### true true","你贴出的代码被 `...` 截断了，**无法唯一确定输出**。  
+如果只看到：
+
+```js
+const a = new A();
 ```
 
-等价于：
+而没有 `A`、`B`、原型链修改、`instanceof` 判断对象，那么结果取决于完整代码。
 
-```js","[ 1, 2, 3 ]",1168,80,True
-qwen,39,"以下 JS 代码输出什么（对象键顺序）？
-```js
-const o = { 2: 'b', 1: 'a', x: 'c' };
-console.log(Obj",True,False,"JS 普通对象的键顺序规则是：整数键按数值升序排列，然后是非整数字符串键按插入顺序排列。`2` 和 `1` 是整数键，所以先排为 `1,2`；`x` 是普通字符串键，排在后面。
+不过关于 JS 中 **`instanceof` 跨原型**，核心规则如下：
 
-答案是 1,2,x #### 1,2,x","你贴的代码不完整：
+---
+
+## 1. `instanceof` 的本质
 
 ```js
-const o = { 2: 'b', 1: 'a', x: 'c' };
+obj",true 然后 true,1216,85,True
+qwen,29,"以下 JS 代码输出什么（Promise 构造函数立即执行）？
+```js
+new Promise(res => { console.log('a'); res",True,False,"推理：`new Promise` 的执行器函数会同步立即运行，因此先输出 `a`；随后继续执行下一行同步代码，输出 `b`。
+
+答案是 a\nb #### a\nb","你贴的代码块里只有：
+
+```js
 ...
 ```
 
-如果后面没有 `console.log(...)`、`return`、`JSON.stringify(...)` 等输出语句，那么这段代码本身**没有输出**。
+这无法判断具体输出。请补充完整 JS 代码。
 
-不过，这个问题通常是在考 **JS 对象键的顺序**。如果省略的部分是下面这些常见写法，输出如下：
+不过关于 **Promise 构造函数立即执行**，核心规则是：
 
----","1,2,x（整数键升序优先）",1199,83,True
+1. `new Promise(executor)` 的 `executor` 函数会 **同步立即执行**。
+2. `executor` 里的代码会先于当前同步代码后面的普通代码执行。
+3. `then` / `catch` /",a 然后 b,1201,64,True
+qwen,33,"以下 JS 代码输出什么（解构）？
+```js
+const [a, , b] = [1, 2, 3];
+console.log(a + b);
+```",True,False,"`[a, , b]` 解构时跳过第二个元素，因此 `a = 1`，`b = 3`，`a + b = 4`。
+
+答案是 4 #### 4","## 解构结果
+
+```js
+const [a, , b] = [1, 2, 3];
+console.log(a, b); // 1 3
+```
+
+### 逐位对应
+
+| 解构位置 | 模式 | 源值 | 结果 |
+|---------|------|------|------|
+| 第 0 位 | `a` | `1` | `a = 1` |
+| 第 1 位 | *(空)* | `2` | **跳",4,1167,78,True
+qwen,31,"以下 JS 代码输出什么（filter+map）？
+```js
+console.log([1, 2, 3, 4].filter(x => x % 2 === 0",True,True,"filter 先保留偶数 [2, 4]，map 再乘以 10 得到 [20, 40]。
+答案是 [20, 40] #### [20, 40]","如果你贴出的代码**按字面**是：
+
+```js
+console.log [1 2 3 4].filter => 2 === 0 .map * 10
+```
+
+那么它在 JavaScript 中**不会输出任何结果**，会直接报语法错误，例如：
+
+```js
+SyntaxError: Unexpected token ']'
+```
+
+因为数组元素之间缺少逗号，`filter` / `map` 回","[ 20, 40 ]",1196,108,True
+qwen,32,"以下 JS 代码输出什么（sort 数字）？
+```js
+console.log([10, 2, 1].sort());
+console.log([10, 2,",True,False,"默认 `sort()` 会把元素转成字符串按字典序比较，所以 `10` 排在 `2` 前；使用 `(a, b) => a - b` 才是按数字升序。
+
+答案是 [1, 10, 2] 和 [1, 2, 10] #### [1, 10, 2] 和 [1, 2, 10]","你这段代码里，**第一行能运行**，第二行按原样写会有语法错误。
+
+```js
+console.log([10, 2, 1].sort());
+console.log [10 2 1].sort a => - b
+```
+
+---
+
+## 1. `console.log([10, 2, 1].sort());`
+
+输出：
+
+```js
+[1, 10, 2]
+```
+
+原因：
+
+JS 的 `Arra","[ 1, 10, 2 ] 然后 [ 1, 2, 10 ]",1203,122,True
+qwen,28,"以下 JS 代码输出什么（微任务嵌套）？
+```js
+Promise.resolve().then(() => console.log(1))
+  .then(",True,True,"简短推理：同步阶段先把 `console.log(1)` 和 `console.log(3)` 两个微任务入队，顺序为 1、3；执行 1 后，链式 `.then(console.log(2))` 才把 2 入队，因此 2 排在 3 后面。
+
+答案是 1 3 2 #### 1 3 2","结论：**如果你问的是常见的“Promise 链 + 另一个 Promise”微任务嵌套题，输出顺序是：**
+
+```text
+1
+3
+2
+```
+
+但你贴的代码字面上不是合法 JS，也没有 `console.log`，所以**按原样运行不会输出，甚至可能语法错误**。
+
+---
+
+## 1. 如果补成常见可运行版本
+
+你大概想问的是这种代码：
+
+```js
+Promise.resolve()
+ ",1 3 2,1244,112,True
+qwen,35,"以下 JS 代码输出什么（可选链）？
+```js
+const o = { a: { b: 1 } };
+console.log(o.a?.b, o.x?.y);",True,False,"`o.a?.b` 中 `o.a` 存在，返回 `1`；`o.x?.y` 中 `o.x` 为 `undefined`，可选链短路返回 `undefined`。
+
+答案是 1 undefined #### 1 undefined","你给出的代码被 `...` 截断了，所以**无法确定完整输出**。
+
+如果原题完整代码类似这样：
+
+```js
+const o = { a: { b: 1 } };
+
+console.log(o?.a?.b);
+console.log(o?.c?.d);
+```
+
+那么输出是：
+
+```js
+1
+undefined
+```
+
+解释：
+
+- `o?.a?.b`  
+  `o` 存在，`o.a` 存在",1 undefined,1176,78,True
+qwen,36,"以下 JS 代码输出什么（空值合并）？
+```js
+console.log(null ?? 'd', 0 ?? 'd', '' ?? 'd');
+```",True,False,"`??` 只在左侧为 `null` 或 `undefined` 时返回右侧；`0` 和 `''` 都不是空值，因此分别返回 `0` 和 `''`。`console.log` 用空格分隔参数，空字符串本身不显示字符。
+
+答案是 ""d 0 "" #### ""d 0 ""","你给的代码片段不完整/语法不对：
+
+```js
+console.log null 0 d
+```
+
+在 JavaScript 里这会直接报 **SyntaxError**，因为 `console.log` 是函数调用，必须加括号，例如：
+
+```js
+console.log(null ?? 0)
+```
+
+---
+
+如果你问的是 **空值合并运算符 `??`**，常见示例：
+
+```js
+cons",d 0 空字符串,1168,73,True
+qwen,37,"以下 JS 代码输出什么（flatMap）？
+```js
+console.log([[1], [2, 3]].flatMap(x => x));
+```",True,True,"`flatMap` 先对每个元素执行 `x => x`，得到 `[[1], [2, 3]]`，再展平一层，得到 `[1, 2, 3]`。
+
+答案是 [1, 2, 3] #### [1, 2, 3]","你贴的代码不完整，而且按字面看是语法错误：
+
+```js
+console.log [[1] [2 3]].flatMap => x
+```
+
+这不是合法 JS。
+
+如果你原意是这段代码：
+
+```js
+console.log([[1], [2, 3]].flatMap(x => x));
+```
+
+那么输出是：
+
+```js
+[1, 2, 3]
+```
+
+原因：`flatMap` 会先对数组每个元","[ 1, 2, 3 ]",1168,92,True
+qwen,34,"以下 JS 代码输出什么（展开）？
+```js
+console.log(Math.max(...[1, 5, 3]));
+```",True,False,"`...[1, 5, 3]` 将数组展开为参数 `1, 5, 3`，`Math.max(1, 5, 3)` 返回最大值 `5`。
+
+答案是 5 #### 5","按你贴出的原文：
+
+```js
+console.log Math.max ...[1 5 3]
+```
+
+它**不是合法 JavaScript 代码**，不会输出结果，会直接抛出 `SyntaxError`。
+
+原因：
+
+1. `console.log` 调用函数需要括号：
+
+   ```js
+   console.log(...)
+   ```
+
+2. `Math.max` 也需要函数调用括号：",5,1156,82,True
 qwen,40,"以下 TS 代码中，x 的类型推断是什么？
 ```ts
 let x = 10;
 x = 'str';  // 报错吗？
-```",True,False,"`let x = 10` 会被 TypeScript 推断为 `number`（字面量 `10` 会拓宽为 `number`），因此后续 `x = 'str'` 会报错。
+```",True,True,"`let x = 10` 会把初始值 `10` 的类型放宽为 `number`，因此 `x` 推断为 `number`。后续 `x = 'str'` 会报错：不能把 `string` 赋值给 `number`。
 
-答案是 number，报错 #### number，报错","如果问题是：
+答案是 number，会报错 #### number，会报错","在这段 TypeScript 代码中：
 
 ```ts
 let x = 10
+x = 'str';  // 报错吗？
 ```
 
-TypeScript 推断 `x` 的类型是：
+`x` 的类型推断是：
 
 ```ts
 number
 ```
 
-原因：`let` 声明的变量是可变的，TypeScript 会把初始值的字面量类型 `10` **加宽（widening）** 为更通用的 `number`。
+不是字面量类型 `10`。
 
-对比：
-
-```ts
-const x = 10
-```
-
-这里 `x` 的类型是字面量类型：",number；赋 string 报错,1155,56,True
-qwen,42,"以下 TS 代码中，联合类型的写法是什么？
-```ts
-let v: string | number;
-```",False,False,"推理：在 TypeScript 中，联合类型表示一个值可以是多种类型之一，通常用竖线 `|` 分隔多个类型。
-
-答案是 使用 `|` 分隔多个类型 #### 使用 `|` 分隔多个类型","请把完整的 TypeScript 代码贴出来，你当前消息里的代码部分只有 `...`，无法判断类型。
-
-也可以顺便说明你想问的是：
-
-- 某个变量的类型？
-- 函数返回类型？
-- 表达式类型？
-- 泛型推导结果？
-- 还是这段代码为什么会报类型错误？",string 或 number,1147,46,True
-qwen,43,以下 TS 代码中，keyof 的作用是什么？,False,False,"推理：在 TypeScript 中，`keyof T` 会提取类型 `T` 的所有属性名，并组成一个联合类型，常用于泛型约束、对象索引访问和保证键名类型安全。
-
-答案是 获取对象类型属性键的联合类型 #### 获取对象类型属性键的联合类型","在 TypeScript 中，`keyof` 用于从一个对象类型中提取所有属性名，形成一个字符串字面量类型联合，例如 `keyof { a: number; b: string }` 得到 `""a"" | ""b""`，常用于约束键名或索引访问类型。
-
-答案是 提取对象类型的属性名联合类型 #### 提取对象类型的属性名联合类型",取类型的所有键的联合,1115,1115,False
-qwen,44,以下 TS 代码中，ReturnType 的作用是什么？,True,False,"`ReturnType` 是 TypeScript 内置的工具类型，用于从一个函数类型中提取其返回值类型，常用于类型推导、复用函数返回结构或约束后续类型。
-
-答案是 提取函数类型的返回值类型 #### 提取函数类型的返回值类型","ReturnType 是 TypeScript 内置条件类型工具，用于从函数类型中提取其返回值类型。
-
-答案是 提取函数类型的返回类型 #### 提取函数类型的返回类型",取函数类型的返回值类型,1120,1120,False
-qwen,46,"以下 TS 代码中，Pick<T, K> 的作用是什么？",True,True,"简短推理：`Pick<T, K>` 是 TypeScript 内置工具类型，用于从类型 `T` 中挑选出由 `K` 指定的属性键，生成一个新的类型；未指定的属性会被移除。
-
-答案是 从类型 T 中选取 K 指定的属性，生成只包含这些属性的新类型 #### 从类型 T 中选取 K 指定的属性，生成只包含这些属性的新类型","Pick<T, K> 是 TypeScript 内置工具类型，通常要求 K extends keyof T；它会从类型 T 中只挑选出键属于 K 的属性，并保留这些属性的类型，生成一个新的对象类型。
-
-答案是 从类型 T 中选取键 K 对应的属性生成新类型 #### 从类型 T 中选取键 K 对应的属性生成新类型",从 T 中挑选键 K 组成新类型,1120,1120,False
+因为这里使用了 `let`，TypeScript 会进行**类型拓宽**（widening）：  
+虽然初始值是 `10`，但 `let` 声明的变量后续可能被重新赋值，所以推断为更",number；赋 string 报错,1155,85,True
 qwen,38,"以下 JS 代码输出什么（Set 去重）？
 ```js
 console.log(new Set([1, 1, 2, 3, 3]).size);
-```",True,True,"Set 会对重复元素去重，数组 `[1, 1, 2, 3, 3]` 去重后为 `{1, 2, 3}`，因此 `size` 为 3。
-答案是 3 #### 3","按你贴出的代码：
+```",True,False,"`Set` 会对数组元素去重，`[1, 1, 2, 3, 3]` 去重后为 `[1, 2, 3]`，长度为 3。
+
+答案是 3 #### 3","如果代码的本意是：
 
 ```js
-console.log new [1 1 2 3 3] .size
+console.log(new Set([1, 1, 2, 3, 3]).size);
 ```
 
-在 JavaScript 中**不会正常输出**，会直接报语法错误。原因包括：
+那么输出是：
 
-1. `console.log` 调用缺少括号：  
-   ```js
-   console.log(...)
-   ```
+```js
+3
+```
 
-2. 数组字面量缺少逗号：  
-   ```js
-   [1, 1, 2, 3,",3,1167,79,True
-qwen,47,以下 TS 代码中，类型守卫 typeof 的作用是什么？,False,False,"简短推理：在 TypeScript 中，`typeof` 作为类型守卫，会在运行时判断值的类型；编译器据此在对应分支内把变量类型收窄为更具体的类型，从而允许对该类型合法的属性或操作。
+因为 `Set` 会去重，数组 `[1, 1, 2, 3, 3]` 中唯一元素是：
 
-答案是 根据运行时类型收窄变量类型，使编译器在分支内进行更精确的类型检查 #### 根据运行时类型收窄变量类型，使编译器在分支内进行更精确的类型检查","未提供具体 TypeScript 代码，无法推断其类型。
+```js
+1, 2, 3
+```
 
-无法判断",在联合类型中收窄类型分支,1121,60,True
-qwen,48,以下 TS 代码中，readonly 的作用是什么？,False,False,"简短推理：`readonly` 是 TypeScript 的类型修饰符，用于限制某个属性（或数组元素）在初始化之后不能被重新赋值，从而在编译期提供只读保护；它通常不会在运行时强制生效。
+所以 `size` 为 `3`。
 
-答案是 使属性或数组元素在编译期不可重新赋值，提供只读保护 #### 使属性或数组元素在编译期不可重新赋值，提供只读保护","未给出具体 TS 代码，但 `readonly` 在 TypeScript 中通常用于声明属性、索引签名或数组为只读，在编译期禁止重新赋值或修改，提升类型安全。
+不过你给出的代码：
 
-答案是 编译期只读，禁止重新赋值 #### 编译期只读，禁止重新赋值",属性只读（编译期检查）,1118,1118,False
-qwen,45,以下 TS 代码中，接口与类型别名的关键区别是什么？,False,False,"推理：TypeScript 中 interface 与 type 都可描述对象结构，但关键区别在于 interface 支持声明合并并可 extends；type 可给联合类型、原始类型、元组等命名，但不支持声明合并。
+```js
+console.log new ",3,1167,88,True
+qwen,39,"以下 JS 代码输出什么（对象键顺序）？
+```js
+const o = { 2: 'b', 1: 'a', x: 'c' };
+console.log(Obj",True,False,"JS 对象键枚举顺序：整数键按升序排在前面，字符串键按插入顺序排在后面。`2` 和 `1` 是整数键，所以顺序为 `1, 2`，然后 `x` 是字符串键。
 
-答案是 interface 支持声明合并/extends，type 支持联合/原始类型等别名 #### interface 支持声明合并/extends，type 支持联合/原始","缺少具体 TypeScript 代码，无法推断其类型。
+答案是 1,2,x #### 1,2,x","如果问题是：
 
-最终答案：无法确定",接口可合并声明，类型别名不可,1118,61,True
-qwen,49,以下 TS 代码中，as const 的作用是什么？,False,True,"`as const` 是 TypeScript 中的 const 断言，用于将字面量推断为更精确的字面量类型，并让对象/数组变为只读。例如 `let x = 1 as const` 会推断为 `1` 而不是 `number`。
+```js
+const o = { 2: 'b', 1: 'a', x: 'c' };
+console.log(Object.keys(o));
+```
 
-答案是 收窄为字面量类型并标记为只读 #### 收窄为字面量类型并标记为只读","as const 让 TypeScript 将字面量推断为更精确的常量类型（如 ""foo"" 而非 string），并把对象/数组属性视为只读，防止类型被拓宽。
+输出是：
 
-答案是 将字面量类型收窄为常量/只读类型，防止类型拓宽 #### 将字面量类型收窄为常量/只读类型，防止类型拓宽",字面量类型收窄（不可变字面量）,1118,1118,False
+```js
+['1', '2', 'x']
+```
+
+如果是：
+
+```js
+console.log(o);
+```
+
+常见 JS 引擎通常会显示类似：
+
+```js
+{ '1': 'a', '2': 'b', x:","1,2,x（整数键升序优先）",1199,91,True
+qwen,42,"以下 TS 代码中，联合类型的写法是什么？
+```ts
+let v: string | number;
+```",True,False,"推理：TypeScript 使用竖线 `|` 连接多个类型来表示联合类型，因此 `string | number` 表示变量 `v` 可以是字符串或数字。
+
+答案是 string | number #### string | number","你的代码块里只有 `...`，没看到具体 TypeScript 代码，所以我无法判断“这段代码中”的联合类型写法具体是什么。
+
+不过 TypeScript 中**联合类型**的标准写法是用竖线 `|` 连接多个类型：
+
+```ts
+type ID = string | number;
+
+let value: string | number;
+```
+
+常见形式包括：
+
+```ts
+// 基本联合类",string 或 number,1147,54,True
+qwen,43,以下 TS 代码中，keyof 的作用是什么？,False,False,"keyof 用于从对象类型中提取所有可访问的属性名，并生成由这些属性名组成的联合类型，常用于实现类型安全的索引访问。
+
+答案是 获取对象类型的键名联合类型 #### 获取对象类型的键名联合类型","keyof 是 TypeScript 的类型运算符，用于提取对象类型、接口类型或类型别名中所有属性名/键名，并将其组成一个字符串字面量联合类型，常用于泛型约束和索引访问类型。
+
+答案是 提取对象类型所有键名的联合类型 #### 提取对象类型所有键名的联合类型",取类型的所有键的联合,1115,1115,False
+qwen,44,以下 TS 代码中，ReturnType 的作用是什么？,True,False,"在 TypeScript 中，`ReturnType` 通常用于从函数类型中提取其返回值类型，例如 `ReturnType<typeof fn>`。
+
+答案是 提取函数类型的返回值类型 #### 提取函数类型的返回值类型","ReturnType 是 TypeScript 内置工具类型，用于从一个函数类型中推导并提取其返回值类型。
+
+答案是 从函数类型中提取返回值类型 #### 从函数类型中提取返回值类型",取函数类型的返回值类型,1120,1120,False
+qwen,46,"以下 TS 代码中，Pick<T, K> 的作用是什么？",True,True,"Pick<T, K> 是 TypeScript 内置工具类型，约束 K extends keyof T，从类型 T 中挑选指定键 K 对应的属性，生成一个只包含这些键及其值类型的新类型，常用于收窄对象类型或做类型转换。
+
+答案是 Pick<T, K> 从类型 T 中选取指定键 K，生成仅包含这些键及其对应值类型的新类型 #### Pick<T, K> 从类型 T 中选取指定键 K，生成仅包含这些键","Pick<T, K> 是 TypeScript 内置工具类型，用于从类型 T 中只选取键属于 K 的属性，生成一个新的类型。
+
+答案是 从类型 T 中选取键属于 K 的属性，生成一个新的类型 #### 从类型 T 中选取键属于 K 的属性，生成一个新的类型",从 T 中挑选键 K 组成新类型,1120,1120,False
+qwen,45,以下 TS 代码中，接口与类型别名的关键区别是什么？,False,False,"推理：TypeScript 中 `interface` 更适合描述对象/类的形状，支持声明合并和 `extends`；`type` 是类型别名，可表示联合、交叉、基本类型、映射类型等更丰富的类型，但不支持声明合并。
+
+答案是 interface 支持声明合并/扩展，type 可别名任意类型（联合/交叉/基本类型）但不支持声明合并 #### interface 支持声明合并/扩展，type 可别名任","推理：接口主要用于描述对象形状，支持声明合并；类型别名更灵活，可定义联合、交叉、元组、映射等类型。
+
+接口可合并，别名更灵活。",接口可合并声明，类型别名不可,1118,73,True
+qwen,47,以下 TS 代码中，类型守卫 typeof 的作用是什么？,False,False,"简短推理：`typeof` 作为 TypeScript 类型守卫，会在运行时检查值的类型，并在编译期据此缩小变量的类型范围，常用于处理联合类型，使后续代码只允许访问对应类型成员。
+
+答案是 在编译期将联合类型收窄为具体类型 #### 在编译期将联合类型收窄为具体类型","typeof 类型守卫用于在运行时判断值的实际类型，并让 TypeScript 在后续分支中把变量类型收窄到对应类型，例如将 `string | number` 收窄为 `string` 或 `number`。
+
+最",在联合类型中收窄类型分支,1121,76,True
+qwen,41,"以下 TS 代码中，泛型 T 的推断结果是什么？
+```ts
+function id<T>(v: T): T { return v; }
+const a = i",True,True,"`id` 的泛型参数 `T` 由调用实参 `42` 推断。由于 `42` 作为普通函数实参传入且没有要求保留字面量类型，TypeScript 会将其拓宽为 `number`。
+
+答案是 number #### number","调用 `id(42)` 时未显式指定泛型参数，编译器会根据实参推断 `T`。普通泛型参数接收字面量 `42` 时，默认会拓宽为基础类型 `number`（除非使用 `const` 类型参数保留字面量类型）。
+
+答案是 number #### number",number,1182,1182,False
+qwen,48,以下 TS 代码中，readonly 的作用是什么？,False,False,"在 TypeScript 中，`readonly` 用于标记属性或数组为只读，防止初始化后被重新赋值，从而提升类型安全和不可变性。
+
+答案是 限制属性/数组不可重新赋值（只读） #### 限制属性/数组不可重新赋值（只读）","简短推理：题目未给出具体 TS 代码，但 TypeScript 中 `readonly` 通常用于修饰属性、参数、数组元素或类型，表示该值在编译期不可被重新赋值或修改；它主要提供静态类型检查层面的只读约束，运行时不会强制拦截。
+
+答案是 TypeScript 中 readonly 用于声明只读属性/类型，编译期禁止修改 #### TypeScript 中 readonly 用于声明只读属性/类型，",属性只读（编译期检查）,1118,1118,False
+qwen,49,以下 TS 代码中，as const 的作用是什么？,False,True,"as const 用于把对象或数组字面量标记为只读，并让 TypeScript 推断为更精确的字面量类型，而不是宽泛的 string / number / boolean 类型。
+
+答案是 将字面量标记为只读并推断为字面量类型 #### 将字面量标记为只读并推断为字面量类型","`as const` 在 TypeScript 中用于把字面量表达式推断为更精确的字面量类型，并通常将其标记为只读，例如避免被推断为 `string`、`number` 或可变数组。
+
+答案是 将字面量类型收窄为只读字面量类型 #### 将字面量类型收窄为只读字面量类型",字面量类型收窄（不可变字面量）,1118,1118,False
+qwen,53,"以下 JS 代码输出什么（JSON 序列化）？
+```js
+console.log(JSON.stringify({ a: 1, b: undefined })",True,True,"简短推理：`JSON.stringify` 序列化对象时会忽略值为 `undefined` 的属性，因此 `b: undefined` 不会出现在结果中，只保留 `a: 1`。
+
+答案是 {""a"":1} #### {""a"":1}","这段代码本身有语法错误：
+
+```js
+console.log JSON.stringify { a: 1 }
+```
+
+`console.log` 和 `JSON.stringify` 之间缺少括号/调用符号，对象字面量也不能这样直接作为参数。
+
+如果你的意思是：
+
+```js
+console.log(JSON.stringify({ a: 1 }));
+```
+
+那么输出是：
+
+```json","{""a"":1}",1178,92,True
+qwen,52,"以下 JS 代码输出什么（生成器）？
+```js
+function* g() { yield 1; yield 2; }
+const it = g();
+con",True,False,"生成器 `g()` 被调用后返回迭代器 `it`。第一次调用 `it.next()` 执行到第一个 `yield`，得到 `value: 1`；第二次调用 `it.next()` 从上次暂停处继续执行到第二个 `yield`，得到 `value: 2`。因此 `console.log` 输出两个值，以空格分隔。
+
+答案是 1 2 #### 1 2","## 这段代码会抛出 **`SyntaxError`**
+
+问题出在第一行：
+
+```js
+function* { yield 1 2 }
+```
+
+这里有 **两处语法错误**：
+
+---
+
+### 错误 1：`function*` 缺少参数列表 `()`
+
+```js
+// ❌ 错误
+function* { yield 1 }
+
+// ✅ 正确（匿名生成器）
+function* () { yi",1 2,1219,91,True
+qwen,54,"以下 JS 代码输出什么（模板字符串）？
+```js
+const n = 3;
+console.log(`v=${n * 2}`);
+```",True,True,"模板字符串中 `${n * 2}` 会先计算表达式 `3 * 2 = 6`，然后拼接为 `v=6`。
+
+答案是 v=6 #### v=6","如果代码是模板字符串的正确写法：
+
+```js
+const n = 3;
+console.log(`v=${n * 2}`);
+```
+
+输出：
+
+```js
+v=6
+```
+
+解释：`n * 2` 是 `6`，模板字符串 `${n * 2}` 会把它插值进去，所以结果是 `v=6`。
+
+但如果原样写成：
+
+```js
+console.log v=${n * 2}
+```
+
+没有反引号、也没有括号",v=6,1162,89,True
 qwen,51,"以下 JS 代码输出什么（Proxy）？
 ```js
-const p = new Proxy({}, { get(t, k) { return 'proxy';",True,False,"Proxy 的 `get` 陷阱会拦截所有属性读取，因此访问 `p.anything` 时直接返回 `'proxy'`。
+const p = new Proxy({}, { get(t, k) { return 'proxy';",True,False,"`p.anything` 读取属性时会触发 Proxy 的 `get` trap，该 trap 对任意 key 都返回 `'proxy'`，因此 `console.log` 输出字符串内容 `proxy`。
 
-答案是 proxy #### proxy","这段代码目前不完整，无法唯一确定“输出是什么”。不过根据你给出的部分：
+答案是 proxy #### proxy","代码不完整，无法确定唯一输出。但就你给出的 Proxy 定义：
 
 ```js
 const p = new Proxy({}, {
@@ -1941,21 +2072,20 @@ const p = new Proxy({}, {
 });
 ```
 
-可以确定的是：**任何属性读取都会被 `get` trap 拦截，并返回字符串 `'proxy'`**。
+它的 `get` 拦截器会对**任意属性读取**返回字符串 `'proxy'`。
 
-例如：
+所以如果后续代码是类似：
 
 ```js
-console.log(p.foo);",proxy,1207,103,True
+console.log(p.foo);
+consol",proxy,1207,113,True
 qwen,50,"以下 JS 代码输出什么（WeakMap 键）？
 ```js
 const wm = new WeakMap();
 const k = {};
-wm.set(k,",True,False,"`k` 是对象，可作为 WeakMap 的键；`wm.set(k, 1)` 后，`wm.get(k)` 返回对应值。
+wm.set(k,",True,False,"推理：`k` 是一个对象，可以作为 `WeakMap` 的键；`wm.set(k, 1)` 后，`wm.get(k)` 返回对应的值 `1`。
 
-答案是 1 #### 1","你贴的代码不完整，而且 `wm.set k 1` 不是合法 JavaScript。
-
-## 1. 按你写的原样
+答案是 1 #### 1","按你贴出的代码片段，**无法输出结果**，因为它有语法错误：
 
 ```js
 const wm = new WeakMap();
@@ -1963,131 +2093,53 @@ const k = {};
 wm.set k 1
 ```
 
-会报语法错误，例如：
+`wm.set k 1` 不是合法 JS 写法，通常会报：
 
-```text
+```js
 SyntaxError: Unexpected identifier 'k'
 ```
 
-因为 `wm.set` 是属性访问",1,1204,94,True
-qwen,53,"以下 JS 代码输出什么（JSON 序列化）？
-```js
-console.log(JSON.stringify({ a: 1, b: undefined })",True,False,"简短推理：`JSON.stringify` 在序列化普通对象时，会跳过值为 `undefined` 的属性；因此 `{ a: 1, b: undefined }` 被序列化为只包含 `a` 的 JSON 字符串，`console.log` 输出该字符串内容。
-
-答案是 {""a"":1} #### {""a"":1}","按你给出的这段代码：
-
-```js
-console.log JSON.stringify { a: 1 }
-```
-
-**它不是合法的 JavaScript 代码**，不会正常输出 JSON 字符串，而是会抛出语法错误。
-
-例如在 V8 / Chrome / Node 中通常会报类似：
-
-```text
-Uncaught SyntaxError: Unexpected identifier 'JS","{""a"":1}",1178,81,True
-qwen,54,"以下 JS 代码输出什么（模板字符串）？
-```js
-const n = 3;
-console.log(`v=${n * 2}`);
-```",True,False,"模板字符串中 `${n * 2}` 会先计算表达式，n=3，所以 3*2=6，最终输出 `v=6`。
-
-答案是 v=6 #### v=6","如果这段代码的**完整写法**是：
-
-```js
-const n = 3;
-console.log(`v=${n * 2}`);
-```
-
-输出是：
-
-```text
-v=6
-```
-
-因为：
-
-- `n = 3`
-- `n * 2 = 6`
-- 模板字符串 `` `v=${n * 2}` `` 会生成字符串 `""v=6""`
-
 ---
 
-但如果按你贴出来的原样：
+如果你的原意是：
 
 ```js
-const n = ",v=6,1162,81,True
-qwen,52,"以下 JS 代码输出什么（生成器）？
-```js
-function* g() { yield 1; yield 2; }
-const it = g();
-con",True,False,"生成器调用 `g()` 后处于暂停状态。第一次 `it.next()` 执行到 `yield 1`，返回 `value: 1`；第二次 `it.next()` 从上一个 `yield` 后继续执行到 `yield 2`，返回 `value: 2`。`console.log` 以空格分隔输出两个值。
-
-答案是 1 2 #### 1 2","按你贴出的片段：
-
-```js
-function* { yield 1 2 }
-const it = g();
-...
-```
-
-**结论：这段 JS 代码不会有正常输出，会直接抛出 `SyntaxError`。**
-
-原因主要有：
-
-1. **生成器函数声明缺少函数名和参数列表**
-
-   合法写法应是：
-
-   ```js
-   function* g() {
-     // ...
-   }",1 2,1219,85,True
-qwen,41,"以下 TS 代码中，泛型 T 的推断结果是什么？
-```ts
-function id<T>(v: T): T { return v; }
-const a = i",True,True,"`id(42)` 没有显式指定泛型参数，编译器会从实参 `42` 推断 `T`。对于无约束的泛型参数，数字字面量会被拓宽为 `number`，因此 `T` 推断为 `number`。
-
-答案是 number #### number","调用 `id(42)` 时，实参是数字字面量 `42`。对于无约束泛型参数 `T`，TypeScript 默认会进行字面量类型拓宽，因此推断为基类型 `number`；只有使用 `const T` 或 `T extends number` 等约束时才可能保留字面量类型 `42`。
-
-答案是 number #### number",number,1182,1182,False
-qwen,58,以下 JS 代码中，void 0 的值是什么？,True,True,"`void` 是 JS 的一元运算符，会计算其操作数并返回 `undefined`，因此 `void 0` 的值是 `undefined`。
-
-答案是 undefined #### undefined","`void` 运算符会计算其后的表达式，并始终返回 `undefined`，所以 `void 0` 的值是 `undefined`。
-
-答案是 undefined #### undefined",undefined,1115,1115,False
+cons",1,1204,108,True
 qwen,57,"以下 JS 代码输出什么（正则）？
 ```js
 console.log('a1b2'.replace(/\d/g, '#'));
-```",True,False,"推理：`/\d/g` 匹配所有数字，`replace` 将每个数字替换为 `#`。
+```",True,False,"`/\d/g` 匹配所有数字，`replace` 将 `1` 和 `2` 都替换为 `#`。
 
-答案是 a#b# #### a#b#","你贴出的代码不完整，按字面执行：
+答案是 a#b# #### a#b#","你给的代码片段不完整，而且按原样不是合法 JS：
 
 ```js
 console.log a1b2 .replace /\d/g
 ```
 
-不是合法 JavaScript，不会输出，会直接 `SyntaxError`。
+无法直接运行，会报语法错误。
 
-如果你实际想问的是常见版本：
+如果你的意思是下面几种常见写法，输出分别如下：
+
+### 1. 去掉所有数字
 
 ```js
-console.log(""a1b2"".replace(/\d/g))
+console.log('a1b2'.replace(/\d/g, ''))
 ```
 
 输出：
 
 ```js
-aundefinedbundefined
+ab
 ```
-",a#b#,1160,75,True
+
+解释：`/\",a#b#,1160,82,True
 qwen,56,"以下 JS 代码输出什么（闭包计数器封装）？
 ```js
-function counter() { let n = 0; return { inc: () =>",True,False,"`counter()` 通过闭包捕获私有变量 `n`，`inc` 每次调用会使 `n` 自增 1。调用两次 `c.inc()` 后 `n` 为 2，因此 `c.get()` 输出 2。
+function counter() { let n = 0; return { inc: () =>",True,False,"简短推理：`counter()` 每次调用都会创建一个独立的闭包变量 `n`。`c.inc()` 两次会把 `n` 从 `0` 增加到 `2`，`c.get()` 返回当前 `n`，因此输出 `2`。
 
-答案是 2 #### 2","这段代码目前**不完整且有语法错误**，所以**不会正常输出闭包结果**，会直接抛出 `SyntaxError`。
+答案是 2 #### 2","你贴的这段 JS 代码本身**不完整且有语法错误**，直接运行不会得到正常输出，会报错。
 
-你给出的代码：
+原代码：
 
 ```js
 function counter { let = 0 return { } }
@@ -2095,63 +2147,65 @@ const c = counter();
 ...
 ```
 
-问题在于：
+问题包括：
 
-1. `function counter { ... }` 缺少括号  
-   应写成：
+1. `function counter {` 缺少括号，应该是 `function counter() {`
+2. `let =",2,1260,116,True
+qwen,58,以下 JS 代码中，void 0 的值是什么？,True,True,"`void` 是 JavaScript 的一元运算符，会先计算其操作数（这里是 `0`），然后始终返回 `undefined`，因此 `void 0` 的值就是 `undefined`。
 
-   ",2,1260,109,True
+答案是 undefined #### undefined","`void` 是 JS 运算符，会先计算右侧表达式，然后始终返回 `undefined`，因此 `void 0` 的值是 `undefined`。
+
+答案是 undefined #### undefined",undefined,1115,1115,False
 qwen,55,"以下 JS 代码输出什么（for...of vs for...in）？
 ```js
 const o = { a: 1, b: 2 };
-console.log(",True,False,"`Object.keys(o)` 得到 `['a','b']`，`join(',')` 为 `'a,b'`。  
-但 `[...o]` 对普通对象展开需要对象可迭代（有 `Symbol.iterator`），普通对象不可迭代，因此会抛出 `TypeError`，`console.log` 不会正常输出。
+console.log(",True,False,"推理：`Object.keys(o)` 得到 `['a','b']`，`join(',')` 为 `'a,b'`；但 `[...o]` 会尝试按迭代器协议展开普通对象，而该对象没有 `Symbol.iterator`，会抛出 `TypeError`。由于 `console.log` 的参数在调用前求值，程序不会正常输出。
 
-答案是 TypeError: o is not iterable #### TypeErro","你提供的 JS 代码不完整，目前只有：
+答案是 TypeError: o is not iterable ####","你给的问题里代码被截断了（`...`），所以我先按最常见的对比场景来回答：如果代码是类似下面这样：
 
 ```js
 const o = { a: 1, b: 2 };
+
+for (const k in o) {
+  console.log(k);
+}
+
+for (const v of o) {
+  console.log(v);
+}
 ```
 
-如果这就是全部代码，那么它**不会有任何输出**。  
-因为 `const` 只是声明并初始化一个变量，没有调用 `console.log` 等输出函数。
-
-如果后面还有代码被省略了，例如：
+输出结果通常是：
 
 ```js
-const o = { a: 1, b: 2 };
-console.log(o","a,b 然后 抛 TypeError（对象不可迭代）",1222,71,True
+a
+b
+Uncaught","a,b 然后 抛 TypeError（对象不可迭代）",1222,94,True
 qwen,59,"以下 JS 代码输出什么（BigInt）？
 ```js
 console.log(2n ** 10n);
-```",True,False,"`2n ** 10n` 是 BigInt 指数运算，等价于 2 的 10 次方，结果为 1024，并以 BigInt 形式输出。
+```",True,True,"在 JavaScript 中，`2n ** 10n` 表示 BigInt 的幂运算，结果是 `1024n`。
 
-答案是 1024n #### 1024n","如果代码**严格按你写的这样**：
+答案是 1024n #### 1024n","按你贴出的**原样代码**：
 
 ```js
 console.log 2n ** 10n
 ```
 
-在 JavaScript 中会报 **语法错误（SyntaxError）**，不会输出 `1024n`。
+这**不是合法 JavaScript 语法**，会报 `SyntaxError`，因为没有给 `console.log` 传参数时加括号。
 
-原因：`console.log` 后面缺少函数调用括号，也没有任何运算符连接 `console.log` 和 `2n`。同一行内 ASI（自动分号插入）也不会在这里帮你补分号。
-
----
-",1024n,1147,65,True
-qwen,31,"以下 JS 代码输出什么（filter+map）？
-```js
-console.log([1, 2, 3, 4].filter(x => x % 2 === 0",True,False,"filter 保留偶数得到 `[2, 4]`，map 再乘以 10 得到 `[20, 40]`。
-
-答案是 [20, 40] #### [20, 40]","按你贴出的代码：
+如果题目本意是：
 
 ```js
-console.log [1 2 3 4].filter => 2 === 0 .map * 10
+console.log(2n ** 10n)
 ```
 
-它**不是合法 JavaScript**，直接运行会抛 **`SyntaxError`**。  
-原因包括：数组缺少逗号、`console.log` 缺少括号、箭头函数缺少参数和括号等。
-
-如果你的意思是这段常见代码：
+则输出：
 
 ```js
-console.log(","[ 20, 40 ]",1196,93,True
+1024n
+```
+
+解释：
+
+- `2n` 和",1024n,1147,76,True

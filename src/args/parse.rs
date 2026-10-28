@@ -520,6 +520,7 @@ pub(crate) const POLICY_TABLE: &[(&str, &str)] = &[
     ("trim_ratio", "--trim-ratio"),
     ("trim_op_keep", "--trim-op-keep"),
     ("code_keep", "--code-keep"),
+    ("zh_keep", "--zh-keep"),
     ("num_line_keep", "--num-line-keep"),
     ("sym_line_keep", "--sym-line-keep"),
 ];
@@ -541,7 +542,7 @@ pub(crate) fn apply(
     match key {
         "ratio" | "context" | "window" => number(s, key, v, path, line)?,
         "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" | "trim"
-        | "trim_op_keep" | "code_keep" | "num_line_keep" | "sym_line_keep" => {
+        | "trim_op_keep" | "code_keep" | "zh_keep" | "num_line_keep" | "sym_line_keep" => {
             toggle(s, key, v, path, line)?
         }
         "max_tokens" => tokens(s, v, path, line)?,
@@ -629,6 +630,7 @@ pub(crate) fn toggle(
         "trim" => s.config.trim = b,
         "trim_op_keep" => s.config.trim_op_keep = b,
         "code_keep" => s.config.code_keep = b,
+        "zh_keep" => s.config.zh_keep = b,
         "num_line_keep" => s.config.num_line_keep = b,
         "sym_line_keep" => s.config.sym_line_keep = b,
         _ => unreachable!("bool policy key whitelist"),
@@ -736,6 +738,7 @@ pub(crate) fn either(
         "--trim" => s.config.trim = b,
         "--trim-op-keep" => s.config.trim_op_keep = b,
         "--code-keep" => s.config.code_keep = b,
+        "--zh-keep" => s.config.zh_keep = b,
         "--num-line-keep" => s.config.num_line_keep = b,
         "--sym-line-keep" => s.config.sym_line_keep = b,
         _ => s.store = b,

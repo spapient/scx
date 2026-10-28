@@ -1,0 +1,1615 @@
+model,idx,question,full,scx,full_ans,scx_ans,gold,full_chars,scx_chars,compressed
+deepseek,1,"以下 kernel 启动的线程块总数是多少？
+```cuda
+kernel<<<dim3(2, 3), 8>>>();
+```",True,True,"`dim3(2, 3)` 表示网格在 x 方向有 2 个块、y 方向有 3 个块，z 方向默认 1，因此线程块总数为 `2 × 3 × 1 = 6`。
+
+答案是 6 #### 6","线程块总数 = gridDim.x × gridDim.y × gridDim.z  
+= 2 × 3 × 1 = **6 个线程块**。
+
+每个线程块有 8 个线程，因此总线程数为 6 × 8 = 48。",6,1155,827,True
+deepseek,0,"以下 CUDA kernel 启动后，每个线程块内的线程总数是多少？
+```cuda
+dim3 block(16, 4);
+kernel<<<8, block>",True,True,"每个线程块的三维尺寸为 `(16, 4, 1)`，因此线程总数为 \(16 \times 4 \times 1 = 64\)。
+
+答案是 64 #### 64","每个线程块内的线程总数是：
+
+\[
+16 \times 4 = 64
+\]
+
+因为 `dim3 block(16, 4);` 表示 block 的维度为 \(x=16, y=4, z=1\)，所以：
+
+\[
+\text{threads per block}=16\times4\times1=64
+\]
+
+答案：**64 个线程/块**。",64,1181,846,True
+deepseek,3,"kernel<<<2, 32>>> 启动后，线程 threadIdx.x 的取值范围是多少？",True,True,"`kernel<<<2, 32>>>` 表示每个线程块有 32 个线程，因此单个块内 `threadIdx.x` 从 0 开始，到 31 结束。
+
+答案是 [0, 31] #### [0, 31]","`kernel<<<2, 32>>>` 中：
+
+- `2` 表示 grid 中有 2 个 block，即 `blockIdx.x = 0, 1`
+- `32` 表示每个 block 有 32 个线程，即 `blockDim.x = 32`
+
+因此每个 block 内：
+
+```cpp
+threadIdx.x = 0, 1, 2, ..., 31
+```
+
+所以 `threadIdx.x` 的取值范",0-31,1138,810,True
+deepseek,2,"以下 kernel 中，blockIdx.x 的取值范围是多少（块总数）？
+```cuda
+kernel<<<5, 16>>>();
+```",True,True,"`<<<5, 16>>>` 中网格维度为 `gridDim.x = 5`，因此 `blockIdx.x` 从 0 开始，取值范围是 0 到 4，共 5 个线程块。
+
+答案是 0 到 4，共 5 个块 #### 0 到 4，共 5 个块","对于：
+
+```cuda
+kernel<<<5, 16>>>();
+```
+
+- 第一个参数 `5` 表示 grid 中 x 维度的 block 数量，即 `gridDim.x = 5`
+- 第二个参数 `16` 表示每个 block 中 x 维度的 thread 数量，即 `blockDim.x = 16`
+
+因此：
+
+- `blockIdx.x` 的取值范围是：`0` 到 `4`，即 `[0,",0-4,1162,834,True
+deepseek,4,"以下 CUDA 代码中，第 0 号块内第 0 号线程的全局线性线程 ID 是多少？
+```cuda
+__global__ void k() {
+    int ",True,False,"网格配置为 `<<<1, 64>>>`，即只有 1 个块，每块 64 个线程。  
+第 0 号块、第 0 号线程满足：`blockIdx.x = 0`，`threadIdx.x = 0`。  
+因此全局线性线程 ID 为 `0 * 64 + 0 = 0`。
+
+答案是 0 #### 0","第 0 号块 `blockIdx.x = 0`，第 0 号线程 `threadIdx.x = 0`，且 `blockDim.x = 64`。
+
+全局线性线程 ID 为：
+
+```cuda
+t = blockIdx.x * blockDim.x + threadIdx.x
+  = 0 * 64 + 0
+  = 0
+```
+
+所以答案是：
+
+```text
+0
+```",0,1236,902,True
+deepseek,6,"以下 kernel 启动的线程总数是多少？
+```cuda
+dim3 grid(3, 2);
+dim3 block(4, 4);
+kernel<<<grid, ",True,True,"`grid(3, 2)` 共启动 \(3 \times 2 = 6\) 个线程块；`block(4, 4)` 每块有 \(4 \times 4 = 16\) 个线程。因此线程总数为 \(6 \times 16 = 96\)。
+
+答案是 96 #### 96","假设代码为：
+
+```cuda
+dim3 grid(3, 2);
+dim3 block(4, 4);
+```
+
+则：
+
+- 每个 block 的线程数：`4 × 4 = 16`
+- grid 中 block 总数：`3 × 2 = 6`
+- 启动线程总数：`6 × 16 = 96`
+
+**答案：总共启动 96 个线程。**",96,1187,822,True
+deepseek,5,"kernel<<<4, 32>>> 启动后，第 2 号块（blockIdx.x=2）内 threadIdx.x=5 的全局线性线程 ID 是多少？",True,True,"全局线性线程 ID = blockIdx.x × blockDim.x + threadIdx.x = 2 × 32 + 5 = 69。
+
+答案是 69 #### 69","全局线性线程 ID 为：
+
+\[
+\text{linearTid} = \text{blockIdx.x} \times \text{blockDim.x} + \text{threadIdx.x}
+\]
+
+已知：
+
+- `blockIdx.x = 2`
+- `blockDim.x = 32`
+- `threadIdx.x = 5`
+
+因此：
+
+\[
+2 \times 32 + 5 = 69
+\]",69,1165,837,True
+deepseek,7,"kernel<<<1, 1024>>> 启动后，blockDim.x 的值是多少？",True,True,"`kernel<<<1, 1024>>>` 中第一个参数是网格维度，第二个参数是线程块维度。这里线程块大小为 1024，因此 `blockDim.x = 1024`。
+
+答案是 1024 #### 1024","`kernel<<<1, 1024>>>` 启动后：
+
+- `gridDim.x = 1`
+- `blockDim.x = 1024`
+- 每个 block 有 1024 个线程
+- `threadIdx.x` 范围是 `0 ~ 1023`
+
+所以 **`blockDim.x` 的值是 `1024`**。",1024,1133,805,True
+deepseek,9,"kernel<<<8, 128>>> 启动后，gridDim.x 的值是多少？",True,True,"kernel<<<8, 128>>> 中第一个执行配置参数表示 grid 的 x 维块数为 8，因此 gridDim.x 等于 8。
+
+答案是 8 #### 8","`kernel<<<8, 128>>>` 中：
+
+- 第一个参数 `8` 是 grid 的维度大小
+- 第二个参数 `128` 是 block 的线程数
+
+因此 kernel 内部：
+
+```cpp
+gridDim.x == 8
+blockDim.x == 128
+```
+
+答案：**`gridDim.x` 的值是 8**。",8,1131,803,True
+deepseek,11,"以下代码中，变量 s 位于什么内存空间？
+```cuda
+__global__ void k() {
+    __shared__ float s[64];
+ ",True,True,"变量 `s` 使用 `__shared__` 修饰，因此位于线程块内的共享内存（shared memory）中。
+
+答案是 共享内存 #### 共享内存","变量 `s` 位于 **共享内存（shared memory）**。
+
+原因：代码中使用了 `__shared__ float s[64];`，说明 `s` 被显式声明为共享内存变量。它是 **每个线程块（block）内所有线程共享** 的，而不是线程私有的寄存器，也不是全局内存。不同 block 拥有各自的 `s` 副本，通常需要配合 `__syncthreads()` 做块内同步。",共享内存（shared memory）,1203,856,True
+deepseek,12,"以下代码中，__constant__ 数组 c 默认被谁访问最快？
+```cuda
+__constant__ float c[16];
+```",True,True,"__constant__ 变量位于常量内存，由常量缓存服务；当一个 warp 内的所有线程读取同一地址时，会以广播方式一次返回，访问最快。若 warp 内访问不同地址，则可能串行化。
+
+答案是 同一warp内所有线程访问同一地址时 #### 同一warp内所有线程访问同一地址时","`__constant__ float c[16];` 位于**常量内存**中，默认对整个 kernel 的所有线程可见且只读，由**常量缓存**加速访问。
+
+访问最快的情况是：
+
+- **同一个 warp 内的所有线程访问同一个地址**，例如都读取 `c[0]`；
+- 此时硬件会进行**广播**，一次事务即可服务整个 warp。
+
+如果同一个 warp 内线程访问 `c` 的不同地址，则可能产生",所有线程（常量缓存广播）,1163,834,True
+deepseek,10,"以下 kernel 中，数组 a 位于什么内存空间？
+```cuda
+__global__ void k(float* a) { a[0] = 1.0f; }
+",True,True,"内核参数 `a` 是一个设备端指针参数，它指向的数组数据通常由主机分配在 CUDA 设备全局内存中，因此 `a[0]` 是对全局内存的访问。严格说，`a` 这个指针值本身位于内核参数空间/常量缓存，但题目所指数组数据位于全局内存。
+
+答案是 全局内存 #### 全局内存","你贴出的代码片段不完整/语法不合法，不能严格直接从它判断：
+
+```cuda
+__global__ void float* { a[0] = 1.0f }
+```
+
+如果原意是常见的 kernel 写法：
+
+```cuda
+__global__ void kernel(float* a) {
+    a[0] = 1.0f;
+}
+```
+
+那么：
+
+- **`a` 本身是一个 kernel 形参指",全局内存（global memory）,1175,841,True
+deepseek,13,"以下代码存在什么问题？
+```cuda
+__global__ void k() {
+    __shared__ int s;
+    if (threadId",True,True,"该 kernel 中只有 `threadIdx.x == 0` 的线程写共享变量 `s`，随后所有线程立即读取 `s`，但写与读之间没有块内同步。其他线程可能读到未初始化值或旧值，属于共享内存数据竞争/未定义行为。应在写 `s` 后、读 `s` 前加入 `__syncthreads();`。
+
+答案是 缺少 __syncthreads()，共享内存写后未同步就读，存在数据竞争/未定义行为 ####","这段 CUDA 代码存在多个明显问题，主要是语法错误和 CUDA 同步语义问题：
+
+1. **kernel 函数定义不完整**
+   ```cuda
+   __global__ void {
+   ```
+   缺少函数名、参数列表和函数体开始，正确形式应类似：
+   ```cuda
+   __global__ void myKernel(int* data) {
+   ```
+
+2. **`if",缺少 __syncthreads() 同步（数据竞争）,1220,830,True
+deepseek,14,"以下 kernel 中，动态共享内存大小由谁指定？
+```cuda
+__global__ void k() {
+    extern __shared__ fl",True,False,"动态共享内存只在 kernel 中用 `extern __shared__` 声明入口，实际大小由主机端在启动 kernel 时通过 `<<<grid, block, sharedMemBytes>>>` 的第三个参数指定；本例中为 128 字节。
+
+答案是 主机端在 kernel 启动配置的第三个参数（此处 128 字节） #### 主机端在 kernel 启动配置的第三个参数（此处 128 字","动态共享内存大小由**主机端（host）在启动 kernel 时通过执行配置的第三个参数指定**。
+
+对于：
+
+```cuda
+k<<<1, 32, 128>>>();
+```
+
+其中：
+
+- `1`：grid 大小，即 1 个 block
+- `32`：block 大小，即每 block 32 个线程
+- `128`：动态共享内存大小，即 **128 字节**
+
+因此，这个 kernel 的动态",启动配置第三参数（128 字节）,1208,840,True
+deepseek,15,"以下代码，cudaMemcpy 的方向是？
+```cuda
+cudaMemcpy(d_a, h_a, n * sizeof(float), cudaMemcpy",True,False,"代码中 `cudaMemcpyHostToDevice` 明确指定复制方向为从主机内存复制到设备内存。
+
+答案是 HostToDevice（主机到设备） #### HostToDevice（主机到设备）","你没有贴出具体代码，所以无法判断这一行 `cudaMemcpy` 的方向。
+
+`cudaMemcpy` 的方向由第 4 个参数决定，例如：
+
+```cpp
+cudaMemcpy(dst, src, size, cudaMemcpyHostToDevice); // 主机 -> 设备
+cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost); // 设备 ",主机到设备（HostToDevice）,1190,785,True
+deepseek,16,"以下代码中，变量 v 存放在哪个空间？
+```cuda
+__global__ void k() {
+    float v = 3.14f;
+    v += ",True,True,"`v` 是在 `__global__` 函数内部定义的自动局部变量，仅属于当前线程。该代码中 `v` 是普通标量且可放入寄存器，通常由编译器分配在线程私有寄存器中；若发生寄存器溢出才可能放入本地内存（local memory）。
+
+答案是 寄存器 #### 寄存器","变量 `v` 是 kernel 内部定义的局部自动变量（`float v = 3.14f;`），属于**线程私有**的存储：
+
+- 正常情况下（尤其是这种简单标量且未取地址时），编译器会把它分配在**寄存器（register）**中。
+- 如果寄存器不足、发生寄存器溢出，或对 `v` 取了地址等，则可能退化为放在**局部内存（local memory）**中。
+
+所以最准确回答是：
+
+> `v` ",线程私有局部变量（寄存器/局部内存）,1183,840,True
+deepseek,18,"以下 CUDA 代码中，d_a 初始化后 h_a 的内容是什么？
+```cuda
+float h_a[4] = {1, 2, 3, 4};
+float* d_a",True,False,"`cudaMemset(d_a, 0, 16)` 将设备内存的 16 个字节全部置为 0。对 `float` 而言，全 0 字节表示 `0.0f`。因此拷回后 `h_a` 的 4 个元素都变成 0。
+
+答案是 {0.0, 0.0, 0.0, 0.0} #### {0.0, 0.0, 0.0, 0.0}","执行后：
+
+```cpp
+cudaMemset(d_a, 0, 16);
+```
+
+会把 `d_a` 指向的 16 个字节全部置为 `0x00`，即将 4 个 `float` 的底层存储全部清零。
+
+因此再拷贝回主机后：
+
+```cpp
+h_a = {0, 0, 0, 0};
+```
+
+以浮点数形式表示就是：
+
+```cpp
+{0.0f, 0.0f, 0.0f, 0.0f}
+```",全 0（Memset 覆盖）,1323,956,True
+deepseek,19,"以下代码中，texture 读取的默认寻址模式是？
+```cuda
+texture<float, 1, cudaReadModeElementType> tex",False,False,"该声明使用传统 texture reference，未显式设置 `addressMode`；其默认寻址模式为 `cudaAddressModeClamp`（越界坐标夹取到边界）。
+
+答案是 cudaAddressModeClamp #### cudaAddressModeClamp","默认寻址模式是：
+
+```cuda
+cudaAddressModeClamp
+```
+
+也就是**边缘钳位模式**：当纹理坐标越界时，会被钳制到纹理边界。
+
+代码：
+
+```cuda
+texture<float, 1, cudaReadModeElementType> tex;
+```
+
+中的 `cudaReadModeElementType` 只表示纹理读取时返回原始元素类型，并不指定寻址模式。",归一化坐标（若绑定为 normalized）否则元素索引,1177,847,True
+deepseek,21,"以下代码中，atomicAdd 的返回值是什么？
+```cuda
+__global__ void k(int* counter) {
+    int old =",False,False,"atomicAdd(counter, 1) 会原子地把 counter 指向的整数加 1，并返回加操作之前的旧值；因此 `old` 得到的是本次原子加执行前的 `*counter` 值。在多个线程并发调用时，每个线程返回的是各自原子操作发生前该地址的旧值。
+
+答案是 atomicAdd 返回执行本次原子加之前的旧值 #### atomicAdd 返回执行本次原子加之前的旧值","`atomicAdd(counter, 1)` 的返回值是：
+
+> **执行本次原子加法之前，`*counter` 中保存的旧值。**
+
+等价于：
+
+```cuda
+int old = *counter;   // 原子地读取旧值
+*counter = old + 1;   // 原子地写回新值
+return old;           // atomicAdd 返回 old
+```
+
+例如：
+",加操作前的旧值,1201,856,True
+deepseek,22,"以下代码执行后，g 的值是多少（假设 g 初始为 0，单块 32 线程各 atomicAdd(g, 1)）？
+```cuda
+__global__ void k",True,False,"单个 block 有 32 个线程，每个线程都执行一次 `atomicAdd(g, 1)`；原子操作保证所有加法不会丢失，因此 `g` 从 0 增加 32 次，结果为 32。
+
+答案是 32 #### 32","执行后 `g` 的值是：
+
+```c
+32
+```
+
+因为 `k<<<1, 32>>>()` 启动 **1 个 block、32 个线程**，每个线程执行一次：
+
+```c
+atomicAdd(g, 1);
+```
+
+`atomicAdd` 保证对 `g` 的加法是原子的，不会发生丢失更新。因此 32 个线程各加 1，最终：
+
+```c
+g = 0 + 32 = 32
+```",32,1225,883,True
+deepseek,23,以下代码中，__threadfence() 的作用是？,True,False,"简短推理：`__threadfence()` 是设备级内存栅栏，用于约束调用线程的内存操作顺序。它保证该线程在 fence 之前发出的全局/共享内存写操作，在 fence 之后的内存操作之前对设备内其它线程可见，常用于生产者-消费者或标志位同步，防止编译器和硬件重排。但它不是块内 `__syncthreads`，也不是跨块执行同步屏障。
+
+答案是 设备级内存栅栏，保证 fence 前的全局/共享内","你这段描述里 **没有贴出具体代码**（只有“以下代码中……”），所以没法针对某一行精确解释。但 CUDA 中 `__threadfence()` 的通用作用是：
+
+### `__threadfence()` 的作用
+它是一个 **设备级内存栅栏/内存屏障**，用于保证调用线程的内存访问顺序：
+
+> 在 `__threadfence()` 之前的写操作，必须先于在它之后的写操作被设备上的其他线程看",确保当前线程先前的写对其他线程可见（内存栅栏）,1119,791,True
+deepseek,20,"以下 kernel 中，所有块都执行到 __syncthreads() 后，全局内存可见性如何？
+```cuda
+__global__ void k(float",False,False,"`__syncthreads()` 只提供 **同一个 block 内** 的线程同步与内存可见性保证，不提供跨 block 的同步。多个 block 并发读写同一地址 `g[0]`，存在数据竞争，因此不能保证跨块的全局内存可见性或最终结果确定性。
+
+答案是 仅保证同一 block 内 barrier 前的内存访问对该 block 可见；跨 block 无同步保证，`g[0]` 存在数据竞争，最终","结论：`__syncthreads()` 只是 **同一个 block 内的线程屏障和内存栅栏**，不是全局屏障。所有 block 都“执行到过” `__syncthreads()`，并不表示所有 block 已经同时到达该点，也不保证 block 之间对全局内存的可见性。
+
+具体到这段代码（假设语义类似）：
+
+```cuda
+__global__ void kernel(float *g) {
+",仅块内线程同步；不同块的写无跨块同步保证,1270,901,True
+deepseek,25,以下代码中，cudaDeviceSynchronize() 的作用是？,False,False,"简短推理：`cudaDeviceSynchronize()` 会阻塞调用它的主机线程，直到该 CUDA 设备上之前提交的异步任务（如 kernel、内存拷贝等）全部完成，常用于等待 GPU 计算结束或检查 kernel 执行是否返回错误。
+
+答案是 阻塞主机线程，直到设备上所有先前提交的任务全部完成 #### 阻塞主机线程，直到设备上所有先前提交的任务全部完成","简短推理：CUDA kernel 启动默认是异步的，主机调用后可能立即继续执行；需要等待 GPU 完成相关任务时使用 `cudaDeviceSynchronize()`。
+
+答案：`cudaDeviceSynchronize()` 的作用是阻塞主机（CPU）线程，直到当前设备上此前提交的所有 CUDA 任务（如 kernel、内存拷贝等）全部执行完成，常用于确保 GPU 结果已就绪、正确计时以及检",阻塞主机直到设备上所有流任务完成,1127,826,True
+deepseek,8,"以下 CUDA 代码中，gird 维度写错的编译错误类型是？
+```cuda
+dim3 grid(2, 2);
+kernel<<<grid, grid>>>()",False,False,,"这是**编译期语法错误（syntax error）**。
+
+`dim3 grid 2 2` 缺少构造函数括号、参数逗号和分号，正确写法应为：
+
+```cuda
+dim3 grid(2, 2);      // 或 dim3 grid(2, 2, 1);
+```
+
+然后才能用于 kernel 启动：
+
+```cuda
+kernel<<<grid, block>>>(...);
+```
+
+因此它属于 ",类型不匹配（grid 用于 gridDim 维度）,1199,816,True
+deepseek,27,"以下代码中，atomicExch(&g, 7) 的返回值是？",False,False,"`atomicExch(&g, 7)` 会原子地把 `g` 写为 7，并返回写入前 `g` 的旧值；若未给出 `g` 的初值，则无法确定具体数值。
+
+答案是 g 的旧值 #### g 的旧值","`atomicExch(&g, 7)` 的返回值是：**执行该原子交换操作之前 `g` 的旧值**。
+
+也就是说，它会把 `g` 设置为 `7`，并返回原来的 `g`。
+
+例如：
+
+- 若操作前 `g == 0`，则返回 `0`，之后 `g == 7`
+- 若操作前 `g == 42`，则返回 `42`，之后 `g == 7`
+
+因此，若题目没有给出 `g` 的初始值，则无法给出具体数值，只能确定",交换前的旧值,1122,794,True
+deepseek,17,"以下代码有什么内存问题？
+```cuda
+__global__ void k(float* d) {
+    float* p = new float[16];",True,False,"设备端 `new` 从 CUDA 设备堆分配全局内存；指针 `p` 离开作用域不会自动释放。每个执行该 kernel 的线程都会分配一次且未 `delete[]`，会造成设备内存泄漏；大量线程同时动态分配也会带来严重性能和堆耗尽风险。
+
+答案是 设备端 `new` 分配后未 `delete[]`，每个线程都会泄漏设备内存，可能导致 device malloc heap 耗尽并带来严重性能问题 ##","这段代码（按意图补全为 `float* p = new float[16]; p[0] = 1.0f; ...`）在 CUDA kernel 里主要有以下内存问题：
+
+1. **每个线程都执行一次设备端 `new`，分配量可能爆炸**
+   - `new float[16]` 约为 `16 * 4 = 64B`。
+   - 如果 kernel 启动几十万/几百万线程，每个线程都分配 64B，会迅速",没有释放（设备端 new 无配对 delete 即泄漏）,1203,852,True
+deepseek,29,以下代码中，atomicCAS 的作用是？,True,False,"atomicCAS 会原子地比较指定地址中的值与给定比较值，若相等则写入新值，并返回该地址的旧值；常用于实现原子更新、锁或无锁同步等操作。由于题目未附具体代码，这里按该 CUDA 内建函数的通用语义作答。
+
+答案是 atomicCAS 原子地比较并交换：若内存当前值等于 compare，则写入 val，否则不写入，并返回旧值；用于实现原子更新/无锁同步。 #### atomicCAS 原子地比较并","你这里没有贴出具体代码，所以不能结合代码逐行说明；但在 CUDA 中，`atomicCAS` 的通用作用是：
+
+```cuda
+int atomicCAS(int* address, int compare, int val);
+```
+
+它原子地执行：
+
+```text
+读取 *address 的旧值 old；
+如果 old == compare，则把 *address 写成 val；
+返回 o",比较并交换（compare-and-swap，返回旧值）,1113,785,True
+deepseek,30,CUDA 中一个 warp 包含多少个线程？,True,True,"CUDA 中 warp 是 GPU 调度和执行的基本单位，固定包含 32 个线程。
+
+答案是 32 #### 32","CUDA 中 warp 是 GPU 线程调度的基本单位，同一 warp 内的线程通常一起执行；在主流 NVIDIA GPU 架构中，一个 warp 固定包含 32 个线程。
+
+答案：32 个线程",32,1114,813,True
+deepseek,31,"以下代码中，两个分支的线程数各是多少（warp divergence）？
+```cuda
+if (threadIdx.x % 2 == 0) { a(); } ",True,False,"在一个 warp（32 个线程）中，`threadIdx.x % 2 == 0` 的线程有 16 个，`else` 分支也有 16 个；发生 warp divergence 时两个分支串行执行。
+
+答案是 16 和 16 #### 16 和 16","假设代码是常见的奇偶判断：
+
+```cuda
+if (threadIdx.x % 2 == 0) {
+    // 偶数线程
+} else {
+    // 奇数线程
+}
+```
+
+在 CUDA 中一个 warp 通常有 **32 个线程**。
+
+对于每个完整的 warp：
+
+- `threadIdx.x % 2 == 0` 为真的线程：偶数编号线程，共 **16 个**
+- 进入 `else` ",各 16（半个 warp）,1189,847,True
+deepseek,28,"以下 CUDA 代码中，g[0] 的最终值是多少？
+```cuda
+__global__ void k(int* g) {
+    __shared__ int",True,False,"线程 0 先令共享变量 `s = 5`，同步后线程 1 执行 `s += 2`，因此 `s` 变为 7；再次同步后线程 0 将 `s` 写入 `g[0]`，所以最终值为 7。
+
+答案是 7 #### 7",,7,1019,690,True
+deepseek,33,"以下共享内存访问是否产生 bank conflict？
+```cuda
+__shared__ float s[32];
+float v = s[threadId",True,True,"一个 warp 内 32 个线程分别访问 `s[threadIdx.x]`，即连续访问 32 个 `float`，每个线程恰好落到不同的共享内存 bank（bank = threadIdx.x % 32），因此没有 bank conflict。
+
+答案是 否 #### 否","不产生 bank conflict。
+
+原因：`float` 通常占 4 字节，共享内存有 32 个 bank，bank 索引可看作：
+
+```cuda
+bank = (address / 4) % 32
+```
+
+线程访问：
+
+```cuda
+float v = s[threadIdx.x];
+```
+
+在同一个 warp 内，线程通常满足：
+
+```cuda
+threadIdx.x = 0, ",否（每线程不同 bank）,1181,848,True
+deepseek,34,"以下全局内存访问是否合并（coalesced）？
+```cuda
+float v = d[threadIdx.x];
+```",False,False,"在同一个 warp 内，相邻线程读取 `d[threadIdx.x]`，访问的是连续且相邻的 `float` 地址（假设 `d` 基址对齐），因此每个 warp 的全局内存访问是合并的。不同 block 会重复读取相同区域，但不影响 warp 内合并性。
+
+答案是 合并 #### 合并","是，**在通常的一维 block 场景下，这个访问是合并的（coalesced）**。
+
+```cuda
+float v = d[threadIdx.x];
+```
+
+原因：
+
+- 同一 warp 内相邻线程的 `threadIdx.x` 连续，例如 warp 0 的线程访问：
+  ```cuda
+  d[0], d[1], d[2], ..., d[31]
+  ```
+- 每个元素是 `floa",是（连续线程访问连续地址）,1154,826,True
+deepseek,32,"以下共享内存访问是否产生 bank conflict？
+```cuda
+__shared__ float s[32];
+float v = s[threadId",True,True,"在一个 warp（通常 `threadIdx.x = 0..31`）中，访问索引为 `0,2,4,...,62`。对应 bank 为 `(2*t) mod 32`，因此 `t=0..15` 与 `t=16..31` 会成对落到相同 bank，但访问的是不同地址，产生 **2 路 bank conflict**。（另外，`s` 只有 32 个 float，后半部分线程会越界。）
+
+答案是 会产生2路","结论：**要看你实际启动了多少线程**；严格看这段代码本身，还存在数组越界问题。
+
+```cuda
+__shared__ float s[32];
+float v = s[threadIdx.x * 2];
+```
+
+共享内存 bank 计算为：
+
+```cuda
+bank = (threadIdx.x * 2) % 32;
+```
+
+### 情况 1：一个 warp 内 32 个线程都参与，即 ",是（线程 0/16 冲突，stride 2）,1185,852,True
+deepseek,36,以下代码中，__shfl_sync 的作用是？,True,False,"推理：`__shfl_sync(mask, var, srcLane, width)` 允许参与同一 warp 的线程按指定 lane 读取其他线程寄存器中的值，不经过共享内存，并带 warp 级同步；常用于广播、置换或 warp 内归约。题目未给出具体代码，因此无法判断该处是广播还是归约，但通用作用是 warp 内同步数据交换。
+
+答案是 在同一个 warp 内按指定 lane 同步交换/广播寄","你这里没有贴出具体代码（只有 `...`），所以只能先给出 `__shfl_sync` 的通用作用；如果要判断“该代码中”的具体含义，需要把包含它的 kernel 代码贴出来。
+
+`__shfl_sync` 是 CUDA 的 **warp 内线程间寄存器数据交换/广播函数**，核心作用是：
+
+> 在同一个 warp 的线程之间，按 lane 编号交换或广播某个变量的值，而不经过共享内存。
+
+常见形",warp 内线程间交换数据（lane shuffle）,1115,787,True
+deepseek,26,"以下代码中，第二个 kernel 何时执行？
+```cuda
+kernel<<<1, 32>>>();
+cudaStreamSynchronize(stream",True,False,第一个 `kernel` 和第二个 `kernel2` 都没有指定 stream，因此它们都进入默认流；同一 stream 内的操作按提交顺序串行执行，所以 `kernel2` 必须等第一个 `kernel` 完成后才能开始。`cudaStreamSynchronize(stream)` 只同步指定的 `stream`，并不一定等待默认流中的第一个 kernel，但它不会改变两个默认流 kerne,,在 stream 上第一个 kernel 完成后,1200,872,True
+deepseek,35,"以下全局内存访问是否合并？
+```cuda
+float v = d[threadIdx.x * 8];
+```",False,True,"该访问模式为 `threadIdx.x * 8`，同一 warp 内相邻线程地址相差 8 个 `float`（32 字节），不是连续相邻地址访问，因此无法形成合并访问，会产生多个内存事务，内存访问效率较低。
+
+答案是 不合并 #### 不合并","不是合并访问。
+
+假设 `d` 是 `float*`，同一 warp 内 lane 编号为 0~31，则每个线程访问：
+
+```cuda
+d[threadIdx.x * 8]
+```
+
+相邻线程地址相差：
+
+```text
+8 * sizeof(float) = 8 * 4 = 32 Byte
+```
+
+因此一个 warp 的 32 个线程访问地址为：
+
+```text
+d[0], d[8], d",否（stride 8，非合并）,1147,819,True
+deepseek,37,"以下代码中，occupancy 主要受什么限制？
+```cuda
+__global__ void k() { __shared__ float s[2048];",True,False,"该 kernel 每 block 声明了 `float s[2048]`，即共享内存占用为 `2048 × 4 = 8192 B = 8 KB`。代码没有明显寄存器压力，也没有其他资源消耗，因此 occupancy 主要受**每 block 的共享内存使用量**限制。
+
+答案是 共享内存（约 8 KB/block） #### 共享内存（约 8 KB/block）","主要受 **每个 block 的共享内存占用** 限制。
+
+`__shared__ s[2048];` 会为每个 block 静态分配：
+
+\[
+2048 \times \text{sizeof(s的元素类型)}\ \text{字节}
+\]
+
+例如：
+
+- 若 `s` 是 `float` 或 `int`：每 block 占 \(2048 \times 4 = 8\text{KB}\)；
+- 若 `",共享内存容量,1178,839,True
+deepseek,40,以下代码中，cudaStreamCreate 返回什么表示成功？,True,True,"`cudaStreamCreate` 是 CUDA 运行时 API，返回类型为 `cudaError_t`；调用成功时返回 `cudaSuccess`（其值为 0）。
+
+答案是 cudaSuccess（值为 0） #### cudaSuccess（值为 0）","`cudaStreamCreate` 返回类型为 `cudaError_t`，成功时返回 `cudaSuccess`，其数值通常为 0。
+
+答案：cudaSuccess（值为 0）",cudaSuccess（0）,1124,823,True
+deepseek,24,"以下代码存在什么问题？
+```cuda
+__global__ void k(int* g) {
+    if (threadIdx.x < 16) { g[0]",False,False,,,块内非全线程到达 __syncthreads 是未定义行为（若 divergent）,1250,877,True
+deepseek,38,"以下代码中，使用 __launch_bounds__(128, 8) 的含义是？",True,True,"简短推理：`__launch_bounds__(128, 8)` 是 CUDA 的 kernel 启动边界提示，第一个参数限制每个线程块最多 128 个线程；第二个参数要求编译器优化寄存器使用，使每个 SM 至少能驻留 8 个这样的线程块，以帮助控制 occupancy。
+
+答案是：每个线程块最多 128 个线程，并要求编译器尽量保证每个 SM 至少驻留 8 个线程块，从而限制寄存器用量并优化占用","`__launch_bounds__(128, 8)` 是 CUDA 的编译优化提示，含义是：
+
+- **第一个参数 `128`**：该 kernel 每个线程块最多允许 **128 个线程**，即 `blockDim.x * blockDim.y * blockDim.z <= 128`。如果运行时启动的 block 超过 128 个线程，启动会失败。
+- **第二个参数 `8`**：告诉编译器",每块最多 128 线程，至少 8 块/SM（指导寄存器分配）,1132,804,True
+deepseek,39,以下代码中，unroll 指令 #pragma unroll 4 的含义是？,True,True,"`#pragma unroll 4` 是给编译器的循环展开提示：把紧接着的循环按因子 4 展开，即一次循环处理 4 个迭代的循环体，以减少循环控制开销、增加指令级并行，但可能增加代码体积和寄存器压力；它是编译器建议，不保证一定按此执行。
+
+答案是 将循环按因子 4 展开以减少循环开销并提高指令级并行 #### 将循环按因子 4 展开以减少循环开销并提高指令级并行","`#pragma unroll 4` 是给 NVCC/CUDA 编译器的循环展开提示：
+
+- **含义**：建议编译器把紧跟其后的循环体展开为 **4 路**，即一次循环迭代中执行原本 4 次迭代的代码。
+- **目的**：减少循环控制开销（条件判断、计数器更新、跳转），增加指令级并行，可能提升性能。
+- **不是**：不会把 4 次迭代并行到 4 个线程；也不会改变程序语义，只是编译优化提示。
+",循环展开 4 次（编译器提示）,1130,802,True
+deepseek,42,以下代码中，cudaEventRecord 的作用是？,True,True,"`cudaEventRecord(event, stream)` 会把事件记录到指定 CUDA 流的当前位置，用来标记该流中此前操作到达的时间点；常用于配合 `cudaEventElapsedTime` 测量 GPU 执行时间，或配合 `cudaEventSynchronize` 做同步/完成状态检查。
+
+答案是 将事件记录到CUDA流中，用于标记流内执行位置以进行计时或同步 #### 将事件记录","简短推理：`cudaEventRecord` 本身不执行计算，而是在 CUDA 流中插入一个事件标记，表示该事件之前提交的操作完成后记录一个时间点；常配合 `cudaEventSynchronize`、`cudaEventElapsedTime` 测量 kernel 或内存传输耗时，也可用于流同步。
+
+答案：`cudaEventRecord` 用于在指定 CUDA 流中记录事件，标记该流中此前操作",在指定流上记录事件（用于计时/同步）,1119,818,True
+deepseek,41,以下代码中，cudaGetLastError() 的作用是？,False,False,"cudaGetLastError() 用于获取并清除最近一次 CUDA 运行时调用或 kernel 启动产生的错误码；常放在 kernel 启动后立即调用，以检查启动配置或调用是否失败，但不能替代 cudaDeviceSynchronize() 捕获异步执行期间的设备错误。
+
+答案是 获取并清除最近一次 CUDA 运行时调用或 kernel 启动产生的错误码，用于检查启动/调用是否失败 #### ","`cudaGetLastError()` 用于获取并清除最近一次 CUDA Runtime API 调用产生的错误码。常放在 kernel 启动后检查启动配置、参数或资源分配是否出错；它不等待 GPU 执行完成，因此不能检测 kernel 内部的异步运行错误，后者通常需配合 `cudaDeviceSynchronize()` 或后续同步调用检查。
+
+答案：cudaGetLastError() 的作",返回最近一次运行时调用的错误码,1122,821,True
+deepseek,44,以下代码中，cudaHostAlloc 分配的内存特点是什么？,True,False,"cudaHostAlloc 分配的是主机端页锁定（pinned/page-locked）内存，具有不会被操作系统换页、主机与设备间传输带宽更高、支持异步拷贝等特点；若使用映射标志，还可让 GPU 直接访问该主机内存。
+
+答案是 页锁定主机内存，传输效率高、支持异步拷贝，并可通过映射标志供GPU直接访问 #### 页锁定主机内存，传输效率高、支持异步拷贝，并可通过映射标志供GPU直接访问","推理：`cudaHostAlloc` 用于在主机端分配不会被操作系统换页的固定内存，便于 GPU 通过 DMA 高效访问，并常配合异步拷贝或映射访问使用。
+
+答案：`cudaHostAlloc` 分配的是页锁定（pinned/page-locked）主机内存，具有可被 GPU 直接访问、支持异步拷贝、带宽和延迟优于普通可分页内存等特点，但分配开销较大且占用物理内存，过度使用会影响系统性能。",页锁定主机内存（可被设备直接访问）,1123,822,True
+deepseek,45,以下代码中，cudaMallocManaged 分配的内存特点是什么？,True,True,"`cudaMallocManaged` 分配的是 CUDA 统一内存（Managed Memory）：CPU 与 GPU 共享同一地址空间，可按需在主机和设备间自动迁移，通常无需显式 `cudaMemcpy`。但它仍需要正确同步，且页迁移/缺页会增加开销，性能可能不如显式管理内存。
+
+答案是 统一内存：CPU/GPU共享同一地址空间，可自动按需迁移，通常无需显式 cudaMemcpy，但仍需同步且","`cudaMallocManaged` 分配的是 CUDA 统一内存（Unified Memory）：CPU 与 GPU 共享同一地址空间，可用同一指针访问，由 CUDA 驱动自动处理数据迁移和一致性，从而简化显式 `cudaMemcpy`。但它可能带来页错误、迁移和同步开销，性能敏感场景常需预取或显式内存管理优化。
+
+答案：`cudaMallocManaged` 分配的是统一内存（managed",统一内存（CPU/GPU 自动迁移）,1127,826,True
+deepseek,46,以下代码中，cudaDeviceReset() 的作用是？,False,False,"cudaDeviceReset() 会清理当前 CUDA 设备上由运行时 API 分配的资源（如内存、流、事件等），并将设备状态重置到初始化前状态，常用于程序结束前显式释放资源。  
+答案是 清理并重置当前 CUDA 设备的运行时资源与状态 #### 清理并重置当前 CUDA 设备的运行时资源与状态","简短推理：`cudaDeviceReset()` 是 CUDA 运行时 API，用于清理当前设备上下文及相关资源，常在程序结束前调用以释放 GPU 资源并恢复初始状态。
+
+答案：`cudaDeviceReset()` 的作用是销毁并清理当前 CUDA 设备上的所有运行时资源（如 `cudaMalloc` 分配的内存、流、事件等），将设备恢复到初始状态，常用于程序结束前释放 GPU 资源、确保干净退",重置设备上下文（释放所有资源）,1121,820,True
+deepseek,43,以下代码中，使用 cudaMemcpyAsync 需要什么前提？,True,True,简短推理：`cudaMemcpyAsync` 是异步拷贝，必须指定 CUDA stream，并通过 stream/event 同步确认完成。要获得真正的异步、与主机或计算重叠，主机端内存应为页锁定（pinned/page-locked）内存（如 `cudaHostAlloc` / `cudaMallocHost` 分配），否则可能退化为同步或需要临时暂存。若要与 kernel 并发重叠，还应使用合,"推理：`cudaMemcpyAsync` 要体现异步性并实现主机端与 GPU 计算/传输重叠，主机内存通常必须是页锁定（pinned）内存，且拷贝要提交到有效 stream 中；同时需保证源/目标指针、方向和大小合法，并用 stream 或 event 做好同步。
+
+答案：使用 `cudaMemcpyAsync` 的主要前提是：主机端参与拷贝的内存应为页锁定内存（如通过 `cudaMallocHo",页锁定（pinned）主机内存 + 指定流,1124,823,True
+deepseek,48,以下代码中，cudaPeekAtLastError 与 cudaGetLastError 的区别是什么？,True,True,"简短推理：两者都用于读取最近一次 CUDA Runtime API 调用产生的错误码。核心区别是是否清除该错误状态：`cudaGetLastError` 返回后会把“最后错误”重置为 `cudaSuccess`；`cudaPeekAtLastError` 只读取、不重置。二者通常用于检查 kernel 启动配置错误，不能单独捕获 kernel 异步执行错误，执行错误需后续同步或再次查询。
+
+答案是","简短推理：二者都读取当前线程/宿主端的“最近一次 CUDA 运行时错误”状态，都不会等待异步 kernel 执行完成；关键区别是是否清除该错误状态。
+
+答案：`cudaPeekAtLastError()` 返回当前最近错误但不清除它；`cudaGetLastError()` 返回当前最近错误并同时将其重置为 `cudaSuccess`。二者都主要捕获启动/配置等同步错误，异步执行错误仍需同步或后续",Peek 不清除错误标志，Get 清除,1144,843,True
+deepseek,47,以下代码中，cudaOccupancyMaxActiveBlocksPerMultiprocessor 返回什么？,False,True,"该 API 的返回值类型是 `cudaError_t`，调用成功时返回 `cudaSuccess`；实际可活跃 block 数通过 `int* numBlocks` 输出参数带回，而不是作为函数返回值。
+
+答案是 cudaSuccess #### cudaSuccess","该 API 的返回值类型是 `cudaError_t`，通常成功时为 `cudaSuccess`；真正的占用率结果通过输出参数 `numBlocks` 写出，表示每个 SM 最大可同时驻留的活跃 block 数。题目未给出具体调用代码和 kernel/block 参数，因此无法确定具体数值。
+
+答案：无法确定具体值；函数返回 `cudaError_t` 状态，成功时 `numBlocks` 输出每",每个 SM 上最大活跃块数（按 kernel 和块大小）,1149,848,True
+deepseek,51,以下代码中，使用 cudaGraphLaunch 的好处是什么？,False,True,"使用 `cudaGraphLaunch` 的主要好处是把固定的内核/内存操作序列预先构建成 CUDA Graph，然后重复启动该图，从而显著降低主机端多次 kernel launch 的 API 和驱动调度开销，尤其适合循环或重复执行的相同计算流程；它不是减少单个 kernel 的 GPU 执行时间，而是优化启动与调度效率。
+
+答案是 降低重复启动固定内核序列时的 CPU/驱动 launch 开销","简短推理：`cudaGraphLaunch` 把多个 kernel 和依赖关系预先构造成图并一次性提交，避免反复从 CPU 逐个启动 kernel，因此适合重复、依赖固定的工作负载，可降低启动开销和 kernel 间空隙，提高 GPU 利用率。
+
+答案：使用 `cudaGraphLaunch` 的主要好处是减少 CPU 启动开销和调度延迟、支持依赖图一次性提交、提高重复工作负载下 GPU 的利用率",减少 kernel 启动开销（图捕获重放）,1124,823,True
+deepseek,52,以下代码中，half2 数据类型的特点是什么？,True,False,"由于未提供具体代码，按 CUDA 通用语义理解：`half2` 是把两个 16 位半精度浮点数打包成一个 32 位量，支持向量化/SIMD 式半精度运算（如 `__hadd2`），可减少内存带宽和寄存器压力、提升吞吐，但精度较低，使用时需注意对齐、类型转换及数值范围。
+
+答案是 half2 是由两个 16 位 half 打包成的 32 位向量类型，支持 SIMD 半精度运算，可减少内存带宽和寄存器","`half2` 是 CUDA 中的**半精度浮点向量类型**，通常定义在 `cuda_fp16.h` 中。它的主要特点：
+
+1. **打包两个 half**  
+   一个 `half2` 包含两个 16 位半精度浮点数，通常命名为 `.x` 和 `.y`，总共占 32 位，即 4 字节。
+
+2. **一次处理两个半精度数**  
+   可对 `.x` 和 `.y` 同时执行相同运算，类似 SIM",2 个 half 打包（16 位浮点×2）,1115,787,True
+deepseek,53,以下代码中，使用 __restrict__ 修饰指针的作用是什么？,False,False,"简短推理：`__restrict__` 告诉编译器被修饰的指针所访问的内存不会与其他指针发生别名冲突，因此编译器可以更自由地进行内存访问优化，如消除重复加载、调整指令顺序、提高寄存器利用率等。
+
+答案是 向编译器承诺指针之间无别名冲突，从而允许更安全高效的编译器优化并提升性能 #### 向编译器承诺指针之间无别名冲突，从而允许更安全高效的编译器优化并提升性能","在 CUDA kernel 中，指针参数上的 `__restrict__` 主要是在向编译器做**无别名（no aliasing）承诺**：
+
+```cuda
+__global__ void add(const float* __restrict__ a,
+                    const float* __restrict__ b,
+                    fl",提示编译器无别名（允许更激进的优化）,1125,797,True
+deepseek,49,以下代码中，使用 -arch=sm_80 编译的含义是什么？,True,False,"推理：`-arch=sm_80` 是 nvcc 的编译选项，用来指定目标 GPU 的架构为计算能力 8.0（Compute Capability 8.0），即 NVIDIA Ampere 架构（如 A100），并生成对应架构可运行的 CUDA 设备代码。
+
+答案是 指定目标 GPU 架构为 sm_80（计算能力 8.0，Ampere 架构）并生成对应设备代码 #### 指定目标 GPU 架构为 s","`-arch=sm_80` 是给 `nvcc` 的目标 GPU 架构选项，含义是：
+
+- 让编译器为 **Compute Capability 8.0** 的 GPU 生成设备代码；
+- `sm_80` 指 **物理 SM 架构版本 8.0**，对应 NVIDIA **Ampere** 架构，如 A100、A30 等；
+- 编译器会据此选择可用的指令集、寄存器/共享内存限制、ABI、内建函数和优化",为 Ampere 架构（sm_80）生成 SASS,1122,794,True
+deepseek,55,以下代码中，使用 cudaMemPrefetchAsync 的作用是什么？,False,False,"`cudaMemPrefetchAsync` 通常用于在 kernel 启动前，把由统一内存/托管内存（Unified Memory）分配的数据异步预取到目标设备（通常是 GPU），从而减少 kernel 执行期间因按需缺页迁移数据造成的延迟和抖动，提高后续访问性能。
+
+答案是 将托管内存提前迁移到GPU以减少缺页延迟并提升访问性能 #### 将托管内存提前迁移到GPU以减少缺页延迟并提升访问性能","简短推理：`cudaMemPrefetchAsync` 用于 Unified Memory 场景，提前把托管内存页异步迁移到目标设备，减少 kernel 访问时的缺页和按需迁移开销；也可把数据预取回 CPU。
+
+答案：异步预取 Unified Memory 数据到指定设备，以减少缺页和迁移开销。",异步预取统一内存到指定设备,1129,828,True
+deepseek,54,以下代码中，动态并行（Dynamic Parallelism）指的是什么？,True,False,"简短推理：动态并行的核心是“由 GPU 上的父 kernel 线程在设备端启动子 kernel”，而不是由 CPU 主机端启动。代码中若在 kernel/device 函数内出现 `childKernel<<<grid, block>>>(...)` 或 `cudaLaunchDevice`，即表示动态并行；它可根据父 kernel 产生的数据动态创建子网格，并可用设备端同步等待子 kernel ",你这条消息里,设备端 kernel 可启动子 kernel,1129,801,True
+deepseek,57,以下代码中，用 shared memory 做矩阵分块（tiling）的主要目的？,True,False,"使用 shared memory 做矩阵分块的主要目的是：把需要反复使用的子矩阵块缓存到片上共享内存中，让块内线程复用这些数据，从而减少对高延迟全局内存的访问次数、提高访存带宽利用率和矩阵运算性能。
+
+答案是 减少全局内存访问并提高数据复用和性能 #### 减少全局内存访问并提高数据复用和性能","用 shared memory 做矩阵分块（tiling）的主要目的是：
+
+**提高数据复用率，减少对全局内存的重复访问，从而降低全局内存带宽压力和访存延迟。**
+
+在矩阵乘法等典型场景中，同一个矩阵元素会被多个线程重复使用。若直接反复读全局内存，访问次数多、延迟高；分块后：
+
+1. 每个 block 的线程先把矩阵的一个 tile 从全局内存加载到 shared memory；
+2. 块内线程在",减少全局内存访问次数（数据复用）,1133,805,True
+deepseek,56,以下代码中，纹理内存相比全局内存的优势是什么？,True,True,"纹理内存相对全局内存的主要优势是：通过只读纹理缓存利用空间局部性，改善二维或非规则访问的缓存命中率，降低全局内存延迟与带宽压力；同时可硬件支持边界处理和插值采样。由于未给出具体代码，这里按纹理内存的通用优势作答。
+
+答案是 利用只读纹理缓存提高空间局部性、降低全局内存延迟/带宽，并支持边界处理和插值 #### 利用只读纹理缓存提高空间局部性、降低全局内存延迟/带宽，并支持边界处理和插值","由于题目中“以下代码”实际未给出，无法针对具体代码逐行分析；按 CUDA 中常见用法，纹理内存相比全局内存的主要优势是：
+
+1. **只读缓存加速**
+   - 纹理内存通过纹理缓存/只读缓存访问，适合只读数据。
+   - 对具有空间局部性的访问，尤其是图像、矩阵邻域访问，可减少对全局内存的重复访问和带宽压力。
+
+2. **更适合二维/三维局部性访问**
+   - 例如卷积、图像滤波、模板计算中，",缓存 + 硬件插值/边界处理,1115,787,True
+deepseek,59,以下代码中，warp-level reduce 相比 block reduce 的优势是什么？,True,True,"warp-level reduce 只在同一个 warp 的 32 个线程内通过寄存器 shuffle 通信，天然同步且不需要共享内存或 `__syncthreads`，因此减少了块级同步、共享内存读写和 bank conflict 开销，延迟更低、实现更轻量；block reduce 需要跨 warp 汇总并做块级同步，开销更大。
+
+答案是 warp-level reduce 无需共享内存和 _","你没有贴出具体代码，所以不能逐行判断；下面按常见 CUDA 实现说明 **warp-level reduce 相比共享内存 + `__syncthreads()` 的 block reduce** 的优势与限制。
+
+### 主要优势
+
+1. **不需要共享内存**
+   - warp-level reduce 通常用 `__shfl_down_sync()` 等 warp shuffle 指令在寄",无需 __syncthreads（warp 内天然同步）,1139,811,True
+deepseek,58,以下代码中，使用 vectorized load（float4）访问的效果是什么？,False,False,"使用 `float4` 向量化加载时，一个线程一次读取 4 个连续 `float`（128 bit）。若相邻线程访问相邻的 `float4`，warp 的全局内存访问仍保持连续合并，从而减少 load 指令数、地址计算和内存事务调度开销，提高有效内存带宽；但要求 16 字节对齐，并可能因使用更多寄存器而影响 occupancy。
+
+答案是 将4个连续float合并为一次128-bit全局加载，减少","你贴出的“以下代码”在末尾只有省略号，实际代码没有给出，因此无法针对具体代码逐行判断。结合 CUDA 的一般规律，`float4` 向量化 load 的效果可以总结如下：
+
+1. **减少全局访存指令数**
+   - 标量写法通常每个线程执行 4 次 `float` load；
+   - `float4` load 通常编译为一条 128-bit load（如 `LDG.E.128`），每个线程一",减少指令数、提高内存带宽利用率,1133,805,True
+deepseek,50,"以下规约（reduce）代码中，最后结果 g[0] 是多少（d 为 0..31 的平方和）？
+```cuda
+__global__ void k(int* g,",True,False,"代码用 32 个线程，每个线程计算 `d[i] * d[i]` 后存入共享内存；同步后由 0 号线程累加全部 32 项。若 `d[i] = i`（i=0..31），则  
+g[0] = Σ_{i=0}^{31} i² = 31×32×63/6 = 10416。
+
+答案是 10416 #### 10416",,10416,1079,706,True
+qwen,1,"以下 kernel 启动的线程块总数是多少？
+```cuda
+kernel<<<dim3(2, 3), 8>>>();
+```",True,True,"`dim3(2, 3)` 指定网格维度为 `gridDim.x = 2`、`gridDim.y = 3`，未指定的 `z` 默认为 1。线程块总数为 `2 * 3 * 1 = 6`。
+
+答案是 6 #### 6","线程块总数是 **6**。
+
+解释：
+
+```cuda
+kernel<<<dim3(2, 3), 8>>>();
+```
+
+第一个参数 `dim3(2, 3)` 表示网格维度：
+
+- `gridDim.x = 2`
+- `gridDim.y = 3`
+- `gridDim.z = 1`
+
+所以线程块总数为：
+
+```text
+2 × 3 × 1 = 6
+```
+
+第二个参数 `8` 表示每个线程块",6,1155,827,True
+qwen,0,"以下 CUDA kernel 启动后，每个线程块内的线程总数是多少？
+```cuda
+dim3 block(16, 4);
+kernel<<<8, block>",True,False,"推理：`dim3 block(16, 4)` 指定线程块维度为 `x=16, y=4`，未指定 `z` 时默认为 `1`，因此每个线程块内的线程总数为 `16 * 4 * 1 = 64`。
+
+答案是 64 #### 64","每个线程块内的线程总数是 **64**。
+
+原因：
+
+```cuda
+dim3 block(16, 4);
+```
+
+`dim3` 的三个分量分别是 `x`、`y`、`z`，未指定时默认为 `1`。
+
+所以：
+
+```cuda
+block.x = 16
+block.y = 4
+block.z = 1
+```
+
+每个线程块内的线程数为：
+
+```cuda
+16 * 4 * 1 = 64
+```
+
+而",64,1181,846,True
+qwen,3,"kernel<<<2, 32>>> 启动后，线程 threadIdx.x 的取值范围是多少？",True,False,"kernel<<<2, 32>>> 中 blockDim.x = 32，threadIdx.x 是块内线程索引，从 0 开始。
+
+答案是 [0, 31] #### [0, 31]","`kernel<<<2, 32>>>` 表示：
+
+- `gridDim.x = 2`：共有 2 个 block
+- `blockDim.x = 32`：每个 block 有 32 个线程
+
+因此每个线程的 `threadIdx.x` 是 **block 内线程索引**，取值范围是：
+
+```text
+0 到 31
+```
+
+即：
+
+```text
+threadIdx.x ∈ [0, 31]
+```",0-31,1138,810,True
+qwen,4,"以下 CUDA 代码中，第 0 号块内第 0 号线程的全局线性线程 ID 是多少？
+```cuda
+__global__ void k() {
+    int ",True,False,"第 0 号块中 `blockIdx.x = 0`，第 0 号线程中 `threadIdx.x = 0`，`blockDim.x = 64`，所以 `t = 0 * 64 + 0 = 0`。
+
+答案是 0 #### 0","第 0 号块内第 0 号线程的全局线性线程 ID 是：
+
+```cuda
+0
+```
+
+计算过程：
+
+```cuda
+int t = blockIdx.x * blockDim.x + threadIdx.x;
+```
+
+启动配置：
+
+```cuda
+k<<<1, 64>>>();
+```
+
+表示：
+
+- `blockIdx.x = 0`
+- `threadIdx.x = 0`
+- `blockD",0,1236,902,True
+qwen,5,"kernel<<<4, 32>>> 启动后，第 2 号块（blockIdx.x=2）内 threadIdx.x=5 的全局线性线程 ID 是多少？",True,False,"全局线性线程 ID 通常按 0 基计算：`blockIdx.x * blockDim.x + threadIdx.x`。这里 `blockDim.x=32`，所以 `2 * 32 + 5 = 69`。
+
+答案是 69 #### 69","按 CUDA 常见的 **0-based 线性线程 ID** 计算：
+
+```cpp
+globalId = blockIdx.x * blockDim.x + threadIdx.x
+```
+
+`kernel<<<4, 32>>>` 表示：
+
+- `gridDim.x = 4`
+- `blockDim.x = 32`
+
+已知：
+
+- `blockIdx.x = 2`
+- `threadIdx.x ",69,1165,837,True
+qwen,2,"以下 kernel 中，blockIdx.x 的取值范围是多少（块总数）？
+```cuda
+kernel<<<5, 16>>>();
+```",True,False,"`<<<5, 16>>>` 表示网格有 5 个块、每块 16 个线程。`blockIdx.x` 从 0 开始编号，因此取值范围为 0 到 4，块总数为 5。
+
+答案是 0~4（共5块） #### 0~4（共5块）","在 CUDA 中：
+
+```cuda
+kernel<<<5, 16>>>();
+```
+
+表示：
+
+- `gridDim.x = 5`：共有 5 个 block
+- `blockDim.x = 16`：每个 block 有 16 个 thread
+
+因此：
+
+```cuda
+blockIdx.x
+```
+
+是 block 的索引，取值范围是：
+
+```text
+0 到 4
+```
+
+也就是：
+
+`",0-4,1162,834,True
+qwen,6,"以下 kernel 启动的线程总数是多少？
+```cuda
+dim3 grid(3, 2);
+dim3 block(4, 4);
+kernel<<<grid, ",True,True,"grid 为 (3, 2)，所以共有 3 × 2 = 6 个线程块。  
+每个 block 为 (4, 4)，所以每个线程块有 4 × 4 = 16 个线程。  
+总线程数为 6 × 16 = 96。
+
+答案是 96 #### 96","线程总数为 **96**。
+
+计算方式：
+
+```cuda
+dim3 grid 3 2;   // grid.x = 3, grid.y = 2, grid.z 默认为 1
+dim3 block 4 4;  // block.x = 4, block.y = 4, block.z 默认为 1
+```
+
+总线程数：
+
+```text
+grid.x * grid.y * grid.z * block.",96,1187,822,True
+qwen,7,"kernel<<<1, 1024>>> 启动后，blockDim.x 的值是多少？",True,False,"`<<<1, 1024>>>` 表示 grid 维度为 1，block 维度为 1024，因此每个 block 的 `blockDim.x` 为 1024。
+
+答案是 1024 #### 1024","`blockDim.x` 的值是 **1024**。
+
+解释：
+
+```cpp
+kernel<<<1, 1024>>>
+```
+
+等价于：
+
+```cpp
+kernel<<<dim3(1), dim3(1024)>>>
+```
+
+其中：
+
+- 第一个参数 `1` 表示 **grid 维度**，即启动 1 个 block；
+- 第二个参数 `1024` 表示 **block 维度**，即每个 blo",1024,1133,805,True
+qwen,9,"kernel<<<8, 128>>> 启动后，gridDim.x 的值是多少？",True,True,"`kernel<<<8, 128>>>` 表示以 8 个线程块、每块 128 个线程启动 kernel。  
+在 kernel 内部，`gridDim.x` 表示网格在 x 方向上的线程块数量，因此等于 8。
+
+答案是 8 #### 8","`kernel<<<8, 128>>>` 表示：
+
+- **grid 维度**：`8`
+- **block 维度**：`128`
+
+因此启动后：
+
+```cpp
+gridDim.x == 8
+```
+
+也就是说，GPU 上会启动 **8 个线程块**，每个线程块包含 **128 个线程**。",8,1131,803,True
+qwen,11,"以下代码中，变量 s 位于什么内存空间？
+```cuda
+__global__ void k() {
+    __shared__ float s[64];
+ ",True,False,"变量 s 使用 `__shared__` 限定符声明，因此位于 CUDA 的共享内存空间，供同一线程块内的线程访问。
+
+答案是 共享内存 #### 共享内存","变量 `s` 位于 **共享内存（shared memory）**。
+
+因为代码中使用了 CUDA 的内存空间限定符：
+
+```cuda
+__shared__ float s[64];
+```
+
+`__shared__` 表示该数组 `s` 被分配到 GPU 的 **共享内存** 中，特点是：
+
+- 每个 **block** 有一份独立的 `s`
+- 同一 block 内的线程可以共享访问
+- 通",共享内存（shared memory）,1203,856,True
+qwen,10,"以下 kernel 中，数组 a 位于什么内存空间？
+```cuda
+__global__ void k(float* a) { a[0] = 1.0f; }
+",True,True,"简短推理：
+- `__global__` kernel 的参数 `float* a` 是一个指针，通常由 host 通过 `cudaMalloc` 分配并传入，指向设备上的全局内存。
+- kernel 中 `a[0] = 1.0f;` 是对该指针所指向内存的写操作，默认对应设备全局内存访问。
+- 指针变量本身可能位于 kernel 参数空间，但问题问的是“数组 a”所在的内存空间，即其数据存储位置","按你给出的代码片段：
+
+```cuda
+__global__ void float* { a[0] = 1.0f }
+```
+
+严格来说这不是合法 CUDA kernel 写法，缺少函数名和参数列表。
+
+如果它想表达的是常见形式：
+
+```cuda
+__global__ void kernel(float* a) {
+    a[0] = 1.0f;
+}
+```
+
+那么数组 `a` 的数据本体通常",全局内存（global memory）,1175,841,True
+qwen,12,"以下代码中，__constant__ 数组 c 默认被谁访问最快？
+```cuda
+__constant__ float c[16];
+```",False,True,"`__constant__` 内存适合只读访问，并由常量缓存优化。若一个 warp 内所有线程读取同一地址，可广播访问，速度最快；若 warp 内访问不同地址，则会串行化。
+
+答案是 同一 warp 内访问相同地址的线程 #### 同一 warp 内访问相同地址的线程","`__constant__ float c[16]` 放在 **常量内存（constant memory）** 中，默认所有线程都可以读取它。
+
+但访问最快的情况是：
+
+> **同一个 warp 内的所有线程访问同一个地址**，例如都读 `c[0]`。
+
+因为 CUDA 的常量缓存会对同一 warp 的相同地址访问进行 **广播（broadcast）**，只需一次内存事务。
+
+如果同一个 warp",所有线程（常量缓存广播）,1163,834,True
+qwen,15,"以下代码，cudaMemcpy 的方向是？
+```cuda
+cudaMemcpy(d_a, h_a, n * sizeof(float), cudaMemcpy",True,False,"简短推理：`cudaMemcpy` 的参数顺序是目标地址、源地址、大小、拷贝方向。这里目标为 `d_a`（设备指针），源为 `h_a`（主机指针），且方向标志为 `cudaMemcpyHostToDevice`，因此数据从主机内存拷贝到设备显存。
+
+答案是 cudaMemcpyHostToDevice #### cudaMemcpyHostToDevice","仅凭你给出的“以下代码，cudaMemcpy 的方向是？ ...”无法判断，因为 `cudaMemcpy` 的方向取决于具体调用参数，尤其是第 4 个参数 `cudaMemcpyKind`。
+
+`cudaMemcpy` 常见原型：
+
+```cpp
+cudaError_t cudaMemcpy(void* dst, const void* src, size_t count, cudaMemcpyK",主机到设备（HostToDevice）,1190,785,True
+qwen,14,"以下 kernel 中，动态共享内存大小由谁指定？
+```cuda
+__global__ void k() {
+    extern __shared__ fl",True,True,"`extern __shared__ float sm[]` 只声明动态共享内存的使用方式，实际分配大小在 kernel launch 时由第三个参数 `sharedMemBytes` 指定；这里 `k<<<1, 32, 128>>>()` 的 `128` 表示 128 字节。
+
+答案是 由 kernel 启动配置 k<<<1, 32, 128>>> 的第三个参数（sharedMemBytes）指","动态共享内存大小由 **kernel 启动配置中的第三个参数 `sharedMemBytes`** 指定。
+
+在代码：
+
+```cuda
+k<<<1, 32, 128>>>();
+```
+
+中：
+
+```cuda
+<<<gridDim, blockDim, sharedMemBytes>>>
+```
+
+所以：
+
+- `1`：网格大小，1 个 block
+- `32`：每个 block 32 个线程",启动配置第三参数（128 字节）,1208,840,True
+qwen,13,"以下代码存在什么问题？
+```cuda
+__global__ void k() {
+    __shared__ int s;
+    if (threadId",True,True,"推理：`threadIdx.x == 0` 的线程写入共享内存 `s` 后，其他线程立即读取 `s`，但中间没有 `__syncthreads()`。CUDA 不保证块内线程执行顺序，因此可能读到未初始化值，构成共享内存读写竞争/未定义行为。
+
+答案是 共享内存读写之间缺少 __syncthreads()，存在数据竞争/未定义行为 #### 共享内存读写之间缺少 __syncthreads()，存","这段 CUDA 代码片段主要有几个问题：
+
+```cuda
+__global__ void {
+...
+if threadIdx.x == 0 = 42
+...
+```
+
+## 1. `__global__ void {` 缺少函数名和参数列表
+
+CUDA kernel 函数必须写成类似：
+
+```cuda
+__global__ void kernelName(args...)
+```
+
+例如：
+",缺少 __syncthreads() 同步（数据竞争）,1220,830,True
+qwen,16,"以下代码中，变量 v 存放在哪个空间？
+```cuda
+__global__ void k() {
+    float v = 3.14f;
+    v += ",True,True,"`v` 是 kernel 中线程私有的局部标量变量，且没有取地址、数组等会强制放入 local memory 的情况，编译器通常会将其分配在寄存器中。
+
+答案是 寄存器 #### 寄存器","变量 `v` 是 `__global__` kernel 函数内部的局部变量：
+
+```cuda
+float v = 3.14f;
+v += 1.0f;
+```
+
+它默认存放在 **寄存器（register）** 中，也就是每个线程私有的高速存储资源。
+
+更准确地说：
+
+1. **正常情况：寄存器**
+   - `v` 是线程私有局部变量。
+   - 编译器通常会把它分配到 GPU 线程的寄存器中",线程私有局部变量（寄存器/局部内存）,1183,840,True
+qwen,18,"以下 CUDA 代码中，d_a 初始化后 h_a 的内容是什么？
+```cuda
+float h_a[4] = {1, 2, 3, 4};
+float* d_a",True,True,"`cudaMemset(d_a, 0, 16)` 将设备内存中 16 个字节全部置为 `0`。由于 `float` 的全零字节模式表示 `0.0f`，随后拷贝回主机后 `h_a` 的 4 个元素都变为 `0`。
+
+答案是 {0, 0, 0, 0} #### {0, 0, 0, 0}","`h_a` 的内容会变成：
+
+```cpp
+{0.0f, 0.0f, 0.0f, 0.0f}
+```
+
+原因：
+
+1. 初始 host 数组：
+
+```cpp
+float h_a[4] = {1, 2, 3, 4};
+```
+
+2. 分配 16 字节设备内存，并把 `h_a` 拷贝到 `d_a`：
+
+```cpp
+cudaMemcpy(d_a, h_a, 16, cudaMemcpyHostToD",全 0（Memset 覆盖）,1323,956,True
+qwen,17,"以下代码有什么内存问题？
+```cuda
+__global__ void k(float* d) {
+    float* p = new float[16];",True,True,答案是 设备端 new 分配内存后未 delete，导致内存泄漏 #### 设备端 new 分配内存后未 delete，导致内存泄漏,"这段代码从 CUDA 内存模型角度看，主要问题不是 `p[0] = 1.0f` 本身，而是**在 device kernel 里使用 `new` 动态分配内存**。你的代码片段虽然不完整，但核心模式是：
+
+```cuda
+__global__ void ... {
+    float* p = new float[16];
+    p[0] = 1.0f;
+    ...
+}
+```
+
+这会有几类",没有释放（设备端 new 无配对 delete 即泄漏）,1203,852,True
+qwen,21,"以下代码中，atomicAdd 的返回值是什么？
+```cuda
+__global__ void k(int* counter) {
+    int old =",True,False,"`atomicAdd(counter, 1)` 会原子地给 `*counter` 加 1，并返回加法发生前 `*counter` 的旧值。
+
+答案是 旧值 #### 旧值","`atomicAdd(counter, 1)` 的返回值是 **加法执行之前 `*counter` 的旧值**。
+
+也就是说，如果代码语义是：
+
+```cuda
+__global__ void kernel(int* counter) {
+    int old = atomicAdd(counter, 1);
+    ...
+}
+```
+
+那么：
+
+```cuda
+int old = atomi",加操作前的旧值,1201,856,True
+qwen,22,"以下代码执行后，g 的值是多少（假设 g 初始为 0，单块 32 线程各 atomicAdd(g, 1)）？
+```cuda
+__global__ void k",True,False,"32 个线程各执行一次 `atomicAdd(g, 1)`，原子操作保证每个增量都不丢失，因此最终 `g = 0 + 32 = 32`。
+
+答案是 32 #### 32","执行后 `g` 的值是：
+
+```text
+32
+```
+
+原因：
+
+- 启动配置是 `k<<<1, 32>>>()`，表示：
+  - 1 个 block
+  - 32 个 thread
+- 每个 thread 都执行一次：
+
+```cuda
+atomicAdd(g, 1);
+```
+
+- `atomicAdd` 是原子操作，会保证 32 个线程对 `g` 的加 1 操作不会发生数据竞争。
+- 初",32,1225,883,True
+qwen,19,"以下代码中，texture 读取的默认寻址模式是？
+```cuda
+texture<float, 1, cudaReadModeElementType> tex",False,False,"`texture<float, 1, cudaReadModeElementType>` 只显式指定了元素类型、维度为 1、读取模式为 `cudaReadModeElementType`，并没有指定地址模式。CUDA texture reference 的默认地址模式是 `cudaAddressModeClamp`，即越界纹理坐标会被钳制到边界。
+
+答案是 cudaAddressModeClamp","默认寻址模式是：
+
+```cuda
+cudaAddressModeClamp
+```
+
+也就是 **Clamp / 钳制到边界** 模式。
+
+你给出的代码应为：
+
+```cuda
+texture<float, 1, cudaReadModeElementType> tex;
+```
+
+这里：
+
+- `float`：纹理元素类型；
+- `1`：一维纹理；
+- `cudaReadModeElement",归一化坐标（若绑定为 normalized）否则元素索引,1177,847,True
+qwen,8,"以下 CUDA 代码中，gird 维度写错的编译错误类型是？
+```cuda
+dim3 grid(2, 2);
+kernel<<<grid, grid>>>()",False,False,"简短推理：`<<<grid, grid>>>` 只是 kernel 启动配置，不会自动满足 kernel 的形参要求；若 kernel 声明需要 block 维度形参，而调用后括号内没有传参，编译器会报参数个数不匹配（too few arguments），属于参数错误。
+
+答案是 参数错误 #### 参数错误","这是 **编译期语法错误（Syntax Error）**，不是 CUDA 运行时错误。
+
+你给出的代码：
+
+```cuda
+dim3 grid 2 2
+```
+
+在 C++/CUDA 中是不合法的。`dim3` 是一个类型，声明变量时需要用构造函数语法或初始化列表语法，例如：
+
+```cuda
+dim3 grid(2, 2);
+```
+
+或者：
+
+```cuda
+dim3 grid{2, 2};
+",类型不匹配（grid 用于 gridDim 维度）,1199,816,True
+qwen,25,以下代码中，cudaDeviceSynchronize() 的作用是？,False,False,"cudaDeviceSynchronize() 是主机端 API，用于阻塞当前 CPU 线程，直到 CUDA 设备端所有已提交的操作（如 kernel 启动、内存拷贝等）全部完成。它不是用于同步 GPU 内部线程或线程块。
+
+答案是 阻塞主机线程，等待设备端所有已提交的 CUDA 操作完成 #### 阻塞主机线程，等待设备端所有已提交的 CUDA 操作完成","推理：`cudaDeviceSynchronize()` 是主机端调用，用于让 CPU 等待 GPU 上之前提交的所有 CUDA 操作完成，常用于确保结果可读或用于计时/调试。
+
+答案：阻塞主机线程，直到设备所有流上先前发起的 CUDA 任务全部执行完成。",阻塞主机直到设备上所有流任务完成,1127,826,True
+qwen,20,"以下 kernel 中，所有块都执行到 __syncthreads() 后，全局内存可见性如何？
+```cuda
+__global__ void k(float",False,False,`__syncthreads()` 只是块内屏障：它保证同一 block 内线程在 barrier 前的共享/全局访问对 block 内后续线程可见，但不构成 grid 级同步，也不保证全局内存写入对其他 block 可见。该 kernel 的全局写 `g[0] = s[0] + 1` 发生在 `__syncthreads()` 之后，因此仅靠所有 block 到达该屏障，不能保证跨块看到全局内存,"结论：**仅靠 `__syncthreads()` 不能保证“所有块”对全局内存的写入互相可见。**
+
+`__syncthreads()` 的语义是：
+
+- 只同步**同一个 block 内**的所有线程；
+- 保证同一个 block 内的线程在 barrier 之前的全局内存写，对 barrier 之后的**同 block 线程**可见；
+- **不会**同步不同 block；
+- **不会**",仅块内线程同步；不同块的写无跨块同步保证,1270,901,True
+qwen,23,以下代码中，__threadfence() 的作用是？,False,False,"__threadfence() 是内存栅栏，不是线程同步；它保证当前线程之前的全局内存写入在后续写入前对设备内其他线程可见。
+
+答案是 保证当前线程对全局内存的写入在后续写入前对所有线程可见 #### 保证当前线程对全局内存的写入在后续写入前对所有线程可见","`__threadfence()` 在 CUDA 中的作用是：**设置一个设备级内存屏障，保证当前线程在调用它之前对全局内存的写操作，在调用它之后的内存访问之前，对同一 GPU 上的其他线程可见，并防止编译器或硬件对这些内存访问进行重排序。**
+
+简单说，它解决的是：
+
+> “我写的数据，别的线程能不能在我设置的标志/计数之后确实看到？”
+
+---
+
+## 典型作用
+
+假设代码中有类似逻辑：
+
+`",确保当前线程先前的写对其他线程可见（内存栅栏）,1119,791,True
+qwen,27,"以下代码中，atomicExch(&g, 7) 的返回值是？",False,False,"`atomicExch(&g, 7)` 会原子地把 `g` 替换为 `7`，并返回替换前 `g` 的旧值。题目未给出 `g` 的具体初始值，因此只能按语义作答。
+
+答案是 g 的旧值 #### g 的旧值","`atomicExch(&g, 7)` 的返回值是：**原子交换发生前 `g` 的旧值**，同时它会把 `g` 设置为 `7`。
+
+也就是说：
+
+```cpp
+int old = atomicExch(&g, 7);
+```
+
+等价于：
+
+```cpp
+old = g;
+g = 7;
+```
+
+但这个过程是原子的。
+
+所以具体返回值取决于代码中 `g` 的初始值。例如：
+
+```cpp
+int g",交换前的旧值,1122,794,True
+qwen,29,以下代码中，atomicCAS 的作用是？,True,False,"在 CUDA 中，`atomicCAS` 是“原子比较并交换”：它比较某地址当前值与预期值，若相等则原子写入新值，否则不写并返回旧值，常用于无锁同步或安全更新共享状态。
+
+答案是 atomicCAS 原子比较并交换，用于安全更新共享状态或实现跨块同步 #### atomicCAS 原子比较并交换，用于安全更新共享状态或实现跨块同步","由于你贴出的代码片段被省略了（只有“...”），我只能根据 CUDA 中 `atomicCAS` 的通用语义回答。
+
+## `atomicCAS` 的作用
+
+`atomicCAS` 是 CUDA 提供的**原子比较并交换**（Compare-And-Swap）操作。
+
+常见形式：
+
+```cpp
+unsigned int old = atomicCAS(&addr, compare, val);
+",比较并交换（compare-and-swap，返回旧值）,1113,785,True
+qwen,30,CUDA 中一个 warp 包含多少个线程？,True,True,"在 CUDA 中，warp 是 GPU 调度和执行的基本单位，由同一线程块中连续编号的一组线程组成。标准架构下，一个 warp 包含 32 个线程。
+
+答案是 32 #### 32","在 CUDA 编程模型中，warp 是 GPU 调度和执行的基本单位，通常由同一 block 内连续的 32 个线程组成。
+
+答案：32 个线程",32,1114,813,True
+qwen,24,"以下代码存在什么问题？
+```cuda
+__global__ void k(int* g) {
+    if (threadIdx.x < 16) { g[0]",True,False,"简短推理：`threadIdx.x` 是块内索引，`__syncthreads()` 只同步当前 block 内的线程，不能保证多个 block 之间的执行顺序或全局内存可见性。若 grid 有多个 block，则不同 block 会并发读写 `g[0]`、`g[1]`，可能读到旧值/未初始化值，形成数据竞争；同时多个线程同址写 `g[0]` 也不安全。
+
+答案是 数据竞争：__syncthrea","这段代码至少有 **语法问题**、**并发同步问题** 和 **数据竞争问题**。如果按你给出的片段理解，核心 CUDA 语义问题是：
+
+> **线程之间对 `g[0]` 的写和读没有同步，`g[1] = g[0]` 可能读到旧值、未初始化值或不确定值。**
+
+---
+
+## 1. 语法错误：kernel 声明不完整
+
+你写的是：
+
+```cuda
+__global__ void int* {
+`",块内非全线程到达 __syncthreads 是未定义行为（若 divergent）,1250,877,True
+qwen,28,"以下 CUDA 代码中，g[0] 的最终值是多少？
+```cuda
+__global__ void k(int* g) {
+    __shared__ int",True,False,"推理：线程 0 先将共享变量 `s` 设为 5，`__syncthreads()` 保证该写入对块内所有线程可见；随后线程 1 执行 `s += 2`，使 `s` 变为 7；再次同步后，线程 0 将 `s` 写入 `g[0]`。
+
+答案是 7 #### 7","结论：**无法给出确定的最终值**。按你贴出的代码，严格来说甚至**不能编译**；即使把它补全成常见的 CUDA 片段，`g[0]` 也会因为**多线程无同步写同一全局内存**而形成**数据竞争**，最终值不确定。
+
+---
+
+## 1. 你给出的代码本身不完整
+
+```cuda
+__global__ void int* {
+...
+if threadIdx.x == 0 { = 5 }
+...
+",7,1019,690,True
+qwen,31,"以下代码中，两个分支的线程数各是多少（warp divergence）？
+```cuda
+if (threadIdx.x % 2 == 0) { a(); } ",True,True,"一个 warp 有 32 个线程，`threadIdx.x % 2 == 0` 时一半线程走 `a()`，另一半走 `b()`，因此每个分支 16 个线程。
+
+答案是 16 和 16 #### 16 和 16","这段代码本身缺少运算符，不能编译：
+
+```cuda
+if threadIdx.x 2 == 0 { } else { }
+```
+
+如果你实际想问的是常见的 warp divergence 例子：
+
+```cuda
+if (threadIdx.x % 2 == 0) {
+    // if 分支
+} else {
+    // else 分支
+}
+```
+
+那么答案是：
+
+## 按一个完整 wa",各 16（半个 warp）,1189,847,True
+qwen,26,"以下代码中，第二个 kernel 何时执行？
+```cuda
+kernel<<<1, 32>>>();
+cudaStreamSynchronize(stream",True,True,"简短推理：`kernel2<<<...>>>` 是主机侧 kernel 启动调用，必须等主机执行到该行才会入队；这里主机先被 `cudaStreamSynchronize(stream)` 阻塞，直到该 stream 空闲后才继续。又因为两个 kernel 都未指定 stream，默认在同一 stream 上，GPU 上 `kernel2` 还会等待同流前序 `kernel` 完成后才执行。
+
+答","按你贴出的代码字面语义：
+
+```cuda
+kernel<<<1, 32>>>();
+cudaStreamSynchronize(stream);
+kernel2<<<1, 32>>>();
+```
+
+结论可以分两层看：
+
+## 1. Host 侧：第二个 kernel 何时被 launch？
+
+`kernel2<<<1, 32>>>();` 这条 launch 语句是在：
+
+```cuda
+cu",在 stream 上第一个 kernel 完成后,1200,872,True
+qwen,33,"以下共享内存访问是否产生 bank conflict？
+```cuda
+__shared__ float s[32];
+float v = s[threadId",True,False,"`float` 为 4 字节，共享内存有 32 个 bank。`s[threadIdx.x]` 在有效索引范围内会让 warp 内不同线程访问不同 bank，因此不会产生 bank conflict。若 `blockDim.x > 32`，该写法会越界，不属于 bank conflict 问题。
+
+答案是 否 #### 否","结论：**在 `threadIdx.x` 为 0~31 的合法访问下，不产生 bank conflict。**
+
+假设典型 GPU 共享内存有 **32 个 bank**，每个 bank 宽度 **4 字节**，`float` 也是 4 字节。
+
+```cuda
+__shared__ float s[32];
+float v = s[threadIdx.x];
+```
+
+线程访问地址为：
+
+```",否（每线程不同 bank）,1181,848,True
+qwen,32,"以下共享内存访问是否产生 bank conflict？
+```cuda
+__shared__ float s[32];
+float v = s[threadId",True,True,"推理：float 为 4B，通常共享内存有 32 个 bank，bank 编号为 `(下标 % 32)`。这里下标是 `threadIdx.x * 2`，在一个 warp 内会映射到 `0,2,...,30,0,2,...,30`，同一 bank 有两个线程访问不同地址，因此产生 2-way bank conflict（并且若 `blockDim.x=32`，`threadIdx.x>=16` 还","严格说，这段代码本身有越界问题：
+
+```cuda
+__shared__ float s[32];   // 合法下标是 0..31
+float v = s[threadIdx.x * 2];
+```
+
+如果一个 warp 内 `threadIdx.x = 0..31`，则访问下标是：
+
+```text
+0, 2, 4, ..., 60, 62
+```
+
+其中 `threadIdx.x >= 16",是（线程 0/16 冲突，stride 2）,1185,852,True
+qwen,35,"以下全局内存访问是否合并？
+```cuda
+float v = d[threadIdx.x * 8];
+```",False,False,"`threadIdx.x * 8` 使相邻线程访问间隔 8 个 float，即 32 字节；一个 warp 内地址分散到多个 sector/transaction，不是连续合并访问。
+
+答案是 不合并 #### 不合并","结论：**不合并**（是典型的 stride 访问，合并效率很差）。
+
+```cuda
+float v = d[threadIdx.x * 8];
+```
+
+设 `d` 是 `float*`，每个 `float` 占 4 字节。
+
+对于同一个 warp 内的线程 `i`：
+
+```cuda
+thread i: 访问 d[i * 8]
+地址: base + i * 8 * sizeof(float)",否（stride 8，非合并）,1147,819,True
+qwen,36,以下代码中，__shfl_sync 的作用是？,True,False,"推理：`__shfl_sync` 是 CUDA 的 warp 级同步 shuffle 指令，用于让同一个 warp 内的线程读取彼此寄存器中的值；`mask` 指定参与线程，避免未同步线程导致未定义行为。它常用于 warp 内归约、广播或数据交换，不需要使用共享内存或全局内存。
+
+答案是 warp 内线程间同步交换寄存器数据（如归约/广播） #### warp 内线程间同步交换寄存器数据（如归约/","`__shfl_sync` 是 CUDA 中的 **warp 内线程数据交换指令**。它的核心作用是：
+
+> **让同一个 warp 内的线程直接读取其他线程寄存器中的值，而不需要借助共享内存或全局内存。**
+
+常见函数形式：
+
+```cpp
+__shfl_sync(mask, var, srcLane, width);
+```
+
+含义大致是：
+
+```cpp
+返回值 = 从 srcLane 号线",warp 内线程间交换数据（lane shuffle）,1115,787,True
+qwen,37,"以下代码中，occupancy 主要受什么限制？
+```cuda
+__global__ void k() { __shared__ float s[2048];",True,False,"该 kernel 没有复杂计算，寄存器使用通常很低；但每个 block 静态分配了 `2048 * 4 = 8192` 字节共享内存。共享内存占用会限制每个 SM 上能同时驻留的 block 数，因此 occupancy 主要受共享内存限制。
+
+答案是 共享内存 #### 共享内存","主要受 **共享内存（Shared Memory）占用** 限制。
+
+虽然你给出的代码不完整：
+
+```cuda
+__global__ void { __shared__ s[2048] }
+```
+
+假设它实际类似：
+
+```cuda
+__global__ void kernel() {
+    __shared__ float s[2048];
+}
+```
+
+那么 `s[2048]` 是 **",共享内存容量,1178,839,True
+qwen,40,以下代码中，cudaStreamCreate 返回什么表示成功？,True,True,"cudaStreamCreate 返回 `cudaError_t`，成功时返回 `cudaSuccess`（枚举值为 0）。
+
+答案是 cudaSuccess #### cudaSuccess","cudaStreamCreate 返回的是 cudaError_t 枚举值；调用成功时返回 cudaSuccess。
+
+答案：cudaSuccess",cudaSuccess（0）,1124,823,True
+qwen,38,"以下代码中，使用 __launch_bounds__(128, 8) 的含义是？",True,False,"__launch_bounds__(maxThreadsPerBlock, minBlocksPerMultiprocessor) 用于指定 kernel 的线程块大小上限和期望的最小 SM 驻留块数，因此 (128, 8) 表示每个 block 最多 128 个线程，并提示编译器优化寄存器分配以保证每个 SM 至少可驻留 8 个 block。
+
+答案是 每个线程块最多128个线程且每个SM至少8","`__launch_bounds__(128, 8)` 是 CUDA kernel 函数上的一个修饰符，用来告诉编译器：
+
+```cpp
+__global__ void __launch_bounds__(128, 8) kernel(...)
+```
+
+它的含义是：
+
+```cpp
+__launch_bounds__(maxThreadsPerBlock, minBlocksPerMultipr",每块最多 128 线程，至少 8 块/SM（指导寄存器分配）,1132,804,True
+qwen,41,以下代码中，cudaGetLastError() 的作用是？,False,False,"cudaGetLastError() 用于返回并清除最近一次 CUDA Runtime API 调用的错误码，常用来检查 kernel 启动或 API 调用是否出错；但它不会等待 kernel 执行完成，kernel 执行期错误需要配合同步函数后再检查。
+
+答案是 获取并清除最近一次 CUDA 错误码以检查 API/kernel 启动是否出错 #### 获取并清除最近一次 CUDA 错误码以检查 ","推理：`cudaGetLastError()` 用于获取最近一次 CUDA API 调用或 kernel 启动产生的错误码，同时清除该错误状态；它通常用于判断 kernel 是否成功启动，但不会等待异步执行完成。
+
+答案：`cudaGetLastError()` 的作用是返回并清除最近一次 CUDA 调用产生的错误码，常用于检查 kernel 启动或 CUDA API 调用是否失败。",返回最近一次运行时调用的错误码,1122,821,True
+qwen,42,以下代码中，cudaEventRecord 的作用是？,False,True,"cudaEventRecord 用于在指定的 CUDA stream 中记录一个事件，相当于在该点打一个时间戳/标记，之后可用于计时（cudaEventElapsedTime）或同步（cudaEventSynchronize）。
+
+答案是 记录事件时间戳/标记点 #### 记录事件时间戳/标记点","cudaEventRecord 用于在指定 CUDA stream 中记录一个事件，作为后续同步或计时的标记。
+
+答案：cudaEventRecord 的作用是将 CUDA 事件插入到指定 stream 中，用于后续同步或测量该 stream 上操作的执行时间。",在指定流上记录事件（用于计时/同步）,1119,818,True
+qwen,39,以下代码中，unroll 指令 #pragma unroll 4 的含义是？,True,False,"`#pragma unroll 4` 是 CUDA 编译器指令，用于提示编译器对紧随其后的循环进行展开，展开因子为 4，即每次循环体复制 4 次，以减少循环控制开销并提高指令级并行度。
+
+答案是 展开4次 #### 展开4次","`#pragma unroll 4` 是 CUDA C++ 源码里的**编译器循环展开提示**，含义是：
+
+> 告诉编译器：对紧随其后的循环，按 **4 次迭代为一组** 进行展开。
+
+例如：
+
+```cpp
+#pragma unroll 4
+for (int i = 0; i < N; ++i) {
+    // loop body
+}
+```
+
+编译器会尝试把它变成类似：
+
+```cpp
+fo",循环展开 4 次（编译器提示）,1130,802,True
+qwen,45,以下代码中，cudaMallocManaged 分配的内存特点是什么？,True,True,"`cudaMallocManaged` 分配的是 CUDA 统一/托管内存：同一指针可被主机和设备访问，页面可按需在主机与设备之间迁移，通常无需显式 `cudaMemcpy`，但访问前需保证同步。
+
+答案是 托管内存，主机和设备均可访问，可按需自动迁移 #### 托管内存，主机和设备均可访问，可按需自动迁移","cudaMallocManaged 分配的是 CUDA 统一内存（managed/unified memory），CPU 和 GPU 可以通过同一指针访问，系统会在需要时自动迁移数据页面。
+
+答案：cudaMallocManaged 分配的内存特点是统一内存，CPU/GPU 均可访问，数据按需自动迁移，不保证始终驻留在 GPU 全局内存中。",统一内存（CPU/GPU 自动迁移）,1127,826,True
+qwen,46,以下代码中，cudaDeviceReset() 的作用是？,False,False,"简短推理：cudaDeviceReset() 用于销毁当前 CUDA 设备上下文，并释放该设备上的所有资源（如显存分配、事件、模块等），使设备回到初始状态，而不是仅释放某一块显存。
+
+答案是 释放当前设备上下文并重置设备到初始状态 #### 释放当前设备上下文并重置设备到初始状态","`cudaDeviceReset()` 会重置当前 CUDA 设备上下文，销毁该上下文中创建的资源，包括设备内存、流、事件等，使设备回到未初始化状态。
+
+答案：cudaDeviceReset() 的作用是重置当前设备并释放/销毁当前 CUDA 上下文中的所有资源。",重置设备上下文（释放所有资源）,1121,820,True
+qwen,43,以下代码中，使用 cudaMemcpyAsync 需要什么前提？,True,True,"cudaMemcpyAsync 要真正异步，通常需要配合 CUDA stream，并且主机端内存应为页锁定内存；普通 malloc 内存可能退化为同步拷贝。
+
+答案是 页锁定内存（pinned memory）+ cudaStream_t #### 页锁定内存（pinned memory）+ cudaStream_t","推理：cudaMemcpyAsync 的异步性依赖内存类型与流：设备端内存需已分配；若涉及主机内存，主机缓冲区通常需要页锁定内存；并应传入 CUDA stream 才能与 kernel 重叠。
+
+答案：需要已分配的设备内存和指定 CUDA stream；涉及主机内存时，主机缓冲区必须是页锁定(pinned)内存。",页锁定（pinned）主机内存 + 指定流,1124,823,True
+qwen,34,"以下全局内存访问是否合并（coalesced）？
+```cuda
+float v = d[threadIdx.x];
+```",True,False,"推理：合并访问看同一 warp 内线程访问的全局内存地址是否连续。`threadIdx.x` 在同一 warp 中连续递增，因此 `d[threadIdx.x]` 读取的是连续的 `float` 地址，满足合并访问。
+
+答案是 是 #### 是","结论：**在常见假设下，是合并访问（coalesced）；但不能只看这一行代码就绝对判定，需要看 `d` 的布局、启动配置和对齐。**
+
+```cuda
+float v = d[threadIdx.x];
+```
+
+---
+
+## 1. 为什么通常认为是 coalesced？
+
+如果：
+
+```cuda
+float* d; // 指向连续 global memory 的 float 数组
+```
+",是（连续线程访问连续地址）,1154,826,True
+qwen,48,以下代码中，cudaPeekAtLastError 与 cudaGetLastError 的区别是什么？,True,True,"cudaGetLastError 会返回最近一次 CUDA 错误并清除该错误状态；cudaPeekAtLastError 只返回最近一次错误，不会清除错误状态。
+
+答案是 cudaGetLastError 返回并清除最近错误；cudaPeekAtLastError 只返回不清除最近错误 #### cudaGetLastError 返回并清除最近错误；cudaPeekAtLastError 只返回不","简短推理：两者都用于获取 CUDA 运行时最近一次错误码，但 `cudaGetLastError()` 在返回错误后会清除错误状态，使其恢复为 `cudaSuccess`；而 `cudaPeekAtLastError()` 只查看错误状态，不会清除。
+
+答案：`cudaGetLastError` 会获取并清除最近一次 CUDA 错误；`cudaPeekAtLastError` 只获取错误但不清除，",Peek 不清除错误标志，Get 清除,1144,843,True
+qwen,47,以下代码中，cudaOccupancyMaxActiveBlocksPerMultiprocessor 返回什么？,True,False,"题目未给出具体代码，因此无法确定一个具体数值；但 `cudaOccupancyMaxActiveBlocksPerMultiprocessor` 的函数返回值是 `cudaError_t`，成功时返回 `cudaSuccess`，真正的“每个 SM 最大活跃 block 数”通过第一个输出参数 `numBlocks` 写回。
+
+答案是 cudaSuccess（并通过 numBlocks 返回每个 ","推理：`cudaOccupancyMaxActiveBlocksPerMultiprocessor` 是 CUDA Runtime API 函数，函数返回值本身是 `cudaError_t`，用于表示调用是否成功；它通过输出参数 `numBlocks` 返回给定 kernel、block 大小和动态共享内存大小下，每个多处理器（SM）最多可同时驻留的线程块数。
+
+答案：函数本身返回 `cudaEr",每个 SM 上最大活跃块数（按 kernel 和块大小）,1149,848,True
+qwen,44,以下代码中，cudaHostAlloc 分配的内存特点是什么？,True,True,"cudaHostAlloc 分配的是主机端页锁定内存（pinned memory），不会被操作系统换页，可用于 DMA 高速拷贝；若带映射标志，还可被 GPU 直接访问。
+
+答案是 页锁定主机内存（pinned memory），支持高速 DMA 拷贝/可映射直接访问 #### 页锁定主机内存（pinned memory），支持高速 DMA 拷贝/可映射直接访问","cudaHostAlloc 在主机端分配的是页锁定（pinned）内存，不会被操作系统换页，便于 GPU 通过 DMA 高效传输；若带映射标志，还可被设备直接访问。
+
+答案：cudaHostAlloc 分配的是页锁定主机内存（pinned host memory），支持高效异步传输，必要时可映射到设备地址空间供 GPU 直接访问。",页锁定主机内存（可被设备直接访问）,1123,822,True
+qwen,51,以下代码中，使用 cudaGraphLaunch 的好处是什么？,True,True,"cudaGraphLaunch 将预先构建好的 CUDA Graph 一次性提交执行，避免逐个 kernel 或内存操作反复调用 launch API，从而减少 CPU 端调度开销和 GPU 启动延迟，使执行更连续、提升吞吐与利用率。
+
+答案是 降低 kernel 启动开销并提升吞吐 #### 降低 kernel 启动开销并提升吞吐","简短推理：`cudaGraphLaunch` 会把预先构建好的 CUDA Graph 一次性提交给 GPU，而不是逐个启动 kernel 或 memcpy 操作。这样可以减少 CPU 端调用驱动、提交任务的开销，降低启动延迟，并让 graph 内部依赖关系被更高效地调度，尤其适合重复执行相同 kernel 序列的场景。
+
+答案：使用 cudaGraphLaunch 的好处是一次性启动预构建的 CU",减少 kernel 启动开销（图捕获重放）,1124,823,True
+qwen,50,"以下规约（reduce）代码中，最后结果 g[0] 是多少（d 为 0..31 的平方和）？
+```cuda
+__global__ void k(int* g,",True,True,"假设以 `blockDim.x = 32` 启动，且 `d[i] = i`（`i = 0..31`）：
+
+- 每个线程计算 `d[threadIdx.x]^2` 写入共享内存 `s[threadIdx.x]`
+- `__syncthreads()` 后，线程 0 将 `s[0..31]` 累加
+- 因此 `g[0] = Σ i^2, i=0..31 = 31×32×63/6 = 10416`
+
+答","在**规约代码被正确补全**的前提下，最后 `g[0]` 的结果是：
+
+```text
+10416
+```
+
+计算为：
+
+\[
+\sum_{i=0}^{31} i^2
+= 0^2 + 1^2 + \cdots + 31^2
+= \frac{31 \times 32 \times 63}{6}
+= 10416
+\]
+
+也就是说，如果每个线程把 `d[threadIdx.x]` 的平方写入共享内存：
+",10416,1079,706,True
+qwen,53,以下代码中，使用 __restrict__ 修饰指针的作用是什么？,False,False,"简短推理：在 CUDA kernel 中，`__restrict__` 是编译器的别名提示，表示被修饰指针所访问的内存区域不会与同一 kernel 中其他 `__restrict__` 指针重叠，因此编译器可以更安全地做寄存器缓存、减少冗余访存、重排或向量化等优化。
+
+答案是 告诉编译器该指针访问的内存与其他 __restrict__ 指针不重叠（无别名），从而允许更激进的优化 #### 告诉编译","在 CUDA 中，`__restrict__` 修饰指针的作用是：
+
+> **告诉编译器：这个指针所指向的内存区域，不会和同一 kernel 中其他指针所指向的内存区域发生重叠 / 别名。**
+
+它本质上是一个**编译器优化提示**，不会改变程序逻辑，但可以帮助编译器生成更高效的 GPU 指令。
+
+---
+
+## 1. 为什么需要 `__restrict__`？
+
+在 CUDA kernel 中，",提示编译器无别名（允许更激进的优化）,1125,797,True
+qwen,49,以下代码中，使用 -arch=sm_80 编译的含义是什么？,True,True,"简短推理：`-arch=sm_80` 是 `nvcc` 的目标架构选项，表示把 CUDA 设备代码编译为面向计算能力 `8.0` 的 GPU 架构（Ampere，如 A100 等），生成的代码与该架构的指令集、寄存器模型和特性支持相关。
+
+答案是 指定目标 GPU 架构为 sm_80（计算能力 8.0，Ampere），并生成对应设备码 #### 指定目标 GPU 架构为 sm_80（计算能力 8.","你贴的代码部分被省略了，但仅就 **`-arch=sm_80`** 这个编译参数而言，它的含义是：
+
+> **告诉 CUDA 编译器 nvcc：这份代码要编译/运行在 Compute Capability 8.0 的 GPU 架构上。**
+
+---
+
+## 1. `sm_80` 是什么？
+
+`sm_80` 表示：
+
+- **Streaming Multiprocessor architecture",为 Ampere 架构（sm_80）生成 SASS,1122,794,True
+qwen,54,以下代码中，动态并行（Dynamic Parallelism）指的是什么？,True,True,"动态并行（Dynamic Parallelism）在 CUDA 中指的是 GPU 上正在执行的 kernel 可以由设备端线程再次启动新的 kernel，而不是必须由主机 CPU 发起启动。
+
+答案是 在设备端 kernel 内部启动新的 kernel #### 在设备端 kernel 内部启动新的 kernel","你这段描述里提到了 **CUDA 动态并行（Dynamic Parallelism）**，但没有贴出具体代码，所以我只能按 CUDA 概念来解释。如果你把代码贴出来，我可以逐行指出哪部分是动态并行。
+
+## 动态并行（Dynamic Parallelism）指的是什么？
+
+在 CUDA 里，**动态并行**通常指：
+
+> **GPU 上正在执行的 kernel 内部，再启动新的 kernel。**",设备端 kernel 可启动子 kernel,1129,801,True
+qwen,55,以下代码中，使用 cudaMemPrefetchAsync 的作用是什么？,False,False,"推理：`cudaMemPrefetchAsync` 是 CUDA 统一内存（managed memory）相关 API，作用是把指定内存页异步预取/迁移到目标设备（通常是 GPU），让后续 kernel 访问这些数据时尽量不再触发缺页或慢速迁移，从而降低访问延迟、提升性能。
+
+答案是 将统一内存页异步预取到指定设备（如 GPU），以减少后续访问时的迁移/缺页开销 #### 将统一内存页异步预取到指","推理：`cudaMemPrefetchAsync` 用于统一内存（managed memory）场景，它会把指定内存区域异步预取/迁移到目标设备（通常是 GPU）上，使后续 kernel 访问数据时更少发生页错误和跨设备传输，从而降低访问延迟、提升性能。
+
+答案：`cudaMemPrefetchAsync` 的作用是异步预取统一内存数据到指定设备（如 GPU 显存），提前完成内存迁移，减少 GPU",异步预取统一内存到指定设备,1129,828,True
+qwen,52,以下代码中，half2 数据类型的特点是什么？,True,True,"half2 是 CUDA 中用于半精度浮点的向量类型，通常将两个 16 位 half 数据打包到一个 32 位寄存器或内存单元中，便于向量化计算、提高吞吐并改善内存访问效率。
+
+答案是 half2 是将两个 16 位半精度浮点数打包到一个 32 位向量单元中的 CUDA 数据类型，支持并行处理两个 half 值并提升计算与访存效率 #### half2 是将两个 16 位半精度浮点数打包到一个 3","你给出的代码片段似乎被省略了（只看到“以下代码中……”但没有具体代码）。不过，在 CUDA 编程模型中，`half2`（通常对应 `__half2`）是一个非常常见的半精度向量数据类型。它的核心特点可以概括为：
+
+> **`half2` 是把两个 16 位半精度浮点数 `__half` 打包成一个 32 位向量类型，用于一次处理两个半精度数据，以提升内存带宽利用率和计算吞吐。**
+
+---
+
+##",2 个 half 打包（16 位浮点×2）,1115,787,True
+qwen,57,以下代码中，用 shared memory 做矩阵分块（tiling）的主要目的？,True,False,"共享内存分块（tiling）的核心思想是：先把一块数据从全局内存加载到共享内存，块内多个线程反复使用这块数据，从而显著减少重复的全局内存访问，提高带宽利用率和局部性。
+
+答案是 减少全局内存访问、提高数据复用 #### 减少全局内存访问、提高数据复用","用 **shared memory 做矩阵分块（tiling）** 的主要目的是：
+
+**减少全局内存访问次数，提高数据复用率，从而提升 GPU kernel 性能。**
+
+在矩阵乘法这类 kernel 中，如果每个线程都直接从全局内存读取数据，会出现大量重复读取，全局内存带宽成为瓶颈。通过 tiling：
+
+- 每个 block 先把矩阵的一小块 tile 从 **global memory**",减少全局内存访问次数（数据复用）,1133,805,True
+qwen,56,以下代码中，纹理内存相比全局内存的优势是什么？,True,False,"纹理内存相比全局内存的优势在于它是只读缓存，针对空间局部性优化，能减少重复读取时的全局内存访问延迟和带宽压力。
+
+答案是 提供只读缓存并利用空间局部性，降低全局内存访问延迟和带宽压力 #### 提供只读缓存并利用空间局部性，降低全局内存访问延迟和带宽压力","由于你贴出的代码部分是 `...`，无法逐行判断具体 kernel 的访问模式。但按 CUDA 编程模型理解，**纹理内存相比全局内存的优势**通常可以概括为：
+
+> **纹理内存更适合“只读、具有二维/三维局部性、地址不完全连续、需要边界处理”的数据访问；它通过专用纹理缓存和边界/格式处理机制，减少全局内存压力，提高缓存命中率，并降低 kernel 中手动处理越界和分支的成本。**
+
+下面详细解",缓存 + 硬件插值/边界处理,1115,787,True
+qwen,59,以下代码中，warp-level reduce 相比 block reduce 的优势是什么？,False,False,"warp-level reduce 通常使用 `__shfl_down_sync` 在 warp 内完成归约；warp 内线程天然同步，不需要像 block reduce 那样依赖共享内存和 `__syncthreads()`。因此它能减少共享内存访问、同步等待和潜在 bank conflict，从而降低延迟、提高吞吐。
+
+答案是 更少的同步和共享内存开销 #### 更少的同步和共享内存开销","在没看到具体代码的情况下，按常见 CUDA 实现来理解：**warp-level reduce 相比 block reduce 的主要优势是：归约过程可以完全在 warp 内的寄存器之间完成，不需要共享内存，也不需要 `__syncthreads()` 这类块级同步，因此延迟更低、同步开销更小、共享内存压力更小。**
+
+具体来说：
+
+---
+
+## 1. 不需要共享内存
+
+典型 block red",无需 __syncthreads（warp 内天然同步）,1139,811,True
+qwen,58,以下代码中，使用 vectorized load（float4）访问的效果是什么？,False,False,"未给出具体代码，按常见 CUDA 全局内存访问理解：`float4` 一次加载 16 字节；若相邻线程访问相邻且对齐的 `float4` 元素，warp 内访存更连续，可提高合并访问效率、减少访存指令数，从而提升带宽利用率和吞吐。它不自动解决 bank conflict、warp divergence 或 occupancy 问题。
+
+答案是 提高全局内存合并访问效率并减少访存指令 #### 提高","由于代码被省略为 `...`，我按 CUDA 中常见的 **`float4` vectorized load** 来解释其效果。
+
+## 1. `float4` 访问的本质
+
+例如：
+
+```cpp
+float4 *data = reinterpret_cast<float4*>(global_memory);
+float4 v = data[threadIdx.x];
+```
+
+这条语句的效果是",减少指令数、提高内存带宽利用率,1133,805,True

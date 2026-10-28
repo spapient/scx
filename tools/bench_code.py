@@ -191,7 +191,7 @@ def main() -> None:
     ap.add_argument("--model", default="both", choices=["deepseek", "qwen", "both"])
     ap.add_argument("--scx-bin", default="target/release/scx")
     ap.add_argument("--scx-extra",
-                    default="--trim 1 --trim-ratio 0.3 --trim-op-keep 1 --num-line-keep 1 --sym-line-keep 1")
+                    default="--trim 1 --trim-ratio 0.3 --trim-op-keep 1 --num-line-keep 1 --sym-line-keep 1 --zh-keep 1")
     ap.add_argument("--csv", default="", help="逐题明细导出")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--workers", type=int, default=6)

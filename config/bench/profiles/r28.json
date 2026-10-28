@@ -1,0 +1,18 @@
+{
+  "comment": "28% 深水区档位（cut ~28.2%，中文段/标识符保留 100%）：r=0.44 + zh-keep 语义保护，P9 深水区调参甜点位（fid 10 题采样）。",
+  "plan": { "ratio": 0.44 },
+  "trim": {
+    "enable": true,
+    "ratio": 0.44,
+    "op_keep": true,
+    "code_keep": true,
+    "zh_keep": true,
+    "num_line_keep": true,
+    "sym_line_keep": true
+  },
+  "anchor": {
+    "structure": true,
+    "anchors": ["md"],
+    "fill_floor": 0.0
+  }
+}

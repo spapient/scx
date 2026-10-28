@@ -327,10 +327,10 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 高于可选填充。默认空 kinds 时为空操作，与现状逐字节一致。
     mark_structure_anchors(cfg, &lines, &mut keep, &mut kept, &mut reason);
 
-    // 行保护策略（--code-keep / --num-line-keep / --sym-line-keep）：整行保留
-    // 并标记 raw（render 跳过行内 trim）。默认全 0 时为空操作，与现状逐字节一致。
+    // 行保护策略（--code-keep / --num-line-keep / --sym-line-keep / --zh-keep）：
+    // 整行保留并标记 raw（render 跳过行内 trim）。默认全 0 时为空操作，与现状逐字节一致。
     let mut raw = vec![false; total];
-    if cfg.code_keep || cfg.num_line_keep || cfg.sym_line_keep {
+    if cfg.code_keep || cfg.num_line_keep || cfg.sym_line_keep || cfg.zh_keep {
         apply_keep_policies(
             cfg,
             &lines,
@@ -509,6 +509,10 @@ pub fn compress_bucketed(
 }
 /// 行保护策略整体应用（--code-keep / --num-line-keep / --sym-line-keep 三段，
 /// 语义与内联时逐字节一致；raw 标记行在 render 跳过行内 trim）。
+// 四个平级策略段落（code/num/sym/zh keep）共用同一签名；每段是独立声明式
+// 策略，拆函数反而损害可读性，故按项目圈复杂度偏好（<10，当前 7）局部放行
+// 认知复杂度 lint。
+#[allow(clippy::cognitive_complexity)]
 fn apply_keep_policies(
     cfg: &Config,
     lines: &[&str],
@@ -539,6 +543,11 @@ fn apply_keep_policies(
     // --sym-line-keep 1（P6m）：符号/签名行整行保留（行内仍 trim）。
     if cfg.sym_line_keep {
         mark_sym_lines(lines, dup, keep, kept, reason, raw);
+    }
+    // --zh-keep 1（P8-E）：中文问句行整行保留并标记 raw（跳过行内 trim）——
+    // 中文代码问答题干被 trim 逐字摘碎是保持率 0.2 主导机制，问句行必须保真。
+    if cfg.zh_keep {
+        mark_zh_lines(lines, dup, keep, kept, reason, raw);
     }
 }
 
@@ -657,6 +666,71 @@ mod tests {
             }
         }
         (dup, n)
+    }
+
+    #[test]
+    fn zh_keep_preserves_question_lines_and_skips_trim() {
+        // zh-keep=1：中文问句行整行保留并跳过行内 trim（题干不被摘碎）。
+        let text = [
+            "CUDA 编程模型里，kernel<<<4,32>>> 启动后第 2 号块 blockIdx.x=2 内 threadIdx.x=5 的全局线性线程 ID 是多少？",
+            "请用答案格式作答：答案是 X #### X。",
+            "背景知识行：共享内存是块内线程共享的高速存储区域。",
+        ]
+        .join("\n");
+        let cfg = crate::Config {
+            trim: true,
+            trim_ratio: 0.3,
+            zh_keep: true,
+            ..Default::default()
+        };
+        let out = compress(&text, "CUDA 内核 线程 共享内存 原子 warp", &cfg);
+        let q_line = "blockIdx.x=2 内 threadIdx.x=5 的全局线性线程 ID 是多少？";
+        assert!(
+            out.text.contains(q_line),
+            "zh-keep 问句行必须整行保留: {}",
+            out.text
+        );
+        assert!(
+            out.text.contains("答案是 X #### X"),
+            "格式要求行必须整行保留: {}",
+            out.text
+        );
+    }
+
+    #[test]
+    fn zh_keep_off_keeps_previous_behavior() {
+        // 默认 zh_keep=0：问句行被行内 trim 摘碎（对照）；zh_keep=1 整行保留。
+        // 多行输入避开小输入透传（单行 <SMALL_TOK 会 fail-open 原样返回）。
+        let ctx = (0..45)
+            .map(|_| "背景：CUDA 编程模型 kernel GPU 线程，共享内存是块内线程共享的高速存储，原子操作保证并发安全。")
+            .collect::<Vec<_>>()
+            .join("\n");
+        let q = "问题：kernel<<<4,32>>> 启动后第 2 号块 blockIdx.x=2 内 threadIdx.x=5 的全局线性线程 ID 是多少？请用答案是 69 #### 69 格式作答。";
+        let text = format!("{ctx}\n{q}");
+        let cfg = crate::Config {
+            trim: true,
+            trim_ratio: 0.3,
+            zh_keep: false,
+            ..Default::default()
+        };
+        let out = compress(&text, "CUDA 内核 线程 共享内存 原子 warp", &cfg);
+        assert!(
+            !out.text.contains("全局线性线程 ID 是多少"),
+            "zh-keep=0 时问句行应被 trim 摘碎（对照行为）: {}",
+            out.text
+        );
+        let cfg2 = crate::Config {
+            trim: true,
+            trim_ratio: 0.3,
+            zh_keep: true,
+            ..Default::default()
+        };
+        let out2 = compress(&text, "CUDA 内核 线程 共享内存 原子 warp", &cfg2);
+        assert!(
+            out2.text.contains("全局线性线程 ID 是多少"),
+            "zh-keep=1 时问句行必须整行保留: {}",
+            out2.text
+        );
     }
 
     #[test]
