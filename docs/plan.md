@@ -1212,3 +1212,31 @@ println!（无 `\n` 转义）不受影响，故 Rust 正常。修复 = 删除 re
 系统性破坏，掉点均为模型采样噪声。⑤ 速度实测：在线并发 4 → 40 次生成
 32s（本地串行 ~15min），快 ~25 倍。本地轨经 ThreadPoolExecutor 分流修复
 （mlx_lm 不支持子线程 GPU stream），在线轨才走并发。
+## P6n 架构文档 rubric 评测（在线双 judge 交叉验证）
+
+架构/设计开放题（产出型）评测落地：判别型（编译+断言）测不了生成型任务，
+改用「本地生成 + 在线强模型按 rubric 打分」。新建 tools/bench_arch.py 与
+bench_arch.csv（10 题跨领域：Rust 系统架构/性能优化/GPU tiling/KV cache/
+work-stealing/小对象分配器/设计评审/日志库/测试金字塔/连续批处理，每题
+中文需求+英文工程约束+Markdown 输出格式要求）。5 维 rubric 0-5 分：
+structure/accuracy/tradeoff/feasibility/clarity。压缩档
+0.3 + --structure-anchors md + --sym-line-keep 1（cut 均值 35.7%）。
+
+**双 judge 设计**：用户要求双在线模型验证——DeepSeek-V4.1-Flash +
+Qwen-flash（百炼最便宜档）对同一批答案独立打分。judge 端点/模型/key
+环境变量化（key 不进 git）。关键坑：DeepSeek-flash 带 reasoning，
+评分任务先输出 1000+ token 推理，max_tokens 不够会 content 为空
+（初跑 20/20 PARSE-FAIL 根因）→ judge max_tokens 提到 2048。
+
+**结果（千问 3B 生成本地，两 judge 独立打同一批答案）**：
+| judge | full 总分 | scx 总分 | scx/full |
+|---|---:|---:|---:|
+| DeepSeek-V4.1-Flash | 1.06 | 1.31 | **1.24x** |
+| Qwen-flash | 2.39 | 2.36 | 0.99x |
+
+**双 judge 一致性**：绝对值不可跨模型比（风格差异，综合均值差 1.21/最大
+3.0——DeepSeek 严格、Qwen 宽松）；单 judge 复打稳定（DeepSeek max-delta
+0.5）。但**方向结论一致：两模型均判 scx ≥ full（±1%）——压缩对架构文档
+生成无损，DeepSeek 甚至判 +24%（压缩去掉冗余规范文字让 3B 更聚焦）**。
+3B 架构文档能力天花板低（1.06-2.39/5：accuracy 0.8/tradeoff 0.55 = 泛泛
+而谈缺具体数字）——开放题是 3B 真实弱项，但 scx 压缩不引入损伤。P6n 关闭。

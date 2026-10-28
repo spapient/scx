@@ -1,0 +1,92 @@
+[load] Qwen2.5-3B-Instruct（千问） ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[gen 1/10] rust_arch    cut=37% 24s
+[gen 2/10] perf_opt     cut=40% 24s
+[gen 3/10] gpu_tiling   cut=33% 24s
+[gen 4/10] kv_cache     cut=40% 24s
+[gen 5/10] scheduler    cut=38% 19s
+[gen 6/10] allocator    cut=39% 24s
+[gen 7/10] code_review  cut=36% 27s
+[gen 8/10] log_sys      cut=39% 39s
+[gen 9/10] test_strategy cut=17% 47s
+[gen 10/10] kv_batch     cut=39% 33s
+[judge] qwen     0/full: 2.5
+[judge] qwen     0/scx: 3.0
+[judge] deepseek 0/full: 2.0
+[judge] qwen     1/full: 2.0
+[judge] deepseek 0/scx: 2.0
+[judge] qwen     1/scx: 2.5
+[judge] deepseek 1/full: 2.0
+[judge] qwen     2/full: 2.5
+[judge] deepseek 2/full: 2.0
+[judge] qwen     2/scx: 2.5
+[judge] deepseek 2/scx: 2.5
+[judge] deepseek 1/scx: 3.0
+[judge] qwen     3/full: 3.0
+[judge] deepseek 3/full: 2.0
+[judge] qwen     3/scx: 2.5
+[judge] qwen     4/full: 3.0
+[judge] deepseek 3/scx: 2.0
+[judge] qwen     4/scx: 2.5
+[judge] deepseek 4/full: 2.5
+[judge] qwen     5/full: 2.5
+[judge] deepseek 4/scx: 1.5
+[judge] qwen     5/scx: 2.5
+[judge] deepseek 5/full: 2.0
+[judge] qwen     6/full: 3.0
+[judge] deepseek 5/scx: 3.0
+[judge] qwen     6/scx: 3.0
+[judge] deepseek 6/full: 1.0
+[judge] qwen     7/full: 2.5
+[judge] deepseek 6/scx: 3.0
+[judge] deepseek 7/full: 2.0
+[judge] qwen     7/scx: 2.5
+[judge] qwen     8/full: 2.5
+[judge] deepseek 8/full: 1.5
+[judge] deepseek 7/scx: 2.5
+[judge] qwen     8/scx: 2.5
+[judge] deepseek 8/scx: 2.0
+[judge] qwen     9/full: 2.5
+[judge] qwen     9/scx: 2.5
+[judge] deepseek 9/scx: 1.5
+[judge] deepseek 9/full: 2.0
+[rejudge] deepseek 5/full max-delta=0.5
+[rejudge] deepseek 5/scx max-delta=0.5
+[rejudge] deepseek 2/full max-delta=0.5
+[rejudge] deepseek 2/scx max-delta=0.5
+
+=== P6n 架构文档 rubric 评测（Qwen2.5-3B-Instruct（千问） 生成本地 / judge=DeepSeek-V4.1-Flash 在线, 10 题, ('--trim', '1', '--trim-ratio', '0.3', '--structure-anchors', 'md', '--sym-line-keep', '1')）===
+维度均分（0-5）：
+维度           full    scx  scx/full
+structure    1.90   2.30     1.21x
+accuracy     0.80   1.05     1.31x
+tradeoff     0.55   0.80     1.45x
+feasibility   0.65   0.70     1.08x
+clarity      1.40   1.70     1.21x
+TOTAL        1.06   1.31     1.24x
+保持率（scx 总分 / full 总分）: 1.31 / 1.06 = 1.236
+
+=== P6n 架构文档 rubric 评测（Qwen2.5-3B-Instruct（千问） 生成本地 / judge=Qwen-flash 在线, 10 题, ('--trim', '1', '--trim-ratio', '0.3', '--structure-anchors', 'md', '--sym-line-keep', '1')）===
+维度均分（0-5）：
+维度           full    scx  scx/full
+structure    2.60   2.60     1.00x
+accuracy     2.20   2.20     1.00x
+tradeoff     1.90   1.95     1.03x
+feasibility   2.20   1.95     0.89x
+clarity      3.05   3.10     1.02x
+TOTAL        2.39   2.36     0.99x
+保持率（scx 总分 / full 总分）: 2.36 / 2.39 = 0.987
+压缩率（均值）: 35.7%
+
+=== 双 judge 交叉一致性（同答案两模型打分差）===
+维度             均值差     最大差
+structure     0.60     2.0
+accuracy      1.27     3.0
+tradeoff      1.25     2.0
+feasibility    1.40     2.5
+clarity       1.52     3.0
+综合            1.21     3.0
+
+单 judge 复打一致性（4 次, max 分差）: 均值 0.50 / 最大 0.5
+[csv] bench_arch_both_v1.csv
