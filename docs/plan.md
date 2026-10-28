@@ -1286,3 +1286,19 @@ Qwen-flash（百炼最便宜档）对同一批答案独立打分。judge 端点/
 - 评测资产：`bench_arch_v3.csv`（20 题逐题全维度三档）、`bench_arch_v3_run8.log`、
   `bench_arch_both_v2.csv`/`run2.log`（10 题 qwen3.8-flash 双 judge v2）。
   P6n v3 关闭。
+
+## P7 架构重构立项（A–E，2026-10-28 方案确认）
+
+**A 压缩管线配置化**：新增 config/pipeline.toml（plan/trim/anchor 三阶段声明式）；
+三层优先级 CLI > pipeline.toml > policy 常量；评测档位沉淀为 config/bench/profiles/*.toml；
+fail-loud 校验；内核 Config API 不变。
+**B 大文件拆分**：compress.rs(2470) → compress/{mod,plan,trim,render}；
+args.rs(2353) → args/{mod,parse}；lib.rs 测试迁出、只留门面。
+**C 性能架构**：release profile 基线先行（bench_zh_n30 等真实语料），
+行为中性优化（scratch 复用/单次 write/位图已并行），golden 零漂移守门。
+**D memory feature-gate**：照 semantic 先例 cfg(feature="memory")，
+default=["memory"]，压缩路径零影响。
+**E 评测闭环**：定稿结果 csv 冻 hash 入 eval-manifest.json + tools/check_bench.sh
+一条命令门禁（cargo test + golden + hash + csv 完整性）。
+
+每阶段门禁：lib 335 绿 + golden 零漂移 + README 白名单 + fmt/clippy 零告警。
