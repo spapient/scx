@@ -1394,3 +1394,26 @@ default=["memory"]，压缩路径零影响。
 一条命令门禁（cargo test + golden + hash + csv 完整性）。
 
 每阶段门禁：lib 335 绿 + golden 零漂移 + README 白名单 + fmt/clippy 零告警。
+
+### P7-C 性能架构（profile 先行，行为中性，golden 守门）
+
+**profile 基线（macOS，release）**：以 `tools/bench_perf.sh`（源码+评测语料
+拼接 1.14MB/32k 行输入）为可复现基线：lossless/r0.3/r0.2 三档各 3 次取最优
+**0.03s**（单次压缩毫秒级，近线性：10x 输入 0.25s → 30x 输入 ~0.75s）。
+`sample` 采样（release+debuginfo，codegen-units=1）热点：`compress` 主链
++ 分配（RawVec finish_grow ~19 帧 + AnchorKind grow_one ~9 帧 + 通用
+grow ~5 帧，合计约 22% 采样帧）——主体 Vec 已 `vec![false; n]` 预分配，
+残余热点为仍在增长的 keys/numbers/out/out_text。
+
+**行为中性优化（golden 零漂移守门）**：
+- `dedup` keys：`Vec::with_capacity(lines.len())` 预分配 + 循环外复用
+  `String` buffer（`key.clear()` + `std::mem::take` 换出，消除每行一次
+  小分配）；
+- `render` 输出：`out_text` 按输入一半预分配、`numbers` 按 keep 长度、
+  `runs` 的 dropped 按 keep/2 预分配；
+- release profile：`codegen-units = 1`（优化质量）、`debug = 1`（采样/
+  诊断能力，strip 让位）。
+
+**门禁证据**：lib 341 全绿；350 全绿（semantic）；golden 2 passed 零漂移
+（输出逐字节不变）；clippy 全 targets 零告警；fmt 干净；Cargo.toml
+profile 调整（codegen-units=1/debug=1/strip 让位）行为中性。

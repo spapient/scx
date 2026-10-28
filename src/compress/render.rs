@@ -11,8 +11,8 @@ pub(crate) fn render(
     raw: &[bool],
     query_terms: &[String],
 ) -> (String, Vec<usize>) {
-    let mut out_text = String::new();
-    let mut numbers = Vec::new();
+    let mut out_text = String::with_capacity(lines.len() / 2);
+    let mut numbers = Vec::with_capacity(keep.len());
     let mut in_gap = false;
     for (i, &k) in keep.iter().enumerate() {
         if k {
@@ -127,7 +127,7 @@ pub(crate) fn active(risk: Risk, cfg: &Config) -> bool {
 }
 
 pub(crate) fn runs(keep: &[bool], dup: &[bool], overflow: bool) -> Vec<crate::Dropped> {
-    let mut out: Vec<crate::Dropped> = Vec::new();
+    let mut out: Vec<crate::Dropped> = Vec::with_capacity(keep.len() / 2);
     let mut start: Option<usize> = None;
     let mut cur = crate::Reason::Budget;
     for (i, &k) in keep.iter().enumerate() {

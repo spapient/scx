@@ -634,11 +634,12 @@ mod tests {
         force: &[bool],
         _code_keep: bool,
     ) -> (Vec<bool>, usize) {
-        let mut keys: Vec<(String, usize)> = Vec::new();
+        let mut keys: Vec<(String, usize)> = Vec::with_capacity(lines.len());
         let mut dup = vec![false; lines.len()];
         let mut n = 0usize;
+        let mut key = String::new();
         for (i, line) in lines.iter().enumerate() {
-            let mut key = String::new();
+            key.clear();
             normalize(line, &mut key);
             if short(&key) {
                 continue;
@@ -652,7 +653,7 @@ mod tests {
                         n += 1;
                     }
                 }
-                None => keys.push((key, 1)),
+                None => keys.push((std::mem::take(&mut key), 1)),
             }
         }
         (dup, n)
