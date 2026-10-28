@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "frozen_at": "2026-10-28",
+  "note": "定稿评测结果冻结（不可变基线）。修改/重跑后必须重新冻结并提交；check_bench.sh 校验 sha256+行数。",
+  "frozen": {
+    "bench_arch_v3.csv": {
+      "sha256": "f878161f654dfce28568328332d7181b9a3ff590f24eb8892fc0c60ebd13d871",
+      "bytes": 7873,
+      "rows": 21
+    }
+  },
+  "present": [
+    {
+      "file": "bench_arch_both_v1.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_arch_both_v2.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_ds_v1.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_ds_v2.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_nb.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_qwen.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_qwen_v3.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_qwen_v5.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_qwen_v6.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_qwen_v7.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_kernel_qwen_v8.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_qwen_n100.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_zh_n26.csv",
+      "min_rows": 2
+    },
+    {
+      "file": "bench_zh_n30.csv",
+      "min_rows": 2
+    }
+  ]
+}

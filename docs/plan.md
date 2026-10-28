@@ -1446,3 +1446,28 @@ memory;`。消费面 cfg 化（照 semantic 先例）：
 lib 186 全绿（memory 相关测试按 feature 排除）、golden 1 passed、clippy
 全 targets 零告警、fmt 干净。压缩路径（compress/plan/score/render）零
 `memory` 依赖，`--no-default-features` 最小内核可独立编译部署。
+
+### P7-E 评测闭环 CI 化（定稿冻结 + 一条命令门禁）
+
+**交付**：
+- `config/bench/eval-manifest.json`：定稿结果 `bench_arch_v3.csv`（P6n v3
+  双 judge 定稿）冻结 sha256 + 行数（schema 1，frozen_at 2026-10-28）；
+  `present` 清单要求 results/ 全部 csv 存在且 ≥2 行（防误删）。
+- `tools/check_bench.sh`：一条命令门禁——`cargo test --locked --lib`（341）
+  + `--features semantic --lib`（350）+ `--test golden`（零漂移）+ clippy
+  全 targets 零告警 + fmt 干净 + manifest 冻结校验（sha256/行数逐项匹配）。
+  任一失败非零退出，可直接挂 CI。
+
+**验证**：正例——check_bench.sh 全步骤通过；负例——篡改
+bench_arch_v3.csv 一字节 → sha256 mismatch 立即检出，git 还原后恢复。
+
+**门禁证据**：lib 341 全绿；semantic 350 全绿；golden 零漂移；clippy 零；
+fmt 干净；manifest 冻结校验 OK（frozen sha256 匹配 + present 全部存在）。
+
+### P7 总结（A→E 全部完成）
+
+A 压缩管线配置化（08204d5）→ B 大文件拆分 compress/args/lib（a154b04/
+9cc5dfe/68708dd）→ C 性能架构（7e0b633）→ D memory feature-gate
+（6994c60）→ E 评测闭环 CI 化（本段）。全程行为中性：golden 零漂移 +
+双配置（default/no-default）clippy 全零。评测基线：1.14MB/32k 行三档
+0.03s；P6n 甜点位 r=0.3 cut 59% ↔ 保持率 0.75 未变。
