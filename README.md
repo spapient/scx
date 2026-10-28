@@ -461,6 +461,7 @@ fn main() {
 | 路径 | 职责 |
 |---|---|
 | `src/lib.rs` | 公共 API、`Config`、`Outcome`、`Mode`/`Risk` 枚举 |
+| `src/lib_tests.rs` | crate 根单元测试（Config/Outcome/类型探测/hash 确定性，`cfg(test)` 子模块） |
 | `src/compress.rs` | sieve 内核门面：单趟压缩主链 `compress`/`compress_bucketed`、行保护策略、预算利用率、`hash` 子模块；拆分为 `compress/` 子模块（plan/score/render） |
 | `src/compress/plan.rs` | 规划阶段：切行统计、折叠判定（fence 感知）、权重打分、种子与结构区域识别 |
 | `src/compress/score.rs` | 选择与守卫阶段：邻域/锚点/围栏/符号行标记、填充预算、风险审计与守卫（`Ctx` 共享上下文） |

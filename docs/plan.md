@@ -1371,6 +1371,17 @@ re-export 保持外部路径不变（main.rs `args::usage`、wrap.rs
 passed 零漂移（CLI 解析行为逐字节不变）；clippy 全 targets 零告警（test
 辅助 argv/sample_lines/naive_dedup 的 clippy 误报以 `#[allow]` 豁免并注明）；
 fmt 干净；README 模块表 +2 行（args/parse）。commit 见 P7-B 提交 2。
+
+### P7-B 大文件拆分（lib 完成）
+
+**交付**：`src/lib.rs`（1470 行 → 611 行门面）测试段迁出至
+`src/lib_tests.rs`（863 行，crate 根子模块 `#[cfg(test)] mod lib_tests;` 保留
+私有访问：Config 私有字段、类型探测 fn、hash::Hasher）。lib.rs 只留 pub API、
+模块声明、`Config`/`Outcome`/`Evidence`/`ContentType` 等核心类型。
+
+**门禁证据**：lib 341 全绿；350 全绿（semantic）；golden 2 passed 零漂移；
+clippy 全 targets 零告警；fmt 干净；README 模块表 +1 行（lib_tests）。
+commit 见 P7-B 提交 3。P7-B（compress/args/lib 三文件拆分）至此完成。
 commit 见 P7-B 提交。
 
 **B 大文件拆分**：compress.rs(2470) → compress/{mod,plan,trim,render}；
