@@ -1,0 +1,45 @@
+question,answer
+"【L1】以下 CUDA 规约代码中，块 0 的 g[0] 是多少（d[0..15] = 0..15）？
+```cuda
+__global__ void k(int* g, int* d) {
+    __shared__ int s[16];
+    s[threadIdx.x] = d[threadIdx.x];
+    __syncthreads();
+    for (int stride = 8; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) s[threadIdx.x] += s[threadIdx.x + stride];
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) g[0] = s[0];
+}
+k<<<1, 16>>>();
+```",120
+【L2】上述规约代码中，如果 s 数组改为 stride 访问 s[threadIdx.x * 2]（线程访问间隔 2），会引入什么问题？,共享内存 bank conflict（性能下降）
+【L3】要规约 100 万个 int（超出单块共享内存），最合理的分层架构是什么？,每块规约出部分和 → 块间用原子加或二次 kernel 聚合
+"【L1】以下 JS 代码输出什么？
+```js
+function f() { let n = 0; return () => ++n; }
+const a = f();
+console.log(a(), a());
+```",1 2
+【L2】大量使用闭包捕获大对象时，主要的运行时开销是什么？,闭包环境对象保留引用（GC 压力/内存占用）
+【L3】在高频调用场景（如每帧创建回调）中，管理闭包状态的更优架构模式是什么？,函数复用/对象复用（避免每帧新建闭包）+ 状态外置
+"【L1】给定表 t(id, v)，以下查询返回几行？
+```sql
+SELECT * FROM t WHERE v = 3;
+```（t: (1,3),(2,3),(3,1)）",2
+【L2】对 v 列建 B+ 树索引后，WHERE v = 3 的查找复杂度从什么降为什么？,全表扫描 O(n) → 索引查找 O(log n)
+【L3】高写入表上为每列都建索引，主要权衡是什么？,查询加速 vs 写入/存储开销（索引维护成本）
+"【L1】以下正则对 'aaa' 的匹配结果是什么？
+```python
+import re
+len(re.findall(r'a{2}', 'aaa'))
+```",1
+【L2】正则 (a+)+b 对长串 'aaaa...a'（无 b）会发生什么？,灾难性回溯（指数级回退，卡死）
+【L3】对不可信输入做解析时，避免灾难性回溯的工程手段是什么？,有限状态机（无回溯）+ 超时/长度上限
+"【L1】以下 TOML 中，[servers] 下 alpha 的 ip 是什么？
+```toml
+[servers.alpha]
+ip = ""10.0.0.1""
+```",10.0.0.1
+【L2】大型应用启动时重复解析同一配置文件，主要开销是什么？,文件 I/O + 解析 CPU 开销（可缓存/懒加载）
+【L3】生产级配置系统的推荐分层结构是什么？,默认值 → 环境覆盖 → 本地覆盖 → 密钥单独注入（十二因子）
