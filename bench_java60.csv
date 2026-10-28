@@ -1,0 +1,614 @@
+question,answer
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String s = ""abc"";
+        s.toUpperCase();
+        System.out.println(s.length());
+    }
+}
+```",toUpperCase 不改原串，3。答案是 3 #### 3
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        StringBuilder b = new StringBuilder(""ab"");
+        b.append(""cd"");
+        System.out.println(b.length());
+    }
+}
+```",追加后长度，4。答案是 4 #### 4
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String s = ""abcde"";
+        System.out.println(s.substring(1, 3).length());
+    }
+}
+```",子串长度，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String s = ""hello"";
+        System.out.println(s.indexOf(""l""));
+    }
+}
+```",首个 l 索引，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        int[] x = new int[3];
+        System.out.println(x.length);
+    }
+}
+```",数组长度，3。答案是 3 #### 3
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        List<Integer> l = new ArrayList<>();
+        l.add(1);
+        l.add(2);
+        System.out.println(l.size());
+    }
+}
+```",两次添加后大小，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        List<Integer> l = new ArrayList<>(Arrays.asList(5, 6, 7));
+        System.out.println(l.get(1));
+    }
+}
+```",索引 1 元素，6。答案是 6 #### 6
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        Map<String, Integer> m = new HashMap<>();
+        m.put(""k"", 3);
+        System.out.println(m.get(""k""));
+    }
+}
+```",键 k 的值，3。答案是 3 #### 3
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        Set<Integer> s = new HashSet<>();
+        s.add(1);
+        s.add(1);
+        s.add(2);
+        System.out.println(s.size());
+    }
+}
+```",去重后大小，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        Integer x = 5;
+        int y = x + 2;
+        System.out.println(y);
+    }
+}
+```",拆箱相加，7。答案是 7 #### 7
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        Integer x = 100;
+        Integer y = 100;
+        System.out.println(x == y ? 1 : 0);
+    }
+}
+```",缓存范围内同一对象，1。答案是 1 #### 1
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        List<String> l = new ArrayList<>();
+        l.add(""ab"");
+        System.out.println(l.get(0).length());
+    }
+}
+```",泛型元素长度，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class A { int v = 3; }
+class B extends A {}
+public class M {
+    public static void main(String[] args) {
+        B b = new B();
+        System.out.println(b.v * 2);
+    }
+}
+```",继承字段翻倍，6。答案是 6 #### 6
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class A { int f() { return 1; } }
+class B extends A { int f() { return 2; } }
+public class M {
+    public static void main(String[] args) {
+        A x = new B();
+        System.out.println(x.f());
+    }
+}
+```",多态取 B 实现，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class A { int f() { return 3; } }
+class B extends A { int f() { return super.f() + 1; } }
+public class M {
+    public static void main(String[] args) {
+        System.out.println(new B().f());
+    }
+}
+```",父类加 1，4。答案是 4 #### 4
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class S {
+    int x;
+    S() { x = 1; }
+    S(int v) { x = v; }
+}
+public class M {
+    public static void main(String[] args) {
+        System.out.println(new S(5).x);
+    }
+}
+```",参数构造 5，5。答案是 5 #### 5
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class S {
+    static int f(int x) { return x * 2; }
+}
+public class M {
+    public static void main(String[] args) {
+        System.out.println(S.f(4));
+    }
+}
+```",静态方法调用，8。答案是 8 #### 8
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class S {
+    static int c = 0;
+    static int f() { return ++c; }
+}
+public class M {
+    public static void main(String[] args) {
+        S.f();
+        System.out.println(S.f());
+    }
+}
+```",静态计数第二次 2，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        final int x = 4;
+        System.out.println(x * 2);
+    }
+}
+```",常量翻倍，8。答案是 8 #### 8
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+interface I {
+    default int f() { return 6; }
+}
+class S implements I {}
+public class M {
+    public static void main(String[] args) {
+        System.out.println(new S().f());
+    }
+}
+```",默认实现 6，6。答案是 6 #### 6
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    interface F { int run(int x); }
+    public static void main(String[] args) {
+        F f = x -> x * 2;
+        System.out.println(f.run(4));
+    }
+}
+```",lambda 翻倍，8。答案是 8 #### 8
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+import java.util.stream.*;
+public class M {
+    public static void main(String[] args) {
+        int s = Stream.of(1, 2, 3).mapToInt(x -> x * 2).sum();
+        System.out.println(s);
+    }
+}
+```",翻倍求和，12。答案是 12 #### 12
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+import java.util.stream.*;
+public class M {
+    public static void main(String[] args) {
+        long c = Stream.of(1, 2, 3, 4).filter(x -> x % 2 == 0).count();
+        System.out.println(c);
+    }
+}
+```",偶数个数，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+import java.util.stream.*;
+public class M {
+    public static void main(String[] args) {
+        int s = Stream.of(1, 2, 3, 4).reduce(0, (x, y) -> x + y);
+        System.out.println(s);
+    }
+}
+```",归约求和，10。答案是 10 #### 10
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String s = ""ab"" + ""cd"";
+        System.out.println(s.length());
+    }
+}
+```",拼接长度，4。答案是 4 #### 4
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String a = new String(""x"");
+        String b = new String(""x"");
+        System.out.println(a.equals(b) ? 1 : 0);
+    }
+}
+```",值相等，1。答案是 1 #### 1
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        int x = 7;
+        System.out.println(x > 5 ? 1 : 0);
+    }
+}
+```",条件为真取 1，1。答案是 1 #### 1
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        int x = 2, y = 0;
+        switch (x) {
+            case 1: y = 10; break;
+            case 2: y = 20; break;
+            default: y = 0;
+        }
+        System.out.println(y);
+    }
+}
+```",命中 case 2，20。答案是 20 #### 20
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        int s = 0;
+        for (int i = 1; i <= 5; i++) s += i;
+        System.out.println(s);
+    }
+}
+```",1 到 5 累加，15。答案是 15 #### 15
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        int s = 0;
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 4; j++) s++;
+        System.out.println(s);
+    }
+}
+```",3 乘 4 次，12。答案是 12 #### 12
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        int s = 0;
+        for (int i = 1; i <= 5; i++) {
+            if (i % 2 == 0) continue;
+            s += i;
+        }
+        System.out.println(s);
+    }
+}
+```",跳过偶数累加，9。答案是 9 #### 9
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        int[] x = {3, 1, 2};
+        Arrays.sort(x);
+        System.out.println(x[0]);
+    }
+}
+```",升序最小，1。答案是 1 #### 1
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        int[] x = {1, 3, 5};
+        System.out.println(Arrays.binarySearch(x, 5));
+    }
+}
+```",命中索引 2，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        char c = 'b';
+        System.out.println(c - 'a' + 1);
+    }
+}
+```",字符差，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        System.out.println(17 % 5);
+    }
+}
+```",余数，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        System.out.println(17 / 5);
+    }
+}
+```",整数商，3。答案是 3 #### 3
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        System.out.println((6 & 3) | (8 >> 2));
+    }
+}
+```",与或移位，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        System.out.println((int)Math.pow(2, 3));
+    }
+}
+```",2 的 3 次方，8。答案是 8 #### 8
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        System.out.println(Math.max(3, 7) + Math.min(3, 7));
+    }
+}
+```",最大加最小，10。答案是 10 #### 10
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    static int f(int n) { return n <= 1 ? 1 : n * f(n - 1); }
+    public static void main(String[] args) {
+        System.out.println(f(5));
+    }
+}
+```",5 的阶乘，120。答案是 120 #### 120
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    static int f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }
+    public static void main(String[] args) {
+        System.out.println(f(7));
+    }
+}
+```",第 7 项，13。答案是 13 #### 13
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class A {}
+class B extends A {}
+public class M {
+    public static void main(String[] args) {
+        A x = new B();
+        System.out.println(x instanceof B ? 1 : 0);
+    }
+}
+```",运行时类型判断，1。答案是 1 #### 1
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class A {}
+class B extends A {}
+public class M {
+    public static void main(String[] args) {
+        A x = new A();
+        System.out.println(x instanceof B ? 1 : 0);
+    }
+}
+```",不是 B 类型，0。答案是 0 #### 0
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+abstract class A { abstract int f(); }
+class B extends A { int f() { return 4; } }
+public class M {
+    public static void main(String[] args) {
+        System.out.println(new B().f() * 2);
+    }
+}
+```",实现抽象方法翻倍，8。答案是 8 #### 8
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    enum C { A(2), B(5); int v; C(int v) { this.v = v; } }
+    public static void main(String[] args) {
+        System.out.println(C.B.v + C.A.v);
+    }
+}
+```",枚举字段相加，7。答案是 7 #### 7
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String s = String.format(""%d%d"", 1, 2);
+        System.out.println(s.length());
+    }
+}
+```",格式化长度，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String s = ""abc"";
+        System.out.println(s.charAt(1) - 'a');
+    }
+}
+```",字符差，1。答案是 1 #### 1
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        List<Integer> l = new ArrayList<>(Arrays.asList(1, 2, 3));
+        l.remove(1);
+        System.out.println(l.get(1));
+    }
+}
+```",删除后取 3，3。答案是 3 #### 3
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        Map<String, Integer> m = new HashMap<>();
+        System.out.println(m.getOrDefault(""k"", 9));
+    }
+}
+```",缺省值 9，9。答案是 9 #### 9
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        List<Integer> l = Arrays.asList(2, 3);
+        int s = 0;
+        Iterator<Integer> it = l.iterator();
+        while (it.hasNext()) s += it.next();
+        System.out.println(s);
+    }
+}
+```",迭代累加，5。答案是 5 #### 5
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        System.out.println(Integer.parseInt(""42"") + 1);
+    }
+}
+```",解析加 1，43。答案是 43 #### 43
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        int x = 0;
+        try { int y = 1 / 0; } catch (ArithmeticException e) { x = 5; }
+        System.out.println(x);
+    }
+}
+```",捕获后 x=5，5。答案是 5 #### 5
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        int x = 0;
+        try { int y = 1 / 0; } catch (ArithmeticException e) { x = 5; } finally { x++; }
+        System.out.println(x);
+    }
+}
+```",finally 加 1，6。答案是 6 #### 6
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        StringBuilder b = new StringBuilder(""abc"");
+        System.out.println(b.reverse().length());
+    }
+}
+```",反转后长度不变，3。答案是 3 #### 3
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+import java.util.*;
+public class M {
+    public static void main(String[] args) {
+        char[] c = {'b', 'a'};
+        Arrays.sort(c);
+        System.out.println(c[0] - 'a' + 1);
+    }
+}
+```",升序最小 a，1。答案是 1 #### 1
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String s = ""  ab  "";
+        System.out.println(s.trim().length());
+    }
+}
+```",去空白后长度，2。答案是 2 #### 2
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+class S {
+    static int v;
+    static { v = 6; }
+}
+public class M {
+    public static void main(String[] args) {
+        System.out.println(S.v + 1);
+    }
+}
+```",静态块赋值，7。答案是 7 #### 7
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+interface I1 { default int a() { return 2; } }
+interface I2 { default int b() { return 3; } }
+class S implements I1, I2 {}
+public class M {
+    public static void main(String[] args) {
+        S s = new S();
+        System.out.println(s.a() + s.b());
+    }
+}
+```",两接口方法相加，5。答案是 5 #### 5
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    static <T> T id(T x) { return x; }
+    public static void main(String[] args) {
+        System.out.println(id(7) * 2);
+    }
+}
+```",泛型恒等翻倍，14。答案是 14 #### 14
+"以下 Java 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```java
+public class M {
+    public static void main(String[] args) {
+        String s = ""aXbXc"";
+        System.out.println(s.replace(""X"", """").length());
+    }
+}
+```",去掉 X 后长度，3。答案是 3 #### 3

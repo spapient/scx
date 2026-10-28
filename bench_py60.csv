@@ -1,0 +1,402 @@
+question,answer
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def g():
+    yield 1
+    yield 2
+it = g()
+print(next(it) + next(it))
+```",生成器依次产出 1、2，next 两次相加得，3。答案是 3 #### 3
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def deco(f):
+    return lambda: f() + 1
+@deco
+def f():
+    return 1
+print(f())
+```",deco 包装后返回值加 1，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def outer():
+    x = 0
+    def inner():
+        nonlocal x
+        x += 1
+        return x
+    return inner
+f = outer()
+f()
+print(f())
+```",inner 闭包引用 x，调用两次后 x=2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class A:
+    def m(self):
+        return ""A""
+class B(A):
+    pass
+class C(A):
+    def m(self):
+        return ""C""
+class D(B, C):
+    pass
+print(D().m())
+```","D(B,C) 的 MRO 中 C 先于 A，取 C 的实现，输出，C。答案是 C #### C"
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class A:
+    def m(self):
+        return ""A""
+class B(A):
+    def m(self):
+        return ""B"" + super().m()
+class C(B):
+    pass
+print(C().m())
+```",C 继承 B，B.m 拼接 B 与 A 的结果，输出，BA。答案是 BA #### BA
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+try:
+    x = 1 // 0
+except ZeroDivisionError:
+    x = 5
+finally:
+    x += 1
+print(x)
+```",除零触发异常 x=5，finally 加 1，，6。答案是 6 #### 6
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class E(Exception):
+    pass
+try:
+    raise E(""x"")
+except E as e:
+    print(len(str(e)))
+```",异常消息 x 长度 1，，1。答案是 1 #### 1
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print(sum(x for x in range(10) if x % 3 == 0))
+```",0 到 9 中 3 的倍数 0+3+6+9=18，，18。答案是 18 #### 18
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+d = {i: i * i for i in range(3)}
+print(d[2])
+```","字典推导 {0:0,1:1,2:4}，d[2]=4，，4。答案是 4 #### 4"
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+arr = [""bb"", ""a"", ""ccc""]
+print(len(sorted(arr, key=len)[-1]))
+```",按长度排序最长 ccc 长度 3，，3。答案是 3 #### 3
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def f(x, L=[]):
+    L.append(x)
+    return L
+print(len(f(1)))
+```",默认列表 L 共享但只调一次，len=1，，1。答案是 1 #### 1
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def f(**kw):
+    return len(kw)
+print(f(a=1, b=2, c=3))
+```",3 个关键字参数，，3。答案是 3 #### 3
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def f(*a):
+    return sum(a)
+print(f(1, 2, 3))
+```",1+2+3=6，，6。答案是 6 #### 6
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+a, b = (1, 2)
+print(a * 10 + b)
+```",a=1、b=2，1*10+2=12，，12。答案是 12 #### 12
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+s = ""0123456789""
+print(s[1:8:2])
+```",索引 1、3、5、7 取字符拼成，输出，1357。答案是 1357 #### 1357
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+s = ""abcde""
+print(s[-1] + s[-3])
+```",s[-1]=e、s[-3]=c 拼接，输出，ec。答案是 ec #### ec
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print(""  abc  "".strip().upper())
+```",strip 去空白再 upper，输出，ABC。答案是 ABC #### ABC
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+b = b""ab""
+print(len(b) + b[0])
+```",len=2，b[0]=97，2+97=99，，99。答案是 99 #### 99
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+a = {1, 2, 3}
+b = {2, 3, 4}
+print(len(a & b))
+```","交集 {2,3} 长度 2，，2。答案是 2 #### 2"
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print((6 & 3) | (8 >> 2))
+```",6&3=2，8>>2=2，2|2=2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def f():
+    return 0
+def g():
+    return 1
+print(f() and g() or 5)
+```",f()=0 为假 and 短路，or 取 5，，5。答案是 5 #### 5
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+x = 5
+print(1 < x < 10 and x > 4)
+```",1<5<10 且 5>4 都成立，输出，True。答案是 True #### True
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+x = 7
+print(""A"" if x > 9 else ""B"" if x > 5 else ""C"")
+```",7>5 取中间分支，输出，B。答案是 B #### B
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+a = [1]
+b = a
+b.append(2)
+print(len(a))
+```",b 与 a 指向同一列表，len=2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def f(x):
+    x.append(1)
+a = []
+f(a)
+print(len(a))
+```",函数内修改同一列表，len=1，，1。答案是 1 #### 1
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+t = (1, [2])
+t[1].append(3)
+print(len(t[1]))
+```",元组内列表可变，append 后 len=2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+x = 4
+print(f""{x * 3}"")
+```",4*3=12，，12。答案是 12 #### 12
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+s = ""a,b,c""
+print(len(s.split("","")))
+```",按逗号拆成 3 段，，3。答案是 3 #### 3
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+it = iter([1, 2, 3])
+next(it)
+print(next(it))
+```",next 跳过 1 后取 2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def g():
+    yield from range(2)
+    yield 5
+print(sum(g()))
+```",0+1+5=6，，6。答案是 6 #### 6
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class C:
+    def __enter__(self):
+        return 3
+    def __exit__(self, *a):
+        pass
+with C() as v:
+    print(v * 2)
+```",__enter__ 返回 3，3*2=6，，6。答案是 6 #### 6
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class A:
+    x = 1
+obj = A()
+obj.x = 2
+print(A.x + obj.x)
+```",类属性 1 + 实例属性 2 = 3，，3。答案是 3 #### 3
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class C:
+    @property
+    def v(self):
+        return 7
+print(C().v)
+```",property 访问返回 7，，7。答案是 7 #### 7
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class C:
+    @staticmethod
+    def f(x):
+        return x * 2
+print(C.f(4))
+```",静态方法 4*2=8，，8。答案是 8 #### 8
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class A:
+    def m(self):
+        return 1
+class B(A):
+    def m(self):
+        return super().m() + 1
+print(B().m())
+```",B.m 调 A.m 加 1，1+1=2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+class C:
+    def __str__(self):
+        return ""hi""
+print(len(str(C())))
+```",str 返回 hi 长度 2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+a, b = 1, 2
+a, b = b, a
+print(a - b)
+```",交换后 a=2、b=1，2-1=1，，1。答案是 1 #### 1
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+n = 0
+while (m := n + 1) < 5:
+    n = m
+print(n)
+```",m 递增到 4 后 5 不满足循环，n=4，，4。答案是 4 #### 4
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+s = 0
+for i, v in enumerate([3, 4]):
+    s += i + v
+print(s)
+```",(0+3)+(1+4)=8，，8。答案是 8 #### 8
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+a = [1, 2]
+b = [3, 4]
+print(sum(x + y for x, y in zip(a, b)))
+```",(1+3)+(2+4)=10，，10。答案是 10 #### 10
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print(any([False, True]) + all([1, 2]))
+```",any 为 True 记 1，all 为 True 记 1，共 2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+from functools import reduce
+print(reduce(lambda a, b: a * b, [2, 3, 4]))
+```",2*3*4=24，，24。答案是 24 #### 24
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+from collections import Counter
+print(Counter(""aab"").most_common(1)[0][1])
+```",a 出现次数最多为 2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+from collections import defaultdict
+d = defaultdict(int)
+d['k'] += 2
+print(d['k'])
+```",默认 int 0 再加 2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+from collections import deque
+q = deque([1])
+q.appendleft(2)
+print(q[0])
+```",头部插入 2，q[0]=2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+import heapq
+h = [3, 1]
+heapq.heapify(h)
+print(heapq.heappop(h))
+```",堆弹出最小元素 1，，1。答案是 1 #### 1
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+arr = [(""a"", 2), (""b"", 1)]
+print(sorted(arr, key=lambda t: t[1])[0][0])
+```",按第二元素升序首个 b，输出，b。答案是 b #### b
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def f(n):
+    return 1 if n < 2 else f(n - 1) + f(n - 2)
+print(f(6))
+```",斐波那契 f(6)=13，，13。答案是 13 #### 13
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def gen():
+    for i in range(4):
+        yield i * 2
+print(sum(gen()))
+```",0+2+4+6=12，，12。答案是 12 #### 12
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def g():
+    v = yield 1
+    yield v + 1
+x = g()
+next(x)
+print(x.send(5))
+```",send(5) 使 v=5，5+1=6，，6。答案是 6 #### 6
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+x = 1
+def f():
+    x = 2
+    return x
+print(f() + x)
+```",函数内 2 + 全局 1 = 3，，3。答案是 3 #### 3
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+def f():
+    x = 0
+    def g():
+        nonlocal x
+        x = 2
+    g()
+    return x
+print(f())
+```",g 修改外层 x 为 2，，2。答案是 2 #### 2
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+x = 0
+def f():
+    global x
+    x = 3
+f()
+print(x)
+```",f 修改全局 x 为 3，，3。答案是 3 #### 3
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print(len(""中文"".encode(""utf-8"")))
+```",中文 utf-8 每字 3 字节共 6，，6。答案是 6 #### 6
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print(int(""ff"", 16))
+```",十六进制 ff 等于 255，，255。答案是 255 #### 255
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+q, r = divmod(17, 5)
+print(q * 10 + r)
+```",17//5=3、17%5=2，3*10+2=32，，32。答案是 32 #### 32
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print(pow(3, 4, 5))
+```",3^4=81，81 mod 5 = 1，，1。答案是 1 #### 1
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print(round(3.14159, 2))
+```",保留两位小数得 3.14，，3.14。答案是 3.14 #### 3.14
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+s = ""ab""
+print(len(s * 2) * 2)
+```",ab 重复 2 次长 4，4*2=8，，8。答案是 8 #### 8
+"以下 Python 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```python
+print(sum(i * i for i in range(1, 4)))
+```",1+4+9=14，，14。答案是 14 #### 14

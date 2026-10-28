@@ -1,0 +1,3 @@
+full : acc=0.680 (34/50)  ctx_tok=966
+scx  : acc=0.680 (34/50)  ctx_tok=738  tok_ratio=0.764
+scx 保持率（full 答对中 scx 仍答对）: 30/34 = 0.882

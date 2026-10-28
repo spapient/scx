@@ -1,0 +1,465 @@
+question,answer
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s = String::from(""ab"");
+    let t = s;
+    println!(""{}"", t.len());
+}
+```",所有权转移给 t，长度，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut v = vec![1];
+    let r = &mut v;
+    r.push(2);
+    println!(""{}"", v.len());
+}
+```",可变借用 push 后长度，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let a = vec![1];
+    let b = a.clone();
+    println!(""{}"", b.len());
+}
+```",克隆副本长度，1。答案是 1 #### 1
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s: i32 = (1..=4).sum();
+    println!(""{}"", s);
+}
+```",1 到 4 求和，10。答案是 10 #### 10
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let x = 3;
+    let f = || x * 2;
+    println!(""{}"", f());
+}
+```",闭包捕获 x 翻倍，6。答案是 6 #### 6
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s: i32 = (0..10).filter(|x| x % 2 == 0).map(|x| x * 2).sum();
+    println!(""{}"", s);
+}
+```",偶数翻倍后求和，40。答案是 40 #### 40
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let x: Option<i32> = Some(5);
+    println!(""{}"", x.unwrap() + 1);
+}
+```",解包后加 1，6。答案是 6 #### 6
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let r: Result<i32, String> = Ok(7);
+    println!(""{}"", r.unwrap());
+}
+```",Ok 直接解包，7。答案是 7 #### 7
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let x = 2;
+    let y = match x { 1 => 10, 2 => 20, _ => 0 };
+    println!(""{}"", y);
+}
+```",x=2 命中 20，20。答案是 20 #### 20
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let x = Some(4);
+    if let Some(v) = x {
+        println!(""{}"", v * 2);
+    }
+}
+```",解构 Some 翻倍，8。答案是 8 #### 8
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+enum E { A(i32), B }
+fn main() {
+    let e = E::A(3);
+    let v = match e { E::A(n) => n, _ => 0 };
+    println!(""{}"", v);
+}
+```",枚举携带数据 3，3。答案是 3 #### 3
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+trait T { fn f(&self) -> i32; }
+struct S;
+impl T for S {
+    fn f(&self) -> i32 { 5 }
+}
+fn main() {
+    println!(""{}"", S.f());
+}
+```",trait 实现返回 5，5。答案是 5 #### 5
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+trait T { fn f(&self) -> i32 { 1 } }
+struct S;
+impl T for S {}
+fn main() {
+    println!(""{}"", S.f());
+}
+```",默认方法返回 1，1。答案是 1 #### 1
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+struct S { x: i32 }
+impl S {
+    fn f(&self) -> i32 { self.x * 2 }
+}
+fn main() {
+    println!(""{}"", S { x: 3 }.f());
+}
+```",方法翻倍字段，6。答案是 6 #### 6
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+struct S;
+impl S {
+    fn val() -> i32 { 9 }
+}
+fn main() {
+    println!(""{}"", S::val());
+}
+```",关联函数返回 9，9。答案是 9 #### 9
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+struct P(i32, i32);
+fn main() {
+    let p = P(3, 4);
+    println!(""{}"", p.0 + p.1);
+}
+```",元组字段相加，7。答案是 7 #### 7
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut s = String::from(""ab"");
+    s.push_str(""cd"");
+    println!(""{}"", s.len());
+}
+```",追加后长度，4。答案是 4 #### 4
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s = format!(""{}{}"", 1, 2);
+    println!(""{}"", s.len());
+}
+```",拼接串长度，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let v = [1, 2, 3, 4];
+    let s = &v[1..3];
+    println!(""{}"", s.len());
+}
+```",切片含 2 元素，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut v = Vec::new();
+    v.push(1);
+    v.push(2);
+    println!(""{}"", v.len());
+}
+```",两次 push 长度，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let v = vec![5, 6, 7];
+    println!(""{}"", v[1]);
+}
+```",索引 1 元素，6。答案是 6 #### 6
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s: i32 = (0..10).step_by(3).sum();
+    println!(""{}"", s);
+}
+```",步长 3 求和，18。答案是 18 #### 18
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut v = vec![1, 2];
+    let mut s = 0;
+    while let Some(x) = v.pop() { s += x; }
+    println!(""{}"", s);
+}
+```",弹栈累加，3。答案是 3 #### 3
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+use std::rc::Rc;
+fn main() {
+    let a = Rc::new(5);
+    let b = a.clone();
+    println!(""{}"", Rc::strong_count(&a));
+}
+```",克隆后强引用数 2，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn f<T: std::ops::Add<Output = T>>(a: T, b: T) -> T { a + b }
+fn main() {
+    println!(""{}"", f(3, 4));
+}
+```",泛型加法，7。答案是 7 #### 7
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+struct P<T> { x: T }
+fn main() {
+    let p = P { x: 3 };
+    println!(""{}"", p.x * 2);
+}
+```",泛型字段翻倍，6。答案是 6 #### 6
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+#[derive(Clone)]
+struct S { x: i32 }
+fn main() {
+    let a = S { x: 2 };
+    let b = a.clone();
+    println!(""{}"", b.x + 1);
+}
+```",派生 Clone 副本加 1，3。答案是 3 #### 3
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let x = 3;
+    let y = match x { 1 | 2 => 0, 3..=5 => 1, _ => 2 };
+    println!(""{}"", y);
+}
+```",3 落在范围命中 1，1。答案是 1 #### 1
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let a = [1, 2, 3];
+    println!(""{}"", a.len());
+}
+```",数组长度 3，3。答案是 3 #### 3
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let (a, b) = (3, 4);
+    println!(""{}"", a + b);
+}
+```",解构后相加，7。答案是 7 #### 7
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn f(x: i32) -> i32 { x * 2 }
+fn main() {
+    let g: fn(i32) -> i32 = f;
+    println!(""{}"", g(4));
+}
+```",函数指针调用，8。答案是 8 #### 8
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut s = 0;
+    for (i, v) in vec![3, 4].iter().enumerate() { s += i + v; }
+    println!(""{}"", s);
+}
+```",索引与值累加，8。答案是 8 #### 8
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let v: Vec<i32> = (1..4).map(|x| x * x).collect();
+    println!(""{}"", v[1]);
+}
+```",平方收集后索引 1，4。答案是 4 #### 4
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s = ""abc"";
+    println!(""{}"", s.chars().count());
+}
+```",字符数 3，3。答案是 3 #### 3
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let c = '5';
+    println!(""{}"", c.to_digit(10).unwrap());
+}
+```",字符 5 转数字，5。答案是 5 #### 5
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", (3 > 2) && (1 < 4));
+}
+```",两个条件都成立，true。答案是 true #### true
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", (6 & 3) | (8 >> 2));
+}
+```",6&3=2、8>>2=2 相或，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", 255u8.wrapping_add(1));
+}
+```",u8 溢出环绕，0。答案是 0 #### 0
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", 7u32 as i32 - 2);
+}
+```",转换后减 2，5。答案是 5 #### 5
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", 17 / 5 + 17 % 5);
+}
+```",商 3 加余 2，5。答案是 5 #### 5
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", 3i32.pow(2) + 1);
+}
+```",3 的平方加 1，10。答案是 10 #### 10
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut v = vec![3, 1, 2];
+    v.sort();
+    println!(""{}"", v[0]);
+}
+```",升序最小，1。答案是 1 #### 1
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut v = vec![1, 1, 2];
+    v.dedup();
+    println!(""{}"", v.len());
+}
+```",相邻去重后长度，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s = ""a,b,c"";
+    println!(""{}"", s.split(',').count());
+}
+```",逗号分 3 段，3。答案是 3 #### 3
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s = ""  ab  "";
+    println!(""{}"", s.trim().len());
+}
+```",去空白后长度 2，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+use std::collections::HashMap;
+fn main() {
+    let mut m = HashMap::new();
+    m.insert(""k"", 3);
+    println!(""{}"", m[""k""]);
+}
+```",键 k 的值，3。答案是 3 #### 3
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+use std::collections::HashMap;
+fn main() {
+    let mut m = HashMap::new();
+    *m.entry(""k"").or_insert(0) += 2;
+    println!(""{}"", m[""k""]);
+}
+```",不存在则插入加 2，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut v = vec![1, 2];
+    v.reverse();
+    println!(""{}"", v[0]);
+}
+```",反转后首元素，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s: i32 = vec![1, 2].into_iter().chain(vec![3]).sum();
+    println!(""{}"", s);
+}
+```",串联迭代求和，6。答案是 6 #### 6
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let x = 1;
+    let x = x + 2;
+    println!(""{}"", x);
+}
+```",遮蔽后新值，3。答案是 3 #### 3
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let x = 5;
+    { let x = 10; }
+    println!(""{}"", x);
+}
+```",内层遮蔽不影响外层，5。答案是 5 #### 5
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    const N: i32 = 6;
+    println!(""{}"", N * N);
+}
+```",常量平方，36。答案是 36 #### 36
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", (1, 2) < (1, 3));
+}
+```",元组字典序，true。答案是 true #### true
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let x = Some(3);
+    println!(""{}"", x.map(|v| v * 2).unwrap());
+}
+```",map 翻倍解包，6。答案是 6 #### 6
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let c = (0..10).filter(|x| x % 2 == 0).count();
+    println!(""{}"", c);
+}
+```",偶数个数 5，5。答案是 5 #### 5
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", (1..4).any(|x| x > 2));
+}
+```",存在大于 2，true。答案是 true #### true
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s: i32 = (1..4).map(|x| x * x).sum();
+    println!(""{}"", s);
+}
+```",1+4+9 平方和，14。答案是 14 #### 14
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let mut s = 0;
+    'outer: for i in 0..3 {
+        for j in 0..3 {
+            if j == 2 { break 'outer; }
+            s += 1;
+        }
+    }
+    println!(""{}"", s);
+}
+```",j=2 时跳出外层，2。答案是 2 #### 2
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    println!(""{}"", 3.min(5) + 2.max(1));
+}
+```",取小加取大，5。答案是 5 #### 5
+"以下 Rust 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```rust
+fn main() {
+    let s = ""ab"".repeat(3);
+    println!(""{}"", s.len());
+}
+```",重复 3 次长度，6。答案是 6 #### 6

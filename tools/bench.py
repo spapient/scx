@@ -142,9 +142,74 @@ def norm_num(s: str) -> str:
     return s
 
 
+NUM_RE = re.compile(r"[-+]?\d+(?:\.\d+)?")
+ANS_RE = re.compile(r"####\s*([^\s，。]+)")
+
+
+def norm_token(s: str) -> str:
+    """字符串答案归一化：去两端空白/引号，统一小写。
+
+    模型侧与 gold 侧同口径（True→true、'C'→c、"BA"→ba），
+    避免同值异形（True vs true vs "True"）被误判为答错。
+    """
+    return s.strip().strip('"\'“”‘’').lower()
+
+
+def kind_of(tok: str) -> str:
+    """gold 值类型判定：数字（含浮点）/ 布尔 / 字符串。"""
+    if NUM_RE.fullmatch(tok):
+        return "num"
+    if tok.lower() in ("true", "false", "t", "f"):
+        return "bool"
+    return "str"
+
+
 def extract_answer(raw: str) -> Optional[str]:
-    m = re.search(r"####\s*([-+]?\d+(?:\.\d+)?)", raw)
-    return norm_num(m.group(1)) if m else None
+    """gold 提取（扩展）：'#### X' 的 X 可为数字/浮点/布尔/字符串。
+
+    数字走 norm_num 归一化；布尔归一为 true/false；字符串去引号小写。
+    旧数字题格式完全兼容。
+    """
+    m = ANS_RE.search(raw)
+    if not m:
+        return None
+    tok = m.group(1)
+    k = kind_of(tok)
+    if k == "num":
+        return norm_num(tok)
+    if k == "bool":
+        return "true" if tok.lower().startswith("t") else "false"
+    return norm_token(tok)
+
+
+def model_value(raw: str, gold: str) -> str:
+    """从模型输出提取与 gold 同类型的值。
+
+    优先取最后 '#### X' 的 X（字符串/布尔依赖此模式）；
+    数字题若 X 非数字则回退 last_number；bool/字符串题若模型未按
+    '#### X' 格式输出（常见于压缩后格式指令被摘），回退取输出末尾
+    的同类 token——模型通常把答案放末尾，末 token 是合理近似。
+    """
+    if not raw.strip():
+        return ""
+    m = ANS_RE.search(raw)
+    k = kind_of(gold)
+    if k == "num":
+        if m and NUM_RE.fullmatch(m.group(1)):
+            return norm_num(m.group(1))
+        return last_number(raw) or ""
+    if m:
+        tok = m.group(1)
+        if k == "bool":
+            t = tok.lower()
+            return "true" if t in ("true", "1", "t") else "false" if t in ("false", "0", "f") else ""
+        return norm_token(tok)
+    # fallback：无 #### 模式
+    if k == "bool":
+        toks = re.findall(r"true|false", raw, re.I)
+        return toks[-1].lower() if toks else ""
+    toks = re.findall(r"[A-Za-z0-9.]+", raw)
+    return norm_token(toks[-1]) if toks else ""
 
 
 def load_model_mlx(spec: ModelSpec, quantize: int = 0):
@@ -315,8 +380,8 @@ def main() -> None:
 
         row = {
             "idx": i + 1,
-            "full": last_number(ans_full), "scx": last_number(ans_scx),
-            "trunc": last_number(ans_trunc), "gold": gold,
+            "full": model_value(ans_full, gold), "scx": model_value(ans_scx, gold),
+            "trunc": model_value(ans_trunc, gold) if not args.no_trunc else "", "gold": gold,
             "full_tok": full_tok, "scx_tok": scx_tok,
             "compressed": scx_out != prompt,
         }

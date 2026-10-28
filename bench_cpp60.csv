@@ -1,0 +1,581 @@
+question,answer
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int x = 3;
+    int &r = x;
+    r = 5;
+    std::cout << x << ""\n"";
+}
+```",引用修改原变量，5。答案是 5 #### 5
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int x = 7;
+    int *p = &x;
+    std::cout << *p + 1 << ""\n"";
+}
+```",解引用加 1，8。答案是 8 #### 8
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+int main() {
+    std::vector<int> v;
+    v.push_back(1);
+    v.push_back(2);
+    std::cout << v.size() << ""\n"";
+}
+```",两次 push 后大小，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+int main() {
+    std::string s = ""ab"";
+    s += ""cd"";
+    std::cout << s.size() << ""\n"";
+}
+```",拼接后长度，4。答案是 4 #### 4
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int f(int x) { return x * 2; }
+double f(double x) { return x + 0.5; }
+int main() {
+    std::cout << f(3) << ""\n"";
+}
+```",int 重载翻倍，6。答案是 6 #### 6
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int f(int x, int y = 3) { return x + y; }
+int main() {
+    std::cout << f(2) << ""\n"";
+}
+```",缺省参数 3，5。答案是 5 #### 5
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+template <typename T> T f(T a, T b) { return a + b; }
+int main() {
+    std::cout << f(3, 4) << ""\n"";
+}
+```",模板实例化求和，7。答案是 7 #### 7
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+struct S {
+    int x;
+    S(int v) : x(v) {}
+};
+int main() {
+    S s(4);
+    std::cout << s.x * 2 << ""\n"";
+}
+```",构造初始化翻倍，8。答案是 8 #### 8
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+struct S {
+    static int cnt;
+};
+int S::cnt = 5;
+int main() {
+    std::cout << S::cnt + 1 << ""\n"";
+}
+```",静态成员加 1，6。答案是 6 #### 6
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+struct A { int v = 3; };
+struct B : A {};
+int main() {
+    B b;
+    std::cout << b.v * 2 << ""\n"";
+}
+```",继承字段翻倍，6。答案是 6 #### 6
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+struct A { virtual int f() { return 1; } };
+struct B : A { int f() override { return 2; } };
+int main() {
+    A *p = new B();
+    std::cout << p->f() << ""\n"";
+    delete p;
+}
+```",虚分派取 B 实现，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+struct P { int x; };
+P operator+(P a, P b) { return {a.x + b.x}; }
+int main() {
+    P a{2}, b{3};
+    std::cout << (a + b).x << ""\n"";
+}
+```",重载加法，5。答案是 5 #### 5
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int x = 3;
+    auto f = [x] { return x * 2; };
+    std::cout << f() << ""\n"";
+}
+```",按值捕获翻倍，6。答案是 6 #### 6
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+#include <algorithm>
+int main() {
+    std::vector<int> v{3, 1, 2};
+    std::sort(v.begin(), v.end());
+    std::cout << v[0] << ""\n"";
+}
+```",升序最小，1。答案是 1 #### 1
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <map>
+int main() {
+    std::map<std::string, int> m;
+    m[""k""] = 4;
+    std::cout << m[""k""] << ""\n"";
+}
+```",键 k 的值，4。答案是 4 #### 4
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <set>
+int main() {
+    std::set<int> s{1, 1, 2};
+    std::cout << s.size() << ""\n"";
+}
+```",去重后大小，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    auto x = 4;
+    auto y = x * 2.0;
+    std::cout << (int)y << ""\n"";
+}
+```",auto 推断 double 转 int，8。答案是 8 #### 8
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int s = 0;
+    for (int v : {1, 2, 3}) s += v;
+    std::cout << s << ""\n"";
+}
+```",范围 for 累加，6。答案是 6 #### 6
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+int main() {
+    std::string s = ""abc"";
+    std::string t = std::move(s);
+    std::cout << t.size() << ""\n"";
+}
+```",移动后目标长度，3。答案是 3 #### 3
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <memory>
+int main() {
+    std::shared_ptr<int> a = std::make_shared<int>(3);
+    auto b = a;
+    std::cout << a.use_count() << ""\n"";
+}
+```",两个共享引用，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <utility>
+int main() {
+    std::pair<int, int> p{3, 4};
+    std::cout << p.first + p.second << ""\n"";
+}
+```",pair 字段相加，7。答案是 7 #### 7
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <tuple>
+int main() {
+    auto t = std::make_tuple(2, 3);
+    std::cout << std::get<0>(t) * std::get<1>(t) << ""\n"";
+}
+```",元组字段相乘，6。答案是 6 #### 6
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+int main() {
+    std::string s = ""hello"";
+    std::cout << s.find(""l"") << ""\n"";
+}
+```",首个 l 索引，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+int main() {
+    std::string s = ""abcde"";
+    std::cout << s.substr(1, 2).size() << ""\n"";
+}
+```",子串长度，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+int main() {
+    std::string s = ""42"";
+    std::cout << std::stoi(s) + 1 << ""\n"";
+}
+```",字符串转 int 加 1，43。答案是 43 #### 43
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int a[4];
+    std::cout << sizeof(a) / sizeof(a[0]) << ""\n"";
+}
+```",数组元素个数，4。答案是 4 #### 4
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+void f(int &x) { x += 3; }
+int main() {
+    int v = 2;
+    f(v);
+    std::cout << v << ""\n"";
+}
+```",引用修改原值，5。答案是 5 #### 5
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int x = 5;
+    const int &r = x;
+    std::cout << r * 2 << ""\n"";
+}
+```",常量引用翻倍，10。答案是 10 #### 10
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+enum Color { RED = 2, GREEN = 5 };
+int main() {
+    std::cout << GREEN + RED << ""\n"";
+}
+```",枚举值相加，7。答案是 7 #### 7
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int x = 2;
+    int y = 0;
+    switch (x) {
+        case 1: y = 10; break;
+        case 2: y = 20; break;
+        default: y = 0;
+    }
+    std::cout << y << ""\n"";
+}
+```",命中 case 2，20。答案是 20 #### 20
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    std::cout << ((6 & 3) | (8 >> 2)) << ""\n"";
+}
+```",与或移位，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int x = 7;
+    std::cout << (x > 5 ? 1 : 0) << ""\n"";
+}
+```",条件为真取 1，1。答案是 1 #### 1
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int x = 0;
+    bool r = (x != 0) && (10 / x > 0);
+    std::cout << r << ""\n"";
+}
+```",短路不触发除零，0。答案是 0 #### 0
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int s = 0;
+    for (int i = 1; i <= 5; i++) s += i;
+    std::cout << s << ""\n"";
+}
+```",1 到 5 累加，15。答案是 15 #### 15
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int s = 0;
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 4; j++) s++;
+    std::cout << s << ""\n"";
+}
+```",3 乘 4 次，12。答案是 12 #### 12
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int s = 0;
+    for (int i = 1; i <= 5; i++) {
+        if (i % 2 == 0) continue;
+        s += i;
+    }
+    std::cout << s << ""\n"";
+}
+```",跳过偶数累加，9。答案是 9 #### 9
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int x = 0, s = 0;
+    do { s += x; x++; } while (x < 3);
+    std::cout << s << ""\n"";
+}
+```",先执行再判断，3。答案是 3 #### 3
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    int a[3] = {10, 20, 30};
+    int *p = a + 1;
+    std::cout << *p << ""\n"";
+}
+```",指针偏移取元素，20。答案是 20 #### 20
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+struct P { int x; int y; };
+int main() {
+    P p{3, 4};
+    std::cout << p.x * p.y << ""\n"";
+}
+```",成员相乘，12。答案是 12 #### 12
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int f(int x) { return x * 2; }
+int main() {
+    int (*g)(int) = f;
+    std::cout << g(4) << ""\n"";
+}
+```",函数指针调用，8。答案是 8 #### 8
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int f(int n) { return n <= 1 ? 1 : n * f(n - 1); }
+int main() {
+    std::cout << f(5) << ""\n"";
+}
+```",5 的阶乘，120。答案是 120 #### 120
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }
+int main() {
+    std::cout << f(7) << ""\n"";
+}
+```",第 7 项斐波那契，13。答案是 13 #### 13
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+#include <algorithm>
+int main() {
+    std::string s = ""abc"";
+    std::reverse(s.begin(), s.end());
+    std::cout << s.size() << ""\n"";
+}
+```",反转后长度不变，3。答案是 3 #### 3
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+#include <algorithm>
+int main() {
+    std::vector<int> v{1, 2, 3, 4};
+    int c = std::count_if(v.begin(), v.end(), [](int x) { return x % 2 == 0; });
+    std::cout << c << ""\n"";
+}
+```",偶数个数，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+#include <numeric>
+int main() {
+    std::vector<int> v{1, 2, 3, 4};
+    std::cout << std::accumulate(v.begin(), v.end(), 0) << ""\n"";
+}
+```",全量累加，10。答案是 10 #### 10
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+#include <algorithm>
+int main() {
+    std::vector<int> v{5, 1, 3};
+    std::sort(v.begin(), v.end());
+    std::cout << v[v.size() / 2] << ""\n"";
+}
+```",排序后中位，3。答案是 3 #### 3
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+int main() {
+    std::vector<int> v{2, 4};
+    int s = 0;
+    for (auto it = v.begin(); it != v.end(); ++it) s += *it;
+    std::cout << s << ""\n"";
+}
+```",迭代器累加，6。答案是 6 #### 6
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+int main() {
+    std::vector<int> v{1, 2, 3};
+    v.erase(v.begin() + 1);
+    std::cout << v.size() << ""\n"";
+}
+```",删一个元素后大小，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+int main() {
+    std::vector<int> v{1, 3};
+    v.insert(v.begin() + 1, 2);
+    std::cout << v[1] << ""\n"";
+}
+```",中间插入元素，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <map>
+int main() {
+    std::map<int, int> m;
+    m[1] = 10;
+    m[1] += 5;
+    std::cout << m[1] << ""\n"";
+}
+```",下标更新值，15。答案是 15 #### 15
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <set>
+int main() {
+    std::multiset<int> s{1, 1, 2};
+    std::cout << s.count(1) << ""\n"";
+}
+```",1 出现次数，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <queue>
+int main() {
+    std::priority_queue<int> q;
+    q.push(3);
+    q.push(1);
+    std::cout << q.top() << ""\n"";
+}
+```",最大堆顶，3。答案是 3 #### 3
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <deque>
+int main() {
+    std::deque<int> q;
+    q.push_front(2);
+    q.push_back(3);
+    std::cout << q.front() << ""\n"";
+}
+```",头插后首元素，2。答案是 2 #### 2
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <list>
+int main() {
+    std::list<int> l{1, 2, 3};
+    std::cout << l.size() << ""\n"";
+}
+```",链表大小，3。答案是 3 #### 3
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+int main() {
+    double d = 7.9;
+    int i = static_cast<int>(d);
+    std::cout << i << ""\n"";
+}
+```",强转截断，7。答案是 7 #### 7
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <sstream>
+#include <string>
+int main() {
+    std::stringstream ss(""42"");
+    int v;
+    ss >> v;
+    std::cout << v / 2 << ""\n"";
+}
+```",流解析整数，21。答案是 21 #### 21
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+int main() {
+    std::string s = ""ababa"";
+    std::cout << s.rfind(""ba"") << ""\n"";
+}
+```",反向查找首个 ba，3。答案是 3 #### 3
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <vector>
+int main() {
+    std::vector<int> v;
+    v.reserve(8);
+    std::cout << v.capacity() << ""\n"";
+}
+```",预留容量，8。答案是 8 #### 8
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+int main() {
+    std::string s = ""ab"";
+    std::cout << (s == ""ab"" ? 1 : 0) << ""\n"";
+}
+```",内容相等记 1，1。答案是 1 #### 1
+"以下 C++ 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```cpp
+#include <iostream>
+#include <string>
+int main() {
+    std::string s = ""abc"";
+    std::cout << s.back() - 'a' + 1 << ""\n"";
+}
+```",尾字符序号，3。答案是 3 #### 3

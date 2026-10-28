@@ -1,0 +1,559 @@
+question,answer
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 7;
+    int *p = &x;
+    printf(""%d\n"", *p + 1);
+}
+```",解引用加 1，8。答案是 8 #### 8
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[3] = {10, 20, 30};
+    int *p = a + 1;
+    printf(""%d\n"", *p);
+}
+```",指针偏移取元素，20。答案是 20 #### 20
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[] = {1, 2, 3};
+    int s = 0;
+    for (int i = 0; i < 3; i++) s += a[i];
+    printf(""%d\n"", s);
+}
+```",遍历累加，6。答案是 6 #### 6
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[5];
+    printf(""%zu\n"", sizeof(a) / sizeof(a[0]));
+}
+```",元素个数，5。答案是 5 #### 5
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+struct P { int x; int y; };
+int main() {
+    struct P p = {3, 4};
+    printf(""%d\n"", p.x * p.y);
+}
+```",成员相乘，12。答案是 12 #### 12
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+typedef struct { int v; } S;
+int main() {
+    S s = {5};
+    printf(""%d\n"", s.v + 1);
+}
+```",typedef 结构体，6。答案是 6 #### 6
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int f(int x) { return x * 2; }
+int main() {
+    printf(""%d\n"", f(4));
+}
+```",函数翻倍，8。答案是 8 #### 8
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int f(int n) { return n <= 1 ? 1 : n * f(n - 1); }
+int main() {
+    printf(""%d\n"", f(5));
+}
+```",5 的阶乘，120。答案是 120 #### 120
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    printf(""%d\n"", (6 & 3) | (8 >> 2));
+}
+```",与或移位，2。答案是 2 #### 2
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    printf(""%d\n"", (3 > 2) && (1 < 4));
+}
+```",两条件成立记 1，1。答案是 1 #### 1
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 7;
+    printf(""%d\n"", x > 5 ? 1 : 0);
+}
+```",条件为真取 1，1。答案是 1 #### 1
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int s = 0;
+    for (int i = 1; i <= 5; i++) s += i;
+    printf(""%d\n"", s);
+}
+```",1 到 5 累加，15。答案是 15 #### 15
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int s = 0;
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 4; j++) s++;
+    printf(""%d\n"", s);
+}
+```",3 乘 4 次，12。答案是 12 #### 12
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 2, y = 0;
+    switch (x) {
+        case 1: y = 10; break;
+        case 2: y = 20; break;
+        default: y = 0;
+    }
+    printf(""%d\n"", y);
+}
+```",命中 case 2，20。答案是 20 #### 20
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+enum Color { RED = 2, GREEN = 5 };
+int main() {
+    printf(""%d\n"", GREEN + RED);
+}
+```",枚举值相加，7。答案是 7 #### 7
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+#define DOUBLE(x) ((x) * 2)
+int main() {
+    printf(""%d\n"", DOUBLE(4));
+}
+```",宏展开翻倍，8。答案是 8 #### 8
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+#include <string.h>
+int main() {
+    char s[] = ""hello"";
+    printf(""%zu\n"", strlen(s));
+}
+```",字符串长度，5。答案是 5 #### 5
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+#include <string.h>
+int main() {
+    printf(""%d\n"", strcmp(""abc"", ""abd"") < 0);
+}
+```",字典序比较，1。答案是 1 #### 1
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    char s[] = ""ab"";
+    printf(""%d\n"", s[1] - 'a' + 1);
+}
+```",字符差，2。答案是 2 #### 2
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[2] = {1, 2};
+    int *p = a;
+    int *q = a + 1;
+    printf(""%ld\n"", q - p);
+}
+```",指针距离，1。答案是 1 #### 1
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int f(int x) { return x * 2; }
+int main() {
+    int (*g)(int) = f;
+    printf(""%d\n"", g(4));
+}
+```",函数指针调用，8。答案是 8 #### 8
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int sum(int a[], int n) {
+    int s = 0;
+    for (int i = 0; i < n; i++) s += a[i];
+    return s;
+}
+int main() {
+    int a[] = {1, 2, 3};
+    printf(""%d\n"", sum(a, 3));
+}
+```",传数组求和，6。答案是 6 #### 6
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[2][3] = {{1, 2, 3}, {4, 5, 6}};
+    int s = 0;
+    for (int i = 0; i < 2; i++)
+        for (int j = 0; j < 3; j++) s += a[i][j];
+    printf(""%d\n"", s);
+}
+```",二维累加，21。答案是 21 #### 21
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 5;
+    int a = x++;
+    int b = ++x;
+    printf(""%d\n"", a + b);
+}
+```",后置取 5，前置后 x=7 取 7，12。答案是 12 #### 12
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 8;
+    int *p = &x;
+    *p += 2;
+    printf(""%d\n"", x);
+}
+```",指针修改原值，10。答案是 10 #### 10
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int f() {
+    static int c = 0;
+    return ++c;
+}
+int main() {
+    f();
+    printf(""%d\n"", f());
+}
+```",静态变量第二次为 2，2。答案是 2 #### 2
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int g = 3;
+int main() {
+    g += 4;
+    printf(""%d\n"", g);
+}
+```",全局加 4，7。答案是 7 #### 7
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    double d = 7.9;
+    printf(""%d\n"", (int)d);
+}
+```",强转截断，7。答案是 7 #### 7
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    printf(""%d\n"", 17 % 5);
+}
+```",余数，2。答案是 2 #### 2
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    printf(""%d\n"", 17 / 5);
+}
+```",整数商，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = (1, 2, 3);
+    printf(""%d\n"", x);
+}
+```",逗号取末值，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+union U { int i; char c; };
+int main() {
+    union U u;
+    u.i = 65;
+    printf(""%d\n"", (int)u.c);
+}
+```",union 共享内存，65。答案是 65 #### 65
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[] = {1, 2, 3};
+    int *p[3];
+    for (int i = 0; i < 3; i++) p[i] = &a[i];
+    printf(""%d\n"", *p[1]);
+}
+```",指针数组取元素，2。答案是 2 #### 2
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+#include <string.h>
+int main() {
+    char s[16] = ""ab"";
+    strcat(s, ""cd"");
+    printf(""%zu\n"", strlen(s));
+}
+```",拼接后长度，4。答案是 4 #### 4
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+#include <string.h>
+int main() {
+    char a[] = ""xyz"";
+    char b[16];
+    strcpy(b, a);
+    printf(""%zu\n"", strlen(b));
+}
+```",复制后长度，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int s = 0;
+    for (int i = 1; i <= 10; i++)
+        if (i % 2 == 0) s += i;
+    printf(""%d\n"", s);
+}
+```",偶数累加，30。答案是 30 #### 30
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int r = 1;
+    for (int i = 0; i < 3; i++) r *= 2;
+    printf(""%d\n"", r);
+}
+```",2 的 3 次方，8。答案是 8 #### 8
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int gcd(int a, int b) { return b ? gcd(b, a % b) : a; }
+int main() {
+    printf(""%d\n"", gcd(12, 8));
+}
+```",最大公约数，4。答案是 4 #### 4
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }
+int main() {
+    printf(""%d\n"", f(7));
+}
+```",第 7 项，13。答案是 13 #### 13
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int n = 17, c = 0;
+    for (int i = 2; i * i <= n; i++)
+        if (n % i == 0) c++;
+    printf(""%d\n"", c == 0);
+}
+```",17 是素数，1。答案是 1 #### 1
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int n = 123, r = 0;
+    while (n) { r = r * 10 + n % 10; n /= 10; }
+    printf(""%d\n"", r);
+}
+```",123 反转为 321，321。答案是 321 #### 321
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 7, c = 0;
+    while (x) { c += x & 1; x >>= 1; }
+    printf(""%d\n"", c);
+}
+```",7 二进制有 3 个 1，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+void swap(int *a, int *b) {
+    int t = *a; *a = *b; *b = t;
+}
+int main() {
+    int x = 2, y = 5;
+    swap(&x, &y);
+    printf(""%d\n"", x - y);
+}
+```",交换后 5-2，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[] = {3, 7, 2, 9};
+    int m = a[0];
+    for (int i = 1; i < 4; i++)
+        if (a[i] > m) m = a[i];
+    printf(""%d\n"", m);
+}
+```",最大值 9，9。答案是 9 #### 9
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[2][2] = {{1, 2}, {3, 4}};
+    int s = 0;
+    for (int i = 0; i < 2; i++)
+        for (int j = 0; j < 2; j++) s += a[i][j];
+    printf(""%d\n"", s);
+}
+```",全部元素和，10。答案是 10 #### 10
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    char s[] = ""hello"";
+    int c = 0;
+    for (int i = 0; s[i]; i++) c++;
+    printf(""%d\n"", c);
+}
+```",遍历计数，5。答案是 5 #### 5
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int s = 0;
+    for (int j = 1; j <= 9; j++) s += 3 * j;
+    printf(""%d\n"", s);
+}
+```",3 的乘法表求和，135。答案是 135 #### 135
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 0, s = 0;
+    do { s += x; x++; } while (x < 3);
+    printf(""%d\n"", s);
+}
+```",先执行再判断，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    printf(""%d\n"", 5 << 1);
+}
+```",左移一位翻倍，10。答案是 10 #### 10
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 0x0F;
+    printf(""%d\n"", (x & 0x0C) >> 2);
+}
+```",掩码取位，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+struct P { int x; };
+int main() {
+    struct P p = {6};
+    struct P *q = &p;
+    q->x += 2;
+    printf(""%d\n"", p.x);
+}
+```",指针改成员，8。答案是 8 #### 8
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+#include <string.h>
+int main() {
+    char *a[] = {""a"", ""b"", ""c""};
+    int s = 0;
+    for (int i = 0; i < 3; i++) s += (int)strlen(a[i]);
+    printf(""%d\n"", s);
+}
+```",各字符串长度和，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[3] = {5, 6, 7};
+    int *p = a + 1;
+    printf(""%d\n"", *p);
+}
+```",指针偏移取 6，6。答案是 6 #### 6
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[] = {1, 2, 3};
+    a[0] += 3;
+    printf(""%d\n"", a[0]);
+}
+```",下标修改，4。答案是 4 #### 4
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int s = 0;
+    for (int i = 0; i < 5; i++) {
+        if (i == 3) break;
+        s += i;
+    }
+    printf(""%d\n"", s);
+}
+```",i=3 中断，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+#include <string.h>
+int main() {
+    char a[] = ""hello"";
+    char b[] = ""hi"";
+    printf(""%d\n"", (int)(strlen(a) - strlen(b)));
+}
+```",5 减 2，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int x = 0x0F;
+    x &= ~0x0C;
+    printf(""%d\n"", x);
+}
+```",清除两位，3。答案是 3 #### 3
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+#define SQUARE(x) ((x) * (x))
+int main() {
+    printf(""%d\n"", SQUARE(3) + 1);
+}
+```",宏平方加 1，10。答案是 10 #### 10
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+struct P { int v; };
+int main() {
+    struct P arr[2] = {{3}, {5}};
+    printf(""%d\n"", arr[1].v);
+}
+```",第二元素，5。答案是 5 #### 5
+"以下 C 代码输出什么？请用 ""答案是 X #### X"" 格式作答。
+```c
+#include <stdio.h>
+int main() {
+    int a[4] = {0, 0, 0, 0};
+    int *p = a;
+    p += 3;
+    printf(""%ld\n"", p - a);
+}
+```",指针距离 3，3。答案是 3 #### 3
