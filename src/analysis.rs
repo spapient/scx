@@ -127,6 +127,7 @@ const ERR_NEEDLES_BY_FIRST: [&[(&[u8], bool)]; 256] = {
     table
 };
 
+#[cfg(feature = "memory")]
 pub(crate) fn fails(ll: &str) -> bool {
     flags(ll).0
 }
@@ -468,6 +469,7 @@ fn blank(b: u8) -> bool {
 ///
 /// 用于 case 去重 / qmap / 会话缓存这类“精确键”。`normalize` 会把 8080/9090、
 /// errno=28/29 都折叠成 `#`，适合日志词面匹配，但不适合判断“是不是同一条记忆”。
+#[cfg(feature = "memory")]
 pub(crate) fn canonical(s: &str, out: &mut String) {
     if s.is_ascii() {
         simple(s, out);
@@ -476,6 +478,7 @@ pub(crate) fn canonical(s: &str, out: &mut String) {
     wide(s, out);
 }
 
+#[cfg(feature = "memory")]
 fn simple(s: &str, out: &mut String) {
     let mut pending_space = false;
     for &b in s.as_bytes() {
@@ -491,6 +494,7 @@ fn simple(s: &str, out: &mut String) {
     }
 }
 
+#[cfg(feature = "memory")]
 fn wide(s: &str, out: &mut String) {
     let mut pending_space = false;
     for c in s.chars() {
@@ -774,6 +778,7 @@ mod tests {
         assert!(frame("  错误 at main.rs:42"));
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn ascii_normalization_matches_generic_path() {
         let cases = [
@@ -835,6 +840,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn normalization_folds_numbers_but_identity_keeps_them() {
         let mut norm = String::new();

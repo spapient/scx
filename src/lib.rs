@@ -37,7 +37,9 @@ pub mod args;
 pub mod input;
 pub mod ops;
 
-/// 记忆知识库（旁路，默认不启用）：I/O 侧模块，与纯函数 `compress` 完全隔离。
+/// 记忆知识库（旁路，`memory` feature 默认启用）：I/O 侧模块，与纯函数
+/// `compress` 完全隔离；`--no-default-features` 时整模块 cfg 排除。
+#[cfg(feature = "memory")]
 pub mod memory;
 
 /// SHA-256 与十六进制编码（常驻，供 semantic 权重校验与 meter 快照指纹共用）。

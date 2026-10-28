@@ -10,14 +10,19 @@
 //! 基线合理性由人工审查 + 库/CLI 单元测试共同保证。`case=` 后的
 //! `YYYY-MM-DD_` 前缀是摄取当天的元数据，不属于输出语义，比较前统一归一化。
 
+#[cfg(feature = "memory")]
 use std::io::Write;
+#[cfg(feature = "memory")]
 use std::path::{Path, PathBuf};
+#[cfg(feature = "memory")]
 use std::process::{Command, Stdio};
 
+#[cfg(feature = "memory")]
 fn expected_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/expected")
 }
 
+#[cfg(feature = "memory")]
 fn run_scx(args: &[&str], input: &str) -> (String, String, i32) {
     let bin = env!("CARGO_BIN_EXE_scx");
     let mut child = Command::new(bin)
@@ -72,6 +77,7 @@ fn normalize_case_dates(text: &str) -> String {
     out
 }
 
+#[cfg(feature = "memory")]
 fn cases() -> Vec<(String, Vec<&'static str>, String)> {
     let lf = char::from(10u8).to_string();
     let mut v: Vec<(String, Vec<&str>, String)> = Vec::new();
@@ -814,6 +820,7 @@ fn cases() -> Vec<(String, Vec<&'static str>, String)> {
 }
 
 #[test]
+#[cfg(feature = "memory")]
 fn golden_gate() {
     for (name, args, input) in cases() {
         let (out, err, code) = run_scx(&args, &input);
@@ -858,6 +865,7 @@ fn case_date_normalization_is_scoped() {
 
 #[test]
 #[ignore]
+#[cfg(feature = "memory")]
 fn update_baselines() {
     let dir = expected_dir();
     std::fs::create_dir_all(&dir).unwrap();

@@ -1417,3 +1417,32 @@ grow ~5 帧，合计约 22% 采样帧）——主体 Vec 已 `vec![false; n]` �
 **门禁证据**：lib 341 全绿；350 全绿（semantic）；golden 2 passed 零漂移
 （输出逐字节不变）；clippy 全 targets 零告警；fmt 干净；Cargo.toml
 profile 调整（codegen-units=1/debug=1/strip 让位）行为中性。
+
+### P7-D memory feature-gate（cfg(feature)，压缩路径零影响）
+
+**交付**：`Cargo.toml` 新增 `memory = []`，`default = ["memory"]`（现有行为
+逐字节不变）；`src/lib.rs` 模块声明 `#[cfg(feature = "memory")] pub mod
+memory;`。消费面 cfg 化（照 semantic 先例）：
+- `ops.rs`：`Op` 10 个 memory 变体、`select/maintain/mode` 构造段、
+  `run/dispatch/apply` match 分支、memory handler 全家
+  （dispatch/result/rate/apply/delete/recall/annotate/memory/prepare/report/
+  escape/lines/summary/eval/evidence/say/emit/lines_out/error/first/truncate）
+  整 fn `#[cfg(feature="memory")]`；`Stored`/`Receiver` 别名、`mpsc` import
+  同 cfg；`filter` 的 store/recall 旁路双分支（no-default 时明确告警
+  "--store/--recall requires the memory feature"）。
+- `redact.rs`：Secret 分支 cfg 双路（memory 开 → `memory::sanitize`；
+  关闭 → 原样输出，feature opt-out 语义，默认路径不变）。
+- `analysis.rs`（fails/canonical/simple/wide）、`terms.rs`
+  （memory/document/PARAPHRASE_PAIRS/RECALL_PAIRS/expand）：仅 memory 域
+  消费者，随 feature cfg。
+- 测试：`tests/golden.rs` golden_gate/update_baselines、ops/redact/terms/
+  analysis 的 memory 相关测试全部 `#[cfg(feature="memory")]`。
+- `examples/minhash_mrr.rs`：Cargo 官方 `[[example]] required-features =
+  ["memory"]`（缺 feature 跳过编译）；`examples/bench.rs` memory 模式分支
+  cfg + 无 feature 时明确报错。
+
+**门禁证据（双矩阵）**：default——lib 341、semantic 350、golden 2 passed
+零漂移、clippy 全 targets 零告警、fmt 干净；`--no-default-features`——
+lib 186 全绿（memory 相关测试按 feature 排除）、golden 1 passed、clippy
+全 targets 零告警、fmt 干净。压缩路径（compress/plan/score/render）零
+`memory` 依赖，`--no-default-features` 最小内核可独立编译部署。

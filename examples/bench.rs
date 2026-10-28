@@ -11,16 +11,25 @@
 //! 记忆库基准构造短日志与长堆栈混合的 1 万条 case，分别报告线性冷启动、索引
 //! 首次加载、稳态倒排召回与全候选宽查询。
 
+#[cfg(feature = "memory")]
 use scx::memory::Stats;
+#[cfg(feature = "memory")]
 use scx::memory::{rebuild, save, search, Input};
 use scx::{compress, Config};
+#[cfg(feature = "memory")]
 use std::path::Path;
 use std::time::Instant;
 
 fn main() {
     match std::env::args().nth(1).as_deref() {
         None | Some("compress") => compress_bench(),
+        #[cfg(feature = "memory")]
         Some("memory") => memory_bench(),
+        #[cfg(not(feature = "memory"))]
+        Some("memory") => {
+            eprintln!("bench: memory mode requires the memory feature");
+            std::process::exit(2);
+        }
         Some(other) => {
             eprintln!("bench: unknown mode {other:?}; expected compress or memory");
             std::process::exit(2);
@@ -178,6 +187,7 @@ fn bench_repeats() -> usize {
         .unwrap_or(9)
 }
 
+#[cfg(feature = "memory")]
 fn memory_bench() {
     let root = std::env::temp_dir().join(format!("scx-mem-bench-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
@@ -295,7 +305,7 @@ fn memory_bench() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
-
+#[cfg(feature = "memory")]
 fn bench_case(seed: usize) -> String {
     if seed % 4 == 0 {
         let mut text = format!(
@@ -321,7 +331,7 @@ fn bench_case(seed: usize) -> String {
         )
     }
 }
-
+#[cfg(feature = "memory")]
 fn bench_query(sample: usize) -> String {
     format!(
         "fam{} cid{} tail{}",
@@ -331,6 +341,7 @@ fn bench_query(sample: usize) -> String {
     )
 }
 
+#[cfg(feature = "memory")]
 /// 数字 → 全字母串（base26，避免 norm 数字折叠导致指纹去重）。
 fn letters(mut n: usize) -> String {
     let mut out = String::new();
@@ -342,7 +353,7 @@ fn letters(mut n: usize) -> String {
         }
     }
 }
-
+#[cfg(feature = "memory")]
 fn percentiles(sorted: &[u128]) -> (u128, u128, u128) {
     fn pct(values: &[u128], q: usize) -> u128 {
         if values.is_empty() {

@@ -12,10 +12,14 @@
 //! 不依赖任何第三方 crate；任何程序可直接构造 `Op::Compress` 复用压缩内核。
 
 use crate::args::Opts;
-use crate::input::{fix, input};
+#[cfg(feature = "memory")]
+use crate::input::fix;
+use crate::input::input;
+#[cfg(feature = "memory")]
 use crate::memory::{Case, Eval, Hit, Input, Stats};
 use crate::{compress, Mode, Outcome};
 use std::io::{self, Write};
+#[cfg(feature = "memory")]
 use std::sync::mpsc;
 
 /// CLI 失败必须收敛到单一出口；库与业务层不直接终止进程。
@@ -32,7 +36,9 @@ impl Failure {
 }
 
 pub type Reply<T = ()> = Result<T, Failure>;
+#[cfg(feature = "memory")]
 type Stored = io::Result<(bool, String)>;
+#[cfg(feature = "memory")]
 type Receiver = mpsc::Receiver<Stored>;
 
 /// 压缩动作的独立入参（与 CLI 解析解耦，MCP 等集成层直接构造）。
@@ -75,6 +81,7 @@ pub struct Annotate {
 
 /// 所有 CLI 一等操作。
 pub enum Op {
+    #[cfg(feature = "memory")]
     RecallOnly {
         mem_dir: String,
         query: String,
@@ -84,34 +91,43 @@ pub enum Op {
         sim_weight: f64,
         minhash_weight: f64,
     },
+    #[cfg(feature = "memory")]
     Eval {
         mem_dir: String,
         path: String,
         mode: Eval,
         verbose: bool,
     },
+    #[cfg(feature = "memory")]
     L1Hist {
         mem_dir: String,
     },
+    #[cfg(feature = "memory")]
     Stats {
         mem_dir: String,
     },
+    #[cfg(feature = "memory")]
     Rate {
         mem_dir: String,
         id: String,
         good: bool,
     },
+    #[cfg(feature = "memory")]
     Rebuild {
         mem_dir: String,
     },
+    #[cfg(feature = "memory")]
     Gc {
         mem_dir: String,
     },
+    #[cfg(feature = "memory")]
     Delete {
         mem_dir: String,
         id: String,
     },
+    #[cfg(feature = "memory")]
     Annotate(Annotate),
+    #[cfg(feature = "memory")]
     Judge {
         mem_dir: String,
         path: String,
@@ -134,7 +150,8 @@ pub fn parse(opts: &Opts) -> Op {
 }
 
 /// 前五个记忆/评估动作（判定点 ≤ 8）。
-fn select(opts: &Opts) -> Option<Op> {
+fn select(#[cfg_attr(not(feature = "memory"), allow(unused_variables))] opts: &Opts) -> Option<Op> {
+    #[cfg(feature = "memory")]
     if opts.recall_only {
         return Some(Op::RecallOnly {
             mem_dir: opts.mem_dir.clone(),
@@ -146,6 +163,7 @@ fn select(opts: &Opts) -> Option<Op> {
             minhash_weight: opts.minhash_weight,
         });
     }
+    #[cfg(feature = "memory")]
     if let Some(path) = &opts.eval {
         return Some(Op::Eval {
             mem_dir: opts.mem_dir.clone(),
@@ -154,16 +172,19 @@ fn select(opts: &Opts) -> Option<Op> {
             verbose: opts.eval_verbose,
         });
     }
+    #[cfg(feature = "memory")]
     if opts.l1_hist {
         return Some(Op::L1Hist {
             mem_dir: opts.mem_dir.clone(),
         });
     }
+    #[cfg(feature = "memory")]
     if opts.stats {
         return Some(Op::Stats {
             mem_dir: opts.mem_dir.clone(),
         });
     }
+    #[cfg(feature = "memory")]
     if let Some((good, id)) = &opts.rate {
         return Some(Op::Rate {
             mem_dir: opts.mem_dir.clone(),
@@ -174,6 +195,7 @@ fn select(opts: &Opts) -> Option<Op> {
     None
 }
 
+#[cfg(feature = "memory")]
 fn mode(opts: &Opts) -> Eval {
     if opts.eval_gate_human {
         Eval::Human
@@ -187,23 +209,29 @@ fn mode(opts: &Opts) -> Eval {
 }
 
 /// 后五个维护/标注动作（判定点 ≤ 6）。
-fn maintain(opts: &Opts) -> Option<Op> {
+fn maintain(
+    #[cfg_attr(not(feature = "memory"), allow(unused_variables))] opts: &Opts,
+) -> Option<Op> {
+    #[cfg(feature = "memory")]
     if opts.rebuild {
         return Some(Op::Rebuild {
             mem_dir: opts.mem_dir.clone(),
         });
     }
+    #[cfg(feature = "memory")]
     if opts.gc {
         return Some(Op::Gc {
             mem_dir: opts.mem_dir.clone(),
         });
     }
+    #[cfg(feature = "memory")]
     if let Some(id) = &opts.delete {
         return Some(Op::Delete {
             mem_dir: opts.mem_dir.clone(),
             id: id.clone(),
         });
     }
+    #[cfg(feature = "memory")]
     if opts.annotate || opts.annotate_raw {
         return Some(Op::Annotate(Annotate {
             mem_dir: opts.mem_dir.clone(),
@@ -213,6 +241,7 @@ fn maintain(opts: &Opts) -> Option<Op> {
             annotate_out: opts.annotate_out.clone(),
         }));
     }
+    #[cfg(feature = "memory")]
     if let Some(path) = &opts.judge {
         return Some(Op::Judge {
             mem_dir: opts.mem_dir.clone(),
@@ -254,11 +283,13 @@ fn job(opts: &Opts) -> Compress {
 pub fn run(op: Op) -> Reply {
     match op {
         Op::Compress(job) => filter(&job),
+        #[cfg(feature = "memory")]
         Op::RecallOnly { .. }
         | Op::Eval { .. }
         | Op::L1Hist { .. }
         | Op::Stats { .. }
         | Op::Rate { .. } => dispatch(op),
+        #[cfg(feature = "memory")]
         Op::Rebuild { .. }
         | Op::Gc { .. }
         | Op::Delete { .. }
@@ -267,6 +298,7 @@ pub fn run(op: Op) -> Reply {
     }
 }
 
+#[cfg(feature = "memory")]
 /// 记忆查询/评估类动作（5-arm match，V(G)=5）。
 fn dispatch(op: Op) -> Reply {
     match op {
@@ -306,7 +338,7 @@ fn dispatch(op: Op) -> Reply {
         }
     }
 }
-
+#[cfg(feature = "memory")]
 fn result(
     mem_dir: &str,
     query: &str,
@@ -330,7 +362,7 @@ fn result(
         Err(e) => Err(Failure::message(format!("--recall-only failed: {e}"))),
     }
 }
-
+#[cfg(feature = "memory")]
 fn rate(mem_dir: &str, id: &str, good: bool) -> Reply {
     let case = crate::memory::rate(mem_dir, id, good)
         .map_err(|e| Failure::message(format!("rate failed: {e}")))?;
@@ -345,6 +377,7 @@ fn rate(mem_dir: &str, id: &str, good: bool) -> Reply {
     Ok(())
 }
 
+#[cfg(feature = "memory")]
 /// 维护/标注类动作（5-arm match，V(G)=5）。
 fn apply(op: Op) -> Reply {
     match op {
@@ -373,7 +406,7 @@ fn apply(op: Op) -> Reply {
         | Op::Compress(_) => unreachable!("maintain called with non-special-b op"),
     }
 }
-
+#[cfg(feature = "memory")]
 fn delete(mem_dir: &str, id: &str) -> Reply {
     match crate::memory::delete(mem_dir, id) {
         Ok(true) => say(format!("delete: removed case={id}")),
@@ -382,6 +415,7 @@ fn delete(mem_dir: &str, id: &str) -> Reply {
     }
 }
 
+#[cfg(feature = "memory")]
 /// `--recall-only` 查看模式：只读召回、零库状态写入，库缺失时不创建目录。
 fn recall(
     mem_dir: &str,
@@ -726,6 +760,7 @@ pub fn recall_report(r: &Outcome, query: &str) -> String {
 }
 
 /// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
+#[cfg(feature = "memory")]
 /// case 只显示指纹段（`YYYY-MM-DD_<hash16>` 的 hash16），保证输出不随日期漂移。
 fn lines(
     out: &mut dyn Write,
@@ -776,6 +811,7 @@ fn lines(
 }
 
 /// 召回详情摘要：字段 + 首个错误/非空行，最多 300 字符。
+#[cfg(feature = "memory")]
 fn summary(c: &Case) -> String {
     let mut parts: Vec<&str> = c
         .fields
@@ -794,6 +830,7 @@ fn summary(c: &Case) -> String {
 }
 
 /// 单趟找“首个错误行”，找不到再用“首个非空行”。
+#[cfg(feature = "memory")]
 fn first(text: &str) -> Option<&str> {
     let mut first_nonempty = None;
     for line in text.lines().map(str::trim).filter(|t| !t.is_empty()) {
@@ -808,6 +845,7 @@ fn first(text: &str) -> Option<&str> {
 }
 
 /// 最多 300 字符，截断处补省略号。
+#[cfg(feature = "memory")]
 fn truncate(s: &str) -> String {
     let mut out = String::with_capacity(s.len().min(900));
     for (i, ch) in s.chars().enumerate() {
@@ -821,6 +859,7 @@ fn truncate(s: &str) -> String {
 }
 
 /// 错误/警告行词面判定（summary 的谓词，V(G)=6）。
+#[cfg(feature = "memory")]
 fn error(t: &str) -> bool {
     t.contains("error")
         || t.contains("ERROR")
@@ -831,6 +870,7 @@ fn error(t: &str) -> bool {
         || t.contains("警告")
 }
 
+#[cfg(feature = "memory")]
 /// 召回回放输出转义控制字符（ANSI ESC / C0），防恶意日志注入终端。
 fn escape(s: &str) -> String {
     crate::memory::escape(s)
@@ -846,6 +886,7 @@ fn write(result: io::Result<()>) -> Reply {
 
 /// 逐行写 stdout；BrokenPipe 视为正常结束（下游关闭，如 `| head`），与 [`write`]
 /// 同口径，其余 IO 错误上报。
+#[cfg(feature = "memory")]
 fn lines_out(lines: Vec<String>) -> Reply {
     let mut out = io::stdout().lock();
     for line in lines {
@@ -879,15 +920,18 @@ pub(crate) fn out_line(text: &str) -> io::Result<()> {
 }
 
 /// 单行 stdout 输出（BrokenPipe 语义同 [`lines_out`]）。
+#[cfg(feature = "memory")]
 fn say(text: String) -> Reply {
     lines_out(vec![text])
 }
 
+#[cfg(feature = "memory")]
 fn emit(result: io::Result<Vec<String>>, action: &str) -> Reply {
     let lines = result.map_err(|e| Failure::message(format!("{action} failed: {e}")))?;
     lines_out(lines)
 }
 
+#[cfg(feature = "memory")]
 fn eval(result: io::Result<(Vec<String>, bool)>) -> Reply {
     let (lines, gate_failed) = result.map_err(|e| Failure::message(format!("eval failed: {e}")))?;
     lines_out(lines)?;
@@ -897,7 +941,7 @@ fn eval(result: io::Result<(Vec<String>, bool)>) -> Reply {
         Ok(())
     }
 }
-
+#[cfg(feature = "memory")]
 fn annotate(job: &Annotate) -> Reply {
     let path = job.annotate_out.clone().unwrap_or_else(|| {
         std::path::Path::new(&job.mem_dir)
@@ -954,16 +998,32 @@ fn filter(job: &Compress) -> Reply {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     output(&mut out, job, &outcome)?;
+    #[cfg(feature = "memory")]
     let mut store_rx: Option<Receiver> = None;
+    #[cfg(feature = "memory")]
     if job.store {
         store_rx = prepare(job, &text, &outcome)?;
     }
+    #[cfg(not(feature = "memory"))]
+    if job.store {
+        eprintln!(
+            "scx: warning: --store requires the memory feature (build with default features)"
+        );
+    }
+    #[cfg(feature = "memory")]
     memory(&mut out, job)?;
+    #[cfg(not(feature = "memory"))]
+    if job.recall != 0 {
+        eprintln!(
+            "scx: warning: --recall requires the memory feature (build with default features)"
+        );
+    }
     if !job.no_stats {
         write(writeln!(out, "{}", stats(&outcome)))?;
         eprintln!("{}", recall_report(&outcome, &job.query));
     }
     diagnostics(job, &outcome, &redact_hits);
+    #[cfg(feature = "memory")]
     if let Some(rx) = store_rx {
         let result = rx
             .recv()
@@ -985,6 +1045,7 @@ fn output(out: &mut dyn Write, job: &Compress, outcome: &Outcome) -> Reply {
     Ok(())
 }
 
+#[cfg(feature = "memory")]
 /// 召回旁路输出；失败只告警，不改变正文/统计/退出码。
 fn memory(out: &mut dyn Write, job: &Compress) -> Reply {
     if job.recall == 0 {
@@ -1015,7 +1076,7 @@ fn memory(out: &mut dyn Write, job: &Compress) -> Reply {
         }
     }
 }
-
+#[cfg(feature = "memory")]
 fn prepare(job: &Compress, input: &str, outcome: &Outcome) -> Reply<Option<Receiver>> {
     let fix = if let Some(path) = &job.fix_file {
         let text = fix(path, crate::memory::MAX_FIX_BYTES as u64).map_err(Failure::message)?;
@@ -1078,7 +1139,7 @@ pass --fix \"...\" after a verified fix (HARD discipline)"
     });
     Ok(Some(rx))
 }
-
+#[cfg(feature = "memory")]
 fn report(result: Stored) -> Reply {
     let (added, id) = result.map_err(|e| Failure::message(format!("memory store failed: {e}")))?;
     eprintln!(
@@ -1090,6 +1151,7 @@ fn report(result: Stored) -> Reply {
 }
 
 /// 按保留行原始行号从输入提取证据原文；行号越界时保留空串，不 panic。
+#[cfg(feature = "memory")]
 fn evidence(input: &str, lno: &[usize]) -> Vec<String> {
     if lno.is_empty() {
         return Vec::new();
@@ -1121,6 +1183,7 @@ fn evidence(input: &str, lno: &[usize]) -> Vec<String> {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "memory")]
     #[test]
     fn summary_truncates_to_300_chars() {
         let mut c = Case::new("id".into(), "q".into(), vec![], String::new());

@@ -164,11 +164,13 @@ pub(crate) fn terms(query: &str) -> Vec<String> {
 ///
 /// 记忆库 query 与 doc（index/edge/eval-B/feedback/annotate）统一走本函数，
 /// A/B 对拍保持同词表口径。compress 引擎维持 `terms` 不动（压缩语义不变）。
+#[cfg(feature = "memory")]
 pub(crate) fn memory(query: &str) -> Vec<String> {
     scan(query, true)
 }
 
 /// case 的 query 词表与 query∪text 去重词表（索引/线性/实体桥共用同一口径）。
+#[cfg(feature = "memory")]
 pub(crate) fn document(query: &str, text: &str) -> (Vec<String>, Vec<String>) {
     let query_terms = memory(query);
     let mut terms = query_terms.clone();
@@ -187,6 +189,7 @@ pub(crate) fn document(query: &str, text: &str) -> (Vec<String>, Vec<String>) {
 // 只做精确 token 匹配，不做子串替换；表顺序固定，输出确定。
 
 /// 双向词对（中英混排）；新增词对必须同时覆盖两个方向，避免检索不对称。
+#[cfg(feature = "memory")]
 pub(crate) const PARAPHRASE_PAIRS: &[(&str, &str)] = &[
     ("db", "database"),
     ("database", "db"),
@@ -251,6 +254,7 @@ pub(crate) const PARAPHRASE_PAIRS: &[(&str, &str)] = &[
 ///
 /// 宽泛→具体的对可以单向（`memory→gc`、`disk→filesystem`）：反向扩展会把
 /// 具体查询稀释成整类，实测让 `gc` 查询的 OOM case 反超目标。
+#[cfg(feature = "memory")]
 const RECALL_PAIRS: &[(&str, &str)] = &[
     ("replication", "replica"),
     ("replica", "replication"),
@@ -305,6 +309,7 @@ const RECALL_PAIRS: &[(&str, &str)] = &[
 ];
 
 /// 对每个精确命中的 token 追加召回用同义 token，并去重保序。
+#[cfg(feature = "memory")]
 pub(crate) fn expand(terms: &[String]) -> Vec<String> {
     let mut out = terms.to_vec();
     for t in terms {
@@ -383,6 +388,7 @@ mod tests {
     /// 重叠 trigram/bigram 也必须提供公共词（共享根因桥）。10 组真实感中/中英混排
     /// 变体：每组 (query, doc) 词表交集必须非空；其中至少 4 对存在 ≥3 字强桥
     /// （trigram 级词面锚，如"连接池""检测到"）。
+    #[cfg(feature = "memory")]
     #[test]
     fn mem_terms_bridge_zh_paraphrases() {
         let pairs: &[(&str, &str)] = &[
@@ -437,6 +443,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn doc_terms_are_sorted_unique_with_query_order_preserved() {
         let (query_terms, terms) = document("Beta alpha beta", "alpha gamma alpha");
@@ -444,6 +451,7 @@ mod tests {
         assert_eq!(terms, ["alpha", "beta", "gamma"]);
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn expands_only_exact_known_tokens() {
         let got = expand(&["replication".into(), "delay".into(), "x".into()]);
@@ -452,11 +460,13 @@ mod tests {
         assert!(!got.contains(&"y".to_string()));
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn does_not_expand_broad_db_alias_in_recall() {
         assert_eq!(expand(&["db".into()]), vec!["db".to_string()]);
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn expands_high_precision_abbrev_pairs() {
         // P3.2 保守补充：标准技术缩写 ↔ 全称（双向、去重）。
@@ -474,6 +484,7 @@ mod tests {
         assert_eq!(expand(&["param".into()]), vec!["param".to_string()]);
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn expansion_is_bidirectional_and_deduplicated() {
         let got = expand(&["memory".into(), "heap".into()]);
@@ -482,6 +493,7 @@ mod tests {
         assert!(got.contains(&"oom".to_string()));
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn expands_cjk_domain_terms_to_english() {
         let got = expand(&["内存".into(), "存储".into()]);
@@ -489,6 +501,7 @@ mod tests {
         assert!(got.contains(&"storage".to_string()));
     }
 
+    #[cfg(feature = "memory")]
     #[test]
     fn broad_terms_expand_one_way_only() {
         let broad = expand(&["memory".into(), "disk".into()]);

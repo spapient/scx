@@ -58,7 +58,12 @@ pub fn redact(text: &str, kinds: &[RedactKind]) -> (String, Vec<Hit>) {
     for &k in kinds {
         let before = out.matches(MASK).count();
         out = match k {
+            // Secret 脱敏复用 memory 的幂等 sanitize（默认启用）；无 memory
+            // 的最小内核构建下该模式降级为原样输出（feature opt-out 语义）。
+            #[cfg(feature = "memory")]
             RedactKind::Secret => crate::memory::sanitize(&out),
+            #[cfg(not(feature = "memory"))]
+            RedactKind::Secret => out,
             RedactKind::IdCard => mask_id_card(&out),
             RedactKind::Phone => mask_phone(&out),
             RedactKind::Email => mask_email(&out),
@@ -173,6 +178,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "memory")]
     fn secret_redacts_keys_and_conn() {
         let (out, hits) = redact(
             "password=hunter2 token=abc postgres://u:pw@db/x",

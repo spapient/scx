@@ -13,10 +13,18 @@ categories = ["command-line-utilities", "development-tools", "text-processing"]
 [dependencies]
 
 [features]
-default = []
+default = ["memory"]
 # 可选语义增强打分器（手写 std 点积/sigmoid + 自描述权重文件，零第三方 crate；
 # 关闭时模块 cfg 排除，默认路径与 v0.4.1 逐字节一致）。
 semantic = []
+# 本地记忆库/证据存储（默认启用；`--no-default-features` 构建最小内核，
+# 压缩路径不依赖 memory，脱敏降级为无 Secret 模式）。
+memory = []
+
+[[example]]
+name = "minhash_mrr"
+# 纯 memory 召回演示：无 memory feature 时跳过编译（Cargo 官方机制）。
+required-features = ["memory"]
 
 [profile.release]
 opt-level = 3
