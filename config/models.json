@@ -1,0 +1,34 @@
+{
+  "comment": "SCX 本地模型注册表。模型一律按此清单登记，评测/工具脚本按 id 引用，禁止在脚本里散落硬编码模型路径。目录命名规范：小写 + 连字符（HF 仓库名风格）。",
+  "default": "qwen2.5-3b-instruct",
+  "registry": [
+    {
+      "id": "nanbeige-4.2-3b",
+      "name": "Nanbeige4.2-3B",
+      "alias_cn": "南北阁",
+      "path": "/Users/fei/model/nanbeige-4.2-3b",
+      "arch": "nanbeige",
+      "tokens": {
+        "bos": "<|im_start|>",
+        "eos": "<|im_end|>",
+        "pad": "<unk>",
+        "unk": "<unk>"
+      },
+      "note": "从 win 机局域网拷贝（scp -O），SHA256 双端校验一致"
+    },
+    {
+      "id": "qwen2.5-3b-instruct",
+      "name": "Qwen2.5-3B-Instruct",
+      "alias_cn": "千问",
+      "path": "/Users/fei/model/qwen2.5-3b-instruct",
+      "arch": "qwen2",
+      "tokens": {
+        "bos": null,
+        "eos": "<|im_end|>",
+        "pad": "<|endoftext|>",
+        "unk": null
+      },
+      "note": "豆包浏览器在线下载完成（5.8G，两分片齐全）"
+    }
+  ]
+}
