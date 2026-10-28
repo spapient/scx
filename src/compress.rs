@@ -822,6 +822,7 @@ const R_CONTEXT: u8 = 2;
 const R_FILL: u8 = 3;
 const R_GUARD: u8 = 4;
 const R_ANCHOR: u8 = 5;
+const R_NUM_LINE: u8 = 6;
 
 /// 先落种子与最小可读邻域；预算只约束其后的可选内容。
 /// 两趟：先种子（`Seed`），再邻域（`Context`），保证种子行的原因不被邻域覆盖。
@@ -988,6 +989,31 @@ fn mark_code_fence(
                 reason[i] = R_ANCHOR;
             }
             raw[i] = true;
+        }
+    }
+}
+
+/// `--num-line-keep 1`（P6j）：含 ASCII 数字的非折叠行整行保留。
+/// 行内仍走 trim（数字 token 本身永不摘），数字常量/赋值行是长代码问答
+/// 的答案高频载体（`#define BLOCK_SIZE 32`、`CAP = 10`、`{ 3`）。
+/// 背景：中文问题以整段 CJK 词根（terms::scan）无法命中全英文代码行，
+/// query 引导在代码上失效（P6j 实测答案行被整行删、压缩率虚高），
+/// 行级数字兜底在"保答案"与"仍压"之间取平衡。默认 0 现状逐字节一致。
+fn mark_num_lines(
+    lines: &[&str],
+    dup: &[bool],
+    keep: &mut [bool],
+    kept: &mut usize,
+    reason: &mut [u8],
+) {
+    for (i, line) in lines.iter().enumerate() {
+        if keep[i] || dup[i] {
+            continue;
+        }
+        if line.bytes().any(|b| b.is_ascii_digit()) {
+            keep[i] = true;
+            reason[i] = R_NUM_LINE;
+            *kept += 1;
         }
     }
 }
@@ -1492,6 +1518,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         mark_code_fence(&lines, &mut keep, &mut kept, &mut reason, &mut raw);
     }
 
+    // --num-line-keep 1（P6j）：数字行整行保留（行内仍 trim）。
+    if cfg.num_line_keep {
+        mark_num_lines(&lines, &dup, &mut keep, &mut kept, &mut reason);
+    }
+
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
     // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
@@ -1832,6 +1863,7 @@ fn explain(reason: &[u8], dup: &[bool]) -> Vec<crate::Explain> {
             R_FILL => crate::Explain::Fill,
             R_GUARD => crate::Explain::Guard,
             R_ANCHOR => crate::Explain::Anchor,
+            R_NUM_LINE => crate::Explain::NumLine,
             _ => {
                 if dup[i] {
                     crate::Explain::Dedup

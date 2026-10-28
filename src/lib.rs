@@ -294,6 +294,11 @@ pub struct Config {
     /// 强制保留并跳过行内 trim（防短变量/运算符被摘、防 gap elide），
     /// 压缩率转移到说明行；GSM8K 文本场景默认关零影响。
     pub code_keep: bool,
+    /// 数字行保留（`--num-line-keep`，默认 0）。含 ASCII 数字的非折叠行
+    /// 整行保留（行内仍走 trim，数字 token 本身永不摘）——长代码问答
+    /// 场景：中文问题无法命中英文代码行（P6j），数字常量/赋值行是答案
+    /// 高频载体，保行不删、行内仍压。
+    pub num_line_keep: bool,
     /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
     /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
     /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
@@ -336,6 +341,7 @@ impl Default for Config {
             trim_ratio: crate::policy::DEFAULT_TRIM_RATIO,
             trim_op_keep: crate::policy::DEFAULT_TRIM_OP_KEEP,
             code_keep: crate::policy::DEFAULT_CODE_KEEP,
+            num_line_keep: crate::policy::DEFAULT_NUM_LINE_KEEP,
         }
     }
 }
@@ -543,6 +549,8 @@ pub enum Explain {
     Guard,
     /// 结构锚点（P6 骨架保护：结构边界行，优先级低于证据）。
     Anchor,
+    /// 数字行兜底（`--num-line-keep`：含数字行整行保留，行内仍 trim）。
+    NumLine,
     /// 去重折叠（第 3 次起的重复行）。
     Dedup,
     /// 删除（预算不足/结构裁剪/硬上限，细粒度见 `dropped`）。
@@ -558,6 +566,7 @@ impl Explain {
             Explain::Fill => "fill",
             Explain::Guard => "guard",
             Explain::Anchor => "anchor",
+            Explain::NumLine => "numline",
             Explain::Dedup => "dedup",
             Explain::Dropped => "dropped",
         }

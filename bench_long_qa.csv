@@ -1,0 +1,21 @@
+unit,question,answer
+rust_cache,LRU 缓存的最大容量是多少,64
+rust_cache,put 两个键后缓存里有多少个键,2
+rust_cache,get 未命中的键时 miss 计数加几,1
+c_pool,内存池总共有多少块,1024
+c_pool,每块多少字节,32
+c_pool,池耗尽时 alloc 返回什么,NULL
+py_config,配置文件缺失时默认端口是多少,8080
+py_config,默认支持多少种协议,3
+cpp_matrix,矩阵模板的维度是多少,4
+cpp_matrix,4 乘 4 矩阵总共有多少个元素,16
+cpp_matrix,对角线元素 2 3 5 的迹是多少,10
+java_queue,任务队列的容量是多少,10
+java_queue,每轮处理几个任务,2
+java_queue,入队 5 个任务并 drain 两轮后还剩几个,1
+c_sched,滑窗大小是多少,10
+c_sched,单任务最大重试次数是多少,3
+c_sched,重试耗尽后任务的 state 值是多少,3
+scx_trim,数字 token 的 score 是多少,3
+scx_trim,query 命中的 token score 是多少,2
+scx_trim,结构锚 token 的 score 是多少,4

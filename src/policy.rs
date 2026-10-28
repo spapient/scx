@@ -27,6 +27,11 @@ pub const DEFAULT_TRIM_OP_KEEP: bool = false;
 /// 打开时 ``` 围栏区间内代码行整行强制保留（防 elide/防 trim 摘短变量），
 /// 压缩率全部转移到说明行——代码场景 P6g 深度优化。
 pub const DEFAULT_CODE_KEEP: bool = false;
+/// 数字行保留开关（`--num-line-keep`，默认 0 = 现状逐字节一致）。
+/// 打开时含 ASCII 数字的非折叠行整行保留（行内仍走 trim，数字 token 本身
+/// 永不摘）——长代码问答场景：中文问题无法以词根命中英文代码行（P6j 实测
+/// query 引导档答案行被整行删），数字常量/赋值行是答案高频载体。
+pub const DEFAULT_NUM_LINE_KEEP: bool = false;
 pub const MAX_CONTEXT: i64 = 4;
 pub const MIN_WINDOW: i64 = 1;
 pub const MAX_WINDOW: i64 = 8;

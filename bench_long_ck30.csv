@@ -1,0 +1,21 @@
+unit,question,full,scx,gold,full_tok,scx_tok,compressed
+rust_cache,LRU 缓存的最大容量是多少,64,64,64,415,406,True
+rust_cache,put 两个键后缓存里有多少个键,4,2,2,418,412,True
+rust_cache,get 未命中的键时 miss 计数加几,1,1,1,420,411,True
+c_pool,内存池总共有多少块,4,4,1024,470,463,True
+c_pool,每块多少字节,32,32,32,469,462,True
+c_pool,池耗尽时 alloc 返回什么,null,null,null,471,465,True
+py_config,配置文件缺失时默认端口是多少,0,0,8080,355,347,True
+py_config,默认支持多少种协议,3,3,3,352,343,True
+cpp_matrix,矩阵模板的维度是多少,4,4,4,274,274,False
+cpp_matrix,4 乘 4 矩阵总共有多少个元素,16,16,16,283,283,False
+cpp_matrix,对角线元素 2 3 5 的迹是多少,10,10,10,282,282,False
+java_queue,任务队列的容量是多少,10,10,10,329,321,True
+java_queue,每轮处理几个任务,2,2,2,328,321,True
+java_queue,入队 5 个任务并 drain 两轮后还剩几个,3,3,1,339,334,True
+c_sched,滑窗大小是多少,10,10,10,598,590,True
+c_sched,单任务最大重试次数是多少,3,3,3,601,592,True
+c_sched,重试耗尽后任务的 state 值是多少,3,3,3,606,602,True
+scx_trim,数字 token 的 score 是多少,3,3,3,677,667,True
+scx_trim,query 命中的 token score 是多少,2,2,2,680,671,True
+scx_trim,结构锚 token 的 score 是多少,4,4,4,678,668,True
