@@ -33,12 +33,12 @@ from bench import scx_compress  # noqa: E402  正确封装：文件+query 调用
 JUDGE_CFG = {
     "deepseek": {
         "url": "https://api.deepseek.com/chat/completions",
-        "model": "deepseek-flash",
+        "model": os.environ.get("SCX_MODEL_DEEPSEEK", "deepseek-flash"),
         "env": "DEEPSEEK_API_KEY",
     },
     "qwen": {
         "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-        "model": "qwen3.8-flash",
+        "model": os.environ.get("SCX_MODEL_QWEN", "qwen3.8-flash"),
         "env": "QWEN_API_KEY",
     },
 }
@@ -57,7 +57,8 @@ def api_call(prompt: str, model: str, max_new: int = 0) -> str:
         raise SystemExit(f"{cfg['env']} env missing for model={model}")
     body = {"model": cfg["model"], "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_new, "temperature": 0.1}
-    if model == "deepseek":
+    if model == "deepseek" and "flash" in cfg["model"]:
+        # 仅 flash 带 reasoning 开关（deepseek-chat 无此字段，传了可能 400）；
         # 关 reasoning：思考会吃光 max_tokens 致空响应且每题 30-40s；
         # 实测 reasoning 关闭后 1.2s 返回同等质量答案，速度 20-30x。
         body["reasoning"] = {"enabled": False}
@@ -140,14 +141,24 @@ def norm(s: str) -> str:
 
 
 def extract_answer(raw: str) -> str:
-    """从模型回答抽取最终答案（答案是 X #### X 或末尾句）。"""
+    """从模型回答抽取最终答案（答案是 X #### X、#### X、含数字末行或全文末数）。"""
     m = ANSWER_RE.search(raw.strip())
     if m:
         return m.group(1).strip()
-    # 兜底：取最后一行（去 "答案是" 前缀）
+    # 兜底1：'#### X' 格式（Markdown 长回答常见）
+    m2 = re.search(r"####\s*(\S+)", raw)
+    if m2:
+        return m2.group(1).strip()
+    # 兜底2：从末行往回找含数字的行（Markdown 长回答的答案常在正文行）
     lines = [l for l in raw.strip().splitlines() if l.strip()]
-    last = lines[-1] if lines else raw
-    return re.sub(r"^答案是\s*", "", last).strip()
+    for line in reversed(lines):
+        if re.search(r"\d", line):
+            return re.sub(r"^答案是\s*", "", line).strip()
+    # 兜底3：全文最后出现的数字
+    nums = re.findall(r"\d+", raw)
+    if nums:
+        return nums[-1]
+    return lines[-1] if lines else raw
 
 
 def check(raw: str, gold: str) -> bool:

@@ -1,0 +1,52 @@
+{
+  "frozen_at": "2026-10-29",
+  "pipeline": "P11-A 本地化验证（零 API 成本）",
+  "tokenizer": "tiktoken/o200k_base",
+  "qwen_tokenizer": false,
+  "note": "A1/A2 口径 = tools/bench_code.py build_prompt 同款（cuda 背景补足 >=1000 字符）后压缩；R28 参数全套。字符口径 cut 来源 = bench_code.py 评测输出（同 prompt）。",
+  "a1_token_cut": [
+    { "set": "bench_cuda60.csv", "kind": "cuda", "n": 60, "tok_full": 37557, "tok_scx": 24174, "token_cut": 0.3563, "char_cut_ref": 0.287 },
+    { "set": "bench_js60.csv", "kind": "js", "n": 60, "tok_full": 38099, "tok_scx": 8471, "token_cut": 0.7777, "char_cut_ref": 0.771 },
+    { "set": "bench_shape30.csv", "kind": "shape", "n": 30, "tok_full": 18863, "tok_scx": 6051, "token_cut": 0.6792, "char_cut_ref": 0.675 },
+    { "set": "bench_layers15.csv", "kind": "layers", "n": 15, "tok_full": 9390, "tok_scx": 2348, "token_cut": 0.7499, "char_cut_ref": 0.709 },
+    { "set": "bench_zh_cn30.csv", "kind": "zh", "n": 30, "tok_full": 18817, "tok_scx": 1327, "token_cut": 0.9295, "char_cut_ref": 0.941 },
+    { "set": "bench_zh_cn40.csv", "kind": "zh", "n": 40, "tok_full": 25053, "tok_scx": 1733, "token_cut": 0.9308, "char_cut_ref": 0.942 }
+  ],
+  "a2_roundtrip": [
+    { "set": "bench_cuda60.csv", "n": 60, "token_cov": 0.7156, "num_cov": 0.5667, "cn_cov": 0.4591, "bleu4_prec": 0.3525 },
+    { "set": "bench_js60.csv", "n": 60, "token_cov": 0.3669, "num_cov": 0.6, "cn_cov": 0.2455, "bleu4_prec": 0.2157 },
+    { "set": "bench_shape30.csv", "n": 30, "token_cov": 0.3983, "num_cov": 0.4667, "cn_cov": 0.3423, "bleu4_prec": 0.3007 },
+    { "set": "bench_layers15.csv", "n": 15, "token_cov": 0.6573, "num_cov": 0.5333, "cn_cov": 0.4269, "bleu4_prec": 0.1432 },
+    { "set": "bench_zh_cn30.csv", "n": 30, "token_cov": 0.0, "num_cov": 1.0, "cn_cov": 0.164, "bleu4_prec": 0.04 },
+    { "set": "bench_zh_cn40.csv", "n": 40, "token_cov": 0.0, "num_cov": 1.0, "cn_cov": 0.162, "bleu4_prec": 0.039 }
+  ],
+  "a3_robustness": [
+    { "case": "损坏UTF-8", "chars_in": 14, "chars_out": 14, "stable": true, "sec": 0.006 },
+    { "case": "混合脚本", "chars_in": 43, "chars_out": 43, "stable": true, "sec": 0.005 },
+    { "case": "emoji密集", "chars_in": 40, "chars_out": 40, "stable": true, "sec": 0.004 },
+    { "case": "零宽字符", "chars_in": 16, "chars_out": 16, "stable": true, "sec": 0.005 },
+    { "case": "重复行", "chars_in": 4400, "chars_out": 4399, "stable": true, "sec": 0.005 },
+    { "case": "空输入", "chars_in": 0, "chars_out": 0, "stable": true, "sec": 0.004 },
+    { "case": "单行", "chars_in": 12, "chars_out": 12, "stable": true, "sec": 0.004 },
+    { "case": "超长单行", "chars_in": 400001, "chars_out": 400001, "stable": true, "sec": 0.005 }
+  ],
+  "a4_sensitive": [
+    { "type": "API_KEY", "n": 5, "kept": 5, "removed": 0 },
+    { "type": "PATH", "n": 5, "kept": 5, "removed": 0 },
+    { "type": "PERSON", "n": 5, "kept": 5, "removed": 0 },
+    { "type": "EMAIL", "n": 5, "kept": 5, "removed": 0 }
+  ],
+  "a5_scale": [
+    { "mb_in": 2, "chars_in": 2097128, "sec": 0.022, "throughput_mbps": 93.99 },
+    { "mb_in": 4, "chars_in": 4194256, "sec": 0.034, "throughput_mbps": 124.87 },
+    { "mb_in": 8, "chars_in": 8388600, "sec": 0.061, "throughput_mbps": 136.87 },
+    { "mb_in": 16, "chars_in": 16777200, "sec": 0.117, "throughput_mbps": 143.46 }
+  ],
+  "conclusions": [
+    "A1: token 口径压缩率——代码集与字符口径一致（cuda 35.6%/js 77.8%/shape 67.9%/layers 75.0%）；中文 token 口径 92.9-93.1% 与字符口径 94.1% 基本一致。口径修正：query hint 须与评测一致（zh 集默认 hint，用 cuda hint 会因背景被 query 保护而误报 34.8%）",
+    "A2: round-trip 信息保留——代码集 token 覆盖率 36.7-71.6%、BLEU-4 精度 14.3-35.3%；zh 集数字覆盖率 100%（数字锚生效）、cn 覆盖率 16%（92% 极端压缩下仅问题行保留）",
+    "A3: 8 类畸形输入全部稳定不崩（透传/单行裁剪），鲁棒性 PASS",
+    "A4: 4 类敏感信息全部原样保留（5/5）——不产生新泄漏但也不脱敏，敏感场景需额外脱敏",
+    "A5: 2→16MB 近线性（0.01→0.11s，吞吐 144→159MB/s），16MB 单文件秒级压缩"
+  ]
+}

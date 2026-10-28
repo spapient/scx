@@ -1,0 +1,38 @@
+{
+  "frozen_at": "2026-10-29",
+  "pipeline": "P11-B1 多轮累积压缩保真（本地，tiktoken o200k_base）",
+  "note": "累积场景 = 评测同款 build_prompt 逐轮累积，每轮全量重压缩（推荐用法）；幂等性 = 压缩产物再压缩的额外 cut。",
+  "cuda5": {
+    "rounds": [
+      { "round": 1, "tok_full": 638, "tok_scx": 417, "cut": 0.3464, "idem_extra_cut": 0.0 },
+      { "round": 2, "tok_full": 1268, "tok_scx": 813, "cut": 0.3588, "idem_extra_cut": 0.3014 },
+      { "round": 3, "tok_full": 1898, "tok_scx": 1209, "cut": 0.363, "idem_extra_cut": 0.3019 },
+      { "round": 4, "tok_full": 2519, "tok_scx": 1600, "cut": 0.3648, "idem_extra_cut": 0.3031 },
+      { "round": 5, "tok_full": 3183, "tok_scx": 2026, "cut": 0.3635, "idem_extra_cut": 0.2986 }
+    ],
+    "final_cut": 0.3635,
+    "idem_stable": false
+  },
+  "zh5": {
+    "rounds": [
+      { "round": 1, "tok_full": 633, "tok_scx": 50, "cut": 0.921, "idem_extra_cut": 0.0 },
+      { "round": 2, "tok_full": 1271, "tok_scx": 105, "cut": 0.9174, "idem_extra_cut": 0.0 },
+      { "round": 3, "tok_full": 1903, "tok_scx": 154, "cut": 0.9191, "idem_extra_cut": 0.0 },
+      { "round": 4, "tok_full": 2527, "tok_scx": 195, "cut": 0.9228, "idem_extra_cut": 0.0 },
+      { "round": 5, "tok_full": 3160, "tok_scx": 245, "cut": 0.9225, "idem_extra_cut": 0.0 }
+    ],
+    "final_cut": 0.9225,
+    "idem_stable": true
+  },
+  "dialogue": {
+    "scene": "code+zh对话（纯自然语言/代码混排，无结构性背景行）",
+    "tok_full": 127,
+    "tok_scx": 127,
+    "cut": 0.0
+  },
+  "conclusions": [
+    "累积场景（推荐用法：每轮 append 后对原始累积文本全量重压缩）：cuda 累积 5 轮 cut 稳定 0.346-0.365 不衰减；zh 累积 5 轮 cut 稳定 0.917-0.923 不衰减——多轮累积压缩保真稳定",
+    "幂等性：单轮压缩产物再压缩额外 cut=0（已到极限）；但多轮累积文本的压缩产物再压缩额外 cut≈0.30——scx 幂等性不成立，对已压缩文本重复压缩会级联退化，必须对原始累积文本重压缩",
+    "zh-keep 副作用：纯代码+中文对话（无结构性背景行）r28 全保护档 cut=0——所有行被保护无处可裁，压缩力来自可裁的结构性/背景性行"
+  ]
+}

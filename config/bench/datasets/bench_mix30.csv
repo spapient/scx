@@ -1,0 +1,31 @@
+question,answer
+# config.rs: load 从 TOML 读配置，merge 用环境变量覆盖。\nfn load(path: &str) -> Config { let base = toml::from_str(&fs::read_to_string(path).unwrap()); let mut cfg = base; for (k, v) in env::vars() { cfg.override_key(&k, &v); } cfg }\n问：merge 优先级是什么？,环境变量覆盖文件配置（env 覆盖 toml）#### 环境变量优先
+// kernel 配置了 128 个线程，每个线程处理 4 个元素，shared 数组大小 256。\n问：一个 block 处理的元素总数？,128*4=512 #### 512
+"""Python 数据管道：load_csv 用 pandas 读，transform 做 one-hot，save_json 写 S3。\n问：管道最后一步输出格式？,JSON（S3）#### JSON
+`pub trait Codec { fn compress(&self, d: &[u8]) -> Vec<u8>; fn decompress(&self, d: &[u8]) -> Vec<u8>; }`\n问：该 trait 要求实现哪两个方法？,compress 和 decompress #### compress decompress
+# 压测报告：QPS 峰值 8400，P99 延迟 12ms，内存峰值 3.2GB。\n问：P99 延迟是多少？,12ms #### 12
+`// 中文注释：此处使用双缓冲避免撕裂（tearing）\nfor (i = 0; i < N; i++) { write(buf[i & 1]); }`\n问：双缓冲的目的？,避免读写撕裂（tearing）#### 撕裂
+README：本项目是零依赖 Rust 压缩器，对标 LLMLingua，支持中英文混排压缩与结构保留。\n问：项目依赖情况？,零依赖（Rust）#### 零依赖
+`fn gcd(a: u32, b: u32) -> u32 { if b == 0 { a } else { gcd(b, a % b) } }\n// 递归深度受输入影响`\n问：gcd(48, 18) 的结果？,6 #### 6
+# deploy.yml: steps 依次为 build → test → push → notify，test 失败会中断。\n问：test 失败时 push 会执行吗？,不会（中断）#### 不会
+`class Buffer { constructor(n) { this.data = new Uint8Array(n); } append(v) { ... } }\n// 缓冲区满了之后自动扩容`\n问：append 越界时会怎样？,自动扩容 #### 扩容
+# kernel 用 grid 1024 × block 256，每个线程算 1 个元素。\n问：总共处理多少元素？,1024*256=262144 #### 262144
+`SELECT name FROM users WHERE age > 30 ORDER BY created DESC LIMIT 10\n-- 只返回最近创建的 10 个成年人`\n问：查询返回的记录上限？,10 #### 10
+# 中文文档：调度器（scheduler）按优先级队列处理任务，超时任务进入重试队列（retry queue）。\n问：超时任务去哪了？,重试队列 #### retry queue
+`fn main() { let v = vec![1, 2, 3]; let s = &v[..]; println!("{:?}", s.len()); }\n// 切片长度等于元素个数`\n问：s.len() 输出？,3 #### 3
+# 性能对比表：scx 压缩 16MB 耗时 0.12s，LLMLingua 同输入约 3.5s。\n问：scx 比 LLMLingua 快多少倍？,约 29 倍（3.5/0.12）#### 29
+`// 内存池（memory pool）固定分配 1MB 块，避免频繁 malloc\nvoid *alloc() { return pool_acquire(); }`\n问：alloc 的实现方式？,内存池固定分配 #### 内存池
+# log 格式：timestamp level module message，级别为 ERROR 时触发告警（alert）。\n问：哪一级别触发告警？,ERROR #### ERROR
+`function debounce(fn, wait) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), wait); }; }\n// 防抖：停止触发后才执行`\n问：debounce 在什么时候执行 fn？,停止触发 wait 毫秒后 #### 停止触发后
+# 中文注释：此处用 zstd 压缩先验数据，字典（dictionary）预加载。\n问：用什么算法压缩？,zstd（带字典）#### zstd
+`curl -X POST /api/items -H "Content-Type: application/json" -d '{"name":"x"}\n-- 返回 201 Created`\n问：创建成功返回什么状态码？,201 #### 201
+# 结构体 Node 含字段 id: u64, name: String, children: Vec<Node>，实现 Display。\n问：Node 有哪些字段？,id、name、children #### id name children
+`classifier: 模型用 sigmoid 输出概率，阈值 0.5 判定正例，F1 在验证集 0.87。\n问：判定正例的阈值？,0.5 #### 0.5
+# 中文文档：缓存（cache）采用 LRU 策略，容量 1024 项，命中率 92%。\n问：缓存淘汰策略？,LRU #### LRU
+`INSERT INTO orders VALUES (1, 'a', 99.5);\n-- 事务包裹，失败回滚`\n问：失败时数据会怎样？,回滚（不落库）#### 回滚
+# kernel 用原子操作（atomicAdd）累加计数器，块内用 __syncthreads 同步。\n问：跨块累加用什么操作？,原子操作 atomicAdd #### atomicAdd
+`const pool = new Map(); function get(k) { return pool.has(k) ? pool.get(k) : seed(k); }\n// 未命中时用 seed 生成`\n问：缓存未命中时怎么处理？,调用 seed(k) 生成 #### seed
+# 中文说明：训练集 20000 条，验证集 5000 条，batch 大小 64，epochs 30。\n问：训练集大小？,20000 条 #### 20000
+`fn rotate(arr: &mut [i32], k: usize) { arr.rotate_left(k % arr.len()); }\n// 循环左移 k 位`\n问：arr = [1,2,3,4,5], k = 2 旋转后结果？,[3,4,5,1,2] #### 3 4 5 1 2
+# 告警规则：CPU 使用率 > 85% 持续 5 分钟触发 page，磁盘 > 90% 触发 warn。\n问：磁盘超过 90% 触发什么？,warn #### warn
+`gem install scx_compress --version 0.7.0\n# Ruby 安装指定版本`\n问：安装的版本号？,0.7.0 #### 0.7.0
