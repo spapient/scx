@@ -32,6 +32,12 @@ pub const DEFAULT_CODE_KEEP: bool = false;
 /// 永不摘）——长代码问答场景：中文问题无法以词根命中英文代码行（P6j 实测
 /// query 引导档答案行被整行删），数字常量/赋值行是答案高频载体。
 pub const DEFAULT_NUM_LINE_KEEP: bool = false;
+/// 符号/签名行保留开关（`--sym-line-keep`，默认 0 = 现状逐字节一致）。
+/// 打开时含函数/类型声明特征的行整行保留（行内仍走 trim）——生成型任务
+/// （算子开发/代码生成评测）的 prompt 里，函数签名是硬约束；签名行的
+/// `fn`/`->`/`&`/`(` 等符号在 token 级重要性低，0.2-0.3 档会被整行摘掉，
+/// 导致模型不知签名而生成错误代码（P6l 实测保持率 0.500 根因）。
+pub const DEFAULT_SYM_LINE_KEEP: bool = false;
 pub const MAX_CONTEXT: i64 = 4;
 pub const MIN_WINDOW: i64 = 1;
 pub const MAX_WINDOW: i64 = 8;

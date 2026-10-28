@@ -823,6 +823,7 @@ const R_FILL: u8 = 3;
 const R_GUARD: u8 = 4;
 const R_ANCHOR: u8 = 5;
 const R_NUM_LINE: u8 = 6;
+const R_SYM_LINE: u8 = 7;
 
 /// 先落种子与最小可读邻域；预算只约束其后的可选内容。
 /// 两趟：先种子（`Seed`），再邻域（`Context`），保证种子行的原因不被邻域覆盖。
@@ -891,13 +892,15 @@ fn anchors(lines: &[&str], kinds: &[crate::AnchorKind]) -> Vec<bool> {
     let json = kinds.contains(&crate::AnchorKind::Json);
     let xml = kinds.contains(&crate::AnchorKind::Xml) || kinds.contains(&crate::AnchorKind::Idoc);
     let yaml = kinds.contains(&crate::AnchorKind::Yaml);
+    let md = kinds.contains(&crate::AnchorKind::Markdown);
     let mut a = vec![false; lines.len()];
     for (i, line) in lines.iter().enumerate() {
         let t = line.trim();
         if t.is_empty() {
             continue;
         }
-        a[i] = (json && json_anchor(t)) || (xml && tag_anchor(t)) || (yaml && yaml_anchor(t));
+        a[i] = (json && json_anchor(t)) || (xml && tag_anchor(t)) || (yaml && yaml_anchor(t))
+            || (md && md_anchor(t));
     }
     a
 }
@@ -927,6 +930,16 @@ fn yaml_anchor(t: &str) -> bool {
         return false;
     }
     t.ends_with(':') || t.starts_with("- ")
+}
+
+/// Markdown ATX 标题行：1–6 个 `#` 后跟空格或行尾（`# 标题`/`## 小节`）。
+fn md_anchor(t: &str) -> bool {
+    if !t.starts_with('#') {
+        return false;
+    }
+    let hashes = t.bytes().take_while(|&b| b == b'#').count();
+    (1..=6).contains(&hashes)
+        && (t.as_bytes().get(hashes) == Some(&b' ') || t.len() == hashes)
 }
 
 /// 把锚点行标记为保留（不覆盖已保留的种子/邻域/守卫）。
@@ -1014,6 +1027,52 @@ fn mark_num_lines(
             keep[i] = true;
             reason[i] = R_NUM_LINE;
             *kept += 1;
+        }
+    }
+}
+
+/// 符号/签名行判定（`--sym-line-keep`）：函数/类型声明行（Rust `fn`/`impl`、
+/// C/C++ 类型开头、模板/类/结构体、`Signature:` 约束行、含 `-> ` 返回箭头）。
+/// 这类行是生成型任务 prompt 的硬约束（P6l 实测签名行被整行摘 → 模型生成
+/// 错误代码，保持率 0.500）。
+fn sym_line(t: &str) -> bool {
+    let heads = [
+        "fn ", "pub fn", "impl ", "int ", "void ", "long ", "size_t ", "char ",
+        "double ", "float ", "bool ", "template ", "class ", "struct ", "static ",
+        "const ", "unsigned ", "typedef ", "using ", "Signature: ",
+    ];
+    if heads.iter().any(|h| t.starts_with(h)) && (t.contains('(') || t.ends_with(';')) {
+        return true;
+    }
+    t.contains(" -> ") && t.contains('(')
+}
+
+/// `--sym-line-keep 1`（P6m）：含符号/签名特征的非折叠行整行保留，并标记
+/// raw（render 跳过行内 trim）——签名行内部符号（`&`/`->`/`:`/`;`）在
+/// token 级低重要会被行内摘掉（`fn f [i32] usize`），模型据此生成错误签名
+/// 代码（P6l 第六轮实测保持率 0.333 根因）。raw 后签名逐字节完整。
+/// 默认 0 现状逐字节一致。
+fn mark_sym_lines(
+    lines: &[&str],
+    dup: &[bool],
+    keep: &mut [bool],
+    kept: &mut usize,
+    reason: &mut [u8],
+    raw: &mut [bool],
+) {
+    for (i, line) in lines.iter().enumerate() {
+        if dup[i] {
+            continue;
+        }
+        // 签名行常含 query 命中词（如函数名）已被 keep——此时仍需设置 raw，
+        // 否则已保留的签名行仍会被行内 trim 摘掉 `&`/`->`/`:`。
+        if sym_line(line.trim()) {
+            if !keep[i] {
+                keep[i] = true;
+                *kept += 1;
+            }
+            reason[i] = R_SYM_LINE;
+            raw[i] = true;
         }
     }
 }
@@ -1523,6 +1582,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         mark_num_lines(&lines, &dup, &mut keep, &mut kept, &mut reason);
     }
 
+    // --sym-line-keep 1（P6m）：符号/签名行整行保留（行内仍 trim）。
+    if cfg.sym_line_keep {
+        mark_sym_lines(&lines, &dup, &mut keep, &mut kept, &mut reason, &mut raw);
+    }
+
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
     // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
@@ -1864,6 +1928,7 @@ fn explain(reason: &[u8], dup: &[bool]) -> Vec<crate::Explain> {
             R_GUARD => crate::Explain::Guard,
             R_ANCHOR => crate::Explain::Anchor,
             R_NUM_LINE => crate::Explain::NumLine,
+            R_SYM_LINE => crate::Explain::SymLine,
             _ => {
                 if dup[i] {
                     crate::Explain::Dedup
@@ -2336,6 +2401,9 @@ mod tests {
             ],
         );
         assert_eq!(all, vec![true, true, true, false]);
+        let md_lines = ["# Doc", "## Sec", "### Sub", "#", "plain"];
+        let md_only = anchors(&md_lines, &[crate::AnchorKind::Markdown]);
+        assert_eq!(md_only, vec![true, true, true, true, false]);
     }
 
     #[test]

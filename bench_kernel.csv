@@ -1,0 +1,209 @@
+lang,task,en_task,sig,test
+C,请用 C 语言实现函数 str_rev：原地反转字符串并返回反转后字符串的长度。只输出函数定义，不要 main、不要解释。,Implement str_rev: reverse a string in place and return its new length (excluding the null terminator).,"#include <string.h>
+int str_rev(char *s);","#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+int str_rev(char *s);
+int main(void) {
+    char b[16] = ""hello"";
+    int n = str_rev(b);
+    assert(n == 5);
+    assert(strcmp(b, ""olleh"") == 0);
+    printf(""OK\n"");
+    return 0;
+}
+"
+C,请用 C 语言实现函数 arr_sum：计算 int 数组元素之和（用 long long 返回，避免溢出）。只输出函数定义，不要 main。,"Implement arr_sum: sum the elements of an int array, returned as long long.","long long arr_sum(const int *a, int n);","#include <stdio.h>
+#include <assert.h>
+long long arr_sum(const int *a, int n);
+int main(void) {
+    int a[] = {1, 2, 3, 4, 5};
+    assert(arr_sum(a, 5) == 15);
+    assert(arr_sum(a, 0) == 0);
+    printf(""OK\n"");
+    return 0;
+}
+"
+C,请用 C 语言实现函数 count_bits：统计 unsigned int 二进制表示中 1 的个数（popcount）。只输出函数定义。,Implement count_bits: count the number of set bits (popcount) of an unsigned int.,int count_bits(unsigned int x);,"#include <stdio.h>
+#include <assert.h>
+int count_bits(unsigned int x);
+int main(void) {
+    assert(count_bits(255u) == 8);
+    assert(count_bits(0u) == 0);
+    assert(count_bits(7u) == 3);
+    printf(""OK\n"");
+    return 0;
+}
+"
+C,请用 C 语言实现函数 list_len：计算单链表节点个数。节点结构为 struct node { int v; struct node *next; }。只输出函数定义。,Implement list_len: count the nodes of a singly-linked list. Node type: struct node { int v; struct node *next; }.,"struct node { int v; struct node *next; };
+int list_len(const struct node *head);","#include <stdio.h>
+#include <assert.h>
+struct node { int v; struct node *next; };
+int list_len(const struct node *head);
+int main(void) {
+    struct node n3 = {3, 0};
+    struct node n2 = {2, &n3};
+    struct node n1 = {1, &n2};
+    assert(list_len(&n1) == 3);
+    assert(list_len(0) == 0);
+    printf(""OK\n"");
+    return 0;
+}
+"
+C,请用 C 语言实现函数 max3：返回三个 int 中的最大值。只输出函数定义。,Implement max3: return the maximum of three ints.,"int max3(int a, int b, int c);","#include <stdio.h>
+#include <assert.h>
+int max3(int a, int b, int c);
+int main(void) {
+    assert(max3(1, 9, 4) == 9);
+    assert(max3(-1, -5, -2) == -1);
+    assert(max3(7, 7, 7) == 7);
+    printf(""OK\n"");
+    return 0;
+}
+"
+C,请用 C 语言实现函数 is_prime：判断正整数是否为素数，是返回 1，否则返回 0。只输出函数定义。,"Implement is_prime: return 1 if n is prime, 0 otherwise (n is a positive int).",int is_prime(int n);,"#include <stdio.h>
+#include <assert.h>
+int is_prime(int n);
+int main(void) {
+    assert(is_prime(17) == 1);
+    assert(is_prime(4) == 0);
+    assert(is_prime(1) == 0);
+    assert(is_prime(97) == 1);
+    printf(""OK\n"");
+    return 0;
+}
+"
+C,请用 C 语言实现函数 gcd：计算两个正整数的最大公约数。只输出函数定义。,Implement gcd: the greatest common divisor of two positive ints.,"int gcd(int a, int b);","#include <stdio.h>
+#include <assert.h>
+int gcd(int a, int b);
+int main(void) {
+    assert(gcd(12, 18) == 6);
+    assert(gcd(7, 13) == 1);
+    assert(gcd(100, 25) == 25);
+    printf(""OK\n"");
+    return 0;
+}
+"
+C,请用 C 语言实现函数 to_upper：将字符串中的小写字母原地转为大写。只输出函数定义。,Implement to_upper: convert lowercase letters in a string to uppercase in place.,void to_upper(char *s);,"#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+void to_upper(char *s);
+int main(void) {
+    char s[] = ""aB1c"";
+    to_upper(s);
+    assert(strcmp(s, ""AB1C"") == 0);
+    printf(""OK\n"");
+    return 0;
+}
+"
+Rust,请用 Rust 实现函数 vec_sum：计算切片所有元素之和，返回 i64。只输出函数定义（含 use 如果需要），不要 main。,"Implement vec_sum: sum all elements of a slice, returned as i64.",fn vec_sum(v: &[i64]) -> i64;,"fn main() {
+    assert_eq!(vec_sum(&[1, 2, 3]), 6);
+    assert_eq!(vec_sum(&[]), 0);
+    println!(""OK"");
+}
+"
+Rust,请用 Rust 实现函数 count_even：统计切片中偶数的个数。只输出函数定义。,Implement count_even: count the even numbers in a slice of i32.,fn count_even(v: &[i32]) -> usize;,"fn main() {
+    assert_eq!(count_even(&[1, 2, 3, 4]), 2);
+    assert_eq!(count_even(&[2, 4]), 2);
+    println!(""OK"");
+}
+"
+Rust,请用 Rust 实现函数 swap_pair：原地交换切片中相邻两元素（0-1、2-3…）。只输出函数定义。,"Implement swap_pair: swap adjacent element pairs (0-1, 2-3, ...) in a slice in place.",fn swap_pair(v: &mut [i32]);,"fn main() {
+    let mut v = vec![1, 2, 3, 4];
+    swap_pair(&mut v);
+    assert_eq!(v, vec![2, 1, 4, 3]);
+    println!(""OK"");
+}
+"
+Rust,请用 Rust 实现结构体 Rect 及方法 area：返回宽高之积（f64）。只输出定义。,"Implement struct Rect { w: f64, h: f64 } with a method area() returning w * h.","struct Rect { w: f64, h: f64 }
+impl Rect {
+    fn area(&self) -> f64;
+}","fn main() {
+    let r = Rect { w: 3.0, h: 4.0 };
+    assert_eq!(r.area(), 12.0);
+    println!(""OK"");
+}
+"
+Rust,请用 Rust 实现函数 first_char：返回字符串的第一个字符。只输出函数定义。,Implement first_char: return the first character of a string.,fn first_char(s: &str) -> char;,"fn main() {
+    assert_eq!(first_char(""abc""), 'a');
+    println!(""OK"");
+}
+"
+Rust,"请用 Rust 实现函数 fib：计算第 n 个斐波那契数（n 从 0 开始，f0=0, f1=1）。只输出函数定义。","Implement fib: the nth Fibonacci number (n >= 0, f0 = 0, f1 = 1).",fn fib(n: u32) -> u64;,"fn main() {
+    assert_eq!(fib(0), 0);
+    assert_eq!(fib(10), 55);
+    println!(""OK"");
+}
+"
+C++,请用 C++ 实现模板函数 tmax：返回两个同类型参数中较大者。只输出函数定义。,Implement template tmax: return the larger of two values of the same type.,"template <typename T> T tmax(T a, T b);","#include <cassert>
+#include <cstdio>
+template <typename T> T tmax(T a, T b);
+int main() {
+    assert(tmax(3, 7) == 7);
+    assert(tmax(2.5, 1.5) == 2.5);
+    std::printf(""OK\n"");
+    return 0;
+}
+"
+C++,请用 C++ 实现类 Counter：构造时静态计数加一，静态方法 count 返回当前计数。只输出定义。,Implement class Counter: construction increments a static counter; static count() returns it.,"class Counter {
+public:
+    Counter();
+    static int count();
+};","#include <cassert>
+#include <cstdio>
+class Counter {
+public:
+    Counter();
+    static int count();
+};
+int main() {
+    Counter a, b, c;
+    assert(Counter::count() == 3);
+    std::printf(""OK\n"");
+    return 0;
+}
+"
+C++,请用 C++ 实现函数 vsum：返回 vector<int> 所有元素之和（long long）。只输出函数定义。,"Implement vsum: sum all elements of a vector<int>, returned as long long.",long long vsum(const std::vector<int>& v);,"#include <cassert>
+#include <cstdio>
+#include <vector>
+long long vsum(const std::vector<int>& v);
+int main() {
+    std::vector<int> v{1, 2, 3, 4, 5};
+    assert(vsum(v) == 15);
+    std::printf(""OK\n"");
+    return 0;
+}
+"
+C++,请用 C++ 实现函数 sum_squares：返回 vector<int> 各元素平方和（long long）。只输出函数定义。,"Implement sum_squares: sum of squares of the elements of a vector<int>, returned as long long.",long long sum_squares(const std::vector<int>& v);,"#include <cassert>
+#include <cstdio>
+#include <vector>
+long long sum_squares(const std::vector<int>& v);
+int main() {
+    std::vector<int> v{1, 2, 3};
+    assert(sum_squares(v) == 14);
+    std::printf(""OK\n"");
+    return 0;
+}
+"
+C++,请用 C++ 实现函数 slen：返回 std::string 的长度。只输出函数定义。,Implement slen: return the length of a std::string.,size_t slen(const std::string& s);,"#include <cassert>
+#include <cstdio>
+#include <string>
+size_t slen(const std::string& s);
+int main() {
+    assert(slen(""abc"") == 3);
+    assert(slen("""") == 0);
+    std::printf(""OK\n"");
+    return 0;
+}
+"
+C++,请用 C++ 实现函数 arev：原地反转 int 数组前 n 个元素。只输出函数定义。,Implement arev: reverse the first n elements of an int array in place.,"void arev(int* a, int n);","#include <cassert>
+#include <cstdio>
+void arev(int* a, int n);
+int main() {
+    int a[] = {1, 2, 3};
+    arev(a, 3);
+    assert(a[0] == 3 && a[1] == 2 && a[2] == 1);
+    std::printf(""OK\n"");
+    return 0;
+}
+"

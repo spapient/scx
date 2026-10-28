@@ -1126,3 +1126,58 @@ full 基线 0.800 本身暴露 3B 读长代码的固有理解边界（宏常量 
 非内容破坏）。与 L3 预判一致：复杂度/性能数值题受 3B 能力硬约束；
 **压缩在长代码问答（P6j 0.938）与复杂度题（0.800）上均不引入内容级
 破坏**。P6k 关闭。
+## P6l 算子开发生成评测（生成型全自动机器验证）+ 双模型对比
+
+P0 方向一落地：生成型评测唯一能全自动判分的形态 = 模型写算子 → 真实编译器
+编译 + 运行断言验证（clang/rustc/clang++）。新建 tools/bench_kernel.py
+（生成 → extract_code → 与测试驱动拼接 → 编译运行 → 通过/失败机器判定，
+gold 零手工标注）与 bench_kernel.csv（20 题：C 8 / Rust 6 / C++ 6，每题
+= 中文任务 + 英文任务 + 签名约束 + 测试驱动；prompt 含语言工程规范块 +
+评审检查表 + 验证契约，上下文 428-506 token 使压缩有效）。
+
+**三轮协议修复（每题根因）**：
+1. 裸 prompt → 3B 复读任务/续写幻觉（C 0/8 全挂、C++ 输出后接
+   `<|endoftext|>Human:` 尾巴污染编译）→ 改走 chat 模板（wrap_chat）。
+2. 中文规范块 → 中文整段成词、cut 仅 2%，且长中文规范干扰 3B
+   （full 2/20）→ 规范块改英文工程规范（真实 spec 语言）。
+3. Rust 题 sig 列被清空（prompt 无签名约束）→ 3B 猜签名编译挂
+   （Rust 2/6）→ 恢复签名列后 Rust 6/6。
+
+**双模型对比结论**：同一协议下 千问 full 6/20（Rust 6/6）vs 南北阁
+0/20（C/Rust/C++ 全不产出可编译代码）→ **南北阁代码生成能力显著弱于
+千问，评测主模型不切换**（南北阁定位保留给文本/中文场景后续对比）。
+
+**定稿档位**（0.3 档 + op-keep + num-line-keep + sym-line-keep）：
+| 轨 | pass | 压缩率 |
+|---|---:|---:|
+| full | 0.300 (6/20) | - |
+| scx | 0.250 (5/20) | 63.3% |
+| 保持率 | 5/6 = 0.833 | |
+
+掉点 idx=10 swap_pair（full P/scx F）：压缩输出核验语义完整
+（"原地交换切片中相邻两元素（0-1 2-3" 与签名 `fn swap_pair(v: &mut [i32]);`
+逐字节在）→ **3B 解码采样噪声，非内容破坏**。C/C++ full 基线 0/8、0/6：
+千问 3B 生成 C/C++ 编译通过率低 = 模型能力边界（同题 Rust 全对，
+C/C++ 却全挂，与语言无关的协议差异排除）。P6l 关闭。
+
+## P6m 内核结构行/符号保护增强（P1）
+
+两枚新开关，默认 0 均逐字节一致（golden 零漂移）：
+
+1. **`--structure-anchors` 新增 `md`**：Markdown ATX 标题行（1-6 个 `#`
+   后跟空格或行尾）作为结构锚点保留——架构文档场景的章节骨架。
+2. **`--sym-line-keep 0|1`**（符号/签名行保护）：函数/类型声明行
+   （Rust `fn`/`impl`、C/C++ 类型开头、模板/类/结构体、`Signature:` 约束行、
+   含 `-> ` 返回箭头）整行保留**并标记 raw（跳过行内 trim）**——生成型
+   任务 prompt 中函数签名是硬约束，其 `fn`/`->`/`&`/`:` 在 token 级低重要
+   会被行内摘成 `fn f [i32] usize`，模型据此生成错误签名代码（P6l 第六轮
+   保持率 0.333 → raw 后 0.833 的根因）。已 keep 的签名行（含 query 命中词）
+   同样设 raw。
+
+实现落点（同 --num-line-keep 样板）：policy.rs DEFAULT_SYM_LINE_KEEP、
+lib.rs Config::sym_line_keep + Explain::SymLine("symline")、compress.rs
+sym_line 判定 + mark_sym_lines(raw) + R_SYM_LINE + 主流程、args.rs
+usage/help/Flag 表/POLICY_TABLE/apply/toggle/either 共 6 处、README 白名单。
+md 锚点落点：lib.rs AnchorKind::Markdown + compress.rs md_anchor + args.rs
+帮助文本 3 处。门禁：`cargo test --locked --lib` 335 全绿 +
+`cargo test --locked --test golden` 零漂移。P6m 关闭。

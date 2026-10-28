@@ -85,6 +85,8 @@ pub enum AnchorKind {
     Idoc,
     /// YAML 缩进层级键行（映射键/列表项）。
     Yaml,
+    /// Markdown 标题行（ATX `#`…`######`），文档结构骨架。
+    Markdown,
 }
 
 impl AnchorKind {
@@ -94,6 +96,7 @@ impl AnchorKind {
             AnchorKind::Xml => "xml",
             AnchorKind::Idoc => "idoc",
             AnchorKind::Yaml => "yaml",
+            AnchorKind::Markdown => "md",
         }
     }
 
@@ -104,6 +107,7 @@ impl AnchorKind {
             "xml" => Some(AnchorKind::Xml),
             "idoc" => Some(AnchorKind::Idoc),
             "yaml" => Some(AnchorKind::Yaml),
+            "md" => Some(AnchorKind::Markdown),
             _ => None,
         }
     }
@@ -299,6 +303,11 @@ pub struct Config {
     /// 场景：中文问题无法命中英文代码行（P6j），数字常量/赋值行是答案
     /// 高频载体，保行不删、行内仍压。
     pub num_line_keep: bool,
+    /// 符号/签名行保留（`--sym-line-keep`，默认 0）。含函数/类型声明特征的
+    /// 行整行保留（行内仍走 trim）——生成型任务 prompt 中函数签名是硬约束，
+    /// 其 `fn`/`->`/`&`/`(` 符号在 token 级低重要会被摘行（P6l 实测保持率
+    /// 0.500 根因：签名行整行消失，模型不知签名生成错误代码）。
+    pub sym_line_keep: bool,
     /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
     /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
     /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
@@ -342,6 +351,7 @@ impl Default for Config {
             trim_op_keep: crate::policy::DEFAULT_TRIM_OP_KEEP,
             code_keep: crate::policy::DEFAULT_CODE_KEEP,
             num_line_keep: crate::policy::DEFAULT_NUM_LINE_KEEP,
+            sym_line_keep: crate::policy::DEFAULT_SYM_LINE_KEEP,
         }
     }
 }
@@ -551,6 +561,8 @@ pub enum Explain {
     Anchor,
     /// 数字行兜底（`--num-line-keep`：含数字行整行保留，行内仍 trim）。
     NumLine,
+    /// 符号/签名行（`--sym-line-keep`：函数/类型声明行整行保留，行内仍 trim）。
+    SymLine,
     /// 去重折叠（第 3 次起的重复行）。
     Dedup,
     /// 删除（预算不足/结构裁剪/硬上限，细粒度见 `dropped`）。
@@ -567,6 +579,7 @@ impl Explain {
             Explain::Guard => "guard",
             Explain::Anchor => "anchor",
             Explain::NumLine => "numline",
+            Explain::SymLine => "symline",
             Explain::Dedup => "dedup",
             Explain::Dropped => "dropped",
         }
