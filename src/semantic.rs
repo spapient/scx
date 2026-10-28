@@ -291,9 +291,16 @@ mod tests {
     #[test]
     fn weights_reject_non_finite_value() {
         // 1e999 溢出为 f64::INFINITY，会污染打分破坏确定性，必须在加载时拒绝。
-        let v = crate::json::parse(r#"{"weights":[1e999, 0.5]}"#).unwrap();
-        let err = weights("test", &v, 2).unwrap_err();
-        assert!(err.contains("non-finite"), "err: {err}");
+        // json::parse 已在解析层拒绝（"number out of range"），或 weights 校验层
+        // 拒绝（"non-finite"）——两条路径均满足确定性门禁。
+        let err = match crate::json::parse(r#"{"weights":[1e999, 0.5]}"#) {
+            Ok(v) => weights("test", &v, 2).unwrap_err(),
+            Err(e) => e,
+        };
+        assert!(
+            err.contains("non-finite") || err.contains("range"),
+            "err: {err}"
+        );
     }
 
     #[test]

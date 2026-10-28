@@ -461,7 +461,10 @@ fn main() {
 | 路径 | 职责 |
 |---|---|
 | `src/lib.rs` | 公共 API、`Config`、`Outcome`、`Mode`/`Risk` 枚举 |
-| `src/compress.rs` | 纯函数筛选与预算分配（sieve 内核，零 I/O） |
+| `src/compress.rs` | sieve 内核门面：单趟压缩主链 `compress`/`compress_bucketed`、行保护策略、预算利用率、`hash` 子模块；拆分为 `compress/` 子模块（plan/score/render） |
+| `src/compress/plan.rs` | 规划阶段：切行统计、折叠判定（fence 感知）、权重打分、种子与结构区域识别 |
+| `src/compress/score.rs` | 选择与守卫阶段：邻域/锚点/围栏/符号行标记、填充预算、风险审计与守卫（`Ctx` 共享上下文） |
+| `src/compress/render.rs` | 渲染阶段：保留/裁剪区间落地、行内 trim、原因注释、输出截断 |
 | `src/analysis.rs`, `src/terms.rs` | 归一化、结构分类（含 fence/import/stack 判定）、切词与 token 估算 |
 | `src/policy.rs` | 默认策略数据表（`ScoreTable`/`RiskTable`/`RegionCfg`/硬常量），不落独立硬编码文件 |
 | `src/toml.rs` | TOML 子集解析（`Entry`/`parse`/`float`/`size`），供 `--policy-file` 与记忆库 `meta.toml` 复用 |

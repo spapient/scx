@@ -1310,9 +1310,47 @@ trim 0.3 + op/code/num/sym 行保护 + md 锚）。
 （apply 认知复杂度 27→拆 6 个子函数 <10，用户圈复杂度门禁）；fmt 干净；
 README 双参数表 + 模块表同步。commit 见 P7-A 提交。
 
-**A 压缩管线配置化**：新增 config/pipeline.toml（plan/trim/anchor 三阶段声明式）；
-三层优先级 CLI > pipeline.toml > policy 常量；评测档位沉淀为 config/bench/profiles/*.toml；
-fail-loud 校验；内核 Config API 不变。
+### P7-B 大文件拆分（compress 完成）
+
+**交付**：`src/compress.rs`（2470 行 → 1122 行门面）按管线阶段拆为
+`src/compress/{plan,score,render}.rs` 三个子模块，顶层项全部 `pub(crate)`、
+struct/enum 字段 `pub(crate)`（拆踩坑链：父模块 use 误抓 `mod hash` 行致
+重复半截块、struct 深度状态机字段私有、`Kind` derive 属性行丢失致
+PartialEq/Copy 编译错、`semantic` 双 fn 的 `#[cfg]` 属性行丢失——均已修复）。
+父模块保留：`compress`/`compress_bucketed` 主链、`hash` 子模块、
+`chars/lines/forces/force`、`config/survey/long/shape/failopen/rare/cap/
+remaining/last`、tests（`use crate::compress::{plan,score,render}::*` 接入）。
+
+**阶段拆分明细**（黄金对照：同输入同输出，golden 唯一权威）：
+- `plan.rs`（625 行）：切行统计/折叠判定/权重打分/种子与结构区域——
+  `tally/masks/dedup/short/hit/foldable/weights/marks/count/expand/windows/
+  merge/regions/structures/braces/continues/kind/close/score/state/region/
+  patch/trace/edge/scores/boost/apply_sims` + `Mask/Stat/Seed/Region/Kind/
+  Span/Shape/Brace`。
+- `score.rs`（437 行）：选择与守卫——`floor/mark_seeds/mark_context/anchors/
+  mark_anchors/mark_structure_anchors/mark_code_fence/mark_num_lines/sym_line/
+  mark_sym_lines/eligible/Select/Fill/fill/est/tokens/audit/dropped/level/
+  guard/ev_retention` + `R_*` 常量 + 新增 `Ctx` 共享上下文。
+- `render.rs`（208 行）：渲染落地——`render/spans/semantic/optional/active/
+  runs/drop_reason/advance/run/explain/cut`。
+
+**行为中性重构**（同输出承诺，golden 守门）：
+- `render` 9 参数 → `(lines, keep, cfg, raw, query_terms)` + `emit_line`
+  单行落地（行号前缀/行内 trim/raw 跳过），认知 11→3；
+- `mark_context` 8 参数 → `Ctx` 分组（scores/fill_floor/keep/kept/reason），
+  左右邻域双循环消除 `d != 0` 与越界判断，认知 7→3；
+- `dedup` 围栏扫描提 `fence_mask`、seen 计数用 `match`+`usize::from`
+  消除嵌套 if，认知 7→5；`foldable` 8 参数 → 6（hit 预计算）；
+- `compress` 主链提 `apply_keep_policies`（code/num/sym 三段行保护）+
+  `budget_used`（预算利用率），认知 11→6；
+- 顺带修 semantic feature 既有测试缺陷：`json::parse` 对 `1e999` 提前
+  拒绝（parse 层即确定性门禁），测试断言改为接受 parse/校验任一路径。
+
+**门禁证据**：lib 341 全绿（默认）；350 全绿（`--features semantic`）；
+golden 2 passed 零漂移；clippy 全 targets 零告警（含既有 4 处高复杂度/
+多参数告警清零）；fmt 干净；README 模块表 +5 行（compress 子模块）。
+commit 见 P7-B 提交。
+
 **B 大文件拆分**：compress.rs(2470) → compress/{mod,plan,trim,render}；
 args.rs(2353) → args/{mod,parse}；lib.rs 测试迁出、只留门面。
 **C 性能架构**：release profile 基线先行（bench_zh_n30 等真实语料），

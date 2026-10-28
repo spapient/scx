@@ -112,7 +112,13 @@ fn scan_ascii(
 /// 非 ASCII 分支：解码单个 UTF-8 char。CJK/全角字符（表意/假名/谚文/全角
 /// 标点数字）作为单字 token；其余（emoji 等）整体跳过，不切坏字节。
 /// 返回下一个扫描位置。
-fn scan_cjk(line: &str, query_terms: &[String], cur: usize, op_keep: bool, t: &mut Tokens) -> usize {
+fn scan_cjk(
+    line: &str,
+    query_terms: &[String],
+    cur: usize,
+    op_keep: bool,
+    t: &mut Tokens,
+) -> usize {
     match line[cur..].chars().next() {
         Some(ch) if crate::terms::full(ch) => {
             let w = ch.len_utf8();
@@ -170,7 +176,12 @@ fn is_anchor(tok: &str, op_keep: bool) -> bool {
 /// - 组装按原文相邻性拼接：两 token 在原文中相邻（无分隔字符）则直接
 ///   相连，否则单空格分隔——CJK 逐字 token 因此保持成词（"内存" 不会
 ///   变成 "内 存"），ASCII token 间仍保留单空格。
-pub(crate) fn trim_line(line: &str, query_terms: &[String], trim_ratio: f64, op_keep: bool) -> String {
+pub(crate) fn trim_line(
+    line: &str,
+    query_terms: &[String],
+    trim_ratio: f64,
+    op_keep: bool,
+) -> String {
     let t = tokens(line, query_terms, op_keep);
     let total = t.start.len();
     if total <= 1 {
