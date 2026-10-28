@@ -1,0 +1,5 @@
+full : acc=0.980 (49/50)  ctx_tok=759
+scx  : acc=0.940 (47/50)  ctx_tok=518  tok_ratio=0.682
+scx 保持率（full 答对中 scx 仍答对）: 47/49 = 0.959
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 50 样本
