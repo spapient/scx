@@ -1,0 +1,12 @@
+unit,question,full,scx,gold,full_tok,scx_tok,compressed
+rust_cache,LRU get 操作的时间复杂度是什么,1,get,o(1),416,166,True
+rust_cache,put 触发淘汰时弹出队尾的时间复杂度是什么,1,1,o(1),421,185,True
+c_pool,pool_init 初始化循环执行多少次,4,4,1024,471,176,True
+c_pool,pool_alloc 分配单块的时间复杂度是什么,1,1,o(1),474,187,True
+c_sched,run_once 每次遍历多少个任务槽位,10,10,10,607,284,True
+c_sched,fail_head 单次最多处理几个任务,1,3,1,603,288,True
+cpp_matrix,trace 函数的循环执行多少次,16,16,4,277,277,False
+cpp_matrix,set 写入单个元素的时间复杂度是什么,1,1,o(1),280,280,False
+java_queue,drain 单轮最多处理几个任务,2,2,2,332,143,True
+scx_trim,停用词 token 的 score 是多少,0,0,0,679,291,True
+scx_trim,score 函数的最高分是多少,4,4,4,678,214,True

@@ -1,0 +1,12 @@
+unit,question,answer
+rust_cache,LRU get 操作的时间复杂度是什么,O(1)
+rust_cache,put 触发淘汰时弹出队尾的时间复杂度是什么,O(1)
+c_pool,pool_init 初始化循环执行多少次,1024
+c_pool,pool_alloc 分配单块的时间复杂度是什么,O(1)
+c_sched,run_once 每次遍历多少个任务槽位,10
+c_sched,fail_head 单次最多处理几个任务,1
+cpp_matrix,trace 函数的循环执行多少次,4
+cpp_matrix,set 写入单个元素的时间复杂度是什么,O(1)
+java_queue,drain 单轮最多处理几个任务,2
+scx_trim,停用词 token 的 score 是多少,0
+scx_trim,score 函数的最高分是多少,4

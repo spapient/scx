@@ -39,13 +39,14 @@ def normalize_gold(gold: str) -> str:
     return norm_token(gold)
 
 
-def build_prompt(code: str, q: str, fence: str) -> str:
+def build_prompt(code: str, q: str, fence: str, fmt_hint: str = "") -> str:
     """单文档问答 prompt：代码围栏 + 问题。答案要短，3B 可判。"""
+    hint = f"\n{fmt_hint}" if fmt_hint else ""
     return (
         "以下是一段真实工程代码，请阅读代码后回答后面的问题。\n\n"
         f"```{fence}\n{code}\n```\n\n"
         f"问题：{q}\n"
-        "回答（只输出答案）："
+        f"回答（只输出答案）{hint}："
     )
 
 
@@ -59,6 +60,8 @@ def main() -> None:
     ap.add_argument("--scx-extra", default="--trim 1 --trim-ratio 0.3 --trim-op-keep 1",
                     metavar="ARGS", help="scx 压缩参数；默认 query 引导档（无 code-keep）")
     ap.add_argument("--csv", default="", help="逐题明细导出")
+    ap.add_argument("--fmt-hint", default="", metavar="HINT",
+                    help="答案格式提示（如 '复杂度请写成 O(1) 形式'），追加在『回答』前")
     args = ap.parse_args()
 
     scx_extra = tuple(args.scx_extra.split()) if args.scx_extra else ()
@@ -95,7 +98,7 @@ def main() -> None:
         q = item["question"]
         gold = normalize_gold(item["answer"])
         code = (Path(args.units) / f"{unit}.{ext[unit]}").read_text(encoding="utf-8")
-        prompt = build_prompt(code, q, fence.get(unit, "text"))
+        prompt = build_prompt(code, q, fence.get(unit, "text"), args.fmt_hint)
 
         ans_full = run(wrap_chat(tok, prompt))
         scx_out = scx_compress(args.scx_bin, prompt, q, extra=scx_extra)
