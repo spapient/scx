@@ -4,8 +4,8 @@
  "note": "定稿评测结果冻结（不可变基线）。修改/重跑后必须重新冻结并提交；check_bench.sh 校验 sha256+行数。",
  "frozen": {
   "bench_arch_v3.csv": {
-   "sha256": "f878161f654dfce28568328332d7181b9a3ff590f24eb8892fc0c60ebd13d871",
-   "bytes": 7873,
+   "sha256": "6d7a59dda1f7dc929788732945b06e9decf744f4fd1fd508968e94e20c0e3290",
+   "bytes": 7852,
    "rows": 21
   },
   "bench_code_cuda60.csv": {
