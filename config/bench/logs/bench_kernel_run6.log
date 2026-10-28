@@ -1,0 +1,32 @@
+[load] Qwen2.5-3B-Instruct（千问） ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[1/20] C    请用 C 语言实现函数 str_rev：   full=F scx=F cut=56.8% 4.9s
+[2/20] C    请用 C 语言实现函数 arr_sum：   full=F scx=F cut=56.1% 2.5s
+[3/20] C    请用 C 语言实现函数 count_bi   full=F scx=F cut=67.1% 1.7s
+[4/20] C    请用 C 语言实现函数 list_len   full=F scx=F cut=64.6% 2.4s
+[5/20] C    请用 C 语言实现函数 max3：返回三   full=F scx=F cut=68.8% 2.1s
+[6/20] C    请用 C 语言实现函数 is_prime   full=F scx=F cut=66.7% 3.6s
+[7/20] C    请用 C 语言实现函数 gcd：计算两个   full=F scx=F cut=68.7% 1.5s
+[8/20] C    请用 C 语言实现函数 to_upper   full=F scx=F cut=67.8% 2.0s
+[9/20] Rust 请用 Rust 实现函数 vec_sum   full=P scx=F cut=56.6% 2.1s
+[10/20] Rust 请用 Rust 实现函数 count_e   full=P scx=P cut=67.3% 2.1s
+[11/20] Rust 请用 Rust 实现函数 swap_pa   full=P scx=F cut=66.2% 2.7s
+[12/20] Rust 请用 Rust 实现结构体 Rect 及   full=P scx=P cut=56.7% 2.5s
+[13/20] Rust 请用 Rust 实现函数 first_c   full=P scx=F cut=68.9% 1.6s
+[14/20] Rust 请用 Rust 实现函数 fib：计算第   full=P scx=F cut=65.3% 2.8s
+[15/20] C++  请用 C++ 实现模板函数 tmax：返   full=F scx=F cut=68.5% 4.6s
+[16/20] C++  请用 C++ 实现类 Counter：构   full=F scx=F cut=59.2% 2.7s
+[17/20] C++  请用 C++ 实现函数 vsum：返回    full=F scx=F cut=60.1% 4.4s
+[18/20] C++  请用 C++ 实现函数 sum_squa   full=F scx=F cut=59.9% 4.6s
+[19/20] C++  请用 C++ 实现函数 slen：返回    full=F scx=F cut=68.9% 2.8s
+[20/20] C++  请用 C++ 实现函数 arev：原地反   full=F scx=F cut=69.0% 2.7s
+
+=== 算子开发生成评测（Qwen2.5-3B-Instruct（千问） via MLX, 20 题, ('--trim', '1', '--trim-ratio', '0.3', '--trim-op-keep', '1', '--num-line-keep', '1', '--sym-line-keep', '1')）===
+full : pass=0.300 (6/20)
+scx  : pass=0.100 (2/20)  tok_ratio=0.359  cut=64.1%
+保持率（full 通过中 scx 仍通过）: 2/6 = 0.333
+  C     full 0/8  scx 0/8
+  Rust  full 6/6  scx 2/6
+  C++   full 0/6  scx 0/6
+[csv] bench_kernel_qwen_v6.csv

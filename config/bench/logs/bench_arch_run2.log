@@ -1,0 +1,5 @@
+[load] Qwen2.5-3B-Instruct（千问） ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[gen 1/10] rust_arch    cut=37% 25s
+[gen 2/10] perf_opt     cut=40% 25s

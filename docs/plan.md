@@ -1072,7 +1072,7 @@ C 内存池/配置解析/模板矩阵/任务队列/任务调度器/scx 自身 tr
 **gold 全部用真实工具链执行验证**（rustc/clang/clang++/python3/javac，
 各单元 main 打印关键值），零手算。评测脚本 tools/bench_long.py（独立
 单文档问答范式：代码围栏 + 问题，query 用问题文本，压缩走 query 命中
-机制），题表 bench_long_qa.csv（20 题），代码单元 bench_long/。
+机制），题表 config/bench/datasets/bench_long_qa.csv（20 题），代码单元 bench_long/。
 
 **三档对照（n=20，千问 8bit）**：
 | 档位 | scx acc | 压缩率 | 保持率 |
@@ -1131,7 +1131,7 @@ full 基线 0.800 本身暴露 3B 读长代码的固有理解边界（宏常量 
 P0 方向一落地：生成型评测唯一能全自动判分的形态 = 模型写算子 → 真实编译器
 编译 + 运行断言验证（clang/rustc/clang++）。新建 tools/bench_kernel.py
 （生成 → extract_code → 与测试驱动拼接 → 编译运行 → 通过/失败机器判定，
-gold 零手工标注）与 bench_kernel.csv（20 题：C 8 / Rust 6 / C++ 6，每题
+gold 零手工标注）与 config/bench/datasets/bench_kernel.csv（20 题：C 8 / Rust 6 / C++ 6，每题
 = 中文任务 + 英文任务 + 签名约束 + 测试驱动；prompt 含语言工程规范块 +
 评审检查表 + 验证契约，上下文 428-506 token 使压缩有效）。
 
@@ -1189,7 +1189,7 @@ OpenAI 兼容后端，deepseek-flash，key 走环境变量，并发 4）首次�
 DeepSeek C/C++ 同样 0/8、0/6 而 Rust 4/6——两个天差地别的模型呈现相同
 "C/C++ 全挂、Rust 正常"分布，指向协议系统性错误而非模型。
 
-**根因**：bench_kernel.csv 以真换行存多行字段（P6l 重建），但 main() 保留
+**根因**：config/bench/datasets/bench_kernel.csv 以真换行存多行字段（P6l 重建），但 main() 保留
 了旧的 `replace("\\n","\n")`——把测试驱动里 `printf("OK\n")` 的字面转义
 `\n` 也破坏成真换行 → C/C++ 字符串跨行 → **全部编译不过**。Rust 测试用
 println!（无 `\n` 转义）不受影响，故 Rust 正常。修复 = 删除 replace（
@@ -1216,7 +1216,7 @@ println!（无 `\n` 转义）不受影响，故 Rust 正常。修复 = 删除 re
 
 架构/设计开放题（产出型）评测落地：判别型（编译+断言）测不了生成型任务，
 改用「本地生成 + 在线强模型按 rubric 打分」。新建 tools/bench_arch.py 与
-bench_arch.csv（10 题跨领域：Rust 系统架构/性能优化/GPU tiling/KV cache/
+config/bench/datasets/bench_arch.csv（10 题跨领域：Rust 系统架构/性能优化/GPU tiling/KV cache/
 work-stealing/小对象分配器/设计评审/日志库/测试金字塔/连续批处理，每题
 中文需求+英文工程约束+Markdown 输出格式要求）。5 维 rubric 0-5 分：
 structure/accuracy/tradeoff/feasibility/clarity。压缩档
@@ -1258,8 +1258,8 @@ Qwen-flash（百炼最便宜档）对同一批答案独立打分。judge 端点/
 2. **query 稀释压缩**：完整任务文本当 query（terms=53 命中几乎每行）把压缩
    稀释到 0-42% 且无档位梯度 → 改为每题短领域关键词 Q_HINT（4-6 terms，
    如"模块架构 接口 数据流 权衡 扩展点"），cut 恢复正常梯度（44-70%）。
-3. **崩溃续跑**：judge 结果增量落盘（`bench_arch_judge.json`）+ `--resume`
-   断点续跑——网络超时 kill 进程不再整批重打（生成 `bench_arch_plans.json`
+3. **崩溃续跑**：judge 结果增量落盘（`config/bench/cache/bench_arch_judge.json`）+ `--resume`
+   断点续跑——网络超时 kill 进程不再整批重打（生成 `config/bench/cache/bench_arch_plans.json`
    同样持久化）。
 
 **结果（千问 3B 生成本地，双 judge 独立打同一批 20 题答案）**：

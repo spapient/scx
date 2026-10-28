@@ -179,7 +179,7 @@ def main() -> None:
         "observability": "可观测性 trace metric 采样 成本",
     }
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="bench_arch.csv")
+    ap.add_argument("--data", default="config/bench/datasets/bench_arch.csv")
     ap.add_argument("--model", default="qwen2.5-3b-instruct")
     ap.add_argument("--scx-bin", default="target/release/scx")
     ap.add_argument("--quantize", type=int, default=8)
@@ -225,7 +225,7 @@ def main() -> None:
         scx_extra_base.append(scx_extra[_i])
         _i += 1
     scx_extra_base = tuple(scx_extra_base)
-    plans_cache = "bench_arch_plans.json"
+    plans_cache = "config/bench/cache/bench_arch_plans.json"
     plans = {}
     if args.resume and os.path.exists(plans_cache):
         import json as _json
@@ -270,7 +270,7 @@ def main() -> None:
     _lock = threading.Lock()
     jobs = [(i, tr, rt, j) for i in range(len(qa)) for tr in ("full", "scx") for rt in ratios for j in judges]
     results = {}
-    judge_cache = "bench_arch_judge.json"
+    judge_cache = "config/bench/cache/bench_arch_judge.json"
     if args.resume and os.path.exists(judge_cache):
         import json as _json
         with open(judge_cache, encoding="utf-8") as fh:

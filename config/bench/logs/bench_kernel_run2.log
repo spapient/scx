@@ -1,0 +1,25 @@
+[18/20] C++  请用 C++ 实现函数 sum_squa   full=F scx=F cut=0.0% 3.0s
+[19/20] C++  请用 C++ 实现函数 slen：返回    full=F scx=F cut=0.0% 1.4s
+[20/20] C++  请用 C++ 实现函数 arev：原地反   full=F scx=F cut=0.0% 2.4s
+
+=== 算子开发生成评测（Qwen2.5-3B-Instruct（千问） via MLX, 20 题, ('--trim', '1', '--trim-ratio', '0.3', '--trim-op-keep', '1', '--num-line-keep', '1')）===
+full : pass=0.100 (2/20)
+scx  : pass=0.100 (2/20)  tok_ratio=0.979  cut=2.1%
+保持率（full 通过中 scx 仍通过）: 2/2 = 1.000
+  C     full 0/8  scx 0/8
+  Rust  full 2/6  scx 2/6
+  C++   full 0/6  scx 0/6
+[csv] bench_kernel_qwen.csv
+===== NANBEIGE =====
+[18/20] C++  请用 C++ 实现函数 sum_squa   full=F scx=F cut=0.0% 40.5s
+[19/20] C++  请用 C++ 实现函数 slen：返回    full=F scx=F cut=0.0% 27.5s
+[20/20] C++  请用 C++ 实现函数 arev：原地反   full=F scx=F cut=0.0% 39.8s
+
+=== 算子开发生成评测（Nanbeige4.2-3B（南北阁） via MLX, 20 题, ('--trim', '1', '--trim-ratio', '0.3', '--trim-op-keep', '1', '--num-line-keep', '1')）===
+full : pass=0.000 (0/20)
+scx  : pass=0.000 (0/20)  tok_ratio=0.973  cut=2.7%
+保持率（full 通过中 scx 仍通过）: 0/0 = 0.000
+  C     full 0/8  scx 0/8
+  Rust  full 0/6  scx 0/6
+  C++   full 0/6  scx 0/6
+[csv] bench_kernel_nb.csv

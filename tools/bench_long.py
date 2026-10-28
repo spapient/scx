@@ -52,7 +52,7 @@ def build_prompt(code: str, q: str, fence: str, fmt_hint: str = "") -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--qa", default="bench_long_qa.csv")
+    ap.add_argument("--qa", default="config/bench/datasets/bench_long_qa.csv")
     ap.add_argument("--units", default=DEFAULT_UNITS)
     ap.add_argument("--model", default="qwen2.5-3b-instruct")
     ap.add_argument("--scx-bin", default="target/release/scx")

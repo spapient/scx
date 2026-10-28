@@ -1,0 +1,27 @@
+=== default (fill-floor 0) ===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.540 (27/50)  ctx_tok=1242  tok_ratio=0.932
+trunc: acc=0.080 (4/50)  ctx_tok=同 scx
+scx 保持率（full 答对中 scx 仍答对）: 25/30 = 0.833
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  cut<2%: 16 样本
+  2-10%: 20 样本
+  10-35%: 14 样本
+注：1/50 样本 scx 未压缩（透传/失败），已按 fail-open 计
+=== fill-floor 2 ===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.420 (21/50)  ctx_tok=1122  tok_ratio=0.843
+trunc: acc=0.020 (1/50)  ctx_tok=同 scx
+scx 保持率（full 答对中 scx 仍答对）: 20/30 = 0.667
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  cut<2%: 1 样本
+  2-10%: 18 样本
+  10-35%: 29 样本
+=== fill-floor 4 ===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.400 (20/50)  ctx_tok=993  tok_ratio=0.746
+trunc: acc=0.000 (0/50)  ctx_tok=同 scx
+scx 保持率（full 答对中 scx 仍答对）: 18/30 = 0.600
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  2-10%: 3 样本
+  10-35%: 38 样本

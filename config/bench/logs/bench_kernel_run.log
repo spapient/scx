@@ -1,0 +1,29 @@
+[16/20] C++  请用 C++ 实现类 Counter：构   full=F scx=F cut=0.0% 18.3s
+[17/20] C++  请用 C++ 实现函数 vsum：返回    full=F scx=F cut=0.0% 18.8s
+[18/20] C++  请用 C++ 实现函数 sum_squa   full=F scx=F cut=0.0% 18.4s
+[19/20] C++  请用 C++ 实现函数 slen：返回    full=F scx=F cut=0.0% 17.9s
+[20/20] C++  请用 C++ 实现函数 arev：原地反   full=F scx=F cut=0.0% 17.4s
+
+=== 算子开发生成评测（Qwen2.5-3B-Instruct（千问） via MLX, 20 题, ('--trim', '1', '--trim-ratio', '0.3', '--trim-op-keep', '1', '--num-line-keep', '1')）===
+full : pass=0.250 (5/20)
+scx  : pass=0.250 (5/20)  tok_ratio=1.000  cut=0.0%
+保持率（full 通过中 scx 仍通过）: 5/5 = 1.000
+  C     full 0/8  scx 0/8
+  Rust  full 5/6  scx 5/6
+  C++   full 0/6  scx 0/6
+[csv] bench_kernel_qwen.csv
+===== NANBEIGE =====
+[16/20] C++  请用 C++ 实现类 Counter：构   full=F scx=F cut=0.0% 37.1s
+[17/20] C++  请用 C++ 实现函数 vsum：返回    full=F scx=F cut=0.0% 10.9s
+[18/20] C++  请用 C++ 实现函数 sum_squa   full=F scx=F cut=0.0% 54.2s
+[19/20] C++  请用 C++ 实现函数 slen：返回    full=F scx=F cut=0.0% 2.5s
+[20/20] C++  请用 C++ 实现函数 arev：原地反   full=F scx=F cut=0.0% 37.2s
+
+=== 算子开发生成评测（Nanbeige4.2-3B（南北阁） via MLX, 20 题, ('--trim', '1', '--trim-ratio', '0.3', '--trim-op-keep', '1', '--num-line-keep', '1')）===
+full : pass=0.000 (0/20)
+scx  : pass=0.000 (0/20)  tok_ratio=1.000  cut=0.0%
+保持率（full 通过中 scx 仍通过）: 0/0 = 0.000
+  C     full 0/8  scx 0/8
+  Rust  full 0/6  scx 0/6
+  C++   full 0/6  scx 0/6
+[csv] bench_kernel_nb.csv

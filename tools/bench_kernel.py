@@ -167,7 +167,7 @@ def api_run(prompt: str, max_new: int = 640) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="bench_kernel.csv")
+    ap.add_argument("--data", default="config/bench/datasets/bench_kernel.csv")
     ap.add_argument("--model", default="qwen2.5-3b-instruct")
     ap.add_argument("--api", default="", help="在线轨: deepseek（默认空 = 本地 MLX）")
     ap.add_argument("--api-conc", type=int, default=4, help="在线轨并发请求数")

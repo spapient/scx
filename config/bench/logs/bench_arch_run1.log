@@ -1,0 +1,49 @@
+[load] Qwen2.5-3B-Instruct（千问） ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[gen 1/10] rust_arch    cut=37% 24s
+[gen 2/10] perf_opt     cut=40% 25s
+[gen 3/10] gpu_tiling   cut=33% 25s
+[gen 4/10] kv_cache     cut=40% 26s
+[gen 5/10] scheduler    cut=38% 21s
+[gen 6/10] allocator    cut=39% 24s
+[gen 7/10] code_review  cut=36% 26s
+[gen 8/10] log_sys      cut=39% 29s
+[gen 9/10] test_strategy cut=17% 29s
+[gen 10/10] kv_batch     cut=39% 32s
+[judge] 2/full: PARSE-FAIL
+[judge] 0/full: PARSE-FAIL
+[judge] 1/full: PARSE-FAIL
+[judge] 4/full: PARSE-FAIL
+[judge] 3/full: PARSE-FAIL
+[judge] 5/full: PARSE-FAIL
+[judge] 7/full: PARSE-FAIL
+[judge] 6/full: PARSE-FAIL
+[judge] 8/full: PARSE-FAIL
+[judge] 0/scx: PARSE-FAIL
+[judge] 1/scx: PARSE-FAIL
+[judge] 9/full: PARSE-FAIL
+[judge] 2/scx: PARSE-FAIL
+[judge] 4/scx: PARSE-FAIL
+[judge] 3/scx: PARSE-FAIL
+[judge] 5/scx: PARSE-FAIL
+[judge] 6/scx: PARSE-FAIL
+[judge] 7/scx: PARSE-FAIL
+[judge] 8/scx: PARSE-FAIL
+[judge] 9/scx: PARSE-FAIL
+
+=== P6n 架构文档 rubric 评测（Qwen2.5-3B-Instruct（千问） 生成本地 / judge=DeepSeek-V4.1-Flash 在线, 10 题, ('--trim', '1', '--trim-ratio', '0.3', '--structure-anchors', 'md', '--sym-line-keep', '1')）===
+维度均分（0-5）：
+维度           full    scx  scx/full
+structure    0.00   0.00     0.00x
+accuracy     0.00   0.00     0.00x
+tradeoff     0.00   0.00     0.00x
+feasibility   0.00   0.00     0.00x
+clarity      0.00   0.00     0.00x
+Traceback (most recent call last):
+  File "/Users/fei/code/scx/tools/bench_arch.py", line 244, in <module>
+    main()
+  File "/Users/fei/code/scx/tools/bench_arch.py", line 221, in main
+    print(f"{'TOTAL':10s} {ta/n_full:6.2f} {tb/n_scx:6.2f} {tb/ta if ta else 0:8.2f}x")
+                           ~~^~~~~~~
+ZeroDivisionError: division by zero

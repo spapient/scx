@@ -1,0 +1,217 @@
+[load] Qwen2.5-3B-Instruct（千问） ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[gen 1/20] rust_arch      cut=0% 42s
+[gen 2/20] perf_opt       cut=0% 48s
+[gen 3/20] gpu_tiling     cut=0% 48s
+[gen 4/20] kv_cache       cut=0% 48s
+[gen 5/20] scheduler      cut=0% 32s
+[gen 6/20] allocator      cut=0% 52s
+[gen 7/20] code_review    cut=0% 51s
+[gen 8/20] log_sys        cut=0% 48s
+[gen 9/20] test_strategy  cut=0% 48s
+[gen 10/20] kv_batch       cut=0% 48s
+[gen 11/20] cache_coherence cut=0% 48s
+[gen 12/20] consensus      cut=0% 48s
+[gen 13/20] compiler_ir    cut=0% 48s
+[gen 14/20] net_stack      cut=0% 42s
+[gen 15/20] gpu_mempool    cut=0% 48s
+[gen 16/20] err_arch       cut=0% 48s
+[gen 17/20] hashmap        cut=0% 47s
+[gen 18/20] build_sys      cut=0% 47s
+[gen 19/20] lsm_store      cut=0% 45s
+[gen 20/20] observability  cut=0% 48s
+[judge] deepseek 0/full@0.3: 2.0
+[judge] deepseek 0/full@0.2: 2.0
+[judge] qwen     0/full@0.3: 2.0
+[judge] deepseek 0/full@0.4: 2.5
+[judge] qwen     0/full@0.2: 2.0
+[judge] deepseek 0/scx@0.2: 2.5
+[judge] deepseek 0/scx@0.3: 2.0
+[judge] qwen     0/full@0.4: 2.0
+[judge] deepseek 0/scx@0.4: 2.0
+[judge] qwen     0/scx@0.2: 2.0
+[judge] deepseek 1/full@0.2: 2.0
+[judge] qwen     0/scx@0.3: 2.5
+[judge] qwen     0/scx@0.4: 2.0
+[judge] deepseek 1/full@0.3: 2.0
+[judge] qwen     1/full@0.3: 2.0
+[judge] qwen     1/full@0.2: 2.0
+[judge] deepseek 1/full@0.4: 2.5
+[judge] deepseek 1/scx@0.2: 2.5
+[judge] deepseek 1/scx@0.3: 2.0
+[judge] qwen     1/full@0.4: 2.0
+[judge] qwen     1/scx@0.2: 1.0
+[judge] deepseek 1/scx@0.4: 2.5
+[judge] qwen     1/scx@0.3: 2.0
+[judge] qwen     1/scx@0.4: 1.5
+[judge] deepseek 2/full@0.2: 2.0
+[judge] deepseek 2/full@0.3: 2.0
+[judge] qwen     2/full@0.3: 2.0
+[judge] qwen     2/full@0.2: 1.5
+[judge] deepseek 2/full@0.4: 2.0
+[judge] deepseek 2/scx@0.2: 1.5
+[judge] qwen     2/full@0.4: 1.0
+[judge] deepseek 2/scx@0.3: 2.0
+[judge] deepseek 2/scx@0.4: 2.0
+[judge] qwen     2/scx@0.3: 1.5
+[judge] deepseek 3/full@0.2: 2.0
+[judge] qwen     2/scx@0.2: 1.0
+[judge] deepseek 3/full@0.3: 2.5
+[judge] qwen     2/scx@0.4: 1.0
+[judge] qwen     3/full@0.2: 2.0
+[judge] deepseek 3/full@0.4: 2.0
+[judge] deepseek 3/scx@0.2: 2.0
+[judge] qwen     3/full@0.3: 1.5
+[judge] qwen     3/full@0.4: 2.0
+[judge] deepseek 3/scx@0.3: 3.0
+[judge] qwen     3/scx@0.2: 2.0
+[judge] deepseek 3/scx@0.4: 1.5
+[judge] qwen     3/scx@0.3: 1.5
+[judge] deepseek 4/full@0.2: 2.0
+[judge] deepseek 4/full@0.3: 2.0
+[judge] qwen     3/scx@0.4: 2.0
+[judge] deepseek 4/full@0.4: 2.0
+[judge] qwen     4/full@0.2: 2.0
+[judge] qwen     4/full@0.3: 1.5
+[judge] deepseek 4/scx@0.2: 2.0
+[judge] deepseek 4/scx@0.3: 2.0
+[judge] qwen     4/full@0.4: 2.0
+[judge] qwen     4/scx@0.2: 2.0
+[judge] deepseek 4/scx@0.4: 2.0
+[judge] deepseek 5/full@0.2: 2.0
+[judge] qwen     4/scx@0.3: 2.5
+[judge] qwen     4/scx@0.4: 2.0
+[judge] deepseek 5/full@0.3: 2.0
+[judge] qwen     5/full@0.2: 1.5
+[judge] deepseek 5/full@0.4: 2.0
+[judge] qwen     5/full@0.3: 1.5
+[judge] deepseek 5/scx@0.2: 2.0
+[judge] qwen     5/full@0.4: 1.5
+[judge] qwen     5/scx@0.2: 1.0
+[judge] deepseek 5/scx@0.3: 2.5
+[judge] deepseek 5/scx@0.4: 1.5
+[judge] deepseek 6/full@0.2: 1.5
+[judge] qwen     5/scx@0.3: 1.0
+[judge] qwen     5/scx@0.4: 1.5
+[judge] deepseek 6/full@0.3: 2.0
+[judge] deepseek 6/full@0.4: 2.0
+[judge] qwen     6/full@0.2: 2.0
+[judge] qwen     6/full@0.4: 2.0
+[judge] qwen     6/full@0.3: 2.0
+[judge] deepseek 6/scx@0.2: 1.5
+[judge] deepseek 6/scx@0.3: 2.0
+[judge] qwen     6/scx@0.2: 1.0
+[judge] deepseek 6/scx@0.4: 1.5
+[judge] deepseek 7/full@0.2: 2.0
+[judge] qwen     6/scx@0.3: 1.5
+[judge] qwen     6/scx@0.4: 1.5
+[judge] deepseek 7/full@0.3: 1.0
+[judge] deepseek 7/full@0.4: 2.0
+[judge] qwen     7/full@0.2: 1.5
+[judge] deepseek 7/scx@0.2: 2.0
+[judge] qwen     7/full@0.3: 1.5
+[judge] deepseek 7/scx@0.3: 2.0
+[judge] qwen     7/full@0.4: 2.0
+[judge] qwen     7/scx@0.2: 1.0
+[judge] deepseek 7/scx@0.4: 2.0
+[judge] deepseek 8/full@0.2: 1.0
+[judge] qwen     7/scx@0.3: 1.5
+[judge] deepseek 8/full@0.3: 1.5
+[judge] qwen     8/full@0.3: 1.0
+[judge] qwen     8/full@0.2: 1.0
+[judge] deepseek 8/full@0.4: 1.5
+[judge] deepseek 8/scx@0.2: 1.0
+[judge] qwen     8/full@0.4: 1.0
+[judge] qwen     8/scx@0.2: 1.0
+[judge] deepseek 8/scx@0.3: 1.5
+[judge] deepseek 8/scx@0.4: 2.0
+[judge] qwen     8/scx@0.3: 1.0
+[judge] qwen     8/scx@0.4: 1.5
+[judge] deepseek 9/full@0.2: 2.0
+[judge] deepseek 9/full@0.3: 1.5
+[judge] qwen     9/full@0.2: 2.0
+[judge] deepseek 9/full@0.4: 1.5
+[judge] qwen     7/scx@0.4: 1.5
+[judge] deepseek 9/scx@0.2: 2.0
+[judge] qwen     9/full@0.3: 1.5
+[judge] deepseek 9/scx@0.3: 2.0
+[judge] qwen     9/full@0.4: 1.0
+[judge] qwen     9/scx@0.2: 2.0
+[judge] deepseek 9/scx@0.4: 2.0
+[judge] qwen     9/scx@0.3: 1.5
+[judge] qwen     9/scx@0.4: 2.0
+[judge] deepseek 10/full@0.3: 1.5
+[judge] qwen     10/full@0.2: 1.0
+[judge] qwen     10/full@0.3: 1.0
+[judge] deepseek 10/full@0.4: 2.0
+[judge] qwen     10/full@0.4: 1.0
+[judge] deepseek 10/scx@0.2: 1.5
+[judge] deepseek 10/scx@0.3: 1.0
+[judge] qwen     10/scx@0.2: 1.5
+[judge] qwen     10/scx@0.3: 1.0
+Traceback (most recent call last):
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/urllib/request.py", line 1357, in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/http/client.py", line 1386, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/http/client.py", line 1432, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/http/client.py", line 1381, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/http/client.py", line 1141, in _send_output
+    self.send(msg)
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/http/client.py", line 1085, in send
+    self.connect()
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/http/client.py", line 1527, in connect
+    self.sock = self._context.wrap_socket(self.sock,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/ssl.py", line 457, in wrap_socket
+    return self.sslsocket_class._create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/ssl.py", line 1066, in _create
+    self.do_handshake()
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/ssl.py", line 1344, in do_handshake
+    self._sslobj.do_handshake()
+TimeoutError: [Errno 60] Operation timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/fei/code/scx/tools/bench_arch.py", line 338, in <module>
+    main()
+  File "/Users/fei/code/scx/tools/bench_arch.py", line 211, in main
+    sc, raw = f.result()
+              ^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/concurrent/futures/thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/code/scx/tools/bench_arch.py", line 119, in judge_answer
+    raw = api_run(prompt, max_new=cfg["max_new"], judge=judge)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/code/scx/tools/bench_arch.py", line 140, in api_call
+    with urllib.request.urlopen(req, timeout=240) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/urllib/request.py", line 515, in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/urllib/request.py", line 532, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/urllib/request.py", line 1405, in https_open
+    return self.do_open(http.client.HTTPSConnection, req,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fei/.local/share/uv/python/cpython-3.12.15-macos-aarch64-none/lib/python3.12/urllib/request.py", line 1360, in do_open
+    raise URLError(err)
+urllib.error.URLError: <urlopen error [Errno 60] Operation timed out>

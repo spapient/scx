@@ -1,0 +1,12 @@
+[load] Qwen2.5-3B-Instruct（千问） ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[1/20] C    请用 C 语言实现函数 str_rev：   full=F scx=F cut=0.0% 6.8s
+[2/20] C    请用 C 语言实现函数 arr_sum：   full=F scx=F cut=0.0% 3.1s
+[3/20] C    请用 C 语言实现函数 count_bi   full=F scx=F cut=0.0% 1.9s
+[4/20] C    请用 C 语言实现函数 list_len   full=F scx=F cut=0.0% 2.5s
+[5/20] C    请用 C 语言实现函数 max3：返回三   full=F scx=F cut=0.0% 2.6s
+[6/20] C    请用 C 语言实现函数 is_prime   full=F scx=F cut=0.0% 3.6s
+[7/20] C    请用 C 语言实现函数 gcd：计算两个   full=F scx=F cut=0.0% 1.6s
+[8/20] C    请用 C 语言实现函数 to_upper   full=F scx=F cut=0.0% 2.3s
+[9/20] Rust 请用 Rust 实现函数 vec_sum   full=F scx=F cut=0.0% 2.1s

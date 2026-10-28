@@ -1,0 +1,277 @@
+[load] Qwen2.5-3B-Instruct（千问） ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[gen 1/20] rust_arch      cut=63% 43s
+[gen 2/20] perf_opt       cut=70% 41s
+[gen 3/20] gpu_tiling     cut=64% 46s
+[gen 4/20] kv_cache       cut=72% 49s
+[gen 5/20] scheduler      cut=75% 45s
+[gen 6/20] allocator      cut=69% 49s
+[gen 7/20] code_review    cut=80% 49s
+[gen 8/20] log_sys        cut=66% 36s
+[gen 9/20] test_strategy  cut=44% 48s
+[gen 10/20] kv_batch       cut=72% 43s
+[gen 11/20] cache_coherence cut=60% 48s
+[gen 12/20] consensus      cut=62% 45s
+[gen 13/20] compiler_ir    cut=63% 47s
+[gen 14/20] net_stack      cut=70% 36s
+[gen 15/20] gpu_mempool    cut=68% 43s
+[gen 16/20] err_arch       cut=61% 48s
+[gen 17/20] hashmap        cut=68% 42s
+[gen 18/20] build_sys      cut=62% 44s
+[gen 19/20] lsm_store      cut=63% 42s
+[gen 20/20] observability  cut=64% 40s
+[judge] deepseek 0/full@0.2: 2.0
+[judge] deepseek 0/full@0.3: 1.5
+[judge] qwen     0/full@0.2: 1.5
+[judge] deepseek 0/full@0.4: 2.0
+[judge] qwen     0/full@0.3: 2.0
+[judge] deepseek 0/scx@0.2: 1.0
+[judge] qwen     0/full@0.4: 2.0
+[judge] deepseek 0/scx@0.3: 1.0
+[judge] qwen     0/scx@0.2: 1.0
+[judge] deepseek 0/scx@0.4: 1.0
+[judge] qwen     0/scx@0.3: 1.5
+[judge] deepseek 1/full@0.2: 2.5
+[judge] qwen     0/scx@0.4: 2.0
+[judge] deepseek 1/full@0.3: 2.5
+[judge] qwen     1/full@0.3: 1.5
+[judge] deepseek 1/full@0.4: 3.0
+[judge] deepseek 1/scx@0.2: 1.5
+[judge] qwen     1/full@0.4: 1.5
+[judge] deepseek 1/scx@0.3: 2.0
+[judge] qwen     1/scx@0.2: 1.5
+[judge] deepseek 1/scx@0.4: 1.5
+[judge] qwen     1/scx@0.3: 1.0
+[judge] deepseek 2/full@0.2: 2.0
+[judge] qwen     1/scx@0.4: 1.0
+[judge] qwen     1/full@0.2: 1.5
+[judge] deepseek 2/full@0.3: 2.0
+[judge] qwen     2/full@0.2: 2.0
+[judge] qwen     2/full@0.3: 1.5
+[judge] deepseek 2/full@0.4: 2.5
+[judge] deepseek 2/scx@0.2: 0.5
+[judge] deepseek 2/scx@0.3: 1.0
+[judge] qwen     2/scx@0.2: 0.5
+[judge] qwen     2/scx@0.3: 0.5
+[judge] deepseek 2/scx@0.4: 1.5
+[judge] qwen     2/full@0.4: 2.0
+[judge] qwen     2/scx@0.4: 1.0
+[judge] deepseek 3/full@0.2: 2.5
+[judge] deepseek 3/full@0.3: 2.5
+[judge] qwen     3/full@0.2: 1.5
+[judge] deepseek 3/full@0.4: 2.0
+[judge] deepseek 3/scx@0.2: 1.0
+[judge] qwen     3/full@0.3: 2.0
+[judge] qwen     3/full@0.4: 2.5
+[judge] qwen     3/scx@0.2: 1.0
+[judge] deepseek 3/scx@0.3: 1.0
+[judge] deepseek 3/scx@0.4: 1.0
+[judge] deepseek 4/full@0.2: 2.0
+[judge] qwen     3/scx@0.3: 1.0
+[judge] qwen     3/scx@0.4: 1.0
+[judge] deepseek 4/full@0.3: 2.0
+[judge] qwen     4/full@0.2: 2.0
+[judge] qwen     4/full@0.3: 1.5
+[judge] deepseek 4/full@0.4: 2.5
+[judge] deepseek 4/scx@0.2: 1.5
+[judge] qwen     4/scx@0.2: 1.5
+[judge] deepseek 4/scx@0.3: 1.0
+[judge] qwen     4/full@0.4: 1.5
+[judge] deepseek 4/scx@0.4: 1.5
+[judge] qwen     4/scx@0.4: 1.0
+[judge] qwen     4/scx@0.3: 1.0
+[judge] deepseek 5/full@0.2: 2.0
+[judge] deepseek 5/full@0.3: 2.0
+[judge] deepseek 5/full@0.4: 1.0
+[judge] qwen     5/full@0.3: 1.5
+[judge] deepseek 5/scx@0.2: 1.0
+[judge] qwen     5/full@0.2: 1.0
+[judge] deepseek 5/scx@0.3: 1.0
+[judge] qwen     5/scx@0.2: 1.0
+[judge] qwen     5/scx@0.3: 1.0
+[judge] deepseek 5/scx@0.4: 1.0
+[judge] qwen     5/full@0.4: 1.5
+[judge] deepseek 6/full@0.2: 1.5
+[judge] qwen     5/scx@0.4: 1.0
+[judge] deepseek 6/full@0.3: 1.5
+[judge] deepseek 6/full@0.4: 2.0
+[judge] qwen     6/full@0.3: 1.0
+[judge] deepseek 6/scx@0.2: 1.0
+[judge] qwen     6/full@0.4: 1.5
+[judge] deepseek 6/scx@0.3: 1.0
+[judge] qwen     6/scx@0.2: 1.0
+[judge] qwen     6/scx@0.3: 1.0
+[judge] deepseek 6/scx@0.4: 1.0
+[judge] deepseek 7/full@0.2: 2.0
+[judge] qwen     6/scx@0.4: 1.0
+[judge] qwen     7/full@0.2: 2.0
+[judge] deepseek 7/full@0.3: 2.0
+[judge] deepseek 7/full@0.4: 2.0
+[judge] qwen     7/full@0.3: 1.5
+[judge] qwen     6/full@0.2: 1.5
+[judge] deepseek 7/scx@0.2: 1.0
+[judge] qwen     7/full@0.4: 1.5
+[judge] qwen     7/scx@0.2: 0.5
+[judge] deepseek 7/scx@0.3: 1.0
+[judge] deepseek 7/scx@0.4: 1.0
+[judge] deepseek 8/full@0.2: 1.5
+[judge] qwen     7/scx@0.3: 1.0
+[judge] qwen     7/scx@0.4: 1.0
+[judge] deepseek 8/full@0.3: 1.5
+[judge] qwen     8/full@0.3: 1.0
+[judge] deepseek 8/full@0.4: 1.0
+[judge] qwen     8/full@0.2: 1.0
+[judge] deepseek 8/scx@0.2: 1.0
+[judge] qwen     8/full@0.4: 1.5
+[judge] qwen     8/scx@0.2: 1.5
+[judge] deepseek 8/scx@0.3: 1.5
+[judge] deepseek 8/scx@0.4: 2.0
+[judge] qwen     8/scx@0.3: 1.0
+[judge] qwen     8/scx@0.4: 1.0
+[judge] deepseek 9/full@0.2: 2.0
+[judge] deepseek 9/full@0.3: 1.5
+[judge] deepseek 9/full@0.4: 2.0
+[judge] qwen     9/full@0.3: 1.5
+[judge] qwen     9/full@0.2: 1.0
+[judge] qwen     9/full@0.4: 1.5
+[judge] deepseek 9/scx@0.2: 1.0
+[judge] deepseek 9/scx@0.3: 1.0
+[judge] qwen     9/scx@0.2: 0.5
+[judge] qwen     9/scx@0.3: 1.0
+[judge] deepseek 9/scx@0.4: 1.5
+[judge] deepseek 10/full@0.2: 2.0
+[judge] qwen     9/scx@0.4: 0.5
+[judge] deepseek 10/full@0.3: 1.5
+[judge] qwen     10/full@0.2: 1.0
+[judge] deepseek 10/full@0.4: 1.5
+[judge] qwen     10/full@0.3: 1.0
+[judge] deepseek 10/scx@0.2: 1.0
+[judge] qwen     10/scx@0.2: 0.5
+[judge] deepseek 10/scx@0.3: 1.0
+[judge] deepseek 10/scx@0.4: 1.0
+[judge] qwen     10/full@0.4: 1.0
+[judge] qwen     10/scx@0.3: 1.0
+[judge] deepseek 11/full@0.2: 1.0
+[judge] deepseek 11/full@0.3: 1.0
+[judge] qwen     10/scx@0.4: 1.0
+[judge] deepseek 11/full@0.4: 1.0
+[judge] qwen     11/full@0.2: 0.5
+[judge] deepseek 11/scx@0.2: 1.0
+[judge] qwen     11/full@0.3: 1.0
+[judge] qwen     11/full@0.4: 1.0
+[judge] deepseek 11/scx@0.3: 1.5
+[judge] deepseek 11/scx@0.4: 1.0
+[judge] qwen     11/scx@0.2: 1.0
+[judge] qwen     11/scx@0.3: 1.0
+[judge] deepseek 12/full@0.2: 2.0
+[judge] qwen     12/full@0.2: 1.0
+[judge] qwen     11/scx@0.4: 1.0
+[judge] deepseek 12/full@0.3: 1.5
+[judge] deepseek 12/full@0.4: 1.5
+[judge] deepseek 12/scx@0.2: 1.0
+[judge] qwen     12/full@0.4: 1.0
+[judge] qwen     12/full@0.3: 1.0
+[judge] deepseek 12/scx@0.3: 0.5
+[judge] qwen     12/scx@0.2: 0.5
+[judge] deepseek 12/scx@0.4: 1.0
+[judge] deepseek 13/full@0.2: 2.5
+[judge] qwen     12/scx@0.3: 0.5
+[judge] qwen     12/scx@0.4: 1.0
+[judge] deepseek 13/full@0.3: 2.0
+[judge] qwen     13/full@0.2: 1.0
+[judge] deepseek 13/full@0.4: 2.0
+[judge] deepseek 13/scx@0.2: 0.5
+[judge] qwen     13/full@0.3: 2.0
+[judge] qwen     13/scx@0.2: 1.0
+[judge] deepseek 13/scx@0.3: 1.0
+[judge] deepseek 13/scx@0.4: 1.0
+[judge] qwen     13/full@0.4: 2.0
+[judge] qwen     13/scx@0.3: 0.5
+[judge] deepseek 14/full@0.2: 1.5
+[judge] deepseek 14/full@0.3: 2.0
+[judge] qwen     13/scx@0.4: 1.0
+[judge] qwen     14/full@0.2: 1.0
+[judge] deepseek 14/full@0.4: 1.5
+[judge] deepseek 14/scx@0.2: 1.0
+[judge] qwen     14/full@0.3: 1.0
+[judge] qwen     14/full@0.4: 1.0
+[judge] deepseek 14/scx@0.3: 1.0
+[judge] qwen     14/scx@0.2: 1.0
+[judge] qwen     14/scx@0.3: 0.5
+[judge] deepseek 14/scx@0.4: 1.0
+[judge] deepseek 15/full@0.2: 1.5
+[judge] qwen     14/scx@0.4: 1.5
+[judge] deepseek 15/full@0.3: 1.5
+[judge] qwen     15/full@0.2: 1.0
+[judge] deepseek 15/full@0.4: 2.0
+[judge] deepseek 15/scx@0.2: 1.0
+[judge] qwen     15/full@0.3: 1.0
+[judge] qwen     15/full@0.4: 1.0
+[judge] deepseek 15/scx@0.3: 1.0
+[judge] deepseek 15/scx@0.4: 1.5
+[judge] qwen     15/scx@0.2: 1.0
+[judge] qwen     15/scx@0.3: 1.0
+[judge] qwen     15/scx@0.4: 1.0
+[judge] deepseek 16/full@0.2: 2.0
+[judge] deepseek 16/full@0.3: 2.0
+[judge] qwen     16/full@0.2: 1.5
+[judge] qwen     16/full@0.3: 1.0
+[judge] deepseek 16/full@0.4: 2.0
+[judge] deepseek 16/scx@0.2: 1.0
+[judge] deepseek 16/scx@0.3: 1.5
+[judge] qwen     16/full@0.4: 0.5
+[judge] qwen     16/scx@0.2: 0.5
+[judge] deepseek 16/scx@0.4: 1.0
+[judge] deepseek 17/full@0.2: 1.5
+[judge] qwen     16/scx@0.3: 1.0
+[judge] qwen     16/scx@0.4: 1.0
+[judge] deepseek 17/full@0.3: 1.5
+[judge] qwen     17/full@0.2: 1.0
+[judge] deepseek 17/full@0.4: 2.0
+[judge] qwen     17/full@0.3: 1.0
+[judge] deepseek 17/scx@0.2: 1.0
+[judge] qwen     17/full@0.4: 1.0
+[judge] deepseek 17/scx@0.3: 1.0
+[judge] qwen     17/scx@0.2: 0.5
+[judge] deepseek 17/scx@0.4: 1.5
+[judge] deepseek 18/full@0.2: 1.5
+[judge] qwen     17/scx@0.3: 1.0
+[judge] qwen     17/scx@0.4: 1.0
+[judge] deepseek 18/full@0.3: 2.0
+[judge] qwen     18/full@0.3: 2.0
+[judge] qwen     18/full@0.2: 1.5
+[judge] deepseek 18/full@0.4: 2.0
+[judge] deepseek 18/scx@0.2: 1.0
+[judge] deepseek 18/scx@0.3: 1.0
+[judge] qwen     18/full@0.4: 2.0
+[judge] qwen     18/scx@0.3: 1.0
+[judge] deepseek 18/scx@0.4: 1.0
+[judge] deepseek 19/full@0.2: 2.0
+[judge] qwen     19/full@0.2: 1.0
+[judge] qwen     18/scx@0.4: 0.5
+[judge] deepseek 19/full@0.3: 2.0
+[judge] deepseek 19/full@0.4: 1.5
+[judge] qwen     19/full@0.3: 1.0
+[judge] deepseek 19/scx@0.2: 1.5
+[judge] qwen     19/full@0.4: 1.0
+[judge] deepseek 19/scx@0.3: 1.0
+[judge] qwen     19/scx@0.2: 1.0
+[judge] qwen     18/scx@0.2: 1.0
+[judge] deepseek 19/scx@0.4: 1.0
+[judge] qwen     19/scx@0.3: 1.0
+[judge] qwen     19/scx@0.4: 1.0
+[rejudge] deepseek 10/full max-delta=0.5
+[rejudge] deepseek 10/scx max-delta=0.5
+[rejudge] deepseek 4/full max-delta=0.5
+[rejudge] deepseek 4/scx max-delta=0.5
+
+=== P6n 架构文档 rubric 评测（Qwen2.5-3B-Instruct（千问） 生成本地 / judge=DeepSeek-V4.1-Flash 在线, 20 题, ratios=['0.2', '0.3', '0.4']）===
+轨                structure  accuracy  tradeoff feasibility  clarity   TOTAL    cut
+Traceback (most recent call last):
+  File "/Users/fei/code/scx/tools/bench_arch.py", line 406, in <module>
+    main()
+  File "/Users/fei/code/scx/tools/bench_arch.py", line 328, in main
+    a = agg[j][tr][rt][d]
+        ~~~~~~~~~~^^^^
+KeyError: None

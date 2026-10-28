@@ -1,0 +1,7 @@
+=== trim 1 (ratio 0.5) n=50 ===
+full : acc=0.600 (30/50)  ctx_tok=1332
+scx  : acc=0.540 (27/50)  ctx_tok=953  tok_ratio=0.716
+trunc: acc=0.000 (0/50)  ctx_tok=同 scx
+scx 保持率（full 答对中 scx 仍答对）: 26/30 = 0.867
+压缩率分桶（cut = 1 - scx_tok/full_tok）:
+  10-35%: 41 样本
