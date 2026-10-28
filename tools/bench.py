@@ -99,8 +99,9 @@ def build_prompt(demos, question):
 def scx_compress(scx_bin: str, prompt: str, query: str, extra: tuple = ()) -> str:
     """调用 scx 压缩 prompt。小输入透传 / 失败均 fail-open 返回原文。
 
-    注意：scx 会在 stdout 末尾追加一行 "compressed: ..." 元数据摘要，
-    必须剥离，否则污染压缩结果并虚增 token 数。
+    注意：scx 会在 stdout 末尾追加 "compressed: ..." 摘要行及其后的
+    "✦ SCX 压缩召回 ✦" 装饰块（查询/模式/说明等展示文本），必须从
+    compressed: 行起整体截断，否则装饰块残留会污染压缩结果并虚增 token 数。
 
     extra 为附加 scx 参数（如 --fill-floor 2），可空。
     """
@@ -118,8 +119,14 @@ def scx_compress(scx_bin: str, prompt: str, query: str, extra: tuple = ()) -> st
         if not out.strip():
             return prompt
         lines = out.splitlines()
-        if lines and lines[-1].lstrip().startswith("compressed:"):
-            out = "\n".join(lines[:-1])
+        cut = 0
+        for k, ln in enumerate(lines):
+            if ln.lstrip().startswith("compressed:"):
+                cut = k
+                break
+        else:
+            return prompt
+        out = "\n".join(lines[:cut])
         return out if out.strip() else prompt
     finally:
         os.unlink(path)

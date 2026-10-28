@@ -1,0 +1,119 @@
+[load] Qwen2.5-3B-Instruct（千问） ...
+[INFO] Quantized model with 8.501 bits per weight.
+[load] 8-bit 量化完成（Qwen2.5-3B-Instruct（千问））
+[resume] 从 bench_arch_plans.json 加载 20 题生成结果
+[resume] judge 缓存 181 条
+[judge] deepseek 15/full@0.3: 2.0
+[judge] deepseek 15/full@0.4: 2.0
+[judge] qwen     15/full@0.3: 1.0
+[judge] qwen     15/full@0.2: 1.0
+[judge] deepseek 15/scx@0.2: 1.5
+[judge] qwen     15/full@0.4: 1.0
+[judge] deepseek 15/scx@0.3: 1.5
+[judge] deepseek 15/scx@0.4: 1.5
+[judge] qwen     15/scx@0.2: 1.0
+[judge] deepseek 16/full@0.2: 1.5
+[judge] qwen     15/scx@0.3: 1.0
+[judge] qwen     15/scx@0.4: 1.0
+[judge] deepseek 16/full@0.3: 2.0
+[judge] deepseek 16/full@0.4: 2.0
+[judge] qwen     16/full@0.3: 1.0
+[judge] qwen     16/full@0.2: 1.5
+[judge] qwen     16/full@0.4: 1.0
+[judge] deepseek 16/scx@0.2: 1.0
+[judge] deepseek 16/scx@0.3: 2.0
+[judge] deepseek 16/scx@0.4: 1.0
+[judge] qwen     16/scx@0.2: 1.0
+[judge] qwen     16/scx@0.3: 1.0
+[judge] deepseek 17/full@0.2: 1.0
+[judge] qwen     16/scx@0.4: 1.0
+[judge] qwen     17/full@0.2: 1.0
+[judge] deepseek 17/full@0.3: 1.0
+[judge] deepseek 17/full@0.4: 1.0
+[judge] qwen     17/full@0.3: 1.0
+[judge] deepseek 17/scx@0.2: 1.0
+[judge] qwen     17/scx@0.2: 1.0
+[judge] qwen     17/full@0.4: 1.0
+[judge] deepseek 17/scx@0.3: 1.0
+[judge] deepseek 17/scx@0.4: 1.5
+[judge] qwen     17/scx@0.3: 1.0
+[judge] deepseek 18/full@0.2: 1.5
+[judge] qwen     17/scx@0.4: 1.0
+[judge] deepseek 18/full@0.3: 2.0
+[judge] qwen     18/full@0.3: 1.5
+[judge] qwen     18/full@0.2: 1.0
+[judge] deepseek 18/full@0.4: 2.0
+[judge] deepseek 18/scx@0.2: 1.0
+[judge] deepseek 18/scx@0.3: 1.0
+[judge] qwen     18/full@0.4: 1.5
+[judge] qwen     18/scx@0.2: 1.0
+[judge] deepseek 18/scx@0.4: 1.0
+[judge] deepseek 19/full@0.2: 2.0
+[judge] qwen     18/scx@0.3: 1.0
+[judge] qwen     19/full@0.2: 1.0
+[judge] deepseek 19/full@0.3: 2.0
+[judge] qwen     18/scx@0.4: 0.5
+[judge] deepseek 19/full@0.4: 1.5
+[judge] qwen     19/full@0.3: 1.5
+[judge] qwen     19/full@0.4: 1.0
+[judge] deepseek 19/scx@0.2: 1.0
+[judge] deepseek 19/scx@0.3: 1.0
+[judge] qwen     19/scx@0.2: 1.0
+[judge] qwen     19/scx@0.3: 0.5
+[judge] deepseek 19/scx@0.4: 1.0
+[judge] qwen     19/scx@0.4: 1.0
+[rejudge] deepseek 10/full max-delta=0.5
+[rejudge] deepseek 10/scx max-delta=0.5
+[rejudge] deepseek 4/full max-delta=0.5
+[rejudge] deepseek 4/scx max-delta=0.5
+
+=== P6n 架构文档 rubric 评测（Qwen2.5-3B-Instruct（千问） 生成本地 / judge=DeepSeek-V4.1-Flash 在线, 20 题, ratios=['0.2', '0.3', '0.4']）===
+轨                structure  accuracy  tradeoff feasibility  clarity   TOTAL    cut
+full                  1.65      0.88      0.60       0.68     1.48    1.05     0%
+scx r=0.2             0.97      0.53      0.15       0.42     1.10    0.64    66%
+scx r=0.3             1.15      0.75      0.25       0.53     1.25    0.79    59%
+scx r=0.4             1.23      0.72      0.42       0.55     1.20    0.82    52%
+保持率 scx(r=0.2)/full = 0.64 / 1.05 = 0.602
+保持率 scx(r=0.3)/full = 0.79 / 1.05 = 0.744
+保持率 scx(r=0.4)/full = 0.82 / 1.05 = 0.782
+
+=== P6n 架构文档 rubric 评测（Qwen2.5-3B-Instruct（千问） 生成本地 / judge=Qwen-flash (3.8) 在线, 20 题, ratios=['0.2', '0.3', '0.4']）===
+轨                structure  accuracy  tradeoff feasibility  clarity   TOTAL    cut
+full                  1.40      0.97      0.68       0.80     1.80    1.13     0%
+scx r=0.2             0.80      0.78      0.25       0.35     1.45    0.72    66%
+scx r=0.3             0.85      0.88      0.38       0.55     1.57    0.84    59%
+scx r=0.4             0.93      0.90      0.45       0.50     1.55    0.86    52%
+保持率 scx(r=0.2)/full = 0.72 / 1.13 = 0.642
+保持率 scx(r=0.3)/full = 0.84 / 1.13 = 0.748
+保持率 scx(r=0.4)/full = 0.86 / 1.13 = 0.765
+压缩率（r=0.2）: 65.9%
+
+=== 双 judge 交叉一致性（同答案两模型打分差）===
+--- 档位 0.2 ---
+维度             均值差     最大差      方向一致率
+structure     0.31     1.5        75%
+accuracy      0.28     1.0        62%
+tradeoff      0.19     1.0        70%
+feasibility    0.25     0.5        68%
+clarity       0.44     1.0        71%
+综合            0.29     1.5
+--- 档位 0.3 ---
+维度             均值差     最大差      方向一致率
+structure     0.38     1.0        85%
+accuracy      0.25     1.0        72%
+tradeoff      0.21     1.0        72%
+feasibility    0.25     0.5        66%
+clarity       0.46     1.0        65%
+综合            0.31     1.0
+--- 档位 0.4 ---
+维度             均值差     最大差      方向一致率
+structure     0.35     1.0        65%
+accuracy      0.24     1.0        65%
+tradeoff      0.21     1.0        63%
+feasibility    0.17     0.5        61%
+clarity       0.36     1.0        61%
+综合            0.27     1.0
+
+单 judge 复打一致性（4 次, max 分差）: 均值 0.50 / 最大 0.5
+judge 解析失败题: ['rust_arch', 'perf_opt', 'gpu_tiling', 'kv_cache', 'scheduler', 'allocator', 'code_review', 'log_sys', 'test_strategy', 'kv_batch', 'cache_coherence', 'consensus', 'compiler_ir', 'net_stack', 'gpu_mempool', 'err_arch', 'hashmap', 'build_sys', 'lsm_store', 'observability']
+[csv] bench_arch_v3.csv
