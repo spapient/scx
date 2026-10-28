@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -44,6 +44,10 @@ pub fn usage() -> String {
     );
     s.push_str("  --policy-file PATH   policy text override: ratio/context/window/elide/risk_gate/lineno/\n");
     s.push_str("                       max_tokens/structure; precedence CLI > file > DEFAULT\n");
+    s.push_str("  --pipeline PATH      JSON pipeline config: plan/trim/anchor stage assembly\n");
+    s.push_str(
+        "                       (config/bench/profiles/*.json); precedence CLI > file > DEFAULT\n",
+    );
     s.push_str(
         "  --embed-cmd CMD      pluggable similarity backend: sh -c CMD reads Q\\t<query> then\n",
     );
@@ -71,25 +75,13 @@ pub fn usage() -> String {
     s.push_str(
         "  --trim-ratio F       per-line token keep ratio for --trim (default 0.5; 0.1..=1.0)\n",
     );
-    s.push_str(
-        "  --trim-op-keep 1     keep arithmetic ops (+ = * -) as anchors in --trim\n",
-    );
-    s.push_str(
-        "                       (default 0; GSM8K lossless optimum, enable 1 for code)\n",
-    );
-    s.push_str(
-        "  --code-keep 1        keep ``` fenced code lines whole in --trim\n",
-    );
-    s.push_str(
-        "                       (default 0; fence-aware line keep, prose-only trim)\n",
-    );
-    s.push_str(
-        "  --num-line-keep 1    keep lines containing ASCII digits in --trim\n",
-    );
+    s.push_str("  --trim-op-keep 1     keep arithmetic ops (+ = * -) as anchors in --trim\n");
+    s.push_str("                       (default 0; GSM8K lossless optimum, enable 1 for code)\n");
+    s.push_str("  --code-keep 1        keep ``` fenced code lines whole in --trim\n");
+    s.push_str("                       (default 0; fence-aware line keep, prose-only trim)\n");
+    s.push_str("  --num-line-keep 1    keep lines containing ASCII digits in --trim\n");
     s.push_str("  --sym-line-keep 1   keep fn/type signature lines in --trim\n");
-    s.push_str(
-        "                       (default 0; long-code QA: digit lines carry answers)\n",
-    );
+    s.push_str("                       (default 0; long-code QA: digit lines carry answers)\n");
     s.push_str("  --preserve T         keep lines with builtin entity T (url/ip/email/errno); repeatable\n");
     s.push_str("  --evidence N|substr  declare must-keep evidence: positive int = line no, else substring;\n");
     s.push_str(
@@ -281,6 +273,9 @@ enum Kind {
     Semantic,
     /// 策略文件（`--policy-file <path>`：文本覆盖 DEFAULT，CLI 显式参数优先）。
     PolicyFile,
+    /// 管线配置（`--pipeline <path>`：JSON 声明式装配 plan/trim/anchor 阶段，
+    /// 优先级 CLI > pipeline.json > DEFAULT，语义同 `--policy-file`）。
+    Pipeline,
     /// 显式证据声明（`--evidence`，可重复；正整数=行号，其他=子串）。
     Evidence,
     /// 结构锚点种类（`--structure-anchors`，逗号分隔：json/xml/idoc/yaml/md）。
@@ -415,6 +410,15 @@ static FLAGS: &[Flag] = &[
         kind: Kind::PolicyFile,
         what: "policy.toml",
         err_empty: "requires a policy file path",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--pipeline",
+        once: true,
+        kind: Kind::Pipeline,
+        what: "pipeline.json",
+        err_empty: "requires a pipeline json path",
         err_zero: "",
         min: 0,
     },
@@ -1034,6 +1038,7 @@ fn flag(
         #[cfg(feature = "semantic")]
         Kind::Semantic => weights(s, f, inline, args, i),
         Kind::PolicyFile => policy(s, f, inline, args, i),
+        Kind::Pipeline => pipeline(s, f, inline, args, i),
     }
 }
 
@@ -1296,6 +1301,31 @@ fn policy(
     Ok(())
 }
 
+/// `--pipeline`：读 JSON 管线配置覆盖 `DEFAULT`。优先级：CLI 显式参数 > 文件 > DEFAULT。
+/// 文件按 JSON 解析（plan/trim/anchor 三阶段声明式装配，见 `crate::pipeline`）；
+/// 未知键 / 类型错 / 范围越界均 fail-loud 报错。CLI 已显式给出的字段
+/// （`s.seen` / `s.sourced`）不被文件覆盖；实际写入的键记录来源，防止后续
+/// 类型默认值（如 `--kind` 的缺省 ratio）覆盖文件值。
+fn pipeline(
+    s: &mut ParseState,
+    f: &Flag,
+    inline: Option<String>,
+    args: &[String],
+    i: &mut usize,
+) -> Result<(), String> {
+    once(&mut s.seen, f.name)?;
+    let path = value(args, i, f.name, inline)?;
+    let p = crate::pipeline::Pipeline::load(&path).map_err(|e| format!("{}: {e}", f.name))?;
+    // CLI 显式参数优先：文件只填 DEFAULT 层（CLI 未指定的字段）。
+    let applied = p.apply(&mut s.config, &|flag| {
+        s.seen.contains(flag) || s.sourced.contains(flag)
+    });
+    for flag in applied {
+        s.sourced.insert(flag);
+    }
+    Ok(())
+}
+
 /// 策略键到 CLI flag 的静态映射（表驱动，避免长 match 链）。
 /// README 的策略键白名单必须与本表一致，由 `readme_policy_keys_match_whitelist` 守护。
 const POLICY_TABLE: &[(&str, &str)] = &[
@@ -1329,7 +1359,8 @@ fn lookup(key: &str) -> Option<&'static str> {
 fn apply(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Result<(), String> {
     match key {
         "ratio" | "context" | "window" => number(s, key, v, path, line)?,
-        "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" | "trim" | "trim_op_keep" | "code_keep" | "num_line_keep" | "sym_line_keep" => {
+        "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" | "trim"
+        | "trim_op_keep" | "code_keep" | "num_line_keep" | "sym_line_keep" => {
             toggle(s, key, v, path, line)?
         }
         "max_tokens" => tokens(s, v, path, line)?,

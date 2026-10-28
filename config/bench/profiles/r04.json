@@ -1,0 +1,17 @@
+{
+  "comment": "保守档位（cut ~52%，保持率 ~0.78）：轻度压缩，质量损失最小。",
+  "plan": { "ratio": 0.35 },
+  "trim": {
+    "enable": true,
+    "ratio": 0.4,
+    "op_keep": true,
+    "code_keep": true,
+    "num_line_keep": true,
+    "sym_line_keep": true
+  },
+  "anchor": {
+    "structure": true,
+    "anchors": ["md"],
+    "fill_floor": 0.0
+  }
+}

@@ -298,6 +298,7 @@ query + input
 | `--max-tokens` | 无 | 输出 token 硬上限；证据行及其最小邻域优先，超限报 `overflow:evidence`/`overflow:fill`，绝不静默丢弃证据 |
 | `--structure` | `0` | `1` 时启用结构感知邻域：fence 代码块、`import`/`use`/`#include` 块、堆栈 `at` 链整体并入 |
 | `--policy-file` | 无 | 策略文本覆盖默认值（`ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`）；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--pipeline` | 无 | JSON 管线配置（`config/pipeline.json` 或 `config/bench/profiles/*.json`）；plan/trim/anchor 三阶段声明式装配；未知键/越界 fail-loud；优先级 CLI 显式 > 文件 > DEFAULT |
 
 ### 四条行为保证
 
@@ -340,6 +341,7 @@ scx --query "..." [OPTIONS] [file...]
 | `--max-tokens <N>` | 输出 token 硬上限；证据地板最高优先，超限报 `overflow:evidence`/`overflow:fill` |
 | `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
 | `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`num_line_keep`/`sym_line_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--pipeline <PATH>` | JSON 管线配置（plan/trim/anchor 三阶段声明式）；键白名单 `plan.ratio/window/context/limit`、`trim.enable/ratio/op_keep/code_keep/num_line_keep/sym_line_keep`、`anchor.structure/anchors/fill_floor`；未知键/越界 fail-loud 报错；优先级 CLI 显式 > 文件 > DEFAULT；评测档位模板 `config/bench/profiles/{r02,r03,r04}.json` |
 | `--fill-floor <F>` | 上下文/填充行最低分数门槛（默认 `0` = 现状）；`F>0` 时分数低于门槛的邻域与填充行被裁剪，压缩更深 |
 | `--trim <0\|1>` | 保留行内 token 级重要性裁剪（默认 `0` = 现状）；`1` 时数字/命中词/结构锚保留，停用词与低信息量 token 按 `--trim-ratio` 摘除；**CJK/中文逐字 token 化**——命中 query 的汉字完整保留（如"内存"成词不拆散）、虚词可摘、全角数字保留，中文行不再丢字 |
 | `--trim-ratio <F>` | `--trim 1` 时的低分 token 保留比例（默认 `0.5`；范围 `0.1..=1.0`） |
@@ -463,6 +465,7 @@ fn main() {
 | `src/analysis.rs`, `src/terms.rs` | 归一化、结构分类（含 fence/import/stack 判定）、切词与 token 估算 |
 | `src/policy.rs` | 默认策略数据表（`ScoreTable`/`RiskTable`/`RegionCfg`/硬常量），不落独立硬编码文件 |
 | `src/toml.rs` | TOML 子集解析（`Entry`/`parse`/`float`/`size`），供 `--policy-file` 与记忆库 `meta.toml` 复用 |
+| `src/pipeline.rs` | 压缩管线配置（`--pipeline`）：JSON 声明式装配 plan/trim/anchor，三层优先级 CLI > 文件 > DEFAULT，未知键/越界 fail-loud |
 | `src/ops.rs` | 操作编排层：`Op` 枚举 + `run` + 纯渲染（统计/JSON），`main.rs` 仅薄壳 |
 | `src/regex.rs` | 手写有限正则子集（交替/字符类/量词，Thompson NFA，零第三方 crate） |
 | `src/semantic.rs` | 可选神经重打分（cargo feature=semantic）：手写 SHA-256、权重加载校验、确定性 sigmoid |

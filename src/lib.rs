@@ -21,6 +21,9 @@ use std::fmt;
 mod analysis;
 mod compress;
 pub mod contain;
+/// 压缩管线配置（`--pipeline <path>`）：JSON 声明式装配 plan/trim/anchor，
+/// 三层优先级 CLI > pipeline.json > policy 常量；未知键/越界 fail-loud。
+pub mod pipeline;
 mod policy;
 mod terms;
 /// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。

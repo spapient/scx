@@ -1,0 +1,17 @@
+{
+  "comment": "激进档位（cut ~66%，保持率 ~0.60-0.64）：更深裁剪，接近质量拐点。",
+  "plan": { "ratio": 0.35 },
+  "trim": {
+    "enable": true,
+    "ratio": 0.2,
+    "op_keep": true,
+    "code_keep": true,
+    "num_line_keep": true,
+    "sym_line_keep": true
+  },
+  "anchor": {
+    "structure": true,
+    "anchors": ["md"],
+    "fill_floor": 0.0
+  }
+}

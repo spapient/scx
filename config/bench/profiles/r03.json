@@ -1,0 +1,17 @@
+{
+  "comment": "P6n 甜点位档位（cut ~59%，保持率 ~0.75）：架构文档/代码生成评测定稿 0.3 档配置。",
+  "plan": { "ratio": 0.35 },
+  "trim": {
+    "enable": true,
+    "ratio": 0.3,
+    "op_keep": true,
+    "code_keep": true,
+    "num_line_keep": true,
+    "sym_line_keep": true
+  },
+  "anchor": {
+    "structure": true,
+    "anchors": ["md"],
+    "fill_floor": 0.0
+  }
+}

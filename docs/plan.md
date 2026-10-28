@@ -1287,7 +1287,28 @@ Qwen-flash（百炼最便宜档）对同一批答案独立打分。judge 端点/
   `bench_arch_both_v2.csv`/`run2.log`（10 题 qwen3.8-flash 双 judge v2）。
   P6n v3 关闭。
 
-## P7 架构重构立项（A–E，2026-10-28 方案确认）
+## P7 架构重构（A–E，2026-10-28 方案确认）
+
+### P7-A 压缩管线配置化（完成）
+
+**交付**：新增 `src/pipeline.rs` + `--pipeline <path>`（JSON 声明式装配
+plan/trim/anchor 三阶段）。设计决策：配置文件格式用 JSON（`crate::json`
+零依赖复用，`config/models.json` 同族先例；`src/toml.rs` 实为压缩输出
+行解析器非通用 TOML，故弃 TOML 选型）；三层优先级
+**CLI 显式 > pipeline.json > policy 常量**——照 `--policy-file` 的
+`seen/sourced` 机制（文件只填 DEFAULT 层，CLI 显式参数优先，无位置依赖）；
+未知键/越界/类型错 fail-loud 报错（端到端验证：不存在文件、ratio 越界、
+顶层未知键三类均明确报错）；`apply()` 返回实际写入 flag 列表记入
+`sourced` 防止 `--kind` 类型默认覆盖文件值。
+
+**配置资产**：`config/pipeline.json`（示例=内核默认值）；
+`config/bench/profiles/{r02,r03,r04}.json`（评测三档模板，r03=P6n 甜点位：
+trim 0.3 + op/code/num/sym 行保护 + md 锚）。
+
+**门禁证据**：lib 341 全绿（+6 pipeline 单测：全字段应用/CLI 优先/部分
+配置保持默认/未知键/越界/类型错）；golden 零漂移；clippy pipeline 零告警
+（apply 认知复杂度 27→拆 6 个子函数 <10，用户圈复杂度门禁）；fmt 干净；
+README 双参数表 + 模块表同步。commit 见 P7-A 提交。
 
 **A 压缩管线配置化**：新增 config/pipeline.toml（plan/trim/anchor 三阶段声明式）；
 三层优先级 CLI > pipeline.toml > policy 常量；评测档位沉淀为 config/bench/profiles/*.toml；

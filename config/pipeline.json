@@ -1,0 +1,21 @@
+{
+  "comment": "SCX 压缩管线配置示例。三层优先级：CLI 显式参数 > pipeline.json > policy 常量（与 --policy-file 同语义，文件只填 CLI 未指定的字段）。缺省键保持内核默认。评测档位模板见 config/bench/profiles/（r02/r03/r04.json）。",
+  "plan": {
+    "ratio": 0.35,
+    "window": 2,
+    "context": 1
+  },
+  "trim": {
+    "enable": false,
+    "ratio": 0.5,
+    "op_keep": false,
+    "code_keep": false,
+    "num_line_keep": false,
+    "sym_line_keep": false
+  },
+  "anchor": {
+    "structure": false,
+    "anchors": [],
+    "fill_floor": 0.0
+  }
+}
