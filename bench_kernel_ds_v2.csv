@@ -1,0 +1,21 @@
+lang,task,full,scx,full_tok,scx_tok,compressed
+C,请用 C 语言实现函数 str_rev：原地反转,True,True,738,315,True
+C,请用 C 语言实现函数 arr_sum：计算 i,True,True,732,315,True
+C,请用 C 语言实现函数 count_bits：统,True,True,731,225,True
+C,请用 C 语言实现函数 list_len：计算单,False,False,764,253,True
+C,请用 C 语言实现函数 max3：返回三个 in,True,True,710,208,True
+C,请用 C 语言实现函数 is_prime：判断正,True,False,720,213,True
+C,请用 C 语言实现函数 gcd：计算两个正整数的,False,True,711,207,True
+C,请用 C 语言实现函数 to_upper：将字符,False,True,720,212,True
+Rust,请用 Rust 实现函数 vec_sum：计算切,False,True,787,331,True
+Rust,请用 Rust 实现函数 count_even：,True,True,780,236,True
+Rust,请用 Rust 实现函数 swap_pair：原,True,True,789,238,True
+Rust,请用 Rust 实现结构体 Rect 及方法 a,True,True,799,338,True
+Rust,请用 Rust 实现函数 first_char：,True,True,779,234,True
+Rust,请用 Rust 实现函数 fib：计算第 n 个,False,False,782,235,True
+C++,请用 C++ 实现模板函数 tmax：返回两个同,True,True,834,255,True
+C++,请用 C++ 实现类 Counter：构造时静态,False,False,853,356,True
+C++,请用 C++ 实现函数 vsum：返回 vect,True,True,840,346,True
+C++,请用 C++ 实现函数 sum_squares：,True,True,852,354,True
+C++,请用 C++ 实现函数 slen：返回 std:,False,True,825,249,True
+C++,请用 C++ 实现函数 arev：原地反转 in,True,True,829,248,True

@@ -1,0 +1,39 @@
+[gen 4/40] 4s
+[gen 8/40] 6s
+[gen 12/40] 10s
+[gen 16/40] 14s
+[gen 20/40] 16s
+[gen 24/40] 18s
+[gen 28/40] 22s
+[gen 32/40] 25s
+[gen 36/40] 27s
+[gen 40/40] 30s
+[1/20] C    请用 C 语言实现函数 str_rev：   full=P scx=P cut=57.3% 0.9s
+[2/20] C    请用 C 语言实现函数 arr_sum：   full=P scx=P cut=57.0% 0.7s
+[3/20] C    请用 C 语言实现函数 count_bi   full=P scx=P cut=69.2% 0.7s
+[4/20] C    请用 C 语言实现函数 list_len   full=F scx=F cut=66.9% 0.1s
+[5/20] C    请用 C 语言实现函数 max3：返回三   full=P scx=P cut=70.7% 0.7s
+[6/20] C    请用 C 语言实现函数 is_prime   full=P scx=F cut=70.4% 0.4s
+[7/20] C    请用 C 语言实现函数 gcd：计算两个   full=F scx=P cut=70.9% 0.4s
+[8/20] C    请用 C 语言实现函数 to_upper   full=F scx=P cut=70.6% 0.4s
+[9/20] Rust 请用 Rust 实现函数 vec_sum   full=F scx=P cut=57.9% 0.4s
+[10/20] Rust 请用 Rust 实现函数 count_e   full=P scx=P cut=69.7% 0.6s
+[11/20] Rust 请用 Rust 实现函数 swap_pa   full=P scx=P cut=69.8% 0.6s
+[12/20] Rust 请用 Rust 实现结构体 Rect 及   full=P scx=P cut=57.7% 0.5s
+[13/20] Rust 请用 Rust 实现函数 first_c   full=P scx=P cut=70.0% 0.6s
+[14/20] Rust 请用 Rust 实现函数 fib：计算第   full=F scx=F cut=69.9% 0.1s
+[15/20] C++  请用 C++ 实现模板函数 tmax：返   full=P scx=P cut=69.4% 0.7s
+[16/20] C++  请用 C++ 实现类 Counter：构   full=F scx=F cut=58.3% 0.1s
+[17/20] C++  请用 C++ 实现函数 vsum：返回    full=P scx=P cut=58.8% 1.0s
+[18/20] C++  请用 C++ 实现函数 sum_squa   full=P scx=P cut=58.5% 1.0s
+[19/20] C++  请用 C++ 实现函数 slen：返回    full=F scx=P cut=69.8% 0.6s
+[20/20] C++  请用 C++ 实现函数 arev：原地反   full=P scx=P cut=70.1% 0.8s
+
+=== 算子开发生成评测（DeepSeek-V4.1-Flash (API, conc=4), 20 题, ('--trim', '1', '--trim-ratio', '0.3', '--trim-op-keep', '1', '--num-line-keep', '1', '--sym-line-keep', '1')）===
+full : pass=0.650 (13/20)
+scx  : pass=0.800 (16/20)  tok_ratio=0.345  cut=65.5%
+保持率（full 通过中 scx 仍通过）: 12/13 = 0.923
+  C     full 5/8  scx 6/8
+  Rust  full 4/6  scx 5/6
+  C++   full 4/6  scx 5/6
+[csv] bench_kernel_ds_v2.csv

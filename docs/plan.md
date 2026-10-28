@@ -1181,3 +1181,34 @@ usage/help/Flag 表/POLICY_TABLE/apply/toggle/either 共 6 处、README 白名�
 md 锚点落点：lib.rs AnchorKind::Markdown + compress.rs md_anchor + args.rs
 帮助文本 3 处。门禁：`cargo test --locked --lib` 335 全绿 +
 `cargo test --locked --test golden` 零漂移。P6m 关闭。
+## P6l-fix 评测集勘误 + 在线天花板基线（DeepSeek V4.1-Flash）
+
+**重大勘误：P6l 的"C/C++ 0 = 3B 能力边界"结论错误，根因是评测集测试驱动
+损坏，非模型能力。** 在线基线轨（bench_kernel.py 新增 `--api deepseek`
+OpenAI 兼容后端，deepseek-flash，key 走环境变量，并发 4）首次跑出
+DeepSeek C/C++ 同样 0/8、0/6 而 Rust 4/6——两个天差地别的模型呈现相同
+"C/C++ 全挂、Rust 正常"分布，指向协议系统性错误而非模型。
+
+**根因**：bench_kernel.csv 以真换行存多行字段（P6l 重建），但 main() 保留
+了旧的 `replace("\\n","\n")`——把测试驱动里 `printf("OK\n")` 的字面转义
+`\n` 也破坏成真换行 → C/C++ 字符串跨行 → **全部编译不过**。Rust 测试用
+println!（无 `\n` 转义）不受影响，故 Rust 正常。修复 = 删除 replace（
+已加注释防回归）。
+
+**修复后重验（同协议同题）**：
+| 轨 | 千问 3B 本地（full/scx） | DeepSeek V4.1-Flash 在线 |
+|---|---:|---:|
+| full | 0.750 (15/20) | 0.650 (13/20) |
+| scx | 0.750 (15/20) | 0.800 (16/20) |
+| 保持率 | 13/15 = 0.867 | 12/13 = 0.923 |
+| cut | 63.3% | 65.5% |
+| 分语言 full | C 6/8 Rust 6/6 C++ 3/6 | C 5/8 Rust 4/6 C++ 4/6 |
+
+**在线天花板结论**：① "题太难"证伪——修复后本地千问 C 6/8、Rust 6/6，
+题集难度正常；② C++ 3/6 是千问 3B 真实弱项（在线 V4.1-Flash 也仅 4/6）；
+③ 在线 V4.1-Flash full 0.650 **不高于**本地千问 0.750——flash 轻量版
+代码能力并不强，不值得切换评测主模型；④ scx 压缩 cut 63-65% 下保持率
+0.867/0.923 且净增益（千问 ±2 持平、DS +4-1）——算子生成场景压缩无
+系统性破坏，掉点均为模型采样噪声。⑤ 速度实测：在线并发 4 → 40 次生成
+32s（本地串行 ~15min），快 ~25 倍。本地轨经 ThreadPoolExecutor 分流修复
+（mlx_lm 不支持子线程 GPU stream），在线轨才走并发。

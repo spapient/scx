@@ -142,10 +142,35 @@ def check(gen_code: str, test_code: str, lang: str, workdir: Path) -> bool:
         return False
 
 
+def api_run(prompt: str, max_new: int = 640) -> str:
+    """在线 OpenAI 兼容轨（DeepSeek 官方，deepseek-flash）。key 走环境变量。"""
+    key = os.environ.get("DEEPSEEK_API_KEY", "")
+    if not key:
+        raise SystemExit("DEEPSEEK_API_KEY env missing for --api deepseek")
+    body = {
+        "model": "deepseek-flash",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_new,
+        "temperature": 0.1,
+    }
+    import json
+    import urllib.request
+    req = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=180) as r:
+        data = json.loads(r.read())
+    return data["choices"][0]["message"]["content"]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="bench_kernel.csv")
     ap.add_argument("--model", default="qwen2.5-3b-instruct")
+    ap.add_argument("--api", default="", help="在线轨: deepseek（默认空 = 本地 MLX）")
+    ap.add_argument("--api-conc", type=int, default=4, help="在线轨并发请求数")
     ap.add_argument("--scx-bin", default="target/release/scx")
     ap.add_argument("--quantize", type=int, default=8)
     ap.add_argument("--scx-extra", default="--trim 1 --trim-ratio 0.3 --trim-op-keep 1 --num-line-keep 1",
@@ -157,21 +182,59 @@ def main() -> None:
     scx_extra = tuple(args.scx_extra.split()) if args.scx_extra else ()
     with open(args.data, encoding="utf-8") as fh:
         qa = list(csv.DictReader(fh))
-    # CSV 中 sig/test 以字面 \n 存多行文本：读入后还原为真换行。
-    for item in qa:
-        item["sig"] = item["sig"].replace("\\n", "\n")
-        item["test"] = item["test"].replace("\\n", "\n")
+    # CSV 以真换行存多行文本（P6l 重建）：不得再做 \n 字面还原，
+    # 否则会把 printf("OK\n") 的转义 \n 破坏成真换行（C/C++ 全编译挂根因）。
 
-    registry = load_registry()
-    spec = resolve_model(registry, args.model)
-    print(f"[load] {spec.display()} ...", flush=True)
-    model, tok = load_model_mlx(spec, quantize=args.quantize)
-
-    from mlx_lm import generate as mlx_generate
+    online = args.api == "deepseek"
+    tok = None
+    if online:
+        model_name = f"DeepSeek-V4.1-Flash (API, conc={args.api_conc})"
+    else:
+        registry = load_registry()
+        spec = resolve_model(registry, args.model)
+        model_name = spec.display()
+        print(f"[load] {model_name} ...", flush=True)
+        from mlx_lm import generate as mlx_generate
+        model, tok = load_model_mlx(spec, quantize=args.quantize)
 
     def run(prompt: str, max_new: int = 640) -> str:
+        if online:
+            return api_run(prompt, max_new)
         # 必须走 chat 模板（instruct 模型裸 prompt 会复读任务/续写幻觉）。
         return mlx_generate(model, tok, wrap_chat(tok, prompt), max_tokens=max_new, verbose=False)
+
+    def ntok(s: str) -> int:
+        return len(tok.encode(s)) if tok is not None else len(s) // 3
+
+    # 生成：在线轨并发出请求；本地轨主线程串行（mlx_lm 不支持子线程 GPU stream）。
+    import concurrent.futures as cf
+    gen = {}
+    scx_map = {}
+    if online:
+        jobs = []
+        for i, item in enumerate(qa):
+            prompt = build_prompt(item)
+            jobs.append((i, "full", prompt))
+            scx_out = scx_compress(args.scx_bin, prompt, item["task"], extra=scx_extra)
+            scx_map[i] = scx_out
+            jobs.append((i, "scx", scx_out))
+        t0_all = time.time()
+        with cf.ThreadPoolExecutor(max_workers=args.api_conc) as ex:
+            futs = {ex.submit(run, p): (i, tr) for (i, tr, p) in jobs}
+            done = 0
+            for f in cf.as_completed(futs):
+                i, tr = futs[f]
+                gen[(i, tr)] = f.result()
+                done += 1
+                if done % 4 == 0 or done == len(futs):
+                    print(f"[gen {done}/{len(futs)}] {time.time()-t0_all:.0f}s", flush=True)
+    else:
+        for i, item in enumerate(qa):
+            prompt = build_prompt(item)
+            gen[(i, "full")] = run(prompt)
+            scx_out = scx_compress(args.scx_bin, prompt, item["task"], extra=scx_extra)
+            scx_map[i] = scx_out
+            gen[(i, "scx")] = run(scx_out)
 
     rows = []
     for i, item in enumerate(qa):
@@ -182,11 +245,11 @@ def main() -> None:
         workdir = Path(tempfile.mkdtemp(prefix="kbench_"))
 
         t0 = time.time()
-        full_code = extract_code(run(prompt), lang)
-        scx_out = scx_compress(args.scx_bin, prompt, task, extra=scx_extra)
-        scx_tok = len(tok.encode(scx_out))
-        full_tok = len(tok.encode(prompt))
-        scx_code = extract_code(run(scx_out), lang)
+        full_code = extract_code(gen[(i, "full")], lang)
+        scx_out = scx_map[i]
+        scx_tok = ntok(scx_out)
+        full_tok = ntok(prompt)
+        scx_code = extract_code(gen[(i, "scx")], lang)
         full_ok = check(full_code, test, lang, workdir)
         scx_ok = check(scx_code, test, lang, workdir)
         dt = time.time() - t0
@@ -207,7 +270,7 @@ def main() -> None:
     tok_ratio = sum(r["scx_tok"] for r in rows) / sum(r["full_tok"] for r in rows)
     passed = sum(1 for r in rows if r["full"])
     kept = sum(1 for r in rows if r["full"] and r["scx"])
-    print(f"\n=== 算子开发生成评测（{spec.display()} via MLX, {n} 题, {scx_extra}）===")
+    print(f"\n=== 算子开发生成评测（{model_name}, {n} 题, {scx_extra}）===")
     print(f"full : pass={full_p:.3f} ({full_p*n:.0f}/{n})")
     print(f"scx  : pass={scx_p:.3f} ({scx_p*n:.0f}/{n})  tok_ratio={tok_ratio:.3f}  cut={100*(1-tok_ratio):.1f}%")
     print(f"保持率（full 通过中 scx 仍通过）: {kept}/{passed} = {kept/max(passed,1):.3f}")
