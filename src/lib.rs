@@ -287,6 +287,9 @@ pub struct Config {
     /// 1 时保留行内部按重要性摘除低信息量 token；`trim_ratio` 控制保留比例。
     pub trim: bool,
     pub trim_ratio: f64,
+    /// 算术符号（`+ = * -`）作为结构锚保留（`--trim-op-keep`，默认 0）。
+    /// 代码/算式场景需要；GSM8K 数学场景默认关保持 P6d 无损最优。
+    pub trim_op_keep: bool,
     /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
     /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
     /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
@@ -327,6 +330,7 @@ impl Default for Config {
             fill_floor: crate::policy::DEFAULT_FILL_FLOOR,
             trim: crate::policy::DEFAULT_TRIM,
             trim_ratio: crate::policy::DEFAULT_TRIM_RATIO,
+            trim_op_keep: crate::policy::DEFAULT_TRIM_OP_KEEP,
         }
     }
 }

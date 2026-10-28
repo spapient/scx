@@ -19,6 +19,10 @@ pub const DEFAULT_TRIM: bool = false;
 pub const DEFAULT_TRIM_RATIO: f64 = 0.5;
 pub const MIN_TRIM_RATIO: f64 = 0.1;
 pub const MAX_TRIM_RATIO: f64 = 1.0;
+/// 算术符号强制保留开关（`--trim-op-keep`，默认 0 = 现状逐字节一致）。
+/// 打开时 `+ = * -` 作为结构锚保留——代码/算式语义核心（P6f）；
+/// 默认关：GSM8K 数学场景实测无益（P6d，0.5 档压缩率 27.5% 最优）。
+pub const DEFAULT_TRIM_OP_KEEP: bool = false;
 pub const MAX_CONTEXT: i64 = 4;
 pub const MIN_WINDOW: i64 = 1;
 pub const MAX_WINDOW: i64 = 8;

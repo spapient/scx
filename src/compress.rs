@@ -1129,6 +1129,7 @@ fn render(
     lineno: bool,
     trim: bool,
     trim_ratio: f64,
+    trim_op_keep: bool,
     query_terms: &[String],
 ) -> (String, Vec<usize>) {
     let mut out_text = String::new();
@@ -1144,7 +1145,7 @@ fn render(
                 prefix(&mut out_text, i + 1);
             }
             let text = if trim {
-                crate::trim::trim_line(lines[i], query_terms, trim_ratio)
+                crate::trim::trim_line(lines[i], query_terms, trim_ratio, trim_op_keep)
             } else {
                 lines[i].to_string()
             };
@@ -1488,6 +1489,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         cfg.lineno,
         cfg.trim,
         cfg.trim_ratio,
+        cfg.trim_op_keep,
         &uniq_terms,
     );
     let (chars_b, cut) = cut(&out_text, chars_a);

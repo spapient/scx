@@ -15,7 +15,7 @@ use std::collections::HashSet;
 /// 用法行保持显式 format，选项说明按功能分组追加。
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--trim-op-keep 0|1] [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -70,6 +70,12 @@ pub fn usage() -> String {
     );
     s.push_str(
         "  --trim-ratio F       per-line token keep ratio for --trim (default 0.5; 0.1..=1.0)\n",
+    );
+    s.push_str(
+        "  --trim-op-keep 1     keep arithmetic ops (+ = * -) as anchors in --trim\n",
+    );
+    s.push_str(
+        "                       (default 0; GSM8K lossless optimum, enable 1 for code)\n",
     );
     s.push_str("  --preserve T         keep lines with builtin entity T (url/ip/email/errno); repeatable\n");
     s.push_str("  --evidence N|substr  declare must-keep evidence: positive int = line no, else substring;\n");
@@ -467,6 +473,15 @@ static FLAGS: &[Flag] = &[
         once: true,
         kind: Kind::F64,
         what: "a number",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--trim-op-keep",
+        once: true,
+        kind: Kind::Bool01,
+        what: "",
         err_empty: "",
         err_zero: "",
         min: 0,
@@ -1257,6 +1272,7 @@ const POLICY_TABLE: &[(&str, &str)] = &[
     ("fill_floor", "--fill-floor"),
     ("trim", "--trim"),
     ("trim_ratio", "--trim-ratio"),
+    ("trim_op_keep", "--trim-op-keep"),
 ];
 
 fn lookup(key: &str) -> Option<&'static str> {
@@ -1270,7 +1286,7 @@ fn lookup(key: &str) -> Option<&'static str> {
 fn apply(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Result<(), String> {
     match key {
         "ratio" | "context" | "window" => number(s, key, v, path, line)?,
-        "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" | "trim" => {
+        "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" | "trim" | "trim_op_keep" => {
             toggle(s, key, v, path, line)?
         }
         "max_tokens" => tokens(s, v, path, line)?,
@@ -1346,6 +1362,7 @@ fn toggle(s: &mut ParseState, key: &str, v: &str, path: &str, line: usize) -> Re
         "lineno" => s.config.lineno = b,
         "structure" => s.config.structure = b,
         "trim" => s.config.trim = b,
+        "trim_op_keep" => s.config.trim_op_keep = b,
         _ => unreachable!("bool policy key whitelist"),
     }
     Ok(())
@@ -1444,6 +1461,7 @@ fn either(
         "--lineno" => s.config.lineno = b,
         "--structure" => s.config.structure = b,
         "--trim" => s.config.trim = b,
+        "--trim-op-keep" => s.config.trim_op_keep = b,
         _ => s.store = b,
     }
     Ok(())

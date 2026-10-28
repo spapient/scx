@@ -45,7 +45,7 @@ pub(crate) struct Tokens {
 /// ASCII 连续段成 token（与 `terms::ascii` 同字符集）；**CJK/全角单字各成
 /// 一个 token**（`terms::full` 判定），使中文裁剪能保留命中字、摘除虚词，
 /// 而不再把整段中文当非 token 丢弃（此前 `--trim` 对中文行只留 ASCII）。
-pub(crate) fn tokens(line: &str, query_terms: &[String]) -> Tokens {
+pub(crate) fn tokens(line: &str, query_terms: &[String], op_keep: bool) -> Tokens {
     let lower = line.to_lowercase();
     let mut t = Tokens {
         start: Vec::new(),
@@ -62,9 +62,9 @@ pub(crate) fn tokens(line: &str, query_terms: &[String]) -> Tokens {
     let mut cur = 0usize;
     while cur < n {
         if bytes[cur].is_ascii() {
-            cur = scan_ascii(line, &lower, query_terms, cur, &mut t);
+            cur = scan_ascii(line, &lower, query_terms, cur, op_keep, &mut t);
         } else {
-            cur = scan_cjk(line, query_terms, cur, &mut t);
+            cur = scan_cjk(line, query_terms, cur, op_keep, &mut t);
         }
     }
     t
@@ -77,16 +77,17 @@ fn scan_ascii(
     lower: &str,
     query_terms: &[String],
     cur: usize,
+    op_keep: bool,
     t: &mut Tokens,
 ) -> usize {
     let bytes = line.as_bytes();
     let n = bytes.len();
-    if !token_char(bytes[cur]) {
+    if !token_char(bytes[cur], op_keep) {
         return cur + 1;
     }
     let s = cur;
     let mut c = cur;
-    while c < n && bytes[c].is_ascii() && token_char(bytes[c]) {
+    while c < n && bytes[c].is_ascii() && token_char(bytes[c], op_keep) {
         c += 1;
     }
     if c <= s {
@@ -97,7 +98,7 @@ fn scan_ascii(
     t.start.push(s);
     t.end.push(c);
     t.numeric.push(tok.bytes().any(|b| b.is_ascii_digit()));
-    t.anchor.push(is_anchor(tok));
+    t.anchor.push(is_anchor(tok, op_keep));
     t.hit
         .push(query_terms.iter().any(|q| q.as_str() == tok_lower));
     t.stop.push(crate::terms::STOP.contains(&tok_lower));
@@ -111,7 +112,7 @@ fn scan_ascii(
 /// 非 ASCII 分支：解码单个 UTF-8 char。CJK/全角字符（表意/假名/谚文/全角
 /// 标点数字）作为单字 token；其余（emoji 等）整体跳过，不切坏字节。
 /// 返回下一个扫描位置。
-fn scan_cjk(line: &str, query_terms: &[String], cur: usize, t: &mut Tokens) -> usize {
+fn scan_cjk(line: &str, query_terms: &[String], cur: usize, op_keep: bool, t: &mut Tokens) -> usize {
     match line[cur..].chars().next() {
         Some(ch) if crate::terms::full(ch) => {
             let w = ch.len_utf8();
@@ -121,7 +122,7 @@ fn scan_cjk(line: &str, query_terms: &[String], cur: usize, t: &mut Tokens) -> u
             t.start.push(s);
             t.end.push(c);
             t.numeric.push(ch.is_numeric());
-            t.anchor.push(is_anchor(tok));
+            t.anchor.push(is_anchor(tok, op_keep));
             // CJK 无大小写：单字命中任一 query term 的包含关系（"内存"
             // 在词表 → "内"/"存" 均命中）。
             t.hit.push(query_terms.iter().any(|q| q.contains(ch)));
@@ -138,18 +139,25 @@ fn scan_cjk(line: &str, query_terms: &[String], cur: usize, t: &mut Tokens) -> u
     }
 }
 
-fn token_char(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b"_./:\\@-<>|[]{}".contains(&b) || b == b'%' || b == b'$'
+fn token_char(b: u8, op_keep: bool) -> bool {
+    b.is_ascii_alphanumeric()
+        || b"_./:\\@-<>|[]{}".contains(&b)
+        || b == b'%'
+        || b == b'$'
+        || (op_keep && (b == b'+' || b == b'=' || b == b'*'))
 }
 
-/// 结构锚：单字节括号/尖括号/管道/大括号（JSON/XML/chat 骨架），
+/// 结构锚：单字节括号/尖括号/管道/大括号（JSON/XML/chat 骨架）、
 /// 以及 chat 模板标记词 `im_start`/`im_end`（`<|im_start|>` 拆出的内部词）。
 /// `<|im_start|>` 会被拆成 `<` `|` `im_start` `|` `>`，各成分均强制保留。
-fn is_anchor(tok: &str) -> bool {
+/// `op_keep` 打开时算术符号（`+` `=` `*` `-`）也强制保留——代码/算式
+/// 语义核心，删了 `n ** 3` 变 `n 3`。默认关：GSM8K 数学场景无益（P6d
+/// 实测），代码场景由 `--trim-op-keep 1` 打开（P6f）。
+fn is_anchor(tok: &str, op_keep: bool) -> bool {
     matches!(
         tok,
         "<" | ">" | "[" | "]" | "{" | "}" | "|" | "im_start" | "im_end"
-    )
+    ) || (op_keep && matches!(tok, "+" | "=" | "*" | "-"))
 }
 
 /// 裁剪一行：返回裁剪后的文本。`trim_ratio` ∈ (0,1]：**低分 token** 的保留比例。
@@ -162,8 +170,8 @@ fn is_anchor(tok: &str) -> bool {
 /// - 组装按原文相邻性拼接：两 token 在原文中相邻（无分隔字符）则直接
 ///   相连，否则单空格分隔——CJK 逐字 token 因此保持成词（"内存" 不会
 ///   变成 "内 存"），ASCII token 间仍保留单空格。
-pub(crate) fn trim_line(line: &str, query_terms: &[String], trim_ratio: f64) -> String {
-    let t = tokens(line, query_terms);
+pub(crate) fn trim_line(line: &str, query_terms: &[String], trim_ratio: f64, op_keep: bool) -> String {
+    let t = tokens(line, query_terms, op_keep);
     let total = t.start.len();
     if total <= 1 {
         return line.trim().to_string();
@@ -236,7 +244,7 @@ mod tests {
     fn keeps_numerics_and_structure() {
         let terms: Vec<String> = vec!["janet".into(), "ducks".into()];
         let line = "Q: Janet's ducks lay 16 eggs per day.";
-        let out = trim_line(line, &terms, 0.5);
+        let out = trim_line(line, &terms, 0.5, false);
         assert!(out.contains("16"), "数字必须保留: {out}");
         assert!(
             out.to_lowercase().contains("janet"),
@@ -249,7 +257,7 @@ mod tests {
     fn trims_stopwords() {
         let terms: Vec<String> = vec![];
         let line = "the quick brown fox jumps over the lazy dog";
-        let out = trim_line(line, &terms, 0.5);
+        let out = trim_line(line, &terms, 0.5, false);
         assert!(!out.contains(" the "), "停用词应被摘除: {out}");
         assert!(
             out.starts_with("the ") || out.starts_with("quick"),
@@ -261,7 +269,7 @@ mod tests {
     fn preserves_first_last() {
         let terms: Vec<String> = vec![];
         let line = "aaaa bbbb cccc dddd eeee ffff";
-        let out = trim_line(line, &terms, 0.2);
+        let out = trim_line(line, &terms, 0.2, false);
         assert!(out.starts_with("aaaa"), "行首 token 必须保留: {out}");
         assert!(out.ends_with("ffff"), "行尾 token 必须保留: {out}");
     }
@@ -269,22 +277,22 @@ mod tests {
     #[test]
     fn empty_or_single_token_passthrough() {
         let terms: Vec<String> = vec![];
-        assert_eq!(trim_line("", &terms, 0.5), "");
-        assert_eq!(trim_line("alpha", &terms, 0.5), "alpha");
+        assert_eq!(trim_line("", &terms, 0.5, false), "");
+        assert_eq!(trim_line("alpha", &terms, 0.5, false), "alpha");
     }
 
     #[test]
     fn budget_full_preserves_line() {
         let terms: Vec<String> = vec![];
         let line = "alpha beta gamma";
-        assert_eq!(trim_line(line, &terms, 1.0), line);
+        assert_eq!(trim_line(line, &terms, 1.0, false), line);
     }
 
     #[test]
     fn chat_anchor_survives_aggressive_trim() {
         let terms: Vec<String> = vec![];
         let line = "<|im_start|> user hello world <|im_end|>";
-        let out = trim_line(line, &terms, 0.3);
+        let out = trim_line(line, &terms, 0.3, false);
         assert!(out.contains("<|im_start|>"), "chat 锚必须保留: {out}");
         assert!(out.contains("<|im_end|>"), "chat 锚必须保留: {out}");
     }
@@ -293,7 +301,7 @@ mod tests {
     fn cjk_keeps_hits_and_numbers_without_space() {
         let terms: Vec<String> = vec!["内存".into()];
         let line = "节点0 内存占用 512MB 缓存命中 耗时 0.3秒";
-        let out = trim_line(line, &terms, 0.5);
+        let out = trim_line(line, &terms, 0.5, false);
         assert!(out.contains("内存"), "命中 CJK 词必须保留成词: {out}");
         assert!(!out.contains("内 存"), "CJK 字间不得插空格: {out}");
         assert!(out.contains('0'), "数字必须保留: {out}");
@@ -310,7 +318,7 @@ mod tests {
     fn cjk_drops_stopword_chars() {
         let terms: Vec<String> = vec![];
         let line = "这个问题非常重要";
-        let out = trim_line(line, &terms, 0.3);
+        let out = trim_line(line, &terms, 0.3, false);
         // 行首尾强制保留；中间的虚词/普通字按预算摘除，长度必须下降。
         assert!(
             out.chars().count() < line.chars().count(),
@@ -323,7 +331,7 @@ mod tests {
         let terms: Vec<String> = vec![];
         // not 在 STOP 里（0 分最易摘），但 KEEP 强制保留——语义反转不可接受。
         let line = "8 is not divisible by 5, but 10 is";
-        let out = trim_line(line, &terms, 0.2);
+        let out = trim_line(line, &terms, 0.2, false);
         assert!(out.to_lowercase().contains("not"), "否定词必须保留: {out}");
         assert!(out.to_lowercase().contains("but"), "转折词必须保留: {out}");
         assert!(out.contains("8"), "数字必须保留: {out}");
@@ -334,7 +342,7 @@ mod tests {
     fn cjk_negation_kept() {
         let terms: Vec<String> = vec![];
         let line = "这个数不能被 5 整除，但可以被 10 整除";
-        let out = trim_line(line, &terms, 0.2);
+        let out = trim_line(line, &terms, 0.2, false);
         assert!(out.contains('不'), "中文否定字必须保留: {out}");
         assert!(out.contains('但'), "中文转折字必须保留: {out}");
         assert!(out.contains('5'), "数字必须保留: {out}");
@@ -346,16 +354,28 @@ mod tests {
         // "30% of the trees die"：% 必须随数字保留，否则 30% 变成 30 棵（语义反转）。
         // "$2 per ticket"：$ 随数字保留，价格语义不丢。
         let line = "30% of the trees die, each costs $2";
-        let out = trim_line(line, &terms, 0.2);
+        let out = trim_line(line, &terms, 0.2, false);
         assert!(out.contains("30%"), "百分比必须保留: {out}");
         assert!(out.contains("$2"), "货币符号必须随数字保留: {out}");
+    }
+
+    #[test]
+    fn keeps_code_operators() {
+        let terms: Vec<String> = vec![];
+        // 代码场景：运算符删了会破坏语义（n ** 3 变 n 3）。
+        let line = "print(n ** 3)  x -= 30  t = s * 2";
+        let out = trim_line(line, &terms, 0.2, true);
+        assert!(out.contains("**"), "幂运算符必须保留: {out}");
+        assert!(out.contains("="), "赋值号必须保留: {out}");
+        assert!(out.contains("*"), "乘号必须保留: {out}");
+        assert!(out.contains("-"), "减号必须保留: {out}");
     }
 
     #[test]
     fn cjk_numeric_fullwidth_is_kept() {
         let terms: Vec<String> = vec![];
         let line = "总共 １２３ 个苹果";
-        let out = trim_line(line, &terms, 0.2);
+        let out = trim_line(line, &terms, 0.2, false);
         assert!(out.contains('１'), "全角数字必须保留: {out}");
         assert!(out.contains('２'), "全角数字必须保留: {out}");
     }
