@@ -1349,6 +1349,28 @@ remaining/last`、tests（`use crate::compress::{plan,score,render}::*` 接入�
 **门禁证据**：lib 341 全绿（默认）；350 全绿（`--features semantic`）；
 golden 2 passed 零漂移；clippy 全 targets 零告警（含既有 4 处高复杂度/
 多参数告警清零）；fmt 干净；README 模块表 +5 行（compress 子模块）。
+
+### P7-B 大文件拆分（args 完成）
+
+**交付**：`src/args.rs`（2384 行 → 1172 行）拆出 `src/args/parse.rs`（1173
+行，全部解析处理器：usage/value/boolean/once 分派、free/path/output/house/
+evaluate/repeat/flag/raw/numeric/none/word/float/signed/count/unsigned/
+weights/policy/pipeline、policy 文件应用链 apply/number/error/ratio/context/
+window/toggle/tokens/fill_floor/trim_ratio_key、preserve/force/evidence/
+anchors/redact/content_kind/pair、终局校验 idle/exempt/query/judge/
+annotation/conflict/missing/actions/gates/store/fix/file/bytes/clash/recall/
+check/stat/finish/all/one/split/option）。父模块保留：`Kind`/`Flag`/
+`FLAGS` 参数声明表（拆分坑：`static` 关键字不在顶层项扫描集，FLAGS 表
+560 行曾被误丢，已从 git 恢复）、`ParseState`/`impl`、`pub parse` 入口、
+tests、`Opts`/`home`。`usage`/`preserve_into` 经 `pub use`/`pub(crate) use`
+re-export 保持外部路径不变（main.rs `args::usage`、wrap.rs
+`args::preserve_into`）；`#[cfg(feature="semantic")]` 属性行在 weights()
+切分时丢失已补回；FLAGS 与 handler 全部 `pub(crate)` 供跨模块引用。
+
+**门禁证据**：lib 341 全绿；350 全绿（`--features semantic`）；golden 2
+passed 零漂移（CLI 解析行为逐字节不变）；clippy 全 targets 零告警（test
+辅助 argv/sample_lines/naive_dedup 的 clippy 误报以 `#[allow]` 豁免并注明）；
+fmt 干净；README 模块表 +2 行（args/parse）。commit 见 P7-B 提交 2。
 commit 见 P7-B 提交。
 
 **B 大文件拆分**：compress.rs(2470) → compress/{mod,plan,trim,render}；

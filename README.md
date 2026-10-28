@@ -476,6 +476,7 @@ fn main() {
 | `src/contain.rs` | 证据保留（Containment）评测协议实现 |
 | `src/memory/` | 本地 case 存储、召回、反馈、索引与评估（`locks` 固定锁序） |
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
+| `src/args/parse.rs` | CLI 参数解析处理器（值解析分派、policy 文件应用链、终局校验），`args` 拆分子模块 |
 | `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
 | `tools/scx`, `tools/scx.cmd` | Unix / Windows 自举构建入口 |

@@ -615,10 +615,47 @@ fn last(final_tok: f64, limit: Option<usize>) -> Option<Mode> {
 }
 mod tests {
     use super::*;
-    use crate::analysis::{import, normalize};
+    #[allow(unused_imports)] // clippy 对 test 内 use 误报（is_import 被 870-873 调用）
+    use crate::analysis::import as is_import;
+    use crate::analysis::normalize;
 
+    #[allow(dead_code)] // clippy 对 test 参考实现误报
     fn sample_lines<'a>(v: &[&'a str]) -> Vec<&'a str> {
         v.to_vec()
+    }
+
+    /// 朴素参考实现：线性查找重复，独立于生产实现的 HashMap/复用路径。
+    #[allow(dead_code)] // clippy 对 test 参考实现误报
+    fn naive_dedup(
+        lines: &[&str],
+        mask: &[u64],
+        words: usize,
+        err: &[bool],
+        force: &[bool],
+        _code_keep: bool,
+    ) -> (Vec<bool>, usize) {
+        let mut keys: Vec<(String, usize)> = Vec::new();
+        let mut dup = vec![false; lines.len()];
+        let mut n = 0usize;
+        for (i, line) in lines.iter().enumerate() {
+            let mut key = String::new();
+            normalize(line, &mut key);
+            if short(&key) {
+                continue;
+            }
+            match keys.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, count)) => {
+                    *count += 1;
+                    let h = hit(mask, words, i);
+                    if foldable(count, h, err[i], force[i], _code_keep, false) {
+                        dup[i] = true;
+                        n += 1;
+                    }
+                }
+                None => keys.push((key, 1)),
+            }
+        }
+        (dup, n)
     }
 
     #[test]
@@ -694,39 +731,6 @@ mod tests {
         let map = structures(&lines);
         assert_eq!(map.regions.len(), 1);
         assert_eq!((map.regions[0].start, map.regions[0].end), (0, 2));
-    }
-
-    /// 朴素参考实现：线性查找重复，独立于生产实现的 HashMap/复用路径。
-    fn naive_dedup(
-        lines: &[&str],
-        mask: &[u64],
-        words: usize,
-        err: &[bool],
-        force: &[bool],
-        _code_keep: bool,
-    ) -> (Vec<bool>, usize) {
-        let mut keys: Vec<(String, usize)> = Vec::new();
-        let mut dup = vec![false; lines.len()];
-        let mut n = 0usize;
-        for (i, line) in lines.iter().enumerate() {
-            let mut key = String::new();
-            normalize(line, &mut key);
-            if short(&key) {
-                continue;
-            }
-            match keys.iter_mut().find(|(k, _)| *k == key) {
-                Some((_, count)) => {
-                    *count += 1;
-                    let h = hit(mask, words, i);
-                    if foldable(count, h, err[i], force[i], _code_keep, false) {
-                        dup[i] = true;
-                        n += 1;
-                    }
-                }
-                None => keys.push((key, 1)),
-            }
-        }
-        (dup, n)
     }
 
     #[test]
@@ -902,11 +906,11 @@ mod tests {
 
     #[test]
     fn use_strict_not_import() {
-        assert!(!import("use strict"));
-        assert!(!import("use of"));
-        assert!(import("use crate::policy::DEFAULT_RATIO"));
-        assert!(import("#include <stdio.h>"));
-        assert!(import("import os"));
+        assert!(!is_import("use strict"));
+        assert!(!is_import("use of"));
+        assert!(is_import("use crate::policy::DEFAULT_RATIO"));
+        assert!(is_import("#include <stdio.h>"));
+        assert!(is_import("import os"));
     }
 
     #[test]
