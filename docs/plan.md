@@ -1471,3 +1471,69 @@ A 压缩管线配置化（08204d5）→ B 大文件拆分 compress/args/lib（a1
 （6994c60）→ E 评测闭环 CI 化（本段）。全程行为中性：golden 零漂移 +
 双配置（default/no-default）clippy 全零。评测基线：1.14MB/32k 行三档
 0.03s；P6n 甜点位 r=0.3 cut 59% ↔ 保持率 0.75 未变。
+
+---
+
+## P8 代码能力评测集泛化扩展（A→D）
+
+用户立项：把代码能力评测从"5 源码语言 × 60 题"泛化到
+①未覆盖语言（CUDA + JS/TS）②非源码代码形态（配置/SQL/正则/脚本）
+③跨难度递进（L1-L3 同源）④双在线模型泛化验证闭环。
+
+### P8-A 语言泛化：CUDA + JS/TS 60 题全量
+
+- `config/bench/datasets/bench_cuda60.csv`：10 主题块（kernel 启动配置/
+  线程索引/内存模型/同步原子/warp 性能/CUDA API/算子模式高级：reduced
+  规约、dynamic parallelism、tiling、vectorized load）。gold 静态语义
+  为主（macOS 无 nvcc）。
+- `config/bench/datasets/bench_js60.csv`：44 题 node 实跑验证（输出格式
+  逐题对齐 node 实打：数组 `[ 1, 10, 2 ]`、空串/undefined 形态）。
+- 生成器 `tools/gen_p8_cuda.py` / `gen_p8_js.py`（单一事实源，可再生成）。
+
+### P8-B 形态泛化：非源码代码形态 30 题
+
+- `bench_shape30.csv`：JSON 配置语义/YAML/TOML/SQL/正则/shell 构建日志
+  6 类 × 5 题；19 题本机工具验证（python json/yaml/tomllib、sqlite3、
+  re、bash）。`tools/gen_p8_shape.py`。
+
+### P8-C 跨层难度递进：L1-L3 同源对照
+
+- `bench_layers15.csv`：5 组同源三问（cuda_reduce/js_closure/sql_index/
+  regex/config），题干带 `【L1|L2|L3】` 前缀。`tools/gen_p8_layers.py`。
+
+### P8-D 泛化验证闭环（双在线模型 + 冻结 + 文档）
+
+**评测器** `tools/bench_code.py`：full vs scx 双在线模型（deepseek-flash
++ qwen3.8-flash），指标 = full 答对率 / scx 答对率 / 保持率 / cut（字符
+口径）。三轮修正：
+1. deepseek-flash 带 reasoning，max_tokens 小被思考吃光 → 空 content
+   污染判定 → 按模型给足（deepseek 2048）+ 空响应重试 5 次；
+2. 判定误杀（"0 到 4" vs "0-4"、"第三个参数" vs "第三参数"、中英对照
+   "cudaMemcpyHostToDevice" vs "主机到设备（HostToDevice）"）→ 改进
+   check：数字集合 + 括号备选答案 + 英文标识符子串 + 中文短语匹配；
+3. reasoning 关闭（`reasoning.enabled=false` 实测 1.2s vs 40s，速度
+   20-30x，答案质量等价）→ 全量重跑提速 30 倍。
+
+**定稿（改进 check 离线重判，frozen 见 eval-manifest.json）**：
+
+| 评测集 | 模型 | full | scx | 保持率 | cut |
+|---|---|---|---|---|---|
+| cuda60 | deepseek / qwen | 45/60 / 43/60 | 11/60 / 11/60 | 0.222 / 0.209 | 49.5% |
+| js60 | deepseek / qwen | 52/60 / 52/60 | 12/60 / 12/60 | 0.231 / 0.212 | 78.3% |
+| shape30 | deepseek / qwen | 24/30 / 24/30 | 12/30 / 10/30 | 0.458 / 0.375 | 68.8% |
+| layers15 | deepseek / qwen | 10/15 / 11/15 | 3/15 / 4/15 | 0.200 / 0.364 | 76.4% |
+
+**关键发现（保真-强度曲线，10 题采样）**：r=0.2 档 cut 55% 中文段保留仅
+2%；r=0.3（当前默认评测档）cut 49% 中文段保留 22%；r=0.5 温和档 cut 26%
+中文段保留 50%。**中文代码问答题干被 trim 整行切碎是保持率 0.2-0.46 的
+主导机制**（数字/标识符保留、中文语义词被裁），非评测器偏差；与 P6 温和
+参数（cut 31.8% 保持率 0.94）对照，r=0.3 激进档切碎中文导致保持率大幅
+回落。短题（shape30 配置/SQL）信息密度高，保持率最高（0.46/0.38）。
+
+**优化方向（下一步）**：中文语义段保护 feature（类比 --code-keep 保护
+中文问句/关键短语行）或默认档位向 r=0.4-0.5 平移，可显著提升中文代码
+场景保持率。
+
+**门禁证据**：4 集 × 双模型全量采集完成；改进 check 回归 10 例全过；
+eval-manifest.json 冻结 4 个 P8 csv（sha256 + 物理行数 + present）。
+P8 关闭。

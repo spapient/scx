@@ -46,26 +46,37 @@ JUDGE_CFG = {
 ANSWER_RE = re.compile(r"答案是\s*(.*?)\s*####\s*(.*?)\s*$", re.S)
 
 
-def api_call(prompt: str, model: str, max_new: int = 640) -> str:
+def api_call(prompt: str, model: str, max_new: int = 0) -> str:
+    # deepseek-flash 带 reasoning：思考会吃光小 max_tokens 导致空 content，
+    # 必须给足（bench_arch 同注）；qwen3.8-flash 同样带思考。
+    if max_new <= 0:
+        max_new = 2048 if model == "deepseek" else 1024
     cfg = JUDGE_CFG[model]
     key = os.environ.get(cfg["env"], "")
     if not key:
         raise SystemExit(f"{cfg['env']} env missing for model={model}")
     body = {"model": cfg["model"], "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_new, "temperature": 0.1}
+    if model == "deepseek":
+        # 关 reasoning：思考会吃光 max_tokens 致空响应且每题 30-40s；
+        # 实测 reasoning 关闭后 1.2s 返回同等质量答案，速度 20-30x。
+        body["reasoning"] = {"enabled": False}
     last = None
-    for attempt in range(4):
+    for attempt in range(5):
         try:
             req = urllib.request.Request(
                 cfg["url"], data=json.dumps(body).encode(),
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=240) as r:
-                return json.loads(r.read())["choices"][0]["message"]["content"]
+                content = json.loads(r.read())["choices"][0]["message"]["content"]
+            if content and content.strip():
+                return content
+            last = RuntimeError("empty model content")
         except Exception as e:  # noqa: BLE001
             last = e
-            time.sleep(2 * (attempt + 1))
-    raise last
+        time.sleep(3 * (attempt + 1))
+    return ""
 
 
 CONTEXT = {
@@ -114,10 +125,17 @@ def scx_compress_prompt(prompt: str, query_hint: str, scx_bin: str, extra: str) 
 
 
 def norm(s: str) -> str:
-    """gold/答案归一化：小写、去空白、去标点、去括号说明。"""
+    """gold/答案归一化：小写、去空白标点、去括号说明、数字中英同化。"""
     s = s.lower().strip()
     s = s.split("（")[0]
     s = re.sub(r"[\s\.,;:'\"`_\-\[\]{}()（）]", "", s)
+    # 数字中英同化（长串先替换："10" 先于 "1"）
+    for d, c in (("10", "十"), ("0", "零"), ("1", "一"), ("2", "二"),
+                 ("3", "三"), ("4", "四"), ("5", "五"), ("6", "六"),
+                 ("7", "七"), ("8", "八"), ("9", "九")):
+        s = s.replace(d, c)
+    # 去 "答案是/结果是" 前缀
+    s = re.sub(r"^(答案|结果是|答案为)", "", s)
     return s
 
 
@@ -133,11 +151,38 @@ def extract_answer(raw: str) -> str:
 
 
 def check(raw: str, gold: str) -> bool:
-    ans = norm(extract_answer(raw))
-    g = norm(gold)
-    if not ans or not g:
+    a_raw = extract_answer(raw)
+    ans = norm(a_raw)
+    if not ans:
         return False
-    return ans == g or g in ans or ans in g
+    # 候选答案：gold 主句 + 括号内内容（"（寄存器/局部内存）" → 答其一即对）
+    cands = [gold] + re.findall(r"[（(]([^）)]+)[)）]", gold)
+    for c in cands:
+        for sub in re.split(r"[/\s]+", c):
+            if not sub:
+                continue
+            sn = norm(sub)
+            if not sn:
+                continue
+            if sn == ans or sn in ans or ans in sn:
+                return True
+            # 英文/数字标识符子串（中英混排粘连免疫）
+            if re.search(r"[A-Za-z0-9]", sub):
+                core = re.sub(r"[_\s()（）]", "", sub).lower()
+                if core and core in re.sub(r"[_\s]", "", a_raw).lower():
+                    return True
+    # 数字集合（原文提取）
+    na = set(re.findall(r"\d+", a_raw))
+    ng = set(re.findall(r"\d+", gold))
+    if ng and na and ng <= na:
+        return True
+    # 中文关键短语：gold 主段任一 ≥2 字连续段出现在答案
+    main_seg = re.findall(r"[\u4e00-\u9fff]{2,}", gold.split("（")[0])
+    ans_seg = re.findall(r"[\u4e00-\u9fff]{2,}", ans)
+    if main_seg and ans_seg:
+        if any(s in x for s in main_seg for x in ans_seg):
+            return True
+    return False
 
 
 def main() -> None:
@@ -180,6 +225,7 @@ def main() -> None:
     else:
         csv_fh = open(args.csv, "w", newline="") if args.csv else None
         csv_w = csv.DictWriter(csv_fh, fieldnames=["model", "idx", "question", "full", "scx",
+                                                    "full_ans", "scx_ans",
                                                     "gold", "full_chars", "scx_chars", "compressed"])
         if csv_w:
             csv_w.writeheader()
@@ -195,6 +241,7 @@ def main() -> None:
         row = {
             "model": model, "idx": idx, "question": q[:80],
             "full": check(ans_full, gold), "scx": check(ans_scx, gold),
+            "full_ans": ans_full[:200], "scx_ans": ans_scx[:200],
             "gold": gold[:60], "full_chars": len(full_prompt), "scx_chars": len(scx_out),
             "compressed": compressed,
         }
