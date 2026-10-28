@@ -1,0 +1,167 @@
+question,answer
+"以下 JSON 配置中，service.port 的值是多少？
+```json
+{""service"": {""name"": ""api"", ""port"": 8080}, ""log"": {""level"": ""info""}}
+```",8080
+"以下 JSON 序列化输出中，键的顺序是什么？
+```python
+import json
+print(json.dumps({""b"": 1, ""a"": 2}))
+```","{""b"": 1, ""a"": 2}（按插入序）"
+"以下 JSON 中，deps 数组的长度是多少？
+```json
+{""name"": ""svc"", ""deps"": [""db"", ""cache"", ""queue""]}
+```",3
+"以下 JSON 解析代码输出什么？
+```python
+import json
+print(json.loads('{""a"": [1, 2, 3]}')['a'][1])
+```",2
+以下 JSON 配置中，与 {} 等价的 Python 值是什么？,空 dict（False 布尔值）
+"以下 JSON 中，price 字段的类型是什么？
+```json
+{""item"": ""x"", ""price"": 9.99}
+```",float（浮点数）
+"以下 YAML 配置中，replicas 的值是多少？
+```yaml
+app:
+  name: web
+  replicas: 3
+```",3
+"以下 YAML 中，env 是一个什么类型的值？
+```yaml
+env:
+  - name: DEBUG
+    value: ""1""
+```",list（列表）
+"以下 TOML 配置中，[database] 段的 port 是多少？
+```toml
+[database]
+host = ""localhost""
+port = 5432
+```",5432
+"以下 TOML 中，tags 的值类型是什么？
+```toml
+tags = [""dev"", ""test""]
+```",list（字符串数组）
+以下 YAML 中，key: value 后跟注释行，解析后注释影响结果吗？,不影响（注释被忽略）
+以下 TOML 中，[tool.test] 段的作用是什么？,声明 tool.test 子表（命名空间配置）
+"给定表 students(name, score)，查询分数 > 80 的人数：
+```sql
+SELECT COUNT(*) FROM students WHERE score > 80;
+```（students 含 5 行：90, 70, 85, 60, 88）",3
+"给定表 orders(id, amount)，以下查询的结果是什么？
+```sql
+SELECT SUM(amount) FROM orders;
+```（amount: 10, 20, 30）",60
+以下 SQL 中，GROUP BY 的作用是什么？,按列分组聚合（配合聚合函数）
+"给定表 emp(name, dept)，查询每个部门的人数：
+```sql
+SELECT dept, COUNT(*) FROM emp GROUP BY dept;
+```（emp: (a,IT),(b,HR),(c,IT)）",IT 2 行，HR 1 行
+以下 SQL 中，JOIN 的作用是什么？,按关联键合并两张表的行
+"给定表 t(v)，以下查询返回多少行？
+```sql
+SELECT DISTINCT v FROM t;
+```（v: 1, 1, 2, 3, 3）",3
+"以下正则对 'a1b2' 的匹配结果是什么？
+```python
+import re
+re.findall(r'\d', 'a1b2')
+```","['1', '2']"
+"以下正则对 'cat 和 dog' 的匹配结果是什么？
+```python
+import re
+re.search(r'[a-z]+', 'cat 和 dog').group()
+```",cat
+"以下正则匹配整个字符串吗？
+```python
+import re
+re.fullmatch(r'\d{3}', '123')
+```",匹配（fullmatch 需整串）
+"以下正则的捕获组数量是多少？
+```python
+re.compile(r'(\d+)-(\d+)')
+```",2
+"以下替换结果是什么？
+```python
+import re
+re.sub(r'\s+', '_', 'a b  c')
+```",a_b_c
+以下正则中，^ 在字符类外的作用是什么？,锚定字符串开头
+"以下 shell 脚本输出什么？
+```bash
+for x in 1 2 3; do echo -n ""$x""; done
+```",123
+以下 shell 中，$(date) 的作用是什么？,命令替换（执行并插入输出）
+"以下 Makefile 中，make clean 会执行什么？
+```makefile
+clean:
+	rm -f *.o
+```",删除所有 .o 文件
+"以下日志行中，时间戳的格式是什么？
+```text
+2026-10-28T10:30:00Z [INFO] svc started
+```",ISO 8601（UTC）
+"以下 grep 命令匹配的行数是多少？
+```bash
+echo -e 'a\nb\na' | grep -c 'a'
+```",2
+"以下 awk 命令的输出是什么？
+```bash
+echo '1 2 3' | awk '{print $2}'
+```",2
+"以下 JSON 中 tags 数组里第 2 个元素是什么？
+```json
+{""tags"": [""a"", ""b"", ""c""]}
+```",b
+"以下 JSON 解析结果中 d 的值是多少？
+```python
+import json
+print(json.loads('{""a"": {""b"": {""c"": 42}}}')['a']['b']['c'])
+```",42
+JSON 中 true 对应的 Python 类型是什么？,bool（布尔值）
+"以下 YAML 中 items 列表的长度是多少？
+```yaml
+items:
+  - x
+  - y
+  - z
+```",3
+"以下 YAML 中 server.timeout 的值是多少？
+```yaml
+server:
+  host: 0.0.0.0
+  timeout: 30
+```",30
+"以下 TOML 中 [build] 段的 opt_level 是多少？
+```toml
+[package]
+name = ""x""
+[build]
+opt_level = 3
+```",3
+"TOML 中数组 [1, 2, 3] 的写法对应的 Python 值是什么？","[1, 2, 3]（list）"
+"给定表 t(id, v)：(1,'a'),(2,'b'),(3,'a')，以下查询返回几行？
+```sql
+SELECT COUNT(*) FROM t WHERE v = 'a';
+```",2
+"表 t(a,b) 中执行 SELECT DISTINCT b FROM t，去重依据是什么？",b 列的取值（去重）
+"给定表 t(v)：(3),(1),(2)，SELECT MAX(v) 返回什么？",3
+"以下正则匹配 'abc123' 提取出的数字是什么？
+```python
+import re
+print(re.findall(r'\d+', 'abc123')[0])
+```",123
+"re.search(r'^ab', 'abab') 与 re.search(r'ab$', 'abab') 各返回什么位置？",0 和 2（^ 锚开头、$ 锚结尾）
+正则字符类 [0-9] 匹配的字符集合是什么？,单个数字字符（0-9）
+"以下 shell 命令输出什么？
+```bash
+echo ${#word}
+```（word=hello）",5
+bash 中 $(date +%s) 命令替换返回的是什么类型值？,Unix 时间戳（秒数）
+shell 变量 ${x:-default} 与 ${x:=default} 的区别是什么？,:- 仅取值不赋值；:= 取值并赋值
+日志行 '2026-01-01 08:00:00 ERROR svc timeout 5000ms' 中，级别和数值分别是什么？,ERROR 和 5000ms
+日志字段 [req_id=a1b2] 属于什么类型的信息？,请求追踪标识（trace id）
+典型错误日志级别从低到高的顺序是什么？,DEBUG < INFO < WARN < ERROR
+"JSON 日志中 ""level"":""warn"" 表示什么？",警告级别（WARN）
