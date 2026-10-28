@@ -240,12 +240,17 @@ fn masks(
 }
 
 /// 去重：归一化后第 3 次起的重复行折叠（除非含查询命中、错误行或 force 命中）。
+/// 去重：归一化后第 3 次起的重复行折叠（除非含查询命中、错误行或 force 命中）。
+/// `code_keep` 时：围栏内代码行永不折叠（语义核心）；围栏外的重复行
+/// （few-shot 格式模板，如 "以下代码输出什么？"）即使命中 query 也折叠——
+/// 命中豁免保留的是证据，格式模板不是证据（P6g 代码场景深压）。
 fn dedup(
     lines: &[&str],
     mask: &[u64],
     words: usize,
     err: &[bool],
     force: &[bool],
+    code_keep: bool,
 ) -> (Vec<bool>, usize) {
     let total = lines.len();
     let mut seen: hash::Hash<String, usize> =
@@ -256,6 +261,19 @@ fn dedup(
     // 与上一行原文相同（日志里连续重复很常见）时，key 里的归一化结果仍然有效，
     // 省掉一次 normalize。字符串相等先比长度再比字节，差异行通常是廉价判断。
     let mut prev: Option<&str> = None;
+    // 围栏感知（code_keep 时）：围栏区间内代码行禁折叠。
+    let mut fence = vec![false; total];
+    if code_keep {
+        let mut in_fence = false;
+        for i in 0..total {
+            if lines[i].trim_start().starts_with("```") {
+                in_fence = !in_fence;
+                fence[i] = true;
+            } else if in_fence {
+                fence[i] = true;
+            }
+        }
+    }
     for i in 0..total {
         if prev != Some(lines[i]) {
             key.clear();
@@ -267,7 +285,7 @@ fn dedup(
         }
         if let Some(n) = seen.get_mut(key.as_str()) {
             *n += 1;
-            if foldable(n, mask, words, i, err, force) {
+            if foldable(n, mask, words, i, err, force, code_keep, &fence) {
                 dup[i] = true;
                 folds += 1;
             }
@@ -294,8 +312,17 @@ fn hit(mask: &[u64], words: usize, i: usize) -> bool {
 }
 
 /// 第 3 次起的重复行是否可折叠（无查询命中、无错误、无 force）。
-fn foldable(n: &usize, mask: &[u64], words: usize, i: usize, err: &[bool], force: &[bool]) -> bool {
-    *n > 2 && !hit(mask, words, i) && !err[i] && !force[i]
+fn foldable(
+    n: &usize,
+    mask: &[u64],
+    words: usize,
+    i: usize,
+    err: &[bool],
+    force: &[bool],
+    code_keep: bool,
+    fence: &[bool],
+) -> bool {
+    *n > 2 && (!hit(mask, words, i) || code_keep) && !err[i] && !force[i] && !fence[i]
 }
 
 /// 词频（df）与 IDF 权重：只统计非折叠行。
@@ -927,6 +954,44 @@ fn mark_structure_anchors(
     mark_anchors(&anchor_mask, keep, kept, reason);
 }
 
+/// `--code-keep 1` 的 ``` 围栏感知：以 ``` 开头的行为围栏标记，
+/// 围栏区间内的代码行整行强制保留——防行级 gap 折叠（elide 整行删代码）、
+/// 防行内 trim 摘短变量/运算符（`print(a // b)` 变 `print // b`）。
+/// 围栏行本身也保留（保 ```python 结构标记），并全部标记 raw
+/// （render 对 raw 行跳过 trim，逐字节原样输出）。
+/// 非围栏行（题目描述、答案推理）不受影响，照常走 keep/trim。
+#[allow(clippy::needless_range_loop)]
+fn mark_code_fence(
+    lines: &[&str],
+    keep: &mut [bool],
+    kept: &mut usize,
+    reason: &mut [u8],
+    raw: &mut [bool],
+) {
+    let mut in_fence = false;
+    for i in 0..lines.len() {
+        let t = lines[i].trim();
+        if t.starts_with("```") {
+            in_fence = !in_fence;
+            if !keep[i] {
+                keep[i] = true;
+                *kept += 1;
+                reason[i] = R_ANCHOR;
+            }
+            raw[i] = true;
+            continue;
+        }
+        if in_fence {
+            if !keep[i] {
+                keep[i] = true;
+                *kept += 1;
+                reason[i] = R_ANCHOR;
+            }
+            raw[i] = true;
+        }
+    }
+}
+
 /// 预算填充候选资格：非折叠、未保留，且有真实得分或位于结构区间
 /// （`--structure 1` 让「整段并入」名副其实）；种子区域门控（首两行身份行豁免）。
 fn eligible(sel: &Select, cfg: &Fill, keep: &[bool], i: usize) -> bool {
@@ -1130,6 +1195,7 @@ fn render(
     trim: bool,
     trim_ratio: f64,
     trim_op_keep: bool,
+    raw: &[bool],
     query_terms: &[String],
 ) -> (String, Vec<usize>) {
     let mut out_text = String::new();
@@ -1144,7 +1210,7 @@ fn render(
             if lineno {
                 prefix(&mut out_text, i + 1);
             }
-            let text = if trim {
+            let text = if trim && !raw[i] {
                 crate::trim::trim_line(lines[i], query_terms, trim_ratio, trim_op_keep)
             } else {
                 lines[i].to_string()
@@ -1336,7 +1402,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         do_tok,
         cfg.strict,
     );
-    let (dup, folds) = dedup(&lines, &masks.mask, masks.words, &masks.errs, &masks.pinned);
+    let (dup, folds) = dedup(
+        &lines,
+        &masks.mask,
+        masks.words,
+        &masks.errs,
+        &masks.pinned,
+        cfg.code_keep,
+    );
     let stat = weights(&masks.mask, masks.words, &dup, uniq_terms.len(), folds);
     let seeds = marks(
         &masks.mask,
@@ -1400,6 +1473,24 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 结构锚点（P6 骨架保护）：结构边界行无条件保留，优先级低于证据（seed/context）、
     // 高于可选填充。默认空 kinds 时为空操作，与现状逐字节一致。
     mark_structure_anchors(cfg, &lines, &mut keep, &mut kept, &mut reason);
+
+    // --code-keep 1（P6g）：``` 围栏感知行保护。围栏内代码行整行强制保留
+    // 并标记 raw（render 跳过行内 trim），防短变量/运算符被摘、防 gap elide
+    // 整行删代码。默认 0 时为空操作，与现状逐字节一致。
+    let mut raw = vec![false; total];
+    if cfg.code_keep {
+        // 先踢掉折叠的 prose 行（重复格式模板）：window 邻域保底会把 dup 行
+        // 拉回 keep，这里强制剔除——模板行不是证据（P6g 代码场景深压）。
+        // 代码行永不 dup（dedup 围栏禁折叠），不受影响。
+        for i in 0..total {
+            if dup[i] {
+                keep[i] = false;
+                reason[i] = 0;
+            }
+        }
+        kept = (0..total).filter(|&i| keep[i]).count();
+        mark_code_fence(&lines, &mut keep, &mut kept, &mut reason, &mut raw);
+    }
 
     // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
@@ -1490,6 +1581,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         cfg.trim,
         cfg.trim_ratio,
         cfg.trim_op_keep,
+        &raw,
         &uniq_terms,
     );
     let (chars_b, cut) = cut(&out_text, chars_a);
@@ -1856,6 +1948,7 @@ mod tests {
         words: usize,
         err: &[bool],
         force: &[bool],
+        _code_keep: bool,
     ) -> (Vec<bool>, usize) {
         let mut keys: Vec<(String, usize)> = Vec::new();
         let mut dup = vec![false; lines.len()];
@@ -1869,7 +1962,7 @@ mod tests {
             match keys.iter_mut().find(|(k, _)| *k == key) {
                 Some((_, count)) => {
                     *count += 1;
-                    if foldable(count, mask, words, i, err, force) {
+                    if foldable(count, mask, words, i, err, force, _code_keep, &vec![false; lines.len()]) {
                         dup[i] = true;
                         n += 1;
                     }
@@ -1919,8 +2012,8 @@ mod tests {
             }
             let err: Vec<bool> = (0..lines.len()).map(|_| next() % 11 == 0).collect();
             let force: Vec<bool> = (0..lines.len()).map(|_| next() % 13 == 0).collect();
-            let got = dedup(&lines, &mask, 2, &err, &force);
-            let want = naive_dedup(&lines, &mask, 2, &err, &force);
+            let got = dedup(&lines, &mask, 2, &err, &force, false);
+            let want = naive_dedup(&lines, &mask, 2, &err, &force, false);
             assert_eq!(got, want, "dedup mismatch on {:?}", raw);
         }
     }
@@ -1958,10 +2051,47 @@ mod tests {
         let mask = vec![0u64; lines.len()];
         let err = vec![false; lines.len()];
         let force = vec![false; lines.len()];
-        let (dup, n) = dedup(&lines, &mask, 0, &err, &force);
+        let (dup, n) = dedup(&lines, &mask, 0, &err, &force, false);
         assert!(!dup[0] && !dup[1] && !dup[2] && !dup[3], "短/填充行不折叠");
         assert!(dup[6] && dup[7], "长行第 3、4 次出现应折叠");
         assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn code_keep_folds_hit_templates_but_never_code() {
+        // code_keep=1：重复格式模板（命中 query）折叠；围栏内代码行永不折叠。
+        let lines: Vec<&str> = vec![
+            "Q: 以下代码输出什么？请用答案是X格式作答。",
+            "```python",
+            "x = 5",
+            "```",
+            "Q: 以下代码输出什么？请用答案是X格式作答。",
+            "```python",
+            "x = 5",
+            "```",
+            "Q: 以下代码输出什么？请用答案是X格式作答。",
+            "```python",
+            "x = 5",
+            "```",
+        ];
+        // mask 置满 → 所有行都命中 query（hit 豁免），验证 code_keep 覆盖命中。
+        let words = 2usize;
+        let mask = vec![u64::MAX; lines.len() * words];
+        let err = vec![false; lines.len()];
+        let force = vec![false; lines.len()];
+        // 关：命中行不折叠（现状行为）。
+        let (dup0, n0) = dedup(&lines, &mask, words, &err, &force, false);
+        assert_eq!(n0, 0, "命中豁免：默认不折叠任何行");
+        assert!(dup0.iter().all(|&d| !d));
+        // 开：Q 模板第 3 次起折叠，围栏行与代码行永不折叠。
+        let (dup1, n1) = dedup(&lines, &mask, words, &err, &force, true);
+        assert_eq!(n1, 1, "第 3 个 Q 模板行折叠");
+        assert!(dup1[8], "第 3 个 Q 模板行折叠");
+        assert!(!dup1[4], "第 2 个 Q 模板行保留（前两次不折叠）");
+        assert!(
+            !dup1[1] && !dup1[2] && !dup1[6] && !dup1[10],
+            "围栏行与代码行永不折叠"
+        );
     }
 
     #[test]
@@ -2174,6 +2304,30 @@ mod tests {
             ],
         );
         assert_eq!(all, vec![true, true, true, false]);
+    }
+
+    #[test]
+    fn code_fence_keeps_and_marks_raw_only_inside() {
+        let lines = [
+            "Q: 以下代码输出什么？",
+            "```python",
+            "x = 5",
+            "print(a // b)",
+            "```",
+            "A: 答案是 8",
+        ];
+        let mut keep = vec![false, false, false, false, false, false];
+        let mut kept = 0usize;
+        let mut reason = vec![0u8; 6];
+        let mut raw = vec![false; 6];
+        mark_code_fence(&lines, &mut keep, &mut kept, &mut reason, &mut raw);
+        // 围栏行 + 围栏内代码行全部保留且 raw；说明行不受影响。
+        assert_eq!(keep, vec![false, true, true, true, true, false]);
+        assert_eq!(raw, vec![false, true, true, true, true, false]);
+        assert_eq!(kept, 4);
+        // 已保留行不重复计数（kept 只统计新保留）。
+        mark_code_fence(&lines, &mut keep, &mut kept, &mut reason, &mut raw);
+        assert_eq!(kept, 4);
     }
 
     #[test]

@@ -1,0 +1,12 @@
+=== CODE n=20 code-keep=1 trim-ratio=0.4 ===
+full : acc=0.950 (19/20)  ctx_tok=759
+scx  : acc=0.950 (19/20)  ctx_tok=729  tok_ratio=0.961
+scx 保持率（full 答对中 scx 仍答对）: 19/19 = 1.000
+=== CODE n=20 code-keep=1 trim-ratio=0.3 ===
+full : acc=0.950 (19/20)  ctx_tok=759
+scx  : acc=0.950 (19/20)  ctx_tok=712  tok_ratio=0.939
+scx 保持率（full 答对中 scx 仍答对）: 19/19 = 1.000
+=== CODE n=20 code-keep=1 trim-ratio=0.2 ===
+full : acc=0.950 (19/20)  ctx_tok=759
+scx  : acc=0.950 (19/20)  ctx_tok=697  tok_ratio=0.918
+scx 保持率（full 答对中 scx 仍答对）: 18/19 = 0.947

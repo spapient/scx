@@ -290,6 +290,10 @@ pub struct Config {
     /// 算术符号（`+ = * -`）作为结构锚保留（`--trim-op-keep`，默认 0）。
     /// 代码/算式场景需要；GSM8K 数学场景默认关保持 P6d 无损最优。
     pub trim_op_keep: bool,
+    /// 代码围栏行保护（`--code-keep`，默认 0）。``` 围栏内代码行整行
+    /// 强制保留并跳过行内 trim（防短变量/运算符被摘、防 gap elide），
+    /// 压缩率转移到说明行；GSM8K 文本场景默认关零影响。
+    pub code_keep: bool,
     /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
     /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
     /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
@@ -331,6 +335,7 @@ impl Default for Config {
             trim: crate::policy::DEFAULT_TRIM,
             trim_ratio: crate::policy::DEFAULT_TRIM_RATIO,
             trim_op_keep: crate::policy::DEFAULT_TRIM_OP_KEEP,
+            code_keep: crate::policy::DEFAULT_CODE_KEEP,
         }
     }
 }

@@ -339,7 +339,7 @@ scx --query "..." [OPTIONS] [file...]
 | `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计；含 `dropped` 区间明细（`--max-tokens`/预算裁剪）与 `max_tokens`/`tok_est` 字段 |
 | `--max-tokens <N>` | 输出 token 硬上限；证据地板最高优先，超限报 `overflow:evidence`/`overflow:fill` |
 | `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
-| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
 | `--fill-floor <F>` | 上下文/填充行最低分数门槛（默认 `0` = 现状）；`F>0` 时分数低于门槛的邻域与填充行被裁剪，压缩更深 |
 | `--trim <0\|1>` | 保留行内 token 级重要性裁剪（默认 `0` = 现状）；`1` 时数字/命中词/结构锚保留，停用词与低信息量 token 按 `--trim-ratio` 摘除；**CJK/中文逐字 token 化**——命中 query 的汉字完整保留（如"内存"成词不拆散）、虚词可摘、全角数字保留，中文行不再丢字 |
 | `--trim-ratio <F>` | `--trim 1` 时的低分 token 保留比例（默认 `0.5`；范围 `0.1..=1.0`） |

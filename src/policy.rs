@@ -23,6 +23,10 @@ pub const MAX_TRIM_RATIO: f64 = 1.0;
 /// 打开时 `+ = * -` 作为结构锚保留——代码/算式语义核心（P6f）；
 /// 默认关：GSM8K 数学场景实测无益（P6d，0.5 档压缩率 27.5% 最优）。
 pub const DEFAULT_TRIM_OP_KEEP: bool = false;
+/// 代码围栏行保护开关（`--code-keep`，默认 0 = 现状逐字节一致）。
+/// 打开时 ``` 围栏区间内代码行整行强制保留（防 elide/防 trim 摘短变量），
+/// 压缩率全部转移到说明行——代码场景 P6g 深度优化。
+pub const DEFAULT_CODE_KEEP: bool = false;
 pub const MAX_CONTEXT: i64 = 4;
 pub const MIN_WINDOW: i64 = 1;
 pub const MAX_WINDOW: i64 = 8;
