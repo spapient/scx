@@ -9,8 +9,10 @@ repository = "https://github.com/spapient/scx"
 homepage = "https://github.com/spapient/scx"
 keywords = ["logs", "compression", "context", "rag", "offline"]
 categories = ["command-line-utilities", "development-tools", "text-processing"]
-# 发布包白名单：排除 config/bench（评测语料/结果/缓存 ≈47MB 跟踪文件，
-# 超 crates.io 10MiB 上限）；消费者仅需 src/文档/示例/轻量 config。
+# 发布包白名单：仅含已跟踪文件（gitignore 风格，! 排除）。排除 config/bench
+# 评测语料/结果（≈47MB，超 crates.io 10MiB 上限）与未跟踪/被 gitignore 的
+# 本地产物（ci-* 统计、ci-mem 记忆库、__pycache__、本地草稿）——cargo 会把
+# 「被 include 匹配但未提交」的文件视为脏并拒绝发布，必须逐项排除。
 include = [
     "Cargo.toml",
     "README.md",
@@ -18,14 +20,19 @@ include = [
     "SKILL.md",
     "src/**",
     "docs/**",
+    "!docs/comparison-v051.md",
     "tools/**",
+    "!tools/__pycache__/**",
     "examples/**",
     "tests/**",
-    "config/*.json",
-    "config/*.csv",
-    "config/*.txt",
-    "config/ci-mem/**",
-    "config/semantic/**",
+    "config/**",
+    "!config/bench/**",
+    "!config/ci-*",
+    "!config/*-mem/**",
+    "!config/*-mem-*/**",
+    "!config/tmp-*/**",
+    "!config/*-ablate/**",
+    "!config/*-replay/**",
 ]
 
 [dependencies]
