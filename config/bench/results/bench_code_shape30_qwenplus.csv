@@ -1,0 +1,719 @@
+model,idx,question,full,scx,full_ans,scx_ans,gold,full_chars,scx_chars,compressed
+deepseek,2,"以下 JSON 中，deps 数组的长度是多少？
+```json
+{""name"": ""svc"", ""deps"": [""db"", ""cache"", ""queue""",True,False,"deps 数组是 `[""db"", ""cache"", ""queue""]`，包含 3 个元素。
+答案是 3 #### 3","严格来说，你给出的内容不是合法的 JSON：
+
+```json
+{ name svc deps [ db ]}
+```
+
+它缺少：
+
+- 键的双引号：`name`、`deps`
+- 键与值之间的冒号：`name: svc`、`deps: [...]`
+- 字符串值的双引号：`svc`、`db`
+- 键值对之间的逗号
+
+因此标准 JSON 解析器会报错，**无法合法解析出 `deps` 数组的长度*",3,1178,95,True
+deepseek,0,"以下 JSON 配置中，service.port 的值是多少？
+```json
+{""service"": {""name"": ""api"", ""port"": 8080",True,True,"JSON 中 `service` 对象里的 `port` 字段值为数字 `8080`。
+
+答案是 8080 #### 8080","严格按 JSON 解析：这段配置**不是合法 JSON**，所以 `service.port` 不能被 JSON 解析器正确读取。
+
+原因是它缺少：
+- 冒号 `:`：例如 `""service"": { ... }`
+- 逗号 `,`：字段之间需要分隔
+- 字符串引号：例如 `""name"": ""api""`
+
+如果按“伪 JSON/配置代码”的意图宽松阅读，`service.port` 的值是：
+
+`",8080,1204,125,True
+deepseek,6,"以下 YAML 配置中，replicas 的值是多少？
+```yaml
+app:
+  name: web
+  replicas: 3
+```",True,True,"YAML 中 `app.replicas` 字段的值被显式设置为 `3`。
+
+答案是 3 #### 3",`replicas` 的值是 **3**。,3,1162,86,True
+deepseek,5,"以下 JSON 中，price 字段的类型是什么？
+```json
+{""item"": ""x"", ""price"": 9.99}
+```",False,True,"JSON 中 `9.99` 未加引号，属于数值字面量；含小数点，因此是 JSON Number（浮点数）。
+
+答案是 Number #### Number","严格来说，这段不是合法 JSON：
+
+```json
+{ item : price 9.99}
+```
+
+原因：
+
+- JSON 中字段名必须用双引号包裹，例如 `""item""`。
+- 值 `price 9.99` 不是合法的 JSON 值，既不是字符串、数字，也不是对象/数组等。
+
+所以无法合法解析出名为 `price` 的字段。
+
+如果修正为：
+
+```json
+{""price"": 9.99}",float（浮点数）,1158,93,True
+deepseek,4,以下 JSON 配置中，与 {} 等价的 Python 值是什么？,False,False,"JSON 的 `{}` 是空对象，对应于 Python 的 `dict` 类型；在 Python 中空字典写作 `{}`，而空集合必须用 `set()`。
+
+答案是 {} #### {}","JSON 中的 `{}` 表示空对象，在 Python 中对应的值是空字典。
+
+答案：`{}`（空字典）",空 dict（False 布尔值）,1125,96,True
+deepseek,7,"以下 YAML 中，env 是一个什么类型的值？
+```yaml
+env:
+  - name: DEBUG
+    value: ""1""
+```",True,True,"YAML 中以 `- ` 开头的缩进块表示序列/列表，因此 `env` 的值是一个列表，列表中包含一个由 `name`、`value` 字段组成的映射。
+
+答案是 列表 #### 列表","YAML 中 `env:` 下方以 `-` 开头的块表示序列，因此 `env` 是列表/数组，元素是包含 `name` 和 `value` 的映射。  
+答案是 列表（数组/序列） #### 列表（数组/序列）",list（列表）,1164,1164,False
+deepseek,8,"以下 TOML 配置中，[database] 段的 port 是多少？
+```toml
+[database]
+host = ""localhost""
+port =",True,True,"TOML 中 `[database]` 段的 `port` 字段直接为 `5432`。  
+答案是 5432 #### 5432","严格来说，**仅凭当前片段无法 100% 确定** `port` 属于 `[database]` 段，因为省略号里可能还有别的表头。
+
+但按常见 TOML 结构，如果 `port = 5432` 位于 `[database]` 表头之后，且之后没有新的表头，那么：
+
+```toml
+[database]
+...
+port = 5432
+...
+```
+
+`[database]` 段的 `port`",5432,1181,94,True
+deepseek,9,"以下 TOML 中，tags 的值类型是什么？
+```toml
+tags = [""dev"", ""test""]
+```",True,True,"推理：TOML 中方括号 `[...]` 表示数组，元素 `""dev""` 和 `""test""` 都是字符串，因此 `tags` 的值类型是数组。
+
+答案是 数组 #### 数组","TOML 中 `[...]` 表示数组，且元素 `""dev""`、`""test""` 都是双引号字符串，因此 tags 的值类型是字符串数组。
+
+答案是 字符串数组（array of strings） #### 字符串数组（array of strings）",list（字符串数组）,1150,1150,False
+deepseek,10,以下 YAML 中，key: value 后跟注释行，解析后注释影响结果吗？,True,False,"YAML 注释以 `#` 开头到行尾，解析器会忽略注释内容；`key: value` 后的注释不参与值或结构解析，因此不影响结果。
+
+答案是 不影响 #### 不影响","YAML 解析器会将 `#` 及之后内容视为注释并忽略，单独注释行不产生节点或值，因此不会改变前面的键值对。
+
+答案：不会影响，解析结果仍为 `key: value`。",不影响（注释被忽略）,1130,101,True
+deepseek,13,"给定表 orders(id, amount)，以下查询的结果是什么？
+```sql
+SELECT SUM(amount) FROM orders;
+```（am",True,True,"SUM 对 amount 列所有行求和：10 + 20 + 30 = 60。  
+答案是 60 #### 60","该 SQL 语句**有语法错误，无法执行**。
+
+原句：
+
+```sql
+SELECT SUM amount orders
+```
+
+主要错误：
+
+1. `SUM` 是聚合函数，必须写成 `SUM(amount)`，不能写成 `SUM amount`。
+2. 缺少 `FROM` 子句，未指定查询来源表。
+
+正确写法应为：
+
+```sql
+SELECT SUM(amount) AS total_am",60,1189,119,True
+deepseek,12,"给定表 students(name, score)，查询分数 > 80 的人数：
+```sql
+SELECT COUNT(*) FROM students WH",True,False,"分数 > 80 的有：90、85、88，共 3 行。
+
+答案是 3 #### 3","这条 SQL 有语法错误，修正后应为：
+
+```sql
+SELECT COUNT(*) AS cnt
+FROM students
+WHERE score > 80;
+```
+
+**错误分析：**
+
+| 原写法 | 问题 | 修正 |
+|---|---|---|
+| `COUNT *` | 标准 SQL 中必须写 `COUNT(*)` | `COUNT(*)` |
+| `SELECT COUNT *",3,1226,138,True
+deepseek,15,"给定表 emp(name, dept)，查询每个部门的人数：
+```sql
+SELECT dept, COUNT(*) FROM emp GROUP BY de",True,False,"按部门分组统计：IT 部门有 a、c 两条记录，计数为 2；HR 部门有 b 一条记录，计数为 1。
+
+答案是 IT 2, HR 1 #### IT 2, HR 1","你的需求是：**给定 `emp(name, dept)` 表，查询每个部门的人数**。
+
+你写的 SQL：
+
+```sql
+SELECT dept COUNT * emp dept
+```
+
+有语法问题，正确写法应为：
+
+```sql
+SELECT dept, COUNT(*) AS cnt
+FROM emp
+GROUP BY dept;
+```
+
+### 执行结果
+
+假设 `emp` 表数据为：",IT 2 行，HR 1 行,1206,110,True
+deepseek,11,以下 TOML 中，[tool.test] 段的作用是什么？,False,True,"推理：未提供具体 TOML 内容，无法判断 `[tool.test]` 的实际配置效果；按 TOML 规范，它只是创建 `tool.test` 子表，通常用于名为 `test` 的工具配置。
+
+答案是 无法确定具体作用，通常作为名为 test 的工具配置表 #### 无法确定具体作用，通常作为名为 test 的工具配置表","TOML 中以 `[tool.*]` 开头的表是保留给第三方工具使用的命名空间；`[tool.test]` 即名为 `test` 的工具/测试工具专用配置段，用于存放该工具读取的配置项，避免与 TOML 标准字段冲突。
+
+答案是 [tool.test] 段用于存放名为 test 的工具专用配置项，避免与 TOML 标准表/字段冲突 #### [tool.test] 段用于存放名为 test 的工具",声明 tool.test 子表（命名空间配置）,1122,1122,False
+deepseek,14,以下 SQL 中，GROUP BY 的作用是什么？,True,False,"未给出具体 SQL，因此按通用语义说明：GROUP BY 将结果集按指定列或表达式的值划分成多个组，每组返回一行，通常与 COUNT、SUM、AVG、MAX、MIN 等聚合函数配合，对每组数据做汇总统计。
+
+答案是 GROUP BY 用于按分组列值将数据分组，并配合聚合函数对每组进行汇总统计 #### GROUP BY 用于按分组列值将数据分组，并配合聚合函数对每组进行汇总统计","推断：题目中未提供具体 SQL，无法针对该语句逐段解析；以下说明 GROUP BY 的通用作用。
+
+答案：GROUP BY 用于按指定列对结果集进行分组，将分组列值相同的行归为一组，通常与聚合函数（如 COUNT、SUM、AVG、MAX、MIN）配合，对每组分别进行汇总统计，每组返回一行结果。",按列分组聚合（配合聚合函数）,1117,88,True
+deepseek,17,"给定表 t(v)，以下查询返回多少行？
+```sql
+SELECT DISTINCT v FROM t;
+```（v: 1, 1, 2, 3, 3）",True,True,"DISTINCT 会去除重复值，`v` 列的不同值为 1、2、3，共 3 个，因此返回 3 行。  
+答案是 3 #### 3","按题意应理解为：
+
+```sql
+SELECT DISTINCT v FROM t;
+```
+
+表 `t(v)` 的数据为：`1, 1, 2, 3, 3`
+
+`DISTINCT` 会对 `v` 列去重：
+
+- `1` 去重后保留 1 行
+- `2` 保留 1 行
+- `3` 去重后保留 1 行
+
+所以返回结果为：
+
+```
+1
+2
+3
+```
+
+**返回 3 行。**
+
+补充：如果原查询确实写成 ",3,1166,95,True
+deepseek,16,以下 SQL 中，JOIN 的作用是什么？,False,False,"未提供具体 SQL 语句，因此无法分析该 JOIN 的具体连接表、连接条件与作用；JOIN 通常用于按关联条件合并多表数据。
+
+答案是 缺少SQL语句，无法确定 #### 缺少SQL语句，无法确定","简短推理：题目未提供具体 SQL，因此无法结合上下文判断该 JOIN 的确切用途，只能给出通用解释。
+
+答案：JOIN 用于根据关联条件将两个或多个表的数据按行合并成一张结果集；具体作用取决于 SQL 中的 JOIN 类型和 ON 条件。由于未提供具体 SQL，无法判断该 SQL 中 JOIN 的确切作用。",按关联键合并两张表的行,1113,84,True
+deepseek,19,"以下正则对 'cat 和 dog' 的匹配结果是什么？
+```python
+import re
+re.search(r'[a-z]+', 'cat 和 dog'",True,False,"正则 `[a-z]+` 匹配连续小写英文字母；字符串 `'cat 和 dog'` 中第一个能匹配到的是开头的 `cat`，`re.search` 返回首个匹配。
+
+答案是 cat #### cat","你提到的正则表达式内容没有显示出来（代码块是空的），所以我无法直接判断它对 `'cat 和 dog'` 的匹配结果。
+
+请补充完整正则表达式，例如：
+
+```python
+import re
+
+pattern = r'你的正则'
+text = 'cat 和 dog'
+print(re.findall(pattern, text))
+```
+
+我会帮你分析匹配结果。",cat,1185,72,True
+deepseek,18,"以下正则对 'a1b2' 的匹配结果是什么？
+```python
+import re
+re.findall(r'\d', 'a1b2')
+```",True,True,"`\d` 匹配数字字符，`findall` 返回所有匹配项，在 `'a1b2'` 中依次匹配到 `'1'` 和 `'2'`。
+
+答案是 ['1', '2'] #### ['1', '2']","按常见写法：
+
+```python
+import re
+
+re.findall(r'\d', 'a1b2')
+```
+
+匹配结果是：
+
+```python
+['1', '2']
+```
+
+原因：`\d` 匹配单个数字字符，`findall` 返回字符串中所有匹配项组成的列表。`'a1b2'` 中的数字是 `1` 和 `2`。","['1', '2']",1164,90,True
+deepseek,20,"以下正则匹配整个字符串吗？
+```python
+import re
+re.fullmatch(r'\d{3}', '123')
+```",False,True,"re.fullmatch 要求模式与整个字符串完全匹配；`\d{3}` 匹配恰好 3 个数字，而 `'123'` 正好是 3 个数字，所以匹配整个字符串。
+
+答案是 是 #### 是","是的，会匹配整个字符串。
+
+前提是代码写成标准 Python 形式：
+
+```python
+import re
+
+m = re.fullmatch(r'\d{3}', '123')
+print(m)
+```
+
+输出会是：
+
+```text
+<re.Match object; span=(0, 3), match='123'>
+```
+
+原因：
+
+- `re.fullmatch` 要求整个字符串从开",匹配（fullmatch 需整串）,1159,87,True
+deepseek,21,"以下正则的捕获组数量是多少？
+```python
+re.compile(r'(\d+)-(\d+)')
+```",True,False,"正则中有两个用圆括号括起的子模式：`(\d+)` 和 `(\d+)`，它们都是捕获组。
+
+答案是 2 #### 2","当前内容中正则表达式只显示为 `...`，没有给出实际表达式，所以无法准确计算捕获组数量。
+
+如果这个 `...` 就是正则表达式本身，那么它没有括号，捕获组数量为 **0**。
+
+但如果 `...` 是省略占位符，请提供完整正则，我可以帮你逐个分析捕获组。",2,1147,59,True
+deepseek,22,"以下替换结果是什么？
+```python
+import re
+re.sub(r'\s+', '_', 'a b  c')
+```",True,True,"`re.sub(r'\s+', '_', 'a b  c')` 会把每一段连续空白字符替换成一个下划线，因此 `a` 和 `b` 之间的一个空格、`b` 和 `c` 之间的两个空格都分别替换成 `_`。
+
+答案是 a_b_c #### a_b_c","连续空白字符 `\s+` 会作为一个整体替换为单个下划线，所以 `'a b  c'` 中的两处空白分别替换为 `_`，结果为 `a_b_c`。
+
+答案是 a_b_c #### a_b_c",a_b_c,1156,1156,False
+deepseek,23,以下正则中，^ 在字符类外的作用是什么？,False,False,"在字符类外的 `^` 是锚点，表示匹配字符串的开头位置；若启用了多行模式（如 `m`），它还会匹配每一行的行首。它并不表示“取反”，取反仅发生在字符类内 `[^...]` 中。
+
+答案是 匹配字符串开头（多行模式下也匹配每行行首） #### 匹配字符串开头（多行模式下也匹配每行行首）","`^` 在字符类外是锚点，不消耗字符，用于断言位置在字符串开头；若启用多行模式 `m`，还会匹配每一行开头。
+
+答案：匹配字符串开头（多行模式下也匹配每行开头）。",锚定字符串开头,1112,83,True
+deepseek,3,"以下 JSON 解析代码输出什么？
+```python
+import json
+print(json.loads('{""a"": [1, 2, 3]}')['a'",True,True,"JSON 解析后得到字典 `{'a': [1, 2, 3]}`，取键 `'a'` 得到列表 `[1, 2, 3]`，再取索引 `1` 得到元素 `2`。
+
+答案是 2 #### 2","这段代码**不会输出任何正常结果**，因为它本身不是合法的 Python 语法，运行时会直接抛出 `SyntaxError`。
+
+主要问题有：
+
+```python
+import json
+print json.loads { a [1 2 3]} [ ][1]
+```
+
+1. `json.loads` 是函数，必须用括号调用，并传入 JSON 字符串：
+   ```python
+   json.",2,1181,116,True
+deepseek,28,"以下 grep 命令匹配的行数是多少？
+```bash
+echo -e 'a\nb\na' | grep -c 'a'
+```",True,True,"`echo -e 'a\nb\na'` 输出三行：`a`、`b`、`a`。  
+`grep -c 'a'` 统计包含 `a` 的行数，其中两行匹配，因此输出为 `2`。
+
+答案是 2 #### 2","输出三行：`a`、`b`、`a`，其中包含 `a` 的行有 2 行，因此 `grep -c 'a'` 输出 2。
+
+答案是 2 #### 2",2,1155,1155,False
+deepseek,27,"以下日志行中，时间戳的格式是什么？
+```text
+2026-10-28T10:30:00Z [INFO] svc started
+```",True,True,"时间戳 `2026-10-28T10:30:00Z` 使用 `T` 分隔日期与时间，末尾 `Z` 表示 UTC，符合 ISO 8601 标准。  
+答案是 ISO 8601（UTC，格式为 YYYY-MM-DDTHH:MM:SSZ） #### ISO 8601（UTC，格式为 YYYY-MM-DDTHH:MM:SSZ）","时间戳“2026-10-28T10:30:00Z”符合 ISO 8601 格式，T 分隔日期和时间，Z 表示 UTC 时区。
+答案是 ISO 8601 UTC（YYYY-MM-DDTHH:MM:SSZ） #### ISO 8601 UTC（YYYY-MM-DDTHH:MM:SSZ）",ISO 8601（UTC）,1161,1161,False
+deepseek,25,以下 shell 中，$(date) 的作用是什么？,True,False,"`$(…)` 是 shell 的命令替换语法；`$(date)` 会执行 `date` 命令，并用其标准输出（当前日期时间字符串）替换该表达式所在位置。
+
+答案是 命令替换：执行 `date` 并返回当前日期时间字符串 #### 命令替换：执行 `date` 并返回当前日期时间字符串","`$(date)` 是 Shell 的命令替换语法，会先执行 `date` 命令，并把它的标准输出（通常是当前日期和时间）作为字符串替换到原位置。
+
+答案是 命令行中执行 `date` 命令并将输出结果替换到该位置 #### 命令行中执行 `date` 命令并将输出结果替换到该位置",命令替换（执行并插入输出）,1118,1118,False
+deepseek,26,"以下 Makefile 中，make clean 会执行什么？
+```makefile
+clean:
+	rm -f *.o
+```",True,True,推理：`clean` 目标没有依赖，`make clean` 会执行其配方中的 shell 命令 `rm -f *.o`；该命令会由 shell 展开通,"`make clean` 会尝试执行 `clean` 目标的配方。这里配方只有一条命令 `rm -f *.o`，shell 会把 `*.o` 展开为当前目录下所有 `.o` 文件并强制删除；若没有匹配文件，`-f` 会忽略错误。  
+答案是 执行 `rm -f *.o`，删除当前目录下所有 `.o` 文件 #### 执行 `rm -f *.o`，删除当前目录下所有 `.o` 文件",删除所有 .o 文件,1157,1157,False
+deepseek,1,"以下 JSON 序列化输出中，键的顺序是什么？
+```python
+import json
+print(json.dumps({""b"": 1, ""a"": 2})",True,False,"Python 3.7+ 中 dict 保留插入顺序，且 `json.dumps` 默认不排序，因此键顺序按字面量顺序：先 `""b""` 后 `""a""`。
+
+答案是 b, a #### b, a",,"{""b"": 1, ""a"": 2}（按插入序）",1177,113,True
+deepseek,24,"以下 shell 脚本输出什么？
+```bash
+for x in 1 2 3; do echo -n ""$x""; done
+```",True,False,"循环 `echo -n` 不换行，依次输出 1、2、3，因此结果为连续字符串 `123`。
+
+答案是 123 #### 123",,123,1158,85,True
+deepseek,29,"以下 awk 命令的输出是什么？
+```bash
+echo '1 2 3' | awk '{print $2}'
+```",True,False,"awk 默认按空白字符拆分字段：`$1` 是 `1`，`$2` 是 `2`，`$3` 是 `3`。`print $2` 输出第二个字段。
+
+答案是 2 #### 2",,2,1152,80,True
+qwen,4,以下 JSON 配置中，与 {} 等价的 Python 值是什么？,False,False,推理：JSON 中的 `{}` 表示一个空对象（empty object），在 JSON 规范中对应 JavaScript 的空对象字面量。Python 中与之语义等价的数据结构是空字典 `dict()`，即 `{}`（字面量形式）。Python 的 `json.loads('{}')` 返回的就是 `dict()`，且其类型为 `dict`，行为（如可变、键值对存储、无序性等）与 JSON 对象,"推理：JSON 中的 `{}` 表示一个空对象，对应 JavaScript 中的空对象字面量。在 Python 中，JSON 对象（object）被 `json.loads()` 解析为 `dict` 类型；因此 `{}` 解析后是 Python 的空字典，即 `dict()` 或 `{}`（二者等价，但字面量 `{}` 是最直接、标准的表示）。
+
+答案：{}",空 dict（False 布尔值）,1125,96,True
+qwen,6,"以下 YAML 配置中，replicas 的值是多少？
+```yaml
+app:
+  name: web
+  replicas: 3
+```",True,True,"推理：YAML 配置中，`app` 是一个映射（字典），其下包含键 `replicas`，对应的值为 `3`（整数，无引号）。该值直接定义在 `app:` 下级，缩进正确，语法合法。
+
+答案是 3 #### 3","在您提供的 YAML 片段中：
+
+```yaml
+...
+replicas: 3
+...
+```
+
+✅ **`replicas` 的值是 `3`**（整数类型）。
+
+说明：
+- YAML 中 `replicas: 3` 是一个标准的键值对（key-value pair）；
+- `3` 未加引号，YAML 解析器会将其识别为 **整数（integer）**，而非字符串；
+- 前后的 `...` 是 ",3,1162,86,True
+qwen,0,"以下 JSON 配置中，service.port 的值是多少？
+```json
+{""service"": {""name"": ""api"", ""port"": 8080",True,True,"JSON 中 `service` 是一个对象，其内部键值对为 `""name"": ""api""` 和 `""port"": 8080`，因此 `service.port` 对应的值是整数 8080。
+
+答案是 8080 #### 8080","这个输入 **不是合法的 JSON**，因此无法直接解析出 `service.port` 的值。
+
+### 原因分析：
+提供的字符串：
+```json
+{ service { name api port 8080} log { level }}
+```
+❌ 不符合 JSON 语法规范，具体问题包括：
+
+1. **缺少引号**：JSON 要求所有键（key）必须是双引号包围的字符串，如 `""serv",8080,1204,125,True
+qwen,2,"以下 JSON 中，deps 数组的长度是多少？
+```json
+{""name"": ""svc"", ""deps"": [""db"", ""cache"", ""queue""",True,False,"JSON 中 `""deps""` 对应的值是一个字符串数组：`[""db"", ""cache"", ""queue""]`，其中包含三个元素：`""db""`、`""cache""` 和 `""queue""`。因此数组长度为 3。
+
+答案是 3 #### 3","这个 JSON 是**无效的（malformed）**，**根本无法被正确解析**，因此 **`deps` 数组的长度在语法上无定义**。
+
+### 原因分析：
+
+给出的字符串：
+```json
+{ name svc deps [ db ]}
+```
+
+它**不符合 JSON 语法规范**，具体问题如下：
+
+1. ✅ `{` 和 `}` 存在 → 对象起止符 OK（表面看）  
+2. ❌ **缺少",3,1178,95,True
+qwen,5,"以下 JSON 中，price 字段的类型是什么？
+```json
+{""item"": ""x"", ""price"": 9.99}
+```",False,False,"JSON 规范中，数字字面量（如 `9.99`）不带引号，解析为数值类型（number），可表示整数或浮点数。`9.99` 包含小数点和小数部分，因此是浮点数（floating-point number），在 JSON 类型系统中统一归类为 **number** 类型，而非字符串、布尔或对象等。
+
+答案是 number #### number","这个 JSON **语法错误，根本不是合法的 JSON**，因此 `price` 字段**没有定义类型**——因为它甚至无法被解析。
+
+我们逐项分析问题中的内容：
+
+```json
+{ item : price 9.99}
+```
+
+❌ **不符合 JSON 语法规范**，原因如下：
+
+1. **键名（key）必须用双引号包围**  
+   ✅ 正确：`""item""`  
+   ❌ 错误：`ite",float（浮点数）,1158,93,True
+qwen,1,"以下 JSON 序列化输出中，键的顺序是什么？
+```python
+import json
+print(json.dumps({""b"": 1, ""a"": 2})",True,True,"Python 3.7+ 中，字典（dict）保持插入顺序，因此 `{""b"": 1, ""a"": 2}` 的键顺序为先 `""b""` 后 `""a""`。`json.dumps()` 默认按字典的迭代顺序序列化，不重新排序键。虽然 JSON 规范本身不要求键序，但 Python 的 `json` 模块忠实反映输入 dict 的键序（自 CPython 3.7 起保证插入顺序）。因此输出为 `{""b"": 1,","这段代码 **语法错误，根本无法运行**，因此**不会产生任何 JSON 序列化输出，也谈不上“键的顺序”**。
+
+我们逐部分分析问题中的代码：
+
+```python
+import json
+print json.dumps { b : 1 2}
+```
+
+❌ 存在多个严重语法错误：
+
+1. **`json.dumps` 是函数，必须加括号调用**：  
+   `json.dumps { ... ","{""b"": 1, ""a"": 2}（按插入序）",1177,113,True
+qwen,7,"以下 YAML 中，env 是一个什么类型的值？
+```yaml
+env:
+  - name: DEBUG
+    value: ""1""
+```",True,True,推理：YAML 中 `env:` 后跟缩进的 `-` 表示一个列表（sequence）的开始，每个 `-` 代表列表的一个元素；此处每个元素是一个映射（mapping），包含 `name` 和 `value` 两个键值对。因此 `env` 是一个**列表（list/array）类型**，其元素为字典（key-value mapping）。这是 Kubernetes Pod spec 等常见配置中标,推理：YAML 中 `env:` 后跟缩进的 `-` 表示一个列表（sequence）的开始；每个 `-` 引导一个列表项，此处为一个映射（mapping），包含 `name` 和 `value` 两个键值对。因此 `env` 的值是一个**列表（或称序列、array）**，其元素为字典（即 key-value 映射）。YAML 规范中该类型称为 *sequence of mappings*，但就,list（列表）,1164,1164,False
+qwen,3,"以下 JSON 解析代码输出什么？
+```python
+import json
+print(json.loads('{""a"": [1, 2, 3]}')['a'",True,False,"推理：`json.loads('{""a"": [1, 2, 3]}')` 将 JSON 字符串解析为 Python 字典 `{'a': [1, 2, 3]}`；取键 `'a'` 对应的值，即列表 `[1, 2, 3]`；再取该列表索引为 `1` 的元素（0-based），即 `2`。
+
+答案是 2 #### 2","这段代码 **根本无法运行**，会直接抛出 **语法错误（SyntaxError）**，**不会有任何输出**（除了报错信息）。
+
+---
+
+### 🔍 逐部分分析错误原因：
+
+```python
+import json
+print json.loads { a [1 2 3]} [ ][1]
+```
+
+#### ❌ 错误 1：`json.loads` 后缺少括号 `()`
+- `json.loa",2,1181,116,True
+qwen,9,"以下 TOML 中，tags 的值类型是什么？
+```toml
+tags = [""dev"", ""test""]
+```",True,False,"推理：TOML 中，方括号 `[]` 表示数组（array）字面量；`""dev""` 和 `""test""` 是双引号包围的字符串，符合 TOML 字符串语法；同一数组中所有元素类型需一致（TOML 要求数组为同构类型），因此该数组是字符串数组（array of strings）。TOML 规范明确将 `[""a"", ""b""]` 定义为字符串数组，其类型为 `array`，元素类型为 `string`，","在 TOML 中，`tags = [""dev"", ""test""]` 使用了方括号语法，这是 TOML 规范中定义数组（array）的明确语法。根据 TOML v1.0.0 规范，方括号包裹的逗号分隔值构成一个数组，且所有元素必须是同一类型（此处为字符串字面量），因此该数组类型为字符串数组（array of strings）。TOML 中不存在“列表”或“元组”等其他集合类型，`[]` 唯一对应 a",list（字符串数组）,1150,1150,False
+qwen,10,以下 YAML 中，key: value 后跟注释行，解析后注释影响结果吗？,False,False,推理：YAML 规范中，注释以 `#` 开头，且必须独占一行或位于行末；当 `key: value` 后紧跟 `# comment`（即在同一行，冒号后有空格、值、空格、`#`），该 `#` 及其后内容被明确定义为**行内注释**，不参与数据解析。YAML 解析器会忽略注释部分，仅提取 `key: value` 的键值对。因此，注释行（无论是否紧随 key-value 后）对解析结果**无任何影响,YAML 规范中，注释（以 `#` 开头）仅在**行内或行首**起作用，且**不绑定到前一个键值对的语义上**；注释行（即单独一行、仅含 `#` 及其后内容）属于文档结构中的空白/注释节点，不影响相邻键值对的解析。`key: value` 与后续注释行之间若无缩进或结构关联（如无列表项、映射嵌套等），则该注释纯粹是文档级旁注，解析器（如 PyYAML、snakeyaml）会忽略它，不改变 `key,不影响（注释被忽略）,1130,101,True
+qwen,14,以下 SQL 中，GROUP BY 的作用是什么？,False,False,推理：SQL 中 GROUP BY 子句用于将查询结果按一个或多个列的值进行分组，使得聚合函数（如 COUNT、SUM、AVG、MAX、MIN 等）能够对每个分组独立计算。它本质上是对行集合进行逻辑划分，后续的 SELECT 中若包含聚合函数，则每一组输出一行；非聚合列若出现在 SELECT 中，必须出现在 GROUP BY 子句中（符合 SQL 标准，如 PostgreSQL、MySQL 严格模,"GROUP BY 用于将查询结果按一个或多个列的值进行分组，使聚合函数（如 COUNT、SUM、AVG 等）能对每个分组独立计算；它消除行级重复，将相同分组键的多行合并为一行（需配合聚合函数使用，否则非分组列在标准SQL中不合法）。
+
+答案：对查询结果按指定列分组，以便对每个组应用聚合操作。",按列分组聚合（配合聚合函数）,1117,88,True
+qwen,8,"以下 TOML 配置中，[database] 段的 port 是多少？
+```toml
+[database]
+host = ""localhost""
+port =",True,True,"推理：TOML 配置中 `[database]` 是一个表（table）段，其下键值对 `port = 5432` 明确指定了端口号为整数 5432。
+
+答案是 5432 #### 5432","这个 TOML 片段 **不合法（invalid）**，无法确定 `[database]` 段的 `port` 值。
+
+原因如下：
+
+🔹 **缺少表头（table header）**：  
+你给出的代码是：
+```toml
+...
+port = 5432
+...
+```
+其中 `...` 是省略符（非 TOML 语法），而 `port = 5432` 这一行 **孤立存在，未位于任何表（table",5432,1181,94,True
+qwen,11,以下 TOML 中，[tool.test] 段的作用是什么？,False,False,推理：TOML 是一种配置文件格式，常用于项目元数据和工具配置。`[tool.test]` 是 TOML 中的表（table）定义，遵循 PEP 518 和主流 Python 工具链（如 pytest、tox、poetry、hatch）的约定：`tool` 表是专供开发工具使用的命名空间，其子表（如 `test`）用于指定对应工具的配置。例如，`[tool.test]` 可能被某些测试框架（如 `,推理：TOML 是一种配置文件格式，常用于项目元数据和工具配置。`[tool.test]` 是 TOML 中的表（table）定义，遵循 PEP 518 和主流 Python 工具链（如 pytest、tox、poetry、hatch）的约定：`tool` 表是专供开发工具使用的命名空间，其子表（如 `test`）用于指定对应工具的配置。例如，`[tool.test]` 可能被某些测试框架（如 `,声明 tool.test 子表（命名空间配置）,1122,1122,False
+qwen,12,"给定表 students(name, score)，查询分数 > 80 的人数：
+```sql
+SELECT COUNT(*) FROM students WH",True,False,"推理：SQL 查询统计满足 `score > 80` 的记录数。students 表共 5 行分数：90、70、85、60、88。逐一判断：90 > 80 ✓，70 > 80 ✗，85 > 80 ✓，60 > 80 ✗，88 > 80 ✓。满足条件的有 90、85、88，共 3 行。因此 COUNT(*) 返回 3。
+
+答案是 3 #### 3","你提供的 SQL 语句存在**多个语法错误**，无法执行。我们来逐项分析并给出正确写法。
+
+---
+
+### ❌ 原语句问题分析：
+```sql
+SELECT COUNT * students WHERE > 80
+```
+
+1. **`COUNT *` 语法错误**  
+   ✅ 正确写法是 `COUNT(*)`（带括号）或 `COUNT(1)`；`COUNT *` 不合法。
+
+2. **缺少 ",3,1226,138,True
+qwen,13,"给定表 orders(id, amount)，以下查询的结果是什么？
+```sql
+SELECT SUM(amount) FROM orders;
+```（am",True,True,"推理：该 SQL 查询对 orders 表的 amount 列求和。给定 amount 值为 10、20、30，三者之和为 10 + 20 + 30 = 60。SUM 是聚合函数，忽略 NULL（此处无 NULL），直接累加所有非空值。
+
+答案是 60 #### 60","这个 SQL 查询存在**多个严重语法错误**，**无法执行**，会直接报错。它**没有合法的查询结果**。
+
+我们逐部分分析问题中的语句：
+
+```sql
+SELECT SUM amount orders
+（amount: 10 20 30）
+```
+
+🔍 **错误解析：**
+
+1. ❌ `SUM amount` — 缺少括号和列引用语法  
+   ✅ 正确写法应为：`SUM(amount)` ",60,1189,119,True
+qwen,16,以下 SQL 中，JOIN 的作用是什么？,False,False,"推理：问题中提到“以下 SQL 中，JOIN 的作用是什么？”，但实际未提供任何 SQL 语句。因此，无法基于具体上下文分析 JOIN 的语义（如内连接、左连接、连接条件、数据关联目的等）。在关系型数据库中，JOIN 的通用作用是根据指定条件将两个或多个表的行进行逻辑组合，以实现跨表数据关联与整合。但由于题干缺失 SQL 示例，无法进行针对性分析，只能回答其标准定义性作用。
+
+答案是 将两个或多个","JOIN 用于将两个或多个表中的行基于指定的关联条件（如共同列）进行横向组合，从而实现跨表数据的关联查询。它不改变原表结构，而是生成一个临时结果集，包含满足连接条件的匹配行（具体行为取决于 JOIN 类型，如 INNER、LEFT 等）。在 SQL 执行逻辑中，JOIN 是 FROM 子句的核心操作，决定了最终结果集的行来源和范围。
+
+答案：JOIN 的作用是基于关联条件将多个表的行进行横向连接，",按关联键合并两张表的行,1113,84,True
+qwen,18,"以下正则对 'a1b2' 的匹配结果是什么？
+```python
+import re
+re.findall(r'\d', 'a1b2')
+```",True,True,"正则表达式 `r'\d'` 匹配任意一个数字字符（等价于 `[0-9]`）。字符串 `'a1b2'` 中，字符 `'1'` 和 `'2'` 是数字，分别位于索引 1 和 3。`re.findall` 返回所有非重叠匹配的字符串列表，因此会提取出 `['1', '2']`。
+
+答案是 ['1', '2'] #### ['1', '2']","这个正则表达式写法 **语法错误**，无法直接运行。
+
+你给出的片段：
+
+```python
+re.findall \d a1b2
+```
+
+❌ **不是合法的 Python 代码**。原因如下：
+
+1. `re.findall()` 是一个函数，**必须加括号调用**，且至少需要两个参数：  
+   ✅ 正确签名：`re.findall(pattern, string, flags=0)`  
+","['1', '2']",1164,90,True
+qwen,21,"以下正则的捕获组数量是多少？
+```python
+re.compile(r'(\d+)-(\d+)')
+```",True,False,"正则表达式 `r'(\d+)-(\d+)'` 中，每个用圆括号 `(...)` 包裹的子表达式构成一个捕获组。  
+此处有两个独立的括号对：第一个 `(\d+)` 捕获第一个数字序列，第二个 `(\d+)` 捕获第二个数字序列；中间的 `-` 是字面量，不构成捕获组。  
+无命名组、非捕获组（如 `(?:...)`）或嵌套捕获组，因此捕获组总数为 2。
+
+答案是 2 #### 2","你好！你提到了“以下正则”，但当前消息中**并未提供具体的正则表达式**（`...` 是占位符，未展开）。
+
+作为资深软件工程师，我需要明确的正则表达式字符串才能准确分析其捕获组（capturing groups）数量。捕获组由圆括号 `(...)` 定义（不包括非捕获组 `(?:...)`、前瞻断言 `(?=...)` 等），且需注意：
+
+✅ 正确计数要点：
+- 每对未转义的 `(` 和匹配的 ",2,1147,59,True
+qwen,15,"给定表 emp(name, dept)，查询每个部门的人数：
+```sql
+SELECT dept, COUNT(*) FROM emp GROUP BY de",True,False,"推理：该 SQL 查询对表 `emp` 按 `dept` 字段分组，并统计每组行数。给定数据 `(a,IT), (b,HR), (c,IT)`，其中 `IT` 出现 2 次，`HR` 出现 1 次。因此结果应为两行：`(IT, 2)` 和 `(HR, 1)`。注意 SQL 标准中 `COUNT(*)` 包含所有行（无 NULL 影响），且 `GROUP BY dept` 确保每个部门唯一输出。
+
+","你提供的 SQL 语句存在**严重语法错误**，且描述不完整（如“查 每 ：”、“（emp: IT HR IT ）”是示意？）。作为资深软件工程师，我来帮你**诊断问题、还原意图、给出正确解法**，并解释关键原理。
+
+---
+
+### 🔍 一、问题诊断（原语句分析）
+```sql
+SELECT dept COUNT * emp dept
+（emp: IT HR IT ）
+```
+
+❌ **错误点解",IT 2 行，HR 1 行,1206,110,True
+qwen,17,"给定表 t(v)，以下查询返回多少行？
+```sql
+SELECT DISTINCT v FROM t;
+```（v: 1, 1, 2, 3, 3）",True,False,"推理：DISTINCT 去除重复值，表 t 中 v 的值为 [1, 1, 2, 3, 3]，去重后剩下 {1, 2, 3}，共 3 个不同值，因此返回 3 行。
+
+答案是 3 #### 3","这个 SQL 查询存在**语法错误**，**无法执行**，因此“返回多少行”这个问题在标准 SQL 中**没有有效答案**（会报错）。
+
+我们来逐项分析：
+
+---
+
+### 🔴 原查询（有误）：
+```sql
+SELECT DISTINCT v t
+（v: 1 1 2 3 3）
+```
+
+#### ❌ 问题 1：`SELECT DISTINCT v t` — 别名语法错误  
+- `v t` 被",3,1166,95,True
+qwen,22,"以下替换结果是什么？
+```python
+import re
+re.sub(r'\s+', '_', 'a b  c')
+```",True,True,"推理：`re.sub(r'\s+', '_', 'a b  c')` 使用正则表达式 `\s+` 匹配**一个或多个连续的空白字符**（包括空格、制表符等），并将每处匹配整体替换为单个下划线 `'_'`。输入字符串 `'a b  c'` 中：  
+- `'a'` 后有一个空格 → 匹配 `\s+`（1个空格）→ 替换为 `'_'`  
+- `'b'` 后有两个连续空格 → 匹配 `\s+`（2个空","推理：`re.sub(r'\s+', '_', 'a b  c')` 使用正则表达式 `\s+` 匹配**一个或多个连续的空白字符**（包括空格、制表符等），并将每处匹配整体替换为单个下划线 `'_'`。输入字符串 `'a b  c'` 中：  
+- `'a'` 后有一个空格 → 匹配 `\s+`（1个空格）→ 替换为 `'_'`  
+- `'b'` 后有两个连续空格 → 匹配 `\s+`（2个空",a_b_c,1156,1156,False
+qwen,19,"以下正则对 'cat 和 dog' 的匹配结果是什么？
+```python
+import re
+re.search(r'[a-z]+', 'cat 和 dog'",True,False,推理：正则表达式 `[a-z]+` 匹配一个或多个连续的**ASCII 小写字母**（即 a–z），不包含中文字符、空格或标点。字符串 `'cat 和 dog'` 中，`'cat'` 是开头的连续小写字母序列，满足匹配；遇到中文字符 `'和'`（不属于 `[a-z]`）时匹配中断；后续 `'dog'` 虽也满足模式，但 `re.search()` 返回**第一个成功匹配**的子串（从左到右扫描，首,"你好！你提到“以下正则”，但当前消息中**并未提供具体的正则表达式**（regex pattern）。
+
+为了准确分析 `'cat 和 dog'` 的匹配结果，我需要知道：
+
+✅ 你使用的完整正则表达式（例如：`r'cat|dog'`、`r'cat.*dog'`、`r'[a-z]+\s+和\s+[a-z]+'` 等）  
+✅ 是否启用了特定标志（如 `re.IGNORECASE`、`re.DOTA",cat,1185,72,True
+qwen,23,以下正则中，^ 在字符类外的作用是什么？,False,False,"在正则表达式中，`^` 是一个元字符。当它出现在字符类（即方括号 `[...]`）**外部**时，其作用是匹配输入字符串的**开始位置**（即行首锚点）。例如，`^abc` 只匹配以 ""abc"" 开头的字符串。注意：该行为受正则引擎的多行模式（multiline mode）影响——在默认单行模式下，`^` 匹配整个字符串开头；在多行模式下，`^` 还可匹配每行的开头。但无论是否多行，只要 `^` ","在正则表达式中，`^` 是一个锚点（anchor），当它出现在字符类（即方括号 `[]`）**外部**且位于模式开头时，表示匹配字符串的**起始位置**（或行首，取决于是否启用多行模式 `m`）。它不匹配任何实际字符，而是断言当前位置必须是字符串/行的开头。
+
+答案：匹配字符串（或行）的开头位置",锚定字符串开头,1112,83,True
+qwen,20,"以下正则匹配整个字符串吗？
+```python
+import re
+re.fullmatch(r'\d{3}', '123')
+```",False,False,"`re.fullmatch(pattern, string)` 要求整个字符串（从开头到结尾）完全匹配正则模式，不允许多余字符。  
+模式 `r'\d{3}'` 表示“恰好三个数字”，字符串 `'123'` 长度为 3，且每个字符都是数字，因此完全匹配。  
+注意：`fullmatch` 隐式锚定（等价于 `^pattern$`），无需显式写 `^` 和 `$`。  
+该调用返回一个匹配对象（非 ","你的问题中正则表达式写法不完整且存在语法错误，我来帮你逐层解析并给出准确答案。
+
+✅ **结论先行**：  
+**`re.fullmatch(r'\d{3}', '123')` 会成功匹配，返回一个 Match 对象（即“匹配整个字符串”）；但你写的 `re.fullmatch r \d{3} 123` 不是合法 Python 代码，无法运行。**
+
+---
+
+### 🔍 详细解析
+
+#### 1",匹配（fullmatch 需整串）,1159,87,True
+qwen,25,以下 shell 中，$(date) 的作用是什么？,True,True,"推理：在 Shell 脚本中，`$(date)` 是命令替换（command substitution）语法，其作用是执行 `date` 命令，并将该命令的标准输出（即当前系统日期和时间的字符串，如 ""Wed Apr 10 15:23:42 CST 2024""）捕获并插入到原位置。它常用于动态生成时间戳，例如在日志文件名、打印带时间的信息或环境变量赋值中。注意：这与 CUDA 或 GPU 编程完全","推理：在 Shell 脚本中，`$(date)` 是命令替换（command substitution）语法，其作用是执行 `date` 命令，并将该命令的标准输出（即当前系统日期和时间的字符串，如 ""Wed Apr 10 15:23:42 CST 2024""）捕获并插入到原位置。它常用于动态生成时间戳，例如在日志文件名、打印带时间的信息或环境变量赋值中。注意：这与 CUDA 或 GPU 编程完全",命令替换（执行并插入输出）,1118,1118,False
+qwen,26,"以下 Makefile 中，make clean 会执行什么？
+```makefile
+clean:
+	rm -f *.o
+```",True,True,推理：Makefile 中 `clean:` 是一个目标（target），其后缩进的命令行 `rm -f *.o` 是该目标的规则（recipe）。当执行 `make clean` 时，Make 会运行该规则中的 shell 命令。`rm -f *.o` 表示强制删除当前目录下所有以 `.o` 结尾的文件（即目标文件/编译中间对象文件），`-f` 选项确保不提示错误（如文件不存在时静默忽略）。该规,推理：Makefile 中 `clean:` 是一个目标（target），其后缩进的命令行 `rm -f *.o` 是该目标的规则（recipe）。当用户执行 `make clean` 时，Make 会查找名为 `clean` 的目标并执行其下的所有命令。`rm -f *.o` 表示强制删除当前目录下所有以 `.o` 结尾的文件（即目标文件/对象文件），`-f` 选项确保即使文件不存在也不报错。注,删除所有 .o 文件,1157,1157,False
+qwen,27,"以下日志行中，时间戳的格式是什么？
+```text
+2026-10-28T10:30:00Z [INFO] svc started
+```",True,True,"推理：该时间戳 `2026-10-28T10:30:00Z` 符合 ISO 8601 标准的完整日期时间格式，其中：
+- `2026-10-28` 是年-月-日（ISO 8601 日期部分），
+- `T` 是日期与时间的分隔符（mandatory in ISO 8601 for combined representations），
+- `10:30:00` 是小时:分钟:秒（24 小时制，无毫秒，","推理：该时间戳 `2026-10-28T10:30:00Z` 符合 ISO 8601 标准的完整日期时间格式，其中 `YYYY-MM-DD` 为日期，`T` 为分隔符，`HH:MM:SS` 为24小时制时间，末尾 `Z` 表示 UTC 时区（即零时区，等价于 +00:00）。无毫秒或微秒部分，秒级精度，且为协调世界时。
+
+答案是 ISO 8601 UTC 格式（YYYY-MM-DDTHH:MM:S",ISO 8601（UTC）,1161,1161,False
+qwen,28,"以下 grep 命令匹配的行数是多少？
+```bash
+echo -e 'a\nb\na' | grep -c 'a'
+```",True,True,"推理：`echo -e 'a\nb\na'` 输出三行：第一行 `a`，第二行 `b`，第三行 `a`。`grep -c 'a'` 统计匹配正则表达式 `'a'` 的**行数**（而非匹配次数），即只要某行包含至少一个 `'a'` 就计为 1 行。第 1 行 `'a'` 匹配，第 2 行 `'b'` 不匹配，第 3 行 `'a'` 匹配，共 2 行匹配。因此 `-c` 输出 `2`。
+
+答案是 2","推理：`echo -e 'a\nb\na'` 输出三行：第一行 `a`，第二行 `b`，第三行 `a`。`grep -c 'a'` 统计匹配正则表达式 `'a'` 的**行数**（而非匹配次数），即只要某行包含至少一个 `'a'` 就计为 1 行。第 1 行 `'a'` 匹配，第 2 行 `'b'` 不匹配，第 3 行 `'a'` 匹配，共 2 行匹配。因此 `-c` 输出 `2`。
+
+答案是 2",2,1155,1155,False
+qwen,24,"以下 shell 脚本输出什么？
+```bash
+for x in 1 2 3; do echo -n ""$x""; done
+```",True,False,"推理：该 shell 脚本使用 for 循环遍历字符串 ""1 2 3""（三个独立词），每次将当前词赋给变量 x；`echo -n ""$x""` 中 `-n` 选项表示不换行输出，因此 `1`、`2`、`3` 会连续打印在同一行，无空格或分隔符。最终输出为 ""123""。
+
+答案是 123 #### 123","这个 shell 脚本：
+
+```bash
+for in 1 2 3 do echo done
+```
+
+**语法错误，无法执行，会报错（不是合法的 Bash 语法）**。
+
+---
+
+### 🔍 详细解析：
+
+标准 `for` 循环在 Bash 中的语法是：
+
+```bash
+for variable in list; do
+    commands
+done
+```
+
+或（单行紧凑写法）：
+`",123,1158,85,True
+qwen,29,"以下 awk 命令的输出是什么？
+```bash
+echo '1 2 3' | awk '{print $2}'
+```",True,False,"推理：`echo '1 2 3'` 输出字符串 `1 2 3`，通过管道传给 `awk`。`awk` 默认以空白（空格、制表符等）为字段分隔符，将输入行分割为字段：`$1=""1""`，`$2=""2""`，`$3=""3""`。`{print $2}` 表示打印第二个字段，即 `""2""`。输出无额外换行或空格，仅 `2`。
+
+答案是 2 #### 2","这个 `awk` 命令：
+
+```bash
+echo 1 2 3 | awk $2}
+```
+
+**语法错误，无法执行（会报错）**，**不会产生有效输出**。
+
+---
+
+### 🔍 详细解析：
+
+#### 1. **Shell 层面的变量展开问题**
+命令中写的是：
+```bash
+awk $2}
+```
+注意：`$2` 在 **shell 中会被解释为位置参数**（即脚本/命令行的第二个参数",2,1152,80,True

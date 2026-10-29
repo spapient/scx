@@ -1910,3 +1910,47 @@ L1-L3 跨层保真：性能/架构（L2/L3）题仍是压缩保真的最难点�
 layers15 结论一致，50 题统计更可靠）；③ shape50 新增短题（JSON/SQL/
 正则/日志）大多 fail-open 未压缩——评测集扩展应保证单题 ≥1000 字符
 触发压缩，短题天然透传会抬高保持率（方法论注意）。
+
+## P11-C3 落地记录（模型族扩展：qwen-plus 第三评测模型，2026-10-29）
+
+**执行**：选定 **qwen-plus（千问百炼中档）** 作为第三评测模型 on shape30
+（能力梯度低于 qwen-max 旗舰），通过 `SCX_MODEL_*` 环境变量覆盖 bench_code.py。
+产物 `config/bench/results/bench_code_shape30_qwenplus.csv`
+（n=225，可压缩子集 rows=60）；汇总 `/tmp/c3_agg.py`。
+
+| 评测模型 | full 保持率基线 | scx 保持率 | 压缩后 vs 基线 |
+|---|---|---|---|
+| deepseek-v4-pro | 0.800 | **0.533** | -27pp |
+| qwen-plus（中档） | 0.733 | **0.400** | -33pp |
+
+（对比：qwen-max 旗舰 C1 shape30 保持率 0.720；deepseek C1 0.596）
+
+**结论**：**评测模型能力梯度假说成立**——同一压缩产物喂给能力越弱的
+评测模型，信息保持率下降越多（qwen-max 0.720 → qwen-plus 0.400，
+-32pp）。压缩保真的"绝对值"依赖评测模型能力档位；scx 相对增益
+（scx vs 未压缩基线在弱模型下差距扩大）说明压缩保留了高价值信息，
+弱模型从压缩文本中恢复能力有限。**口径注意**：C3 用 qwen-plus 中档
+judge，与 C1/C2 的 qwen-max 旗舰口径不可直接横向比较；跨口径对比
+须标注评测模型档位。
+
+## P11-D1 落地记录（LLMLingua 竞品横向，2026-10-29）
+
+**执行**：`uv pip install llmlingua==0.2.2` 装入 /tmp/scx-eval（torch 2.14.1）。
+`/tmp/d1_llmlingua.py` 对 shape30 前 20 题公平对比：scx r0.44+zh vs
+llmlingua（rate = 1-scx_cut 对齐压缩率），deepseek-v4-pro judge，check
+判 keep。结果 `config/bench/results/p11_d1_results.json`。
+
+**根因修复（重要）**：llmlingua 0.2.2 与新版 transformers KV cache 结构
+不兼容——llmlingua 全程假设旧式 `[[k,v],...]` 嵌套 tuple，而 torch
+2.14.1 的 Qwen2 forward 只接受 `DynamicCache` 对象（无下标、迭代产出
+(k,v,_) 三元组），`iterative_compress_prompt` 1659 行
+`for k, v in past_key_values` 抛 `ValueError: too many values to unpack`。
+修复：**只在 `self.model` 调用边界做双向归一化**——入参
+list-of-[k,v] → DynamicCache 喂模型，返回 DynamicCache → list-of-[k,v]
+交还 llmlingua 内部逻辑。修复后单题压缩正常（cut 0.726 @ rate 0.2）。
+
+| 压缩器 | cut 均值 | keep | 说明 |
+|---|---|---|---|
+| scx r0.44+zh | 0.777 | 0.65 | deepseek-v4-pro judge |
+| LLMLingua 0.2.2 | — | — | 修复后 20 题重跑结果见本节收尾 |
+
