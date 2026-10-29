@@ -371,6 +371,31 @@ pub(crate) fn estimate(s: &str) -> f64 {
         + 1.0
 }
 
+/// 一趟输入测量：字符数 + token 估算（原 `chars`+`estimate` 两趟全扫合一）。
+pub(crate) fn measure(s: &str) -> (usize, f64) {
+    if s.is_ascii() {
+        return (s.len(), s.len() as f64 / ASCII_CHARS_PER_TOKEN + 1.0);
+    }
+    let (mut chars, mut ascii, mut cjk, mut other) = (0usize, 0usize, 0usize, 0usize);
+    for c in s.chars() {
+        chars += 1;
+        if c.is_ascii() {
+            ascii += 1;
+        } else if full(c) {
+            cjk += 1;
+        } else {
+            other += 1;
+        }
+    }
+    (
+        chars,
+        ascii as f64 / ASCII_CHARS_PER_TOKEN
+            + cjk as f64 * CJK_TOKENS_PER_CHAR
+            + other as f64 / OTHER_CHARS_PER_TOKEN
+            + 1.0,
+    )
+}
+
 /// 整数化 token 计数（`estimate` 向上取整；空串为 0，供计量/预算用整数口径）。
 pub(crate) fn count(s: &str) -> usize {
     if s.is_empty() {
@@ -383,6 +408,30 @@ pub(crate) fn count(s: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// measure 必须与「chars + estimate」两趟口径一致（ASCII/非 ASCII）。
+    #[test]
+    fn measure_matches_chars_estimate() {
+        let cases = [
+            "",
+            "abc def",
+            "服务器　超时  42",
+            "错误 42 naïve 123456789",
+            "🙂 emoji 混合",
+            "a\tb\x0bc\r\nd",
+            "8080/9090 errno=28",
+        ];
+        for s in cases {
+            let (n, tok) = measure(s);
+            let want_n = if s.is_ascii() {
+                s.len()
+            } else {
+                s.chars().count()
+            };
+            assert_eq!(n, want_n, "chars mismatch for {s:?}");
+            assert_eq!(tok, estimate(s), "tokens mismatch for {s:?}");
+        }
+    }
 
     /// 中文释义层桥接——query 与 doc 的 CJK 段即使整段不重叠，
     /// 重叠 trigram/bigram 也必须提供公共词（共享根因桥）。10 组真实感中/中英混排

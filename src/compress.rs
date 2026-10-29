@@ -168,11 +168,10 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 小输入先算一次即可（随后可能直接 passthrough）；大输入把估算并入
     // 逐行分析循环，避免为同一批行再走一趟缓存。
     let small_tok = survey(&lines, total);
-    let chars_a = chars(original);
     let evidence = &cfg.evidence;
-    // 输入 token 估算只依赖原文，且 Outcome.tokens_in 与单桶 tokens_in 同值：
-    // 算一次共用（CJK 输入上 estimate 是整篇 O(n) 扫描）。
-    let tokens_in = crate::terms::estimate(original);
+    // 输入测量一趟完成：字符数 + token 估算（原 chars + estimate 两趟全扫
+    // 合一，CJK 输入上 estimate 是整篇 O(n) 扫描，合一趟省一次全扫）。
+    let (chars_a, tokens_in) = crate::terms::measure(original);
     prof.mark("lines+terms");
 
     let mk = |text_owned: String,
