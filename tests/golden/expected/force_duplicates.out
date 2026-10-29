@@ -4,4 +4,4 @@ SPECIAL_FORCE_LINE
 SPECIAL_FORCE_LINE
 SPECIAL_FORCE_LINE
 ...
-compressed: kept=4/200 lines chars=5257->83 (98.4% cut) dup=194 seeds=4 evidence=4 risk=LOW guarded=0 regions=1 window=2 terms=0 forced=1 mode=sieve
+compressed: kept=4/200 lines chars=5257->83 (98.4% cut) dup=194 seeds=4 evidence=4 risk=LOW guarded=0 regions=1 window=2 terms=0 forced=1 mode=sieve ser_b=2200

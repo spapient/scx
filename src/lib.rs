@@ -526,6 +526,10 @@ pub struct Outcome {
     /// 行保留率 kept/total（轻量代理，非信息留存语义，见 docs/context-governance-plan.md P4）。
     /// passthrough/fail-open/no-kept 恒 1.0（未删任何行）。`--json` 消费，默认统计行不输出。
     pub ev_retention: f64,
+    /// 声明证据总条数（`--evidence` 参数个数；bucketed 模式为 0）。配合
+    /// `ev_retention` 供报告卡给出真实"保留/丢失"口径，替代 v0.6.4 误用
+    /// `seeds` 当证据数的假"全部保留"（P12.6 修复）。
+    pub ev_total: usize,
     /// 分桶统计（默认单桶 = 整输入视作 ToolOutput）；`compress_bucketed` 时逐桶填充。
     /// `--json` 消费，默认统计行不输出。
     pub buckets: Vec<BucketStat>,

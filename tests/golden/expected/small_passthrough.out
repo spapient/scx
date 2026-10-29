@@ -8,4 +8,4 @@ line 6
 line 7
 line 8
 line 9
-compressed: kept=10/10 lines chars=69->69 (0.0% cut) dup=0 seeds=0 evidence=0 risk=LOW guarded=0 regions=0 window=2 terms=1 forced=0 mode=passthrough:small
+compressed: kept=10/10 lines chars=69->69 (0.0% cut) dup=0 seeds=0 evidence=0 risk=LOW guarded=0 regions=0 window=2 terms=1 forced=0 mode=passthrough:small ser_b=497

@@ -59,4 +59,4 @@ filler error kvwrite line 56
 filler error kvwrite line 57
 filler error kvwrite line 58
 filler error kvwrite line 59
-compressed: kept=61/61 lines chars=151730->151730 (0.0% cut) dup=0 seeds=0 evidence=0 risk=LOW guarded=0 regions=0 window=2 terms=1 forced=0 mode=passthrough:longline
+compressed: kept=61/61 lines chars=151730->151730 (0.0% cut) dup=0 seeds=0 evidence=0 risk=LOW guarded=0 regions=0 window=2 terms=1 forced=0 mode=passthrough:longline ser_b=523

@@ -13,6 +13,7 @@ pub(crate) const R_NUM_LINE: u8 = 6;
 pub(crate) const R_SYM_LINE: u8 = 7;
 pub(crate) const R_ZH_LINE: u8 = 8;
 pub(crate) const R_LIST_LINE: u8 = 9;
+pub(crate) const R_EVIDENCE: u8 = 10;
 
 /// 标记阶段共享可变上下文：keep 位图 / 计数 / 原因，与只读 scores/fill_floor。
 pub(crate) struct Ctx<'a> {
@@ -586,5 +587,70 @@ pub(crate) fn mark_list_lines(
             reason[i] = R_LIST_LINE;
             raw[i] = true;
         }
+    }
+}
+
+/// 证据行整行保留并标记 raw（--evidence）——Substr 命中的行与 Line 号命中的
+/// 行强制 keep+raw：证据是问答的硬锚，字符级 trim 会摘词导致证据 marker
+/// 丢失而保留率报告仍称"全部保留"（P12.6 实测：声明 --evidence 后证据行
+/// 被裁剪为残句，正文不含证据子串）。dup 折叠的证据行一并强制保留。
+pub(crate) fn mark_evidence_lines(
+    lines: &[&str],
+    evidence: &[crate::Evidence],
+    keep: &mut [bool],
+    kept: &mut usize,
+    reason: &mut [u8],
+    raw: &mut [bool],
+) {
+    for e in evidence {
+        match e {
+            crate::Evidence::Substr(s) => {
+                mark_evidence_substr(s.as_str(), lines, keep, kept, reason, raw);
+            }
+            crate::Evidence::Line(n) => {
+                mark_evidence_line(*n, lines, keep, kept, reason, raw);
+            }
+        }
+    }
+}
+
+/// Substr 证据：命中子串的行整行保留并 raw。
+fn mark_evidence_substr(
+    s: &str,
+    lines: &[&str],
+    keep: &mut [bool],
+    kept: &mut usize,
+    reason: &mut [u8],
+    raw: &mut [bool],
+) {
+    for (i, line) in lines.iter().enumerate() {
+        if line.contains(s) {
+            if !keep[i] {
+                keep[i] = true;
+                *kept += 1;
+            }
+            reason[i] = R_EVIDENCE;
+            raw[i] = true;
+        }
+    }
+}
+
+/// Line 证据：行号（1-based）命中的行整行保留并 raw；越界静默忽略。
+fn mark_evidence_line(
+    n: usize,
+    lines: &[&str],
+    keep: &mut [bool],
+    kept: &mut usize,
+    reason: &mut [u8],
+    raw: &mut [bool],
+) {
+    if n >= 1 && n <= lines.len() {
+        let i = n - 1;
+        if !keep[i] {
+            keep[i] = true;
+            *kept += 1;
+        }
+        reason[i] = R_EVIDENCE;
+        raw[i] = true;
     }
 }

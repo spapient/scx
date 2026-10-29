@@ -2,4 +2,4 @@
 错误：数据库连接超时 (conn_id=9f2a)
 错误：磁盘已满 errno=28
 ...
-compressed: kept=2/300 lines chars=10041->50 (99.5% cut) dup=295 seeds=1 evidence=1 risk=HIGH guarded=1 regions=1 window=2 terms=3 forced=0 mode=sieve
+compressed: kept=2/300 lines chars=10041->50 (99.5% cut) dup=295 seeds=1 evidence=1 risk=HIGH guarded=1 regions=1 window=2 terms=3 forced=0 mode=sieve ser_b=3049

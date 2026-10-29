@@ -198,4 +198,4 @@ line 196 with padding text alpha beta gamma
 line 197 with padding text alpha beta gamma
 line 198 with padding text alpha beta gamma
 line 199 with padding text alpha beta gamma
-compressed: kept=200/200 lines chars=8689->8689 (0.0% cut) dup=198 seeds=0 evidence=0 risk=LOW guarded=0 regions=0 window=2 terms=3 forced=0 mode=failopen:zero-signal
+compressed: kept=200/200 lines chars=8689->8689 (0.0% cut) dup=198 seeds=0 evidence=0 risk=LOW guarded=0 regions=0 window=2 terms=3 forced=0 mode=failopen:zero-signal ser_b=521

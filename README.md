@@ -169,7 +169,7 @@ Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技
 scx --version                                  # 已将入口加入 PATH 时
 ```
 
-三条命令都应输出版本号（当前为 `scx 0.9.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
+三条命令都应输出版本号（当前为 `scx 0.10.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
 
 只对实际安装过的入口执行上述检查；未安装的路径报“不存在”不代表工具本身异常。
 
@@ -190,13 +190,19 @@ stdout 是筛选后的正文，末尾附一行统计。典型输出形状如下�
 42: 2026-10-24T10:31:08Z ERROR db timeout waiting for connection
 43:   at Pool.acquire(Pool.java:214)
 ...
-compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence=4 risk=LOW guarded=0 regions=2 window=2 terms=3 forced=0 mode=sieve
+compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence=4 risk=LOW guarded=0 regions=2 window=2 terms=3 forced=0 mode=sieve ser_b=1562
 ```
 
 - `kept/total` 是保留行数与输入行数。
 - `seeds` 与 `evidence` 是结构性不变量，二者始终相等。
+- `ser_b` 是实际序列化响应大小：`--json` 渲染载荷（`render()`）的 UTF-8 字节数，MCP/脚本层按此计真实载荷，而非字符/估算 token。
 - `mode=sieve` 表示实际执行了筛选；passthrough 或 fail-open 模式返回原文。
 - 统计行属于 stdout；管道消费正文时加 `--no-stats`，需要机器可读统计时加 `--json`。
+
+`--evidence SUBSTR|N`（可重复）声明的证据行**强制整行保留并跳过行内 trim**：
+证据是问答硬锚，字符级裁剪会摘掉证据 marker 导致正文丢失而报告仍称"全部保留"
+（v0.9.x 缺陷，P12.6 修复）。`--json` 中 `ev_total` 是声明证据条数、
+`ev_retention` 是实际保留率（0..=1），二者配合给出真实"保留/丢失"口径。
 
 ### 压缩召回效果报告（v0.6.4+）
 
@@ -602,7 +608,7 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 - **单机本地工具**：记忆库是本地目录，不是多租户服务或分布式数据库。
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。
 - **输入有上限**：CLI 单次输入总计 64 MiB；更大的输入需要分段。
-- **pre-1.0 状态**：当前版本 `0.9.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
+- **pre-1.0 状态**：当前版本 `0.10.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
 
 ## 贡献与安全
 

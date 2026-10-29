@@ -2147,3 +2147,27 @@ bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
 - p30m r0.3：0.2940 → 0.1887s（**-36%**，173.1 MB/s）；lossless -47%。
 - 阶段 profile（r0.3 p30m，perf 构建）：dedup 117→30ms（**-74%**），lines+terms ~33ms、masks ~33ms 并行均衡，总 ~130–145ms。
 - 已提交：26cf7bb（P14）、d85f106（P15）、df51fcf（P16），均未 push。
+
+## P12.6 完成记录（2026-10-30，版本 0.10.0）——证据行强制保留 + 实际序列化口径（建议 4/5 执行）
+
+### 背景：5 项建议核查 → 执行 4/5
+- 用户给出 5 项输出契约建议；逐条实测核对：1（outcome.text 作正文）✅ 已符合、2（正文+一行紧凑统计，完整报告独立 stderr）✅ 已符合、3（逐行 explain 默认关，--annotate 按需）✅ 已符合。
+- **4（usage_summary 统计实际序列化响应大小）⚠️**：stats 只报字符+「约 N token」（terms::estimate 估算），无真实序列化字节。
+- **5（测试断言"证据行必须出现在正文"+ small/passthrough/fail-open 覆盖）❌**：无端到端断言。
+- 用户拍板「执行优化，必须验证全量顶级优秀」。
+
+### 实测暴露双重缺陷（P12.6 核心）
+- **证据 marker 被字符级 trim 摘走**：60 行文档 `--evidence UNIQUE_EVIDENCE_XYZ` + trim 深压（cut 93.3%）下，正文证据行被裁为残句（marker 消失），但 stderr 报告仍称「🎯 证据召回 1 条关键证据全部保留 · 0 丢失」。
+- 根因：`apply_keep_policies` 无 evidence 分支（证据只进 `ev_retention` 事后报告，不进 keep/raw 保护）；报告卡 `r.evidence` 实为 `seeds` 复用，非真实保留数。
+
+### 修复清单
+1. **score.rs**：`R_EVIDENCE: u8 = 10` + `mark_evidence_lines`（Substr 命中行 / Line 号命中行强制 keep+raw，跳过行内 trim；越界行号静默忽略；复杂度 8/6 → 拆 `mark_evidence_substr`/`mark_evidence_line` 归零）。
+2. **compress.rs**：`apply_keep_policies` 新增 evidence 分支；`!cfg.evidence.is_empty()` 并入 341 行保护触发条件；Outcome 新增 `ev_total`（两构造点：mk 闭包=evidence.len()，bucketed=0）。
+3. **ops.rs**：`stats()` 末尾新增 `ser_b=`（实际序列化字节 = `render(&outcome)` UTF-8 长度，建议 4）；recall_report 证据卡改用 `ev_retention × ev_total` 如实口径（无证据显示"未声明证据"）；`render()` JSON 新增 `"ev_total":N` 与 ev_retention 配套。
+4. **tests/evidence.rs（新增，建议 5）**：三模式端到端断言——sieve 深压（cut≈90% 下证据行整行逐字节在正文 + 报告如实 + ser_b 存在）/ small 透传（passthrough:small 原样保留）/ fail-open（terms=0 → mode=failopen 原样保留）。
+5. **契约变更**：stats 行 `ser_b` + JSON `ev_total` 属有意的契约扩展——golden 基线整体更新（47 文件，diff 仅 ser_b 追加 / ev_total 插入 / 证据卡文案 / memory 用例日期归一），审查无意外漂移；`ev_retention_explicit_evidence_reports_dropped` 测试语义升级为 `_forced_kept`（"只校验不强制" → "声明即强制保留"，断言 ev_retention=1.0/ev_total=2）。
+
+### 门禁与提交
+- `bash tools/check_bench.sh` 全绿：lib 359（+3：evidence 单测 + 端到端×3 于 tests/evidence.rs）+ semantic + golden（基线已更新）+ clippy 0 + fmt + eval-manifest frozen 匹配 + A2 fidelity 全过。
+- 版本 bump 0.9.0 → 0.10.0（Cargo.toml / README 2 处 / SKILL.md 2 处同步）。
+- 提交 <PENDING>。

@@ -442,9 +442,12 @@ fn recall(
 
 /// 压缩统计行渲染（纯文本，无 I/O；格式与 v0.4.1 逐字节一致）。
 fn stats(r: &Outcome) -> String {
+    // 实际序列化响应大小（P12.6，建议 4）：render() 的 UTF-8 字节数——
+    // MCP/集成层消费的正是该 JSON 载荷，stat 报真实字节而非字符估算。
+    let ser_b = render(r).len();
     let base = format!(
-        "compressed: kept={}/{} lines chars={}->{} ({:.1}% cut) dup={} seeds={} evidence={} risk={} guarded={} regions={} window={} terms={} forced={} mode={}",
-        r.kept, r.total, r.input, r.output, r.cut, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode
+        "compressed: kept={}/{} lines chars={}->{} ({:.1}% cut) dup={} seeds={} evidence={} risk={} guarded={} regions={} window={} terms={} forced={} mode={} ser_b={}",
+        r.kept, r.total, r.input, r.output, r.cut, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode, ser_b
     );
     // 硬上限溢出时追加可解析的记账字段；正常模式统计行格式保持不变（golden 零漂移）。
     match r.mode {
@@ -497,6 +500,9 @@ pub fn render(r: &Outcome) -> String {
     out.push_str(&format!(",\"budget_used_pct\":{:.1}", r.budget_used_pct));
     // 信息留存率（0..=1）：显式证据或默认行保留率代理（P4），全模式恒填充。
     out.push_str(&format!(",\"ev_retention\":{:.4}", r.ev_retention));
+    // 声明证据总条数（P12.6）：与 ev_retention 配合给出真实保留/丢失口径，
+    // 替代 v0.6.4 用 seeds 冒充证据数。
+    out.push_str(&format!(",\"ev_total\":{}", r.ev_total));
     // 分桶统计（默认单桶；compress_bucketed 时逐桶填充）。
     let global_out = tokens_out;
     out.push_str(",\"buckets\":[");
@@ -699,11 +705,19 @@ pub fn recall_report(r: &Outcome, query: &str) -> String {
                     token_cut(tin, tout)
                 ),
             ));
-            s.push_str(&row(
-                "🎯",
-                "证据召回",
-                &format!("{} 条关键证据全部保留 · 0 丢失", r.evidence),
-            ));
+            // 证据召回如实口径（P12.6）：ev_retention × ev_total 得真实保留数；
+            // v0.6.4 误用 seeds 当证据数导致"全部保留"与正文丢失并存。
+            if r.ev_total > 0 {
+                let ev_kept = (r.ev_retention * r.ev_total as f64).round() as usize;
+                let ev_loss = r.ev_total.saturating_sub(ev_kept);
+                s.push_str(&row(
+                    "🎯",
+                    "证据召回",
+                    &format!("{} 条中 {ev_kept} 条保留 · {ev_loss} 丢失", r.ev_total),
+                ));
+            } else {
+                s.push_str(&row("🎯", "证据召回", "未声明证据"));
+            }
             s.push_str(&row("🔁", "去重", &format!("{} 行重复内容已折叠", r.dup)));
             s.push_str(&row(
                 "✂️",

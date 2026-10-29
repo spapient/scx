@@ -610,22 +610,25 @@ fn ev_retention_explicit_evidence_all_kept() {
 }
 
 #[test]
-fn ev_retention_explicit_evidence_reports_dropped() {
-    // 声明一个不会被命中的行号作为证据 → 留存率如实 < 1.0（只校验、不强制保留）。
+fn ev_retention_explicit_evidence_forced_kept() {
+    // 声明即强制保留（P12.6，建议 5）：v0.6.4 证据"只校验、不强制保留"导致
+    // 证据行被裁剪而报告仍称"全部保留"；现契约下 Line/Substr 证据在
+    // apply_keep_policies 强制 keep+raw——即使远离 seed 的纯 filler 也整行保留。
     let mut lines: Vec<String> = (0..200)
         .map(|i| format!("pad alpha beta line {i}"))
         .collect();
     lines[100] = "ERROR db timeout conn_id=9f2a".to_string();
     let text = lines.join("\n");
     let mut c = cfg();
-    c.context = 0; // 针尖模式：只留 seed + 守卫，纯 filler 必删。
+    c.context = 0; // 针尖模式：只留 seed + 守卫 + 证据，纯 filler 必删。
     c.evidence = vec![
         crate::Evidence::Line(101), // seed 行保留
-        crate::Evidence::Line(51),  // 纯 filler，远离 seed，必删
+        crate::Evidence::Line(51),  // 纯 filler，但声明即强制保留
     ];
     let o = compress(&text, "db timeout", &c);
     assert_eq!(o.mode, Mode::Sieve);
-    assert_eq!(o.ev_retention, 0.5, "1/2 证据保留");
+    assert_eq!(o.ev_retention, 1.0, "声明的证据全部强制保留");
+    assert_eq!(o.ev_total, 2);
 }
 
 #[test]

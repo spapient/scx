@@ -215,6 +215,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             dropped,
             budget_used_pct: 0.0,
             ev_retention: ev,
+            ev_total: evidence.len(),
             buckets: vec![crate::BucketStat {
                 kind,
                 tokens_in,
@@ -335,10 +336,16 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     mark_structure_anchors(cfg, &lines, &mut keep, &mut kept, &mut reason);
 
     // 行保护策略（--code-keep / --num-line-keep / --sym-line-keep / --zh-keep /
-    // --list-keep）：整行保留并标记 raw（render 跳过行内 trim）。
-    // 默认全 0 时为空操作，与现状逐字节一致。
+    // --list-keep / --evidence）：整行保留并标记 raw（render 跳过行内 trim）。
+    // 默认全 0 且无证据时为空操作，与现状逐字节一致。
     let mut raw = vec![false; total];
-    if cfg.code_keep || cfg.num_line_keep || cfg.sym_line_keep || cfg.zh_keep || cfg.list_keep {
+    if cfg.code_keep
+        || cfg.num_line_keep
+        || cfg.sym_line_keep
+        || cfg.zh_keep
+        || cfg.list_keep
+        || !cfg.evidence.is_empty()
+    {
         apply_keep_policies(
             cfg,
             &lines,
@@ -517,6 +524,7 @@ pub fn compress_bucketed(
         dropped: Vec::new(),
         budget_used_pct: 0.0,
         ev_retention: 1.0,
+        ev_total: 0,
         buckets,
         explain: Vec::new(),
     }
@@ -568,6 +576,12 @@ fn apply_keep_policies(
     // instruct 保持率 0.000 根因；缓解候选，代价是列表场景压缩率下降）。
     if cfg.list_keep {
         mark_list_lines(lines, dup, keep, kept, reason, raw);
+    }
+    // --evidence（P12.6）：证据行整行保留并标记 raw——Substr/Line 声明的
+    // 证据是问答硬锚，行内 trim 会摘词导致证据 marker 从正文消失而报告仍
+    // 称"全部保留"；强制 keep+raw 后正文逐字节含证据子串。
+    if !cfg.evidence.is_empty() {
+        mark_evidence_lines(lines, &cfg.evidence, keep, kept, reason, raw);
     }
 }
 
@@ -1286,5 +1300,63 @@ mod tests {
         assert!(!keep[1] && !keep[3], "普通行与代码行不受影响");
         assert_eq!(kept, 2);
         assert_eq!(reason[0], crate::compress::score::R_LIST_LINE);
+    }
+
+    #[test]
+    fn evidence_lines_kept_and_raw_skip_trim() {
+        // Substr 证据：命中的行整行保留 + raw（行内 trim 不再摘 marker）。
+        let lines: Vec<&str> = vec!["plain", "关键证据行 UNIQUE_EVIDENCE_XYZ", "plain2"];
+        let mut keep = vec![false; 3];
+        let mut kept = 0;
+        let mut reason = vec![0u8; 3];
+        let mut raw = vec![false; 3];
+        let ev = vec![crate::Evidence::Substr("UNIQUE_EVIDENCE_XYZ".into())];
+        crate::compress::score::mark_evidence_lines(
+            &lines,
+            &ev,
+            &mut keep,
+            &mut kept,
+            &mut reason,
+            &mut raw,
+        );
+        assert!(keep[1], "Substr 命中行整行保留");
+        assert!(raw[1], "Substr 命中行跳过行内 trim");
+        assert!(!keep[0] && !keep[2], "未命中行不受影响");
+        assert_eq!(kept, 1);
+        assert_eq!(reason[1], crate::compress::score::R_EVIDENCE);
+
+        // Line 证据：行号命中整行保留（1-based）。
+        let mut keep2 = vec![false; 3];
+        let mut kept2 = 0;
+        let mut reason2 = vec![0u8; 3];
+        let mut raw2 = vec![false; 3];
+        let ev2 = vec![crate::Evidence::Line(3)];
+        crate::compress::score::mark_evidence_lines(
+            &lines,
+            &ev2,
+            &mut keep2,
+            &mut kept2,
+            &mut reason2,
+            &mut raw2,
+        );
+        assert!(keep2[2] && raw2[2], "Line 命中行整行保留并 raw");
+        assert_eq!(kept2, 1);
+
+        // 越界行号静默忽略，不 panic。
+        let mut keep3 = vec![false; 3];
+        let mut kept3 = 0;
+        let mut reason3 = vec![0u8; 3];
+        let mut raw3 = vec![false; 3];
+        let ev3 = vec![crate::Evidence::Line(99)];
+        crate::compress::score::mark_evidence_lines(
+            &lines,
+            &ev3,
+            &mut keep3,
+            &mut kept3,
+            &mut reason3,
+            &mut raw3,
+        );
+        assert!(!keep3.iter().any(|&k| k), "越界行号不影响任何行");
+        assert_eq!(kept3, 0);
     }
 }

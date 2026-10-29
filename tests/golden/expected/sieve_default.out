@@ -7,4 +7,4 @@ ERROR db timeout at 12:01 pool exhausted (conn_id=9f2a)
 at com.ingest.Pool.acquire(Pool.java:214)
 Root cause: connection pool size 4 < peak concurrency 11
 ...
-compressed: kept=7/200 lines chars=8909->338 (96.2% cut) dup=0 seeds=1 evidence=1 risk=HIGH guarded=0 regions=1 window=2 terms=6 forced=0 mode=sieve
+compressed: kept=7/200 lines chars=8909->338 (96.2% cut) dup=0 seeds=1 evidence=1 risk=HIGH guarded=0 regions=1 window=2 terms=6 forced=0 mode=sieve ser_b=2549
