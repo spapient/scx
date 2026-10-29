@@ -1989,3 +1989,21 @@ scx 在同口径下仍领先：cut +3.1pp（0.777 vs 0.746）、keep +10pp
 （0.550 vs 0.450）。LLMLingua-2 的 XLM-RoBERTa 512 token 序列上限对其
 长代码题存在固有截断损失，scx 无此限制。
 
+
+## P11-D2 落地记录（Nugget/LLM-Compressor 可用性调研，2026-10-29）
+
+**调研结论（两个候选均不适用，P11-D 组以 D1 为终）**：
+
+| 候选 | 定位 | 可用性结论 |
+|---|---|---|
+| Nugget2D（NUGGET2D: Dynamic Contextual Compression） | ACL 2024 学术方法：上下文压缩为 virtual tokens（nuggets），需 LLAMA 初始化 + LoRA 训练 | **无开箱即用 pip 包**；效果依赖训练，非即插即用压缩器，不适用轻量对比 |
+| LLM-Compressor（llmcompressor, Neural Magic） | 模型优化库：权重/激活/KV Cache 量化、剪枝、稀疏化（面向 vLLM 部署） | **非 prompt 压缩器**，与 scx 的上下文压缩非同类型，不可比 |
+
+**结论**：P11-D2 标记为「不可用（调研记录）」；竞品对比组以 D1（LLMLingua-1/2 横向）收官。
+至此 **P11 十二项全量完成**：A1-A5 本地化验证、B1-B3 真实使用形态、C1-C3 评测可信度、
+D1 竞品对比（LLMLingua-2, scx cut 0.777/keep 0.550 双领先）+ D2 调研闭环。
+
+**P11 收官证据**：本文件 P11-A/B/C/D 各落地记录齐全；结果冻结
+config/bench/results/p11_{a,c1,c2,c3,d1}*.json；评测数据集 config/bench/datasets/
+bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
+…→ 7bd3abd（P11-D1 LLMLingua-2 收官）。文档版本随本段递增（P11 完成）。
