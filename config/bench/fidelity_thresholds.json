@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "note": "A2 round-trip 保真断言阈值（分档口径，接入 check_bench.sh）。",
+  "mode": "gte",
+  "bands": {
+    "code": {
+      "sets": ["bench_cuda60.csv", "bench_js60.csv", "bench_shape30.csv", "bench_layers15.csv"],
+      "note": "代码档 = r28 激进档口径（cut 28-77%）：信息层面中等保留，守住数字/词元/BLEU 三锚下界",
+      "num_cov": 0.40,
+      "token_cov": 0.30,
+      "bleu4_prec": 0.10
+    },
+    "zh_extreme": {
+      "sets": ["bench_zh_cn30.csv", "bench_zh_cn40.csv"],
+      "note": "中文极端档 = cut 92-94%：词元/BLEU 重合预期趋零，唯一硬锚是数字覆盖率（数字锚永不摘除）",
+      "num_cov": 0.95
+    }
+  }
+}

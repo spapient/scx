@@ -5,7 +5,7 @@ use super::*;
 
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -72,6 +72,8 @@ pub fn usage() -> String {
     s.push_str("  --num-line-keep 1    keep lines containing ASCII digits in --trim\n");
     s.push_str("  --sym-line-keep 1   keep fn/type signature lines in --trim\n");
     s.push_str("                       (default 0; long-code QA: digit lines carry answers)\n");
+    s.push_str("  --list-keep 1        keep markdown list lines whole in --trim\n");
+    s.push_str("                       (default 0; list-keep: enumeration docs keep item lines)\n");
     s.push_str("  --preserve T         keep lines with builtin entity T (url/ip/email/errno); repeatable\n");
     s.push_str("  --evidence N|substr  declare must-keep evidence: positive int = line no, else substring;\n");
     s.push_str(
@@ -523,6 +525,7 @@ pub(crate) const POLICY_TABLE: &[(&str, &str)] = &[
     ("zh_keep", "--zh-keep"),
     ("num_line_keep", "--num-line-keep"),
     ("sym_line_keep", "--sym-line-keep"),
+    ("list_keep", "--list-keep"),
 ];
 
 pub(crate) fn lookup(key: &str) -> Option<&'static str> {
@@ -542,9 +545,8 @@ pub(crate) fn apply(
     match key {
         "ratio" | "context" | "window" => number(s, key, v, path, line)?,
         "elide" | "risk_gate" | "scoped" | "strict" | "lineno" | "structure" | "trim"
-        | "trim_op_keep" | "code_keep" | "zh_keep" | "num_line_keep" | "sym_line_keep" => {
-            toggle(s, key, v, path, line)?
-        }
+        | "trim_op_keep" | "code_keep" | "zh_keep" | "num_line_keep" | "sym_line_keep"
+        | "list_keep" => toggle(s, key, v, path, line)?,
         "max_tokens" => tokens(s, v, path, line)?,
         "fill_floor" => fill_floor(s, v, path, line)?,
         "trim_ratio" => trim_ratio_key(s, v, path, line)?,
@@ -633,6 +635,7 @@ pub(crate) fn toggle(
         "zh_keep" => s.config.zh_keep = b,
         "num_line_keep" => s.config.num_line_keep = b,
         "sym_line_keep" => s.config.sym_line_keep = b,
+        "list_keep" => s.config.list_keep = b,
         _ => unreachable!("bool policy key whitelist"),
     }
     Ok(())
@@ -741,6 +744,7 @@ pub(crate) fn either(
         "--zh-keep" => s.config.zh_keep = b,
         "--num-line-keep" => s.config.num_line_keep = b,
         "--sym-line-keep" => s.config.sym_line_keep = b,
+        "--list-keep" => s.config.list_keep = b,
         _ => s.store = b,
     }
     Ok(())

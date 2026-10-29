@@ -2050,3 +2050,25 @@ bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
 - 代码质量：RowCtx/RowOut 收敛参数、split_parts 借用链、clippy 归零、零第三方 crate、`#![forbid(unsafe_code)]` 保持。
 - 版本 bump `0.7.0 → 0.8.0`（README/SKILL 同步）。
 - git 提交见交付记录；状态图见 P12 交付消息。
+
+## 验证覆盖矩阵修复（P0-P2）v0.8.1
+
+### P0 manifest 冻结断层
+- `tools/freeze_manifest.py` 幂等补录：frozen 8 → 48 → 50 结果资产（sha256=原始字节哈希、rows=换行计数、bytes 审计），与 check_bench.sh 同口径。
+- commit 7409ff8。
+
+### P1-A2 round-trip 保真门禁
+- 定分档阈值 `config/bench/fidelity_thresholds.json`（code 档 num_cov≥0.40/token_cov≥0.30/bleu4_prec≥0.10；zh_extreme 档 num_cov≥0.95）。
+- `tools/check_fidelity.py` 断言接入 check_bench.sh：cuda 0.567/0.716/0.353、js 0.600/0.367/0.216、shape 0.467/0.398/0.301、layers 0.533/0.657/0.143；zh 两集 num_cov=1.000 全过。
+
+### P1-B1 幂等边界文档
+- README「压缩产物不可二次压缩」：非幂等、级联退化（实测额外 cut≈0.30），必须对原始累积文本全量重压缩。
+
+### P2 list-keep 列表行保护
+- 根因：B2 枚举场景（instruct）scx 压缩后列表项被字符级 trim 摘词 → 保持率 0.000（base 列表行保留 4%）。
+- 内核：`src/compress/score.rs` R_LIST_LINE + list_sep/list_task/list_ordered（保守判定防误伤代码 `*ptr`/`-x`/`1.5f`/`1)`）；mark_list_lines 整行保留。
+- 接线：lib.rs Config + policy.rs DEFAULT_LIST_KEEP + args.rs Flag + **args/parse.rs CLI/pipeline 映射 6 处**（缺映射是"未生效"根因）+ pipeline.rs TRIM_KEYS。
+- 本地验证：10 枚举场景列表行保留 4% → **100%**（cut 53.6% → 51.3%，仅 -2.3pp）。
+- 在线验证（deepseek-v4-pro + qwen-max，3 场景 instruct 枚举）：full 3/6 → scx 0/6 → **scx+list-keep 6/6**。
+- 冻结：p12_5_listkeep_results.json + p12_5_listkeep_online.json 入 eval-manifest。
+- 门禁：lib 345 + semantic + golden + clippy 0 + fmt + manifest + A2 fidelity 全部通过 ✓

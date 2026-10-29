@@ -335,10 +335,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 高于可选填充。默认空 kinds 时为空操作，与现状逐字节一致。
     mark_structure_anchors(cfg, &lines, &mut keep, &mut kept, &mut reason);
 
-    // 行保护策略（--code-keep / --num-line-keep / --sym-line-keep / --zh-keep）：
-    // 整行保留并标记 raw（render 跳过行内 trim）。默认全 0 时为空操作，与现状逐字节一致。
+    // 行保护策略（--code-keep / --num-line-keep / --sym-line-keep / --zh-keep /
+    // --list-keep）：整行保留并标记 raw（render 跳过行内 trim）。
+    // 默认全 0 时为空操作，与现状逐字节一致。
     let mut raw = vec![false; total];
-    if cfg.code_keep || cfg.num_line_keep || cfg.sym_line_keep || cfg.zh_keep {
+    if cfg.code_keep || cfg.num_line_keep || cfg.sym_line_keep || cfg.zh_keep || cfg.list_keep {
         apply_keep_policies(
             cfg,
             &lines,
@@ -562,6 +563,12 @@ fn apply_keep_policies(
     // 中文代码问答题干被 trim 逐字摘碎是保持率 0.2 主导机制，问句行必须保真。
     if cfg.zh_keep {
         mark_zh_lines(lines, dup, keep, kept, reason, raw);
+    }
+    // --list-keep 1（P12.5）：列表项行整行保留并标记 raw——枚举型文档的
+    // 列表项是全量枚举任务的硬信息，trim 摘词导致模型恢复清单漏项（P11-B2
+    // instruct 保持率 0.000 根因；缓解候选，代价是列表场景压缩率下降）。
+    if cfg.list_keep {
+        mark_list_lines(lines, dup, keep, kept, reason, raw);
     }
 }
 
@@ -1218,5 +1225,67 @@ mod tests {
         );
         assert_eq!(kc2, 1, "区域门控只保留证据邻域内的错误行");
         assert!(k_region[2], "in-region 错误行保留");
+    }
+
+    #[test]
+    fn list_line_detects_markdown_lists_and_rejects_code() {
+        // 命中：无序 / 有序 / 任务清单。
+        for hit in [
+            "- item",
+            "* item",
+            "+ item",
+            "1. item",
+            "12) item",
+            "(3) item",
+            "a. item",
+            "B) item",
+            "[ ] todo",
+            "[x] done",
+            "-中文列表项",
+        ] {
+            assert!(crate::compress::score::list_line(hit), "应命中: {hit}");
+        }
+        // 拒绝：代码/数学表达式（标记后无空白或数字字面量）。
+        for miss in [
+            "*ptr",
+            "-x",
+            "+1",
+            "1.5f",
+            "1)",
+            "1+2",
+            "a.b",
+            "-",
+            "*",
+            "1. ",
+            "[x]",
+            "fn f(",
+            "// - comment",
+            "return -1",
+        ] {
+            assert!(!crate::compress::score::list_line(miss), "不应命中: {miss}");
+        }
+    }
+
+    #[test]
+    fn list_keep_preserves_list_rows_and_skips_trim() {
+        let lines: Vec<&str> = vec!["- keep me", "plain row", "3. also keep", "*ptr code"];
+        let dup = vec![false; 4];
+        let mut keep = vec![false; 4];
+        let mut kept = 0;
+        let mut reason = vec![0u8; 4];
+        let mut raw = vec![false; 4];
+        crate::compress::score::mark_list_lines(
+            &lines,
+            &dup,
+            &mut keep,
+            &mut kept,
+            &mut reason,
+            &mut raw,
+        );
+        assert!(keep[0] && keep[2], "列表行整行保留");
+        assert!(raw[0] && raw[2], "列表行跳过行内 trim");
+        assert!(!keep[1] && !keep[3], "普通行与代码行不受影响");
+        assert_eq!(kept, 2);
+        assert_eq!(reason[0], crate::compress::score::R_LIST_LINE);
     }
 }

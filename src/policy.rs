@@ -43,6 +43,12 @@ pub const DEFAULT_SYM_LINE_KEEP: bool = false;
 /// 中文代码问答题干被 trim 逐字摘碎是保持率 0.2 的主导机制（P8 保真
 /// 曲线：r=0.3 中文段保留仅 22%），问句行必须整行保真。
 pub const DEFAULT_ZH_KEEP: bool = false;
+/// 列表行保护开关（`--list-keep`，默认 0 = 现状逐字节一致）。
+/// 打开时列表项行（`- `/`* `/`1. `/`[ ] ` 等行首标记）整行保留并标记
+/// raw（跳过行内 trim）——枚举型文档的列表项是全量枚举任务的硬信息，
+/// 字符级 trim 摘词导致模型恢复清单漏项（P11-B2 实测 instruct 保持率
+/// 0.000 根因；缓解候选，代价是列表场景压缩率下降）。
+pub const DEFAULT_LIST_KEEP: bool = false;
 pub const MAX_CONTEXT: i64 = 4;
 pub const MIN_WINDOW: i64 = 1;
 pub const MAX_WINDOW: i64 = 8;

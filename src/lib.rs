@@ -319,6 +319,11 @@ pub struct Config {
     /// 整行保留并跳过行内 trim（防 trim 逐字摘碎中文题干）——中文代码
     /// 问答场景 P8 实测 r=0.3 档保持率 0.2 根因：题干被裁成"线 线程 ？"。
     pub zh_keep: bool,
+    /// 列表行保护（`--list-keep`，默认 0）。列表项行（`- `/`* `/`1. `/`[ ] `
+    /// 等行首标记）整行保留并跳过行内 trim——枚举型文档的列表项是"全量
+    /// 枚举"任务的硬信息，trim 摘词导致模型恢复清单漏项（P11-B2 实测
+    /// instruct 保持率 0.000 根因；缓解候选，代价是该场景压缩率下降）。
+    pub list_keep: bool,
     /// 主压缩路径的单桶内容类型（`--kind` 显式标注，默认 ToolOutput = 现状行为不变）。
     /// 仅给单桶打标签并决定缺省 `--ratio`（args 层解析为 `default_ratio()`）；
     /// `compress_bucketed` 按 part 覆盖，不受此字段影响。
@@ -364,6 +369,7 @@ impl Default for Config {
             num_line_keep: crate::policy::DEFAULT_NUM_LINE_KEEP,
             sym_line_keep: crate::policy::DEFAULT_SYM_LINE_KEEP,
             zh_keep: crate::policy::DEFAULT_ZH_KEEP,
+            list_keep: crate::policy::DEFAULT_LIST_KEEP,
         }
     }
 }

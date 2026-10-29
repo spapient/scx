@@ -59,6 +59,9 @@ print("  " + ("OK: frozen + present 全部匹配" if ok else "FAIL"))
 sys.exit(0 if ok else 1)
 PY
 
+step "A2 保真断言（fidelity_thresholds 分档）"
+/tmp/scx-eval/bin/python tools/check_fidelity.py || fail "A2 fidelity"
+
 if [ "$FAIL" = "0" ]; then
   echo; echo "check_bench: 全部通过 ✓"
 else

@@ -12,6 +12,7 @@ pub(crate) const R_ANCHOR: u8 = 5;
 pub(crate) const R_NUM_LINE: u8 = 6;
 pub(crate) const R_SYM_LINE: u8 = 7;
 pub(crate) const R_ZH_LINE: u8 = 8;
+pub(crate) const R_LIST_LINE: u8 = 9;
 
 /// 标记阶段共享可变上下文：keep 位图 / 计数 / 原因，与只读 scores/fill_floor。
 pub(crate) struct Ctx<'a> {
@@ -503,6 +504,86 @@ pub(crate) fn mark_zh_lines(
                 *kept += 1;
             }
             reason[i] = R_ZH_LINE;
+            raw[i] = true;
+        }
+    }
+}
+
+/// 是否为列表行（markdown/文本列表，`--list-keep` 使用）。
+/// 保守判定：标记后必须紧跟分隔（ASCII 空格或 CJK），避免误伤代码
+/// （`*ptr`/`-x`/`1+2`/`1.5f`/`1)` 函数调用均不命中）。
+/// 支持：无序 `- ` / `* ` / `+ `，任务清单 `[ ] ` / `[x] `，
+/// 有序 `1. ` / `1) ` / `(1) ` / `a. ` / `A) `。
+pub(crate) fn list_line(t: &str) -> bool {
+    let t = t.trim();
+    let b = t.as_bytes();
+    if b.is_empty() {
+        return false;
+    }
+    if b[0] == b'[' {
+        return list_task(b);
+    }
+    if b[0] == b'-' || b[0] == b'*' || b[0] == b'+' {
+        return list_sep(b, 1);
+    }
+    list_ordered(b)
+}
+
+/// 列表标记后的分隔检查：ASCII 空格 或 非 ASCII（CJK）——中文文档常写
+/// `-中文`（无空格）；行尾无分隔不算列表（markdown 语法要求空格）。
+fn list_sep(b: &[u8], i: usize) -> bool {
+    match b.get(i) {
+        Some(&c) => c == b' ' || !c.is_ascii(),
+        None => false,
+    }
+}
+
+/// 任务清单：`[ ] ` / `[x] ` / `[X] `（严格空格）。
+fn list_task(b: &[u8]) -> bool {
+    if b.len() <= 3 || b[0] != b'[' {
+        return false;
+    }
+    matches!(&b[..3], b"[ ]" | b"[x]" | b"[X]") && b[3] == b' '
+}
+
+/// 有序列表：数字 `1. `/`1) `/`(1) `，或字母 `a. `/`A) `。
+fn list_ordered(b: &[u8]) -> bool {
+    let mut i = if b[0] == b'(' { 1 } else { 0 };
+    let mut digits = 0;
+    while i < b.len() && b[i].is_ascii_digit() && digits < 3 {
+        digits += 1;
+        i += 1;
+    }
+    if digits > 0 {
+        let s = b.get(i).copied();
+        return (s == Some(b'.') || s == Some(b')')) && list_sep(b, i + 1);
+    }
+    b[0].is_ascii_alphabetic()
+        && (b.get(1) == Some(&b'.') || b.get(1) == Some(&b')'))
+        && list_sep(b, 2)
+}
+
+/// 列表行整行保留并标记 raw（跳过行内 trim）——枚举型文档（配置清单、
+/// 依赖列表、TODO）的列表项是"全量枚举"任务的硬信息，字符级 trim 会
+/// 摘词导致模型恢复清单漏项（P11-B2 实测 instruct 保持率 0.000 根因）。
+pub(crate) fn mark_list_lines(
+    lines: &[&str],
+    dup: &[bool],
+    keep: &mut [bool],
+    kept: &mut usize,
+    reason: &mut [u8],
+    raw: &mut [bool],
+) {
+    for (i, line) in lines.iter().enumerate() {
+        if dup[i] {
+            continue;
+        }
+        if list_line(line.trim()) {
+            if !keep[i] {
+                keep[i] = true;
+                *kept += 1;
+            }
+            reason[i] = R_LIST_LINE;
             raw[i] = true;
         }
     }

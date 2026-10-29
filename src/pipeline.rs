@@ -31,6 +31,7 @@ pub struct Trim {
     pub zh_keep: Option<bool>,
     pub num_line_keep: Option<bool>,
     pub sym_line_keep: Option<bool>,
+    pub list_keep: Option<bool>,
 }
 
 /// 骨架保护阶段：结构感知邻域、结构锚点种类与填充行最低分门槛。
@@ -60,6 +61,7 @@ const TRIM_KEYS: &[&str] = &[
     "zh_keep",
     "num_line_keep",
     "sym_line_keep",
+    "list_keep",
 ];
 const ANCHOR_KEYS: &[&str] = &["structure", "anchors", "fill_floor"];
 
@@ -113,6 +115,7 @@ fn from_json(root: &Json, path: &str) -> Result<Pipeline, String> {
         p.trim.zh_keep = bool_of(obj, "zh_keep", path, "trim")?;
         p.trim.num_line_keep = bool_of(obj, "num_line_keep", path, "trim")?;
         p.trim.sym_line_keep = bool_of(obj, "sym_line_keep", path, "trim")?;
+        p.trim.list_keep = bool_of(obj, "list_keep", path, "trim")?;
     }
     if let Some(obj) = anchor {
         reject_unknown(ANCHOR_KEYS, obj, path, "anchor")?;
@@ -284,6 +287,11 @@ fn apply_trim_keep(t: &Trim, cfg: &mut Config, set: &dyn Fn(&str) -> bool) -> Ve
     if t.sym_line_keep.is_some() {
         set1(&mut a, cfg, set, "--sym-line-keep", |c| {
             c.sym_line_keep = t.sym_line_keep.unwrap()
+        });
+    }
+    if t.list_keep.is_some() {
+        set1(&mut a, cfg, set, "--list-keep", |c| {
+            c.list_keep = t.list_keep.unwrap()
         });
     }
     a

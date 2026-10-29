@@ -1,0 +1,131 @@
+{
+  "pipeline": "P12.5 list-keep 在线 instruct 验证（3 场景 × 双强模型）",
+  "rows": [
+    {
+      "scene": "公共 API 函数列表",
+      "variant": "full",
+      "model": "deepseek",
+      "pass": false,
+      "ans": "sc"
+    },
+    {
+      "scene": "公共 API 函数列表",
+      "variant": "full",
+      "model": "qwen",
+      "pass": true,
+      "ans": "scx_compress scx_decompress scx_mem_pool scx_tokenize scx_trim_line scx_render 答案是 6 #### 6"
+    },
+    {
+      "scene": "公共 API 函数列表",
+      "variant": "scx",
+      "model": "deepseek",
+      "pass": false,
+      "ans": "scx_compress 答案是 scx_compress #### scx_compress"
+    },
+    {
+      "scene": "公共 API 函数列表",
+      "variant": "scx",
+      "model": "qwen",
+      "pass": false,
+      "ans": "- scx_compress 答案是 - scx_compress #### - scx_compress"
+    },
+    {
+      "scene": "公共 API 函数列表",
+      "variant": "scx_listkeep",
+      "model": "deepseek",
+      "pass": true,
+      "ans": "scx_compress scx_decompress scx_mem_pool scx_tokenize scx_trim_line scx_render 答案是 scx_compress scx_decompress scx_mem_p"
+    },
+    {
+      "scene": "公共 API 函数列表",
+      "variant": "scx_listkeep",
+      "model": "qwen",
+      "pass": true,
+      "ans": "- scx_compress - scx_decompress - scx_mem_pool - scx_tokenize - scx_trim_line - scx_render 答案是 - scx_compress - scx_deco"
+    },
+    {
+      "scene": "核心指标",
+      "variant": "full",
+      "model": "deepseek",
+      "pass": false,
+      "ans": "请求延迟 错误率 CPU "
+    },
+    {
+      "scene": "核心指标",
+      "variant": "full",
+      "model": "qwen",
+      "pass": true,
+      "ans": "- 请求延迟 - 错误率 - CPU 使用率 - 内存水位 - 队列深度 答案是 5 #### 5"
+    },
+    {
+      "scene": "核心指标",
+      "variant": "scx",
+      "model": "deepseek",
+      "pass": false,
+      "ans": "__API_FAIL__ empty content"
+    },
+    {
+      "scene": "核心指标",
+      "variant": "scx",
+      "model": "qwen",
+      "pass": false,
+      "ans": "- 版本 2.1.0 - 端口 8081 - 超时 45000 秒 - 保留 30 天 - 并发上 512 答案是 5 #### 5"
+    },
+    {
+      "scene": "核心指标",
+      "variant": "scx_listkeep",
+      "model": "deepseek",
+      "pass": true,
+      "ans": "请求延迟   错误率   CPU 使用率   内存水位   队列深度   答案是 请求延迟、错误率、CPU 使用率、内存水位、队列深度 #### 请求延迟、错误率、CPU 使用率、内存水位、队列深度"
+    },
+    {
+      "scene": "核心指标",
+      "variant": "scx_listkeep",
+      "model": "qwen",
+      "pass": true,
+      "ans": "- 请求延迟 - 错误率 - CPU 使用率 - 内存水位 - 队列深度 答案是 5 #### 5"
+    },
+    {
+      "scene": "部署配置项",
+      "variant": "full",
+      "model": "deepseek",
+      "pass": false,
+      "ans": "__API_FAIL__ empty content"
+    },
+    {
+      "scene": "部署配置项",
+      "variant": "full",
+      "model": "qwen",
+      "pass": true,
+      "ans": "- batch_size - num_workers - quant_bits - max_seq_len - learning_rate 答案是 5 #### 5"
+    },
+    {
+      "scene": "部署配置项",
+      "variant": "scx",
+      "model": "deepseek",
+      "pass": false,
+      "ans": "__API_FAIL__ empty content"
+    },
+    {
+      "scene": "部署配置项",
+      "variant": "scx",
+      "model": "qwen",
+      "pass": false,
+      "ans": "- batch_size  答案是 1 #### 1"
+    },
+    {
+      "scene": "部署配置项",
+      "variant": "scx_listkeep",
+      "model": "deepseek",
+      "pass": true,
+      "ans": "batch_size num_workers quant_bits max_seq_len learning_rate 答案是 batch_size, num_workers, quant_bits, max_seq_len, learni"
+    },
+    {
+      "scene": "部署配置项",
+      "variant": "scx_listkeep",
+      "model": "qwen",
+      "pass": true,
+      "ans": "- batch_size - num_workers - quant_bits - max_seq_len - learning_rate 答案是 5 #### 5"
+    }
+  ]
+}

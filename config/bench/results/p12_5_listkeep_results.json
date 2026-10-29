@@ -1,0 +1,190 @@
+{
+  "pipeline": "P12.5 list-keep 实验（B2 枚举场景本地验证，r28 档）",
+  "method": "复用 P11-B2 文档模板；对比默认 vs --list-keep 1 的列表行保留率与 cut",
+  "rows": [
+    {
+      "scene": "公共 API 函数列表",
+      "qi": 0,
+      "list_items": 6,
+      "base": {
+        "cut": 0.5737,
+        "list_keep": 0.062,
+        "hit": 1,
+        "n": 16
+      },
+      "listkeep": {
+        "cut": 0.5421,
+        "list_keep": 1.0,
+        "hit": 16,
+        "n": 16
+      }
+    },
+    {
+      "scene": "性能优化要点",
+      "qi": 1,
+      "list_items": 5,
+      "base": {
+        "cut": 0.4673,
+        "list_keep": 0.0,
+        "hit": 0,
+        "n": 15
+      },
+      "listkeep": {
+        "cut": 0.4443,
+        "list_keep": 1.0,
+        "hit": 15,
+        "n": 15
+      }
+    },
+    {
+      "scene": "环境变量列表",
+      "qi": 2,
+      "list_items": 5,
+      "base": {
+        "cut": 0.5649,
+        "list_keep": 0.133,
+        "hit": 2,
+        "n": 15
+      },
+      "listkeep": {
+        "cut": 0.5426,
+        "list_keep": 1.0,
+        "hit": 15,
+        "n": 15
+      }
+    },
+    {
+      "scene": "管道阶段",
+      "qi": 3,
+      "list_items": 7,
+      "base": {
+        "cut": 0.4986,
+        "list_keep": 0.0,
+        "hit": 0,
+        "n": 17
+      },
+      "listkeep": {
+        "cut": 0.4774,
+        "list_keep": 1.0,
+        "hit": 17,
+        "n": 17
+      }
+    },
+    {
+      "scene": "核心指标",
+      "qi": 4,
+      "list_items": 5,
+      "base": {
+        "cut": 0.4818,
+        "list_keep": 0.0,
+        "hit": 0,
+        "n": 15
+      },
+      "listkeep": {
+        "cut": 0.46,
+        "list_keep": 1.0,
+        "hit": 15,
+        "n": 15
+      }
+    },
+    {
+      "scene": "依赖清单",
+      "qi": 5,
+      "list_items": 6,
+      "base": {
+        "cut": 0.5866,
+        "list_keep": 0.0,
+        "hit": 0,
+        "n": 16
+      },
+      "listkeep": {
+        "cut": 0.5598,
+        "list_keep": 1.0,
+        "hit": 16,
+        "n": 16
+      }
+    },
+    {
+      "scene": "索引策略",
+      "qi": 6,
+      "list_items": 5,
+      "base": {
+        "cut": 0.5999,
+        "list_keep": 0.0,
+        "hit": 0,
+        "n": 15
+      },
+      "listkeep": {
+        "cut": 0.5783,
+        "list_keep": 1.0,
+        "hit": 15,
+        "n": 15
+      }
+    },
+    {
+      "scene": "访问控制策略",
+      "qi": 7,
+      "list_items": 5,
+      "base": {
+        "cut": 0.5595,
+        "list_keep": 0.0,
+        "hit": 0,
+        "n": 15
+      },
+      "listkeep": {
+        "cut": 0.5377,
+        "list_keep": 1.0,
+        "hit": 15,
+        "n": 15
+      }
+    },
+    {
+      "scene": "部署配置项",
+      "qi": 8,
+      "list_items": 5,
+      "base": {
+        "cut": 0.5099,
+        "list_keep": 0.067,
+        "hit": 1,
+        "n": 15
+      },
+      "listkeep": {
+        "cut": 0.4831,
+        "list_keep": 1.0,
+        "hit": 15,
+        "n": 15
+      }
+    },
+    {
+      "scene": "基础设施组件",
+      "qi": 9,
+      "list_items": 5,
+      "base": {
+        "cut": 0.5223,
+        "list_keep": 0.133,
+        "hit": 2,
+        "n": 15
+      },
+      "listkeep": {
+        "cut": 0.5054,
+        "list_keep": 1.0,
+        "hit": 15,
+        "n": 15
+      }
+    }
+  ],
+  "agg": {
+    "base": {
+      "mean_cut": 0.5364,
+      "mean_list_keep": 0.04,
+      "list_rows_kept": 6,
+      "list_rows_total": 154
+    },
+    "listkeep": {
+      "mean_cut": 0.5131,
+      "mean_list_keep": 1.0,
+      "list_rows_kept": 154,
+      "list_rows_total": 154
+    }
+  }
+}

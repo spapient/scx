@@ -340,8 +340,8 @@ scx --query "..." [OPTIONS] [file...]
 | `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计；含 `dropped` 区间明细（`--max-tokens`/预算裁剪）与 `max_tokens`/`tok_est` 字段 |
 | `--max-tokens <N>` | 输出 token 硬上限；证据地板最高优先，超限报 `overflow:evidence`/`overflow:fill` |
 | `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
-| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
-| `--pipeline <PATH>` | JSON 管线配置（plan/trim/anchor 三阶段声明式）；键白名单 `plan.ratio/window/context/limit`、`trim.enable/ratio/op_keep/code_keep/zh_keep/num_line_keep/sym_line_keep`、`anchor.structure/anchors/fill_floor`；未知键/越界 fail-loud 报错；优先级 CLI 显式 > 文件 > DEFAULT；评测档位模板 `config/bench/profiles/{r02,r03,r04}.json` |
+| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--pipeline <PATH>` | JSON 管线配置（plan/trim/anchor 三阶段声明式）；键白名单 `plan.ratio/window/context/limit`、`trim.enable/ratio/op_keep/code_keep/zh_keep/num_line_keep/sym_line_keep/list_keep`、`anchor.structure/anchors/fill_floor`；未知键/越界 fail-loud 报错；优先级 CLI 显式 > 文件 > DEFAULT；评测档位模板 `config/bench/profiles/{r02,r03,r04}.json` |
 | `--fill-floor <F>` | 上下文/填充行最低分数门槛（默认 `0` = 现状）；`F>0` 时分数低于门槛的邻域与填充行被裁剪，压缩更深 |
 | `--trim <0\|1>` | 保留行内 token 级重要性裁剪（默认 `0` = 现状）；`1` 时数字/命中词/结构锚保留，停用词与低信息量 token 按 `--trim-ratio` 摘除；**CJK/中文逐字 token 化**——命中 query 的汉字完整保留（如"内存"成词不拆散）、虚词可摘、全角数字保留，中文行不再丢字 |
 | `--trim-ratio <F>` | `--trim 1` 时的低分 token 保留比例（默认 `0.5`；范围 `0.1..=1.0`） |
@@ -597,6 +597,7 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 - **正则子集有限**：`re:` 支持交替/字符类/量词，不支持 `.`、捕获组、锚点与简写类；非法模式报错并提示支持子集。
 - **`--semantic` 可选且默认关闭**：需 `--features semantic` 构建；权重文件 SHA256 校验失败即拒绝运行，不启用时默认路径逐字节不变。
 - **MCP 并入主二进制**：`scx mcp` 子命令走 stdio，只调库内核与 JSON 渲染；`scx setup` 一键注册到 Claude/Codex/Cursor（幂等、写前备份、写后自检）。
+- **压缩产物不可二次压缩**：scx 非幂等——对已压缩文本重复压缩会继续裁减（级联退化，实测额外 cut≈0.30，round-trip 已确认）。**累积场景必须对原始累积文本全量重压缩**，禁止对上次压缩产物再压缩。
 - **token 为估算值**：按字符与 CJK 启发式估算，不是特定模型的 BPE 计数；`--max-tokens`/预算按「启发式 × 安全系数」取保守上界（宁高估勿超预算）。
 - **单机本地工具**：记忆库是本地目录，不是多租户服务或分布式数据库。
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。
