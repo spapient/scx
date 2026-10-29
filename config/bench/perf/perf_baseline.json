@@ -1,0 +1,52 @@
+{
+ "tool": "tools/bench_perf.py",
+ "date": "2026-10-29",
+ "corpus_dir": "/Users/fei/code/scx/config/bench/perf",
+ "results": {
+  "corpus_p1m.txt": {
+   "chars": 1361748,
+   "lossless": {
+    "best_s": 0.0303,
+    "mbps": 42.8
+   },
+   "r0.3": {
+    "best_s": 0.0294,
+    "mbps": 44.2
+   },
+   "r0.2": {
+    "best_s": 0.0295,
+    "mbps": 44.1
+   }
+  },
+  "corpus_p10m.txt": {
+   "chars": 11411030,
+   "lossless": {
+    "best_s": 0.1123,
+    "mbps": 96.9
+   },
+   "r0.3": {
+    "best_s": 0.1094,
+    "mbps": 99.5
+   },
+   "r0.2": {
+    "best_s": 0.1081,
+    "mbps": 100.6
+   }
+  },
+  "corpus_p30m.txt": {
+   "chars": 34252122,
+   "lossless": {
+    "best_s": 0.3768,
+    "mbps": 86.7
+   },
+   "r0.3": {
+    "best_s": 0.294,
+    "mbps": 111.1
+   },
+   "r0.2": {
+    "best_s": 0.2887,
+    "mbps": 113.2
+   }
+  }
+ }
+}

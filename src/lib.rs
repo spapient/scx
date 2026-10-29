@@ -21,6 +21,8 @@ use std::fmt;
 mod analysis;
 mod compress;
 pub mod contain;
+/// 阶段计时器（feature = "perf" 可选诊断；默认零代码）。
+mod perf;
 /// 压缩管线配置（`--pipeline <path>`）：JSON 声明式装配 plan/trim/anchor，
 /// 三层优先级 CLI > pipeline.json > policy 常量；未知键/越界 fail-loud。
 pub mod pipeline;

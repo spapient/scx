@@ -1,6 +1,6 @@
 [package]
 name = "scx"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.82"
 license = "MIT OR Apache-2.0"
@@ -20,6 +20,9 @@ semantic = []
 # 本地记忆库/证据存储（默认启用；`--no-default-features` 构建最小内核，
 # 压缩路径不依赖 memory，脱敏降级为无 Secret 模式）。
 memory = []
+# 诊断计时（可选）：压缩主链分阶段耗时打印到 stderr；关闭时零代码零开销，
+# 输出与默认构建逐字节一致。仅用于性能定位，不参与任何结果路径。
+perf = []
 
 [[example]]
 name = "minhash_mrr"

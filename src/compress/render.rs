@@ -11,55 +11,135 @@ pub(crate) fn render(
     raw: &[bool],
     query_terms: &[String],
 ) -> (String, Vec<usize>) {
-    let mut out_text = String::with_capacity(lines.len() / 2);
-    let mut numbers = Vec::with_capacity(keep.len());
+    let total = keep.len();
+    // trim 结果预计算（并行）：trim 行间相互独立，emit 阶段按保留行顺序取用，
+    // 消除 render 主循环里逐行 trim 的串行成本。
+    let trimmed: Vec<Option<String>> = if cfg.trim {
+        compute_trimmed(lines, keep, raw, cfg, query_terms)
+    } else {
+        vec![None; total]
+    };
+    let mut sink = Sink {
+        out: String::with_capacity(lines.len() / 2),
+        numbers: Vec::with_capacity(keep.len()),
+    };
     let mut in_gap = false;
     for (i, &k) in keep.iter().enumerate() {
         if k {
-            if in_gap && cfg.elide {
-                out_text.push_str("...\n");
-            }
-            in_gap = false;
-            emit_line(
-                &mut out_text,
-                &mut numbers,
-                i,
-                lines[i],
-                cfg,
-                raw,
-                query_terms,
-            );
+            emit_kept(&mut sink, &mut in_gap, i, lines[i], cfg, raw, &trimmed);
         } else {
             in_gap = true;
         }
     }
-    if in_gap && cfg.elide {
-        out_text.push_str("...\n");
-    }
-    (out_text, numbers)
+    flush_gap(&mut sink, in_gap, cfg);
+    // perf 诊断：输出逐行 trim 的累计分段耗时（仅 feature="perf"，默认零开销）。
+    crate::perf::T::start().dump_agg("trim_line");
+    (sink.out, sink.numbers)
 }
 
-/// 单行落地：行号前缀、行内 trim（raw 行跳过）、追加换行并记录序号。
-fn emit_line(
-    out: &mut String,
-    numbers: &mut Vec<usize>,
+/// 保留行落地：先行写省略标记（若前置非保留行段），再输出该行。
+fn emit_kept(
+    sink: &mut Sink,
+    in_gap: &mut bool,
     i: usize,
     line: &str,
     cfg: &Config,
     raw: &[bool],
-    query_terms: &[String],
+    trimmed: &[Option<String>],
 ) {
-    if cfg.lineno {
-        prefix(out, i + 1);
+    if *in_gap && cfg.elide {
+        sink.out.push_str("...\n");
     }
-    let text = if cfg.trim && !raw[i] {
-        crate::trim::trim_line(line, query_terms, cfg.trim_ratio, cfg.trim_op_keep)
+    *in_gap = false;
+    let trim_line = if cfg.trim && !raw[i] {
+        trimmed[i].as_deref()
     } else {
-        line.to_string()
+        None
     };
-    out.push_str(&text);
-    out.push('\n');
-    numbers.push(i + 1);
+    emit_line(sink, i, line, cfg, trim_line);
+}
+
+/// 尾部省略标记（elide 且末尾存在被裁段）。
+fn flush_gap(sink: &mut Sink, in_gap: bool, cfg: &Config) {
+    if in_gap && cfg.elide {
+        sink.out.push_str("...\n");
+    }
+}
+
+/// 并行计算所有 trim 行的裁剪结果（`keep[i] && !raw[i]`），其余为 None。
+/// 行间独立；线程各自产出 `(保留行索引, 裁剪串)`，串行回填保序。
+fn compute_trimmed(
+    lines: &[&str],
+    keep: &[bool],
+    raw: &[bool],
+    cfg: &Config,
+    query_terms: &[String],
+) -> Vec<Option<String>> {
+    let total = keep.len();
+    let mut trimmed = vec![None; total];
+    let idxs: Vec<usize> = (0..total).filter(|&i| keep[i] && !raw[i]).collect();
+    if idxs.len() < crate::compress::plan::PAR_MIN_REF {
+        for &i in &idxs {
+            let mut buf = String::new();
+            crate::trim::trim_line_into(
+                lines[i],
+                query_terms,
+                cfg.trim_ratio,
+                cfg.trim_op_keep,
+                &mut buf,
+            );
+            trimmed[i] = Some(buf);
+        }
+        return trimmed;
+    }
+    let n_t = 6;
+    let part = idxs.len().div_ceil(n_t);
+    let rows: Vec<Vec<(usize, String)>> = std::thread::scope(|s| {
+        let mut handles = Vec::with_capacity(n_t);
+        for chunk in idxs.chunks(part) {
+            handles.push(s.spawn(move || {
+                let mut local = Vec::with_capacity(chunk.len());
+                for &i in chunk {
+                    let mut buf = String::new();
+                    crate::trim::trim_line_into(
+                        lines[i],
+                        query_terms,
+                        cfg.trim_ratio,
+                        cfg.trim_op_keep,
+                        &mut buf,
+                    );
+                    local.push((i, buf));
+                }
+                local
+            }));
+        }
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    for row in rows {
+        for (idx, s) in row {
+            trimmed[idx] = Some(s);
+        }
+    }
+    trimmed
+}
+
+/// 渲染期输出槽：`out` 主文本、`numbers` 行号。
+struct Sink {
+    out: String,
+    numbers: Vec<usize>,
+}
+
+/// 单行落地：行号前缀、行内 trim 结果（预计算）或原行、追加换行并记录序号。
+fn emit_line(sink: &mut Sink, i: usize, line: &str, cfg: &Config, trim_line: Option<&str>) {
+    if cfg.lineno {
+        prefix(&mut sink.out, i + 1);
+    }
+    match trim_line {
+        Some(s) => sink.out.push_str(s),
+        None => sink.out.push_str(line),
+    }
+    sink.out.push('\n');
+    sink.numbers.push(i + 1);
 }
 
 pub(crate) fn spans(

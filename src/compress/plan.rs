@@ -34,6 +34,96 @@ pub(crate) fn tally(lines: &[&str], total: usize, small_tok: f64, do_tok: bool) 
     (tok, sum)
 }
 
+/// 并行版 tally：分块估 token 与求和（estimate 逐行独立），供大输入复用。
+fn tally_par(
+    lines: &[&str],
+    total: usize,
+    small_tok: f64,
+    do_tok: bool,
+    n_t: usize,
+    chunk: usize,
+) -> (Vec<f64>, f64) {
+    if !do_tok {
+        return (Vec::new(), small_tok);
+    }
+    let mut tok = vec![0.0; total];
+    let mut parts = split_parts(&mut tok, chunk);
+    let sums: Vec<f64> = std::thread::scope(|s| {
+        let mut handles = Vec::with_capacity(n_t);
+        for (k, part) in parts.drain(..).enumerate() {
+            let base = k * chunk;
+            handles.push(s.spawn(move || {
+                let mut sum = 0.0;
+                for (j, slot) in part.iter_mut().enumerate() {
+                    *slot = crate::terms::estimate(lines[base + j]);
+                    sum += *slot;
+                }
+                sum
+            }));
+        }
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    (tok, sums.iter().sum())
+}
+
+/// 并行分块阈值：低于此行数走串行（避免线程启动开销）。
+const PAR_MIN: usize = 20_000;
+/// 供其它阶段（如 render trim 预计算）复用相同阈值。
+pub(crate) const PAR_MIN_REF: usize = PAR_MIN;
+
+/// 把 `v` 切成多个不重叠的可变切片（每片 ≤ `size` 元素）。
+/// 借用链独立：前一借用的切出即终结，可全部收集后 move 分派。
+fn split_parts<T>(v: &mut [T], size: usize) -> Vec<&mut [T]> {
+    let mut rest = v;
+    let mut out = Vec::new();
+    while !rest.is_empty() {
+        let take = size.min(rest.len());
+        let (a, b) = rest.split_at_mut(take);
+        out.push(a);
+        rest = b;
+    }
+    out
+}
+
+/// 逐行计算共享入参：词表、强制模式、掩码字宽与严格旗标。
+struct RowCtx<'a> {
+    terms: &'a [String],
+    forces: &'a [Force],
+    words: usize,
+    precise: bool,
+}
+
+/// 逐行输出槽：掩码行、错误/标记/守卫/固定行标记。
+struct RowOut<'a> {
+    mask: &'a mut [u64],
+    errs: &'a mut [bool],
+    marked: &'a mut [bool],
+    guards: &'a mut [bool],
+    pinned: &'a mut [bool],
+}
+
+/// 逐行计算一行的小写掩码与标记（掩码、错误/守卫/标记/固定行）。
+/// 每行完全独立（无共享可变状态），供 `masks` 并行分块复用。
+fn mask_row(i: usize, line: &str, ctx: &RowCtx<'_>, low: &mut String, out: &mut RowOut<'_>) {
+    low.clear();
+    lowercase(line, low);
+    let ll = low.as_str();
+    let (err, guard) = flags(ll);
+    out.errs[i] = err;
+    out.guards[i] = if ctx.precise { error_line(ll) } else { guard };
+    out.marked[i] = marker(ll);
+    out.pinned[i] = ctx.forces.iter().any(|p| match p {
+        Force::Sub(s) => ll.contains(s.as_str()),
+        Force::Re(n) => n.matches(ll),
+    });
+    let base = i * ctx.words;
+    for (k, t) in ctx.terms.iter().enumerate() {
+        if ll.contains(t.as_str()) {
+            out.mask[base + k / 64] |= 1u64 << (k % 64);
+        }
+    }
+}
+
 pub(crate) fn masks(
     lines: &[&str],
     terms: &[String],
@@ -51,26 +141,81 @@ pub(crate) fn masks(
     let mut pinned = vec![false; total];
     // 每行 token 估算表：供填充与记账复用（此前同一批行会被 estimate 2–3 次）。
     // do_tok=false（小输入/针尖档）时为空表，调用方回退现算。
-    let (tok, total_tok) = tally(lines, total, small_tok, do_tok);
-    let mut low = String::new();
-    for i in 0..total {
-        low.clear();
-        lowercase(lines[i], &mut low);
-        let ll = low.as_str();
-        let (err, guard) = flags(ll);
-        errs[i] = err;
-        guards[i] = if precise { error_line(ll) } else { guard };
-        marked[i] = marker(ll);
-        pinned[i] = forces.iter().any(|p| match p {
-            Force::Sub(s) => ll.contains(s.as_str()),
-            Force::Re(n) => n.matches(ll),
-        });
-        let base = i * words;
-        for (k, t) in terms.iter().enumerate() {
-            if ll.contains(t.as_str()) {
-                mask[base + k / 64] |= 1u64 << (k % 64);
-            }
+    // 并行分块：行间逐行独立（含 tally），分块写不重叠区间，输出保序零漂移。
+    // 线程数按 18 逻辑核折半，避免能效核与线程切换损耗。
+    let n_t = if total >= PAR_MIN { 6 } else { 1 };
+    let chunk = total.div_ceil(n_t);
+    let (tok, total_tok) = if n_t > 1 {
+        tally_par(lines, total, small_tok, do_tok, n_t, chunk)
+    } else {
+        tally(lines, total, small_tok, do_tok)
+    };
+    if n_t == 1 {
+        let mut low = String::new();
+        let ctx = RowCtx {
+            terms,
+            forces,
+            words,
+            precise,
+        };
+        let mut out = RowOut {
+            mask: &mut mask,
+            errs: &mut errs,
+            marked: &mut marked,
+            guards: &mut guards,
+            pinned: &mut pinned,
+        };
+        for (i, &line) in lines.iter().enumerate() {
+            mask_row(i, line, &ctx, &mut low, &mut out);
         }
+    } else {
+        // 一次性切出不重叠块（借用链独立），move 进各线程写各自区间。
+        let mask_parts = split_parts(&mut mask, chunk * words);
+        let errs_parts = split_parts(&mut errs, chunk);
+        let marked_parts = split_parts(&mut marked, chunk);
+        let guards_parts = split_parts(&mut guards, chunk);
+        let pinned_parts = split_parts(&mut pinned, chunk);
+        let ctx = RowCtx {
+            terms,
+            forces,
+            words,
+            precise,
+        };
+        std::thread::scope(|s| {
+            let n_p = mask_parts.len().min(errs_parts.len());
+            let mut iter_m = mask_parts.into_iter();
+            let mut iter_e = errs_parts.into_iter();
+            let mut iter_mk = marked_parts.into_iter();
+            let mut iter_g = guards_parts.into_iter();
+            let mut iter_p = pinned_parts.into_iter();
+            for t in 0..n_p {
+                let (Some(m), Some(e), Some(mk), Some(g), Some(p)) = (
+                    iter_m.next(),
+                    iter_e.next(),
+                    iter_mk.next(),
+                    iter_g.next(),
+                    iter_p.next(),
+                ) else {
+                    break;
+                };
+                // m 为整块 mask（len=rows*words），mask_row 用块内偏移 j 索引。
+                let rows = e.len();
+                let ctx_ref = &ctx;
+                let mut out_ref = RowOut {
+                    mask: m,
+                    errs: e,
+                    marked: mk,
+                    guards: g,
+                    pinned: p,
+                };
+                s.spawn(move || {
+                    let mut low = String::new();
+                    for j in 0..rows {
+                        mask_row(j, lines[t * chunk + j], ctx_ref, &mut low, &mut out_ref);
+                    }
+                });
+            }
+        });
     }
     Mask {
         mask,
@@ -607,6 +752,7 @@ pub(crate) fn scores(
     force: &[bool],
     tbl: &Weights,
 ) -> Vec<f64> {
+    // 逐行打分工作量小（约 20-30ms/30MB），并行线程开销大于收益，保持串行。
     let total = lines.len();
     let mut scores = vec![0.0f64; total];
     for i in 0..total {

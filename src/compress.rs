@@ -148,6 +148,7 @@ fn force(pats: &mut Vec<Force>, p: String) {
     }
 }
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
+    let mut prof = crate::perf::T::start();
     let (ratio, context, window) = config(cfg);
     let kind = cfg.kind;
     // --max-tokens 保守上界：可选填充预算按「用户上限 ÷ 安全系数」计（宁高估勿超预算）；
@@ -172,6 +173,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 输入 token 估算只依赖原文，且 Outcome.tokens_in 与单桶 tokens_in 同值：
     // 算一次共用（CJK 输入上 estimate 是整篇 O(n) 扫描）。
     let tokens_in = crate::terms::estimate(original);
+    prof.mark("lines+terms");
 
     let mk = |text_owned: String,
               kept: usize,
@@ -228,6 +230,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
 
     // 直通早退：小输入 / 超长行（无查询参与，原样返回）。
     if let Some(mode) = shape(total, small_tok, &lines) {
+        prof.finish("compress");
         return mk(
             original.to_string(),
             total,
@@ -255,6 +258,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         do_tok,
         cfg.strict,
     );
+    prof.mark("masks");
     let (dup, folds) = dedup(
         &lines,
         &masks.mask,
@@ -263,6 +267,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         &masks.pinned,
         cfg.code_keep,
     );
+    prof.mark("dedup");
     let stat = weights(&masks.mask, masks.words, &dup, uniq_terms.len(), folds);
     let seeds = marks(
         &masks.mask,
@@ -274,9 +279,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         &masks.pinned,
     );
     let seeds_total = (0..total).filter(|&i| seeds.seed[i]).count();
+    prof.mark("weights+seeds");
 
     // 无信号 fail-open：零命中且无 --force 命中 => 原样保留。
     if failopen(seeds.hit_lines, seeds.force_any) {
+        prof.finish("compress");
         return mk(
             original.to_string(),
             total,
@@ -312,6 +319,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     semantic(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
     apply_sims(cfg, &mut scores, &dup, total);
     let boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
+    prof.mark("spans+scores");
     // 逐行保留原因（--explain 用）：0=删除，其余见 R_* 常量。
     let mut reason = vec![0u8; total];
     let (mut keep, mut kept) = floor(
@@ -346,6 +354,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
     // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
     let tok_floor = tokens(&lines, &keep, &masks.tok);
+    prof.mark("floor");
     let mut overflow = cap(tok_floor, cfg.limit);
 
     // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
@@ -378,6 +387,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let budget_used_pct = budget_used(used_optional, masks.total_tok, ratio);
 
     let risk = audit(&keep, &masks.errs, &seeds.hits, &DEFAULT_RISK);
+    prof.mark("budget");
     let mut guarded = 0u8;
     if active(risk, cfg) {
         let scoped = cfg.scoped.then_some(regions.in_region.as_slice());
@@ -391,6 +401,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             &mut reason,
         );
     }
+    prof.mark("guard");
 
     // 守卫后最终检查：填充受上限约束，但风险守卫可能追加证据性行；如实报告 OverflowFill。
     let final_tok = tokens(&lines, &keep, &masks.tok);
@@ -400,6 +411,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
 
     // 预算过紧或只有高频单查询命中时可能选不出任何行；此时回退原文，不返回静默空结果。
     if kept == 0 {
+        prof.finish("compress");
         return mk(
             original.to_string(),
             total,
@@ -419,6 +431,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
 
     let (out_text, numbers) = render(&lines, &keep, cfg, &raw, &uniq_terms);
+    prof.mark("render");
     let (chars_b, cut) = cut(&out_text, chars_a);
     let mut o = mk(
         out_text,
@@ -438,6 +451,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     );
     o.budget_used_pct = budget_used_pct;
     o.explain = explain(&reason, &dup);
+    prof.finish("compress");
     o
 }
 pub fn compress_bucketed(

@@ -2007,3 +2007,46 @@ D1 竞品对比（LLMLingua-2, scx cut 0.777/keep 0.550 双领先）+ D2 调研�
 config/bench/results/p11_{a,c1,c2,c3,d1}*.json；评测数据集 config/bench/datasets/
 bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
 …→ 7bd3abd（P11-D1 LLMLingua-2 收官）。文档版本随本段递增（P11 完成）。
+
+## P12 完成记录（2026-10-29，版本 0.8.0）——速度/性能终极优化
+
+**目标**：在 golden 逐字节零漂移守门下，把 scx 压缩吞吐推到极致；延续 P7-C 性能架构，全部变更纯 std（`std::thread::scope` 并行，无第三方 crate、无 unsafe）。
+
+### P12-A 性能基线冻结
+- 多档位语料 `config/bench/perf/corpus_p{1,10,30,100}m.txt`（p1m 1.36MB / p10m 11.4MB / p30m 34.3MB / p100m 114.2MB）。
+- `tools/bench_perf.py`：3 次取最优 real 秒 + MB/s，输出 `perf_baseline.json`。
+- **原始基线**（优化前）：p10m lossless 0.2328s/46.7、r0.3 0.2243s/48.5；p30m lossless 0.6377s/51.2、r0.3 0.6072s/53.8。
+
+### P12-B 热点深挖（测量纪律）
+- `sample`（bash 附加）只采到 bash `__wait4`、`xctrace record` exit 1——两条外部路径验证做不通，弃。
+- 转 feature-gated 插桩（`src/perf.rs`，feature="perf" 才编，默认零开销）：
+  - 真实热点 = **masks ~218ms（31%）+ trim::tokens ~130ms（render 内 97%）**。
+  - **插桩伪影识别**：dedup 曾测 135ms，实为 mark_agg 逐行开销（100 万行 × 3 次）；还原插桩后 dedup 真实仅 ~5ms。**教训**：逐行 mark_agg 对百万行语料污染测量，正式对比一律走 bench_perf.py。
+
+### P12-C 算子级优化（按序落地）
+| 序号 | 优化 | 实测 | 结论 |
+|---|---|---|---|
+| C1 | render 消除每行 String 分配（Sink + scratch） | 几乎无差 | 架构保留 |
+| C2 | trim::tokens 线程局部池化（TOK_POOL/LOW_POOL） | 小幅 | 保留 |
+| C3 | lowercase 池化 + STOP/KEEP 长度桶 + query 首字节位图 | p10m -9%、p30m -4% | **正收益** |
+| C4 | masks 行字节位图快速拒绝 | 变慢 | 已回退 |
+| C5 | **masks 并行**（RowCtx/RowOut + split_parts + std::thread::scope，6 线程，PAR_MIN=20k） | p30m 0.5713→0.2843s | **主收益** |
+| C6 | **render trim 预计算并行**（compute_trimmed，行间独立、串行回填保序） | 0.4925→0.2843s | **正收益** |
+| C7 | scores 并行（尝试） | 变慢（工作量小，线程开销亏本） | 已回退 |
+
+**最终基准（P12 收官）**：
+
+| 档位 | 基线 r0.3 | P12 r0.3 | 提速 | MB/s |
+|---|---|---|---|---|
+| p10m | 0.2243s | **0.1042s** | **-53.5%** | 104.5 |
+| p30m | 0.6072s | **0.2843s** | **-53.2%** | 114.9 |
+
+（lossless：p30m 0.6377→0.2889s，-54.7%。零漂移：串行/并行 30MB 输出 SHA-256 完全一致 d4e4399e…）
+
+### P12-D 回归门禁
+- `tools/check_bench.sh` 全部通过 ✓：lib 343 + semantic + golden 2 + clippy 0 warning + fmt 干净 + eval-manifest 冻结一致。
+
+### P12-E 交付
+- 代码质量：RowCtx/RowOut 收敛参数、split_parts 借用链、clippy 归零、零第三方 crate、`#![forbid(unsafe_code)]` 保持。
+- 版本 bump `0.7.0 → 0.8.0`（README/SKILL 同步）。
+- git 提交见交付记录；状态图见 P12 交付消息。
