@@ -7,7 +7,8 @@
 //!   stdio 通道不被污染。
 //!
 //! 入口：`scx mcp` 子命令（main.rs 分派）调用 `serve()`；`serverInfo.name`
-//! 为 `"scx"`。压缩主路径与 v0.4.1 逐字节一致。
+//! 为 `"scx {version}"`（客户端列表可见版本，随 CARGO_PKG_VERSION 自动变化）。
+//! 压缩主路径与 v0.4.1 逐字节一致。
 
 use crate::json::{parse, Json};
 
@@ -91,8 +92,9 @@ fn dispatch(method: &str, id: Option<Json>, msg: &Json, usage: &mut Usage) -> Op
 
 fn init(key: &str) -> String {
     format!(
-            "{{\"jsonrpc\":\"2.0\",\"id\":{key},\"result\":{{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{{\"tools\":{{}}}},\"serverInfo\":{{\"name\":\"scx\",\"version\":\"{}\"}}}}}}",
-            env!("CARGO_PKG_VERSION")
+            "{{\"jsonrpc\":\"2.0\",\"id\":{key},\"result\":{{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{{\"tools\":{{}}}},\"serverInfo\":{{\"name\":\"scx {}\",\"version\":\"{}\"}}}}}}",
+            env!("CARGO_PKG_VERSION"),
+            env!("CARGO_PKG_VERSION"),
         )
 }
 
