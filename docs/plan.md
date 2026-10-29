@@ -2170,4 +2170,4 @@ bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
 ### 门禁与提交
 - `bash tools/check_bench.sh` 全绿：lib 359（+3：evidence 单测 + 端到端×3 于 tests/evidence.rs）+ semantic + golden（基线已更新）+ clippy 0 + fmt + eval-manifest frozen 匹配 + A2 fidelity 全过。
 - 版本 bump 0.9.0 → 0.10.0（Cargo.toml / README 2 处 / SKILL.md 2 处同步）。
-- 提交 <PENDING>。
+- 提交 24d5024。
