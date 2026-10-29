@@ -258,6 +258,11 @@
       "bytes": 1700,
       "rows": 82
     },
+    "p12_7_d1_strong.json": {
+      "sha256": "a8e0b8acc835cc7f63a3dafc91ae39497be8f1fbdc5979e2fb07ee99f83a1ff7",
+      "bytes": 2335,
+      "rows": 154
+    },
     "p12_8_p3_blind.json": {
       "sha256": "73e89ef1a6b9846855d6a9f0da7acce7d4136bf2ad63b59a2803b8fc301daba5",
       "bytes": 1155,

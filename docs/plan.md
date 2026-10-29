@@ -2083,3 +2083,10 @@ bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
 - 128k token 长文档：32k/64k/128k 三档 cut 34.4%/34.4%/34.3%，耗时 0.0s/0.0s/0.1s（P12 后 ~100MB/s）。
 - 内存曲线：rss 3.5MB→4.0MB→5.1MB（近线性、峰值 <6MB，零第三方栈保持）。
 - 冻结 p12_8_p3_blind.json（frozen 52）。
+
+### P2-D1 强 judge 竞品重跑（收官）
+- 口径：shape30 前 20 题，同压缩率对齐，保持率 = deepseek-v4-pro + qwen-max **双强模型均通过**（弱 judge P11-D1 为 flash 单模型）。
+- 结果：**scx cut 0.777 keep 0.450**（9/20）vs **LLMLingua-2 cut 0.746 keep 0.100**（2/20）。
+- 解读：强口径下差距显著拉大（弱口径 0.55 vs 0.45 → 强口径 0.45 vs 0.10）。LLMLingua-2 主因 = 512 token 窗口截断（shape30 prompt 780-920 token 全部超窗）+ 强模型对残缺枚举/格式更严格。
+- scx 压缩更狠（cut 高 3.1pp）且保持率 4.5 倍。
+- 冻结 p12_7_d1_strong.json（frozen 53）。
