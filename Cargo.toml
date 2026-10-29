@@ -9,6 +9,24 @@ repository = "https://github.com/spapient/scx"
 homepage = "https://github.com/spapient/scx"
 keywords = ["logs", "compression", "context", "rag", "offline"]
 categories = ["command-line-utilities", "development-tools", "text-processing"]
+# 发布包白名单：排除 config/bench（评测语料/结果/缓存 ≈47MB 跟踪文件，
+# 超 crates.io 10MiB 上限）；消费者仅需 src/文档/示例/轻量 config。
+include = [
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+    "SKILL.md",
+    "src/**",
+    "docs/**",
+    "tools/**",
+    "examples/**",
+    "tests/**",
+    "config/*.json",
+    "config/*.csv",
+    "config/*.txt",
+    "config/ci-mem/**",
+    "config/semantic/**",
+]
 
 [dependencies]
 
