@@ -6,46 +6,46 @@
   "corpus_p1m.txt": {
    "chars": 1361748,
    "lossless": {
-    "best_s": 0.0303,
-    "mbps": 42.8
+    "best_s": 0.0255,
+    "mbps": 50.9
    },
    "r0.3": {
-    "best_s": 0.0294,
-    "mbps": 44.2
+    "best_s": 0.023,
+    "mbps": 56.4
    },
    "r0.2": {
-    "best_s": 0.0295,
-    "mbps": 44.1
+    "best_s": 0.0227,
+    "mbps": 57.3
    }
   },
   "corpus_p10m.txt": {
    "chars": 11411030,
    "lossless": {
-    "best_s": 0.1123,
-    "mbps": 96.9
+    "best_s": 0.0724,
+    "mbps": 150.4
    },
    "r0.3": {
-    "best_s": 0.1094,
-    "mbps": 99.5
+    "best_s": 0.0695,
+    "mbps": 156.5
    },
    "r0.2": {
-    "best_s": 0.1081,
-    "mbps": 100.6
+    "best_s": 0.07,
+    "mbps": 155.4
    }
   },
   "corpus_p30m.txt": {
    "chars": 34252122,
    "lossless": {
-    "best_s": 0.3768,
-    "mbps": 86.7
+    "best_s": 0.1988,
+    "mbps": 164.3
    },
    "r0.3": {
-    "best_s": 0.294,
-    "mbps": 111.1
+    "best_s": 0.1887,
+    "mbps": 173.1
    },
    "r0.2": {
-    "best_s": 0.2887,
-    "mbps": 113.2
+    "best_s": 0.1875,
+    "mbps": 174.2
    }
   }
  }

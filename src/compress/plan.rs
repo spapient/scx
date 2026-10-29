@@ -2,10 +2,10 @@
 //! 种子与结构区域识别。纯函数、无 I/O；全部 `pub(crate)` 供管线阶段互调。
 
 use super::*;
+use crate::analysis::lowercase;
 use crate::analysis::{
     closes, diff, fence, flags, frame, heading, import, lineref, marker, meta, stack,
 };
-use crate::analysis::{lowercase, normalize};
 use crate::policy::Weights;
 use crate::Config;
 
@@ -229,6 +229,294 @@ pub(crate) fn masks(
     }
 }
 
+// ---------------------------------------------------------------------------
+// 去重键：单趟归一化指纹（P14）。
+//
+// 旧实现为每行 `normalize` 物化完整归一化 String 作 HashMap 键，并在唯一行
+// 插入时 `clone`（P12 后 p30m 实测 dedup 占 44-52%，为第一热点）。本实现改为
+// 边扫描原文边滚动更新两条独立 64 位哈希（合计 128 位）+ 归一化长度，
+// 不物化字符串，键为 `(h1, h2, len)`。折叠语义与 `analysis::normalize`
+// 逐字节一致（`norm_hash_matches_normalize_fingerprint` 差分测试守门）；
+// 128 位指纹 + 长度下不同归一化串碰撞概率 ~2^-128，确定性不受影响。
+// ---------------------------------------------------------------------------
+
+/// 指纹通道 A 种子（与 `compress::hash::Hasher` 同源），通道 B 独立种子。
+const FINGER_A: u64 = 0x517c_c1b7_2722_0a95;
+const FINGER_B: u64 = 0x9e37_79b9_7f4a_7c15;
+
+/// 滚动双通道指纹：字节级复刻 `hash::Hasher::write` 的 8 字节分块语义。
+#[derive(Clone, Copy)]
+struct Finger {
+    a: u64,
+    b: u64,
+    buf: [u8; 8],
+    n: usize,
+}
+
+impl Finger {
+    fn new() -> Self {
+        Finger {
+            a: 0,
+            b: 0,
+            buf: [0; 8],
+            n: 0,
+        }
+    }
+    #[inline]
+    fn push(&mut self, byte: u8) {
+        self.buf[self.n] = byte;
+        self.n += 1;
+        if self.n == 8 {
+            self.flush();
+        }
+    }
+    #[inline]
+    fn flush(&mut self) {
+        let w = u64::from_ne_bytes(self.buf);
+        self.a = (self.a.rotate_left(5) ^ w).wrapping_mul(FINGER_A);
+        self.b = (self.b.rotate_left(5) ^ w).wrapping_mul(FINGER_B);
+        self.n = 0;
+    }
+    /// 收尾（含不足 8 字节的剩余，与 `Hasher::write` 补齐语义一致）。
+    fn finish(mut self) -> (u64, u64) {
+        if self.n > 0 {
+            let mut last = [0u8; 8];
+            last[..self.n].copy_from_slice(&self.buf[..self.n]);
+            let w = u64::from_ne_bytes(last);
+            self.a = (self.a.rotate_left(5) ^ w).wrapping_mul(FINGER_A);
+            self.b = (self.b.rotate_left(5) ^ w).wrapping_mul(FINGER_B);
+        }
+        (self.a, self.b)
+    }
+}
+
+/// 单趟归一化指纹：`(h1, h2, 归一化长度)`。
+/// 归一化长度口径与 `short` 一致：ASCII 输入按字节、非 ASCII 输入按字符。
+fn norm_hash(s: &str) -> (u64, u64, u32) {
+    if s.is_ascii() {
+        norm_hash_ascii(s)
+    } else {
+        norm_hash_unicode(s)
+    }
+}
+
+/// ASCII 快路径：与 `analysis::normalize::ascii` 的折叠语义逐字节一致。
+fn norm_hash_ascii(s: &str) -> (u64, u64, u32) {
+    let bytes = s.as_bytes();
+    let mut f = Finger::new();
+    let mut n_out = 0u32;
+    let mut pending = false;
+    let mut has = false;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c.is_ascii_hexdigit() {
+            let end = hex_run_end(bytes, i);
+            emit_space(&mut pending, &mut has, &mut f, &mut n_out);
+            hex_run(&bytes[i..end], &mut f, &mut n_out);
+            has = true;
+            i = end;
+        } else if blank_byte(c) {
+            i = blank_run_end(bytes, i);
+            pending = true;
+        } else {
+            emit_space(&mut pending, &mut has, &mut f, &mut n_out);
+            f.push(c);
+            n_out += 1;
+            has = true;
+            i += 1;
+        }
+    }
+    let (a, b) = f.finish();
+    (a, b, n_out)
+}
+
+/// 连续空白 run 终点（与 `analysis::normalize::ascii` 的跳过语义一致）。
+fn blank_run_end(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && blank_byte(bytes[i]) {
+        i += 1;
+    }
+    i
+}
+
+/// 连续十六进制 run 终点（与 `analysis::normalize::ascii` 一致）。
+fn hex_run_end(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && bytes[i].is_ascii_hexdigit() {
+        i += 1;
+    }
+    i
+}
+
+/// 待写空格：`pending && 已有内容` 时写一个空格，随后复位（与 `normalize::space` 一致）。
+fn emit_space(pending: &mut bool, has: &mut bool, f: &mut Finger, n: &mut u32) {
+    if *pending && *has {
+        f.push(b' ');
+        *n += 1;
+    }
+    *pending = false;
+}
+
+/// 十六进制 run 折叠（ASCII 字节版本；与 `analysis::normalize::bytes` 逐字节一致）。
+fn hex_run(run: &[u8], f: &mut Finger, n: &mut u32) {
+    if run.len() >= 8 && run.iter().any(|b| b.is_ascii_digit()) {
+        f.push(b'#');
+        *n += 1;
+        return;
+    }
+    let mut j = 0usize;
+    while j < run.len() {
+        if run[j].is_ascii_digit() {
+            while j < run.len() && run[j].is_ascii_digit() {
+                j += 1;
+            }
+            f.push(b'#');
+            *n += 1;
+        } else {
+            f.push(run[j]);
+            *n += 1;
+            j += 1;
+        }
+    }
+}
+
+/// 与 `analysis::normalize::blank` 一致（含垂直制表 U+000B）。
+fn blank_byte(b: u8) -> bool {
+    b == b'\x0b' || b.is_ascii_whitespace()
+}
+
+/// Unicode 路径：与 `analysis::normalize::unicode` 的折叠语义逐字符一致。
+fn norm_hash_unicode(s: &str) -> (u64, u64, u32) {
+    let mut f = Finger::new();
+    let mut n_out = 0u32;
+    let mut pending = false;
+    let mut has = false;
+    let mut it = s.char_indices().peekable();
+    while let Some((start, c)) = it.next() {
+        if c.is_ascii_hexdigit() {
+            let end = hex_end(&mut it, start, c);
+            emit_space(&mut pending, &mut has, &mut f, &mut n_out);
+            emit_hex_run(&s[start..end], &mut f, &mut n_out);
+            has = true;
+        } else if c.is_ascii_digit() {
+            skip_digits(&mut it);
+            emit_space(&mut pending, &mut has, &mut f, &mut n_out);
+            f.push(b'#');
+            n_out += 1;
+            has = true;
+        } else if c.is_whitespace() {
+            skip_ws(&mut it);
+            pending = true;
+        } else {
+            emit_space(&mut pending, &mut has, &mut f, &mut n_out);
+            let end = plain_end(&mut it, start, c);
+            emit_plain(&s[start..end], &mut f, &mut n_out);
+            has = true;
+        }
+    }
+    let (a, b) = f.finish();
+    (a, b, n_out)
+}
+
+/// 十六进制 run：含数字 → `fold_run`，否则整段原样入指纹。
+fn emit_hex_run(run: &str, f: &mut Finger, n: &mut u32) {
+    if run.bytes().any(|b| b.is_ascii_digit()) {
+        fold_run(run, f, n);
+    } else {
+        for &b in run.as_bytes() {
+            f.push(b);
+            *n += 1;
+        }
+    }
+}
+
+/// 普通字符 run 原样入指纹（长度按字符计数，与 `short` 的非 ASCII 口径一致）。
+fn emit_plain(run: &str, f: &mut Finger, n: &mut u32) {
+    for ch in run.chars() {
+        let mut b4 = [0u8; 4];
+        let bs = ch.encode_utf8(&mut b4);
+        for &b in bs.as_bytes() {
+            f.push(b);
+        }
+        *n += 1;
+    }
+}
+
+/// 跳过连续数字字符（与 `analysis::normalize::skip` 一致）。
+fn skip_digits(it: &mut Cursor) {
+    while it.peek().is_some_and(|&(_, n)| n.is_ascii_digit()) {
+        it.next();
+    }
+}
+
+/// 跳过连续空白字符。
+fn skip_ws(it: &mut Cursor) {
+    while it.peek().is_some_and(|&(_, n)| n.is_whitespace()) {
+        it.next();
+    }
+}
+
+/// 连续十六进制 run 的终点（首字符已消费；与 `analysis::normalize::hex` 一致）。
+fn hex_end(it: &mut Cursor, start: usize, first: char) -> usize {
+    let mut end = start + first.len_utf8();
+    while let Some(&(j, n)) = it.peek() {
+        if !n.is_ascii_hexdigit() {
+            break;
+        }
+        end = j + n.len_utf8();
+        it.next();
+    }
+    end
+}
+
+/// 普通字符 run 的终点（非十六进制/空白；与 `analysis::normalize::plain` 一致）。
+fn plain_end(it: &mut Cursor, start: usize, first: char) -> usize {
+    let mut end = start + first.len_utf8();
+    while let Some(&(j, d)) = it.peek() {
+        if d.is_ascii_hexdigit() || d.is_whitespace() {
+            break;
+        }
+        end = j + d.len_utf8();
+        it.next();
+    }
+    end
+}
+
+/// 十六进制 run 折叠：>=8 位且含数字 → `#`；否则数字段 → `#`、其余保留。
+/// 与 `analysis::normalize::fold` 逐字节一致。
+fn fold_run(run: &str, f: &mut Finger, n_out: &mut u32) {
+    if run.len() >= 8 && run.bytes().any(|b| b.is_ascii_digit()) {
+        f.push(b'#');
+        *n_out += 1;
+        return;
+    }
+    let mut it = run.chars().peekable();
+    while let Some(rc) = it.next() {
+        if rc.is_ascii_digit() {
+            while it.peek().is_some_and(|&n| n.is_ascii_digit()) {
+                it.next();
+            }
+            f.push(b'#');
+            *n_out += 1;
+        } else {
+            let mut b4 = [0u8; 4];
+            let bs = rc.encode_utf8(&mut b4);
+            for &b in bs.as_bytes() {
+                f.push(b);
+                *n_out += 1;
+            }
+        }
+    }
+}
+
+/// 归一化扫描游标（与 `analysis::normalize` 同型）。
+type Cursor<'a> = std::iter::Peekable<std::str::CharIndices<'a>>;
+
+/// 并行扫描段产物：每行归一化指纹 + 与上一行原文相等标记。
+struct ScanFp {
+    fp: Vec<(u64, u64, u32)>,
+    prev_same: Vec<bool>,
+}
+
 pub(crate) fn dedup(
     lines: &[&str],
     mask: &[u64],
@@ -237,15 +525,78 @@ pub(crate) fn dedup(
     force: &[bool],
     code_keep: bool,
 ) -> (Vec<bool>, usize) {
+    let scan = scan_fp(lines);
+    dedup_insert(lines, mask, words, err, force, code_keep, &scan)
+}
+
+/// 并行扫描段：每行单趟归一化指纹 + 与上一行原文相等标记。
+/// 实测（p30m）：旧串行 dedup 117ms 中 74% 是 normalize 扫描本身，
+/// HashMap 插入仅 ~30ms。指纹/相等标记均行间独立，按 masks 同款
+/// 分块并行（6 线程 / PAR_MIN 阈值），串行段只剩共享 HashMap 插入。
+fn scan_fp(lines: &[&str]) -> ScanFp {
     let total = lines.len();
-    let mut seen: hash::Hash<String, usize> =
+    let n_t = if total >= PAR_MIN { 6 } else { 1 };
+    let chunk = total.div_ceil(n_t);
+    let mut fp = vec![(0u64, 0u64, 0u32); total];
+    let mut prev_same = vec![false; total];
+    if n_t > 1 {
+        scan_fp_par(lines, chunk, &mut fp, &mut prev_same);
+    } else {
+        scan_fp_ser(lines, &mut fp, &mut prev_same);
+    }
+    ScanFp { fp, prev_same }
+}
+
+fn scan_fp_par(lines: &[&str], chunk: usize, fp: &mut [(u64, u64, u32)], prev_same: &mut [bool]) {
+    let fp_parts = split_parts(fp, chunk);
+    let same_parts = split_parts(prev_same, chunk);
+    std::thread::scope(|s| {
+        for (k, (fp_part, same_part)) in fp_parts.into_iter().zip(same_parts).enumerate() {
+            let base = k * chunk;
+            s.spawn(move || {
+                let mut prev: Option<&str> = None;
+                for (j, slot) in fp_part.iter_mut().enumerate() {
+                    let line = lines[base + j];
+                    if prev == Some(line) {
+                        same_part[j] = true;
+                    } else {
+                        *slot = norm_hash(line);
+                    }
+                    prev = Some(line);
+                }
+            });
+        }
+    });
+}
+
+fn scan_fp_ser(lines: &[&str], fp: &mut [(u64, u64, u32)], prev_same: &mut [bool]) {
+    let mut prev: Option<&str> = None;
+    for i in 0..lines.len() {
+        if prev == Some(lines[i]) {
+            prev_same[i] = true;
+        } else {
+            fp[i] = norm_hash(lines[i]);
+        }
+        prev = Some(lines[i]);
+    }
+}
+
+/// 串行插入段：共享 HashMap 不可并行。连续重复 run 的指纹取 run 首行。
+fn dedup_insert(
+    lines: &[&str],
+    mask: &[u64],
+    words: usize,
+    err: &[bool],
+    force: &[bool],
+    code_keep: bool,
+    scan: &ScanFp,
+) -> (Vec<bool>, usize) {
+    let total = lines.len();
+    let mut seen: hash::Hash<(u64, u64, u32), usize> =
         hash::Hash::with_capacity_and_hasher(total, Default::default());
     let mut dup = vec![false; total];
     let mut folds = 0usize;
-    let mut key = String::new();
-    // 与上一行原文相同（日志里连续重复很常见）时，key 里的归一化结果仍然有效，
-    // 省掉一次 normalize。字符串相等先比长度再比字节，差异行通常是廉价判断。
-    let mut prev: Option<&str> = None;
+    let mut run_fp = (0u64, 0u64, 0u32);
     // 围栏感知（code_keep 时）：围栏区间内代码行禁折叠。
     let fence = if code_keep {
         fence_mask(lines)
@@ -253,15 +604,16 @@ pub(crate) fn dedup(
         vec![false; total]
     };
     for i in 0..total {
-        if prev != Some(lines[i]) {
-            key.clear();
-            normalize(lines[i], &mut key);
-            prev = Some(lines[i]);
-        }
-        if short(&key) {
+        let f = if scan.prev_same[i] {
+            run_fp
+        } else {
+            scan.fp[i]
+        };
+        run_fp = f;
+        if f.2 < 6 {
             continue;
         }
-        match seen.get_mut(key.as_str()) {
+        match seen.get_mut(&f) {
             Some(n) => {
                 *n += 1;
                 let is_dup = foldable(
@@ -276,7 +628,7 @@ pub(crate) fn dedup(
                 folds += usize::from(is_dup);
             }
             None => {
-                seen.insert(key.clone(), 1);
+                seen.insert(f, 1);
             }
         }
     }
@@ -795,5 +1147,81 @@ pub(crate) fn apply_sims(cfg: &Config, scores: &mut [f64], dup: &[bool], total: 
                 scores[i] += sims[i] * cfg.sim_weight;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::hash::Hasher as Digest;
+
+    /// streaming 指纹必须与「normalize + 真实 Hasher」逐位一致（ASCII/非 ASCII）。
+    #[test]
+    fn norm_hash_matches_normalize_fingerprint() {
+        let cases = [
+            "服务器　超时  42",
+            "a\tb\x0bc\r\nd",
+            "deadbeef deadbee abc123 0xDEADBEEF",
+            "错误 42 naïve 123456789",
+            "conn 9f2a ",
+            "纯中文无数字的普通文本",
+            "🙂 emoji 混合 ＡＢＣ",
+            "abc def",
+            "",
+            "  abc  ",
+            "8080/9090 errno=28",
+            "0xDEADBEEF 0xdeadbeef 0xDEADBEE",
+            "aaaaaaaaaaaaaaaaaaaa",
+            "1234567890",
+            "\x1b[31mERROR\x1b[0m 42",
+        ];
+        for s in cases {
+            assert_fp(s);
+        }
+        // LCG 生成覆盖：ASCII 字母/数字/标点/空白 + 中文 + emoji 边界。
+        let mut state = 0x9e37_79b9u32;
+        for _ in 0..8_000 {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let len = (state as usize >> 8) % 48;
+            let mut input = String::with_capacity(len);
+            for _ in 0..len {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let pick = (state as usize >> 16) % 3;
+                match pick {
+                    0 => {
+                        let abc = b" abcdefABCDEF0123456789[]()=:/.-_\\\t\r\n\x0b";
+                        input.push(abc[(state as usize >> 20) % abc.len()] as char);
+                    }
+                    1 => {
+                        let zh = "错误服务器超时失败崩溃警告连接拒绝";
+                        input.push(zh.chars().nth((state as usize >> 20) % 15).unwrap());
+                    }
+                    _ => input.push('🙂'),
+                }
+            }
+            assert_fp(&input);
+        }
+    }
+
+    fn assert_fp(s: &str) {
+        let mut key = String::new();
+        crate::analysis::normalize(s, &mut key);
+        let mut h = super::super::hash::Hasher::default();
+        h.write(key.as_bytes());
+        let want_len = if key.is_ascii() {
+            key.len()
+        } else {
+            key.chars().count()
+        };
+        let (h1, h2, len) = norm_hash(s);
+        assert_eq!(h1, h.finish(), "lane A mismatch for {s:?}");
+        assert_eq!(len as usize, want_len, "len mismatch for {s:?}");
+        // 双通道确定性：两次计算必须一致。
+        let (h1b, h2b, lenb) = norm_hash(s);
+        assert_eq!(
+            (h1b, h2b, lenb),
+            (h1, h2, len),
+            "non-deterministic for {s:?}"
+        );
     }
 }
