@@ -2090,3 +2090,60 @@ bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
 - 解读：强口径下差距显著拉大（弱口径 0.55 vs 0.45 → 强口径 0.45 vs 0.10）。LLMLingua-2 主因 = 512 token 窗口截断（shape30 prompt 780-920 token 全部超窗）+ 强模型对残缺枚举/格式更严格。
 - scx 压缩更狠（cut 高 3.1pp）且保持率 4.5 倍。
 - 冻结 p12_7_d1_strong.json（frozen 53）。
+
+## P14 完成记录（2026-10-29，版本 0.9.0）——dedup 并行归一化指纹扫描
+
+### P14-A 实测推翻旧认知
+- P12 笔记「dedup 仅 ~5ms」是插桩伪影结论；并行化后的权威 profile（p30m r0.3）显示 **dedup 117ms / 52.3% 是第一热点**（非 masks 33ms）。
+- 拆解：117ms 中 74% 是 `normalize` 扫描本身，HashMap 插入仅 ~30ms；`String` 键 map 123ms vs 元组键 map 120ms（仅差 3ms，换键无用）。
+- 首次迭代（串行单趟指纹）实测反而 +29% 回归（151–267ms）——瓶颈在扫描量不在 map，**并行扫描才是正确打法**。
+
+### P14-B 落地
+- `norm_hash`：单趟归一化 + 双通道 128 位旋转乘法哈希 + 长度（(h1,h2,len) 键，不物化 String）；折叠语义与 `analysis::normalize` 逐字节一致。
+- `scan_fp`：masks 同款并行基建（6 线程 + PAR_MIN 20k 分块 + std::thread::scope），附带相邻原文相等标记 `prev_same`。
+- `dedup_insert`：串行 HashMap 插入（共享态不可并行），run 复用 run 首行指纹，围栏感知（code_keep）保留。
+- 差分测试 `norm_hash_matches_normalize_fingerprint`（手写 15 例 + LCG 8000 例）守门；修过 Unicode 长度按字符计的口径 bug。
+
+### P14-C 基准（bench_perf.py 同工具对比 git HEAD）
+| 档位 | 旧基线 | P14 | 提速 |
+|---|---|---|---|
+| p30m r0.3 | 0.2940s | **0.1887s** | **-36%** |
+| p30m lossless | 0.3768s | **0.1988s** | **-47%** |
+| p10m r0.3 | 0.1094s | **0.0695s** | **-36%** |
+| p1m r0.3 | 0.0294s | 0.0230s | -22% |
+
+（注：plan.md P12 收官表 0.2843s 与 git HEAD json 0.294s 存在口径差——P12 记录与同一脚本重测有测量方法差异，本表以同工具重测的 git HEAD json 为严格基线。）
+
+### P14-D 门禁与提交
+- check_bench.sh 全绿：lib 346 + semantic + golden 零漂移 + clippy 0 + fmt + eval-manifest 冻结 + A2 fidelity。提交 26cf7bb。
+
+## P15 完成记录（2026-10-29，版本 0.9.0）——输入测量单趟融合
+
+- `terms::measure(s) -> (usize, f64)`：一趟扫描同时产出字符数 + token 估算，替代 `chars(original)` + `estimate(original)` 两趟全扫。
+- ASCII 快路径（len + len/4+1）；`chars()` 保留（render.rs 在用，曾误删致编译失败已恢复）。
+- 差分测试 `measure_matches_chars_estimate` 守门；lib 347。
+- 基准：与 P14 持平（噪声内）——ASCII 语料上 `is_ascii` 本就 SIMD 廉价，收益被噪声掩盖；**CJK 语料上 estimate 是字符循环，融合省一整趟 O(n) 为真收益**。提交 d85f106。
+
+## P16 完成记录（2026-10-29，版本 0.9.0）——fused 召回会话缓存（原案收敛）
+
+### P16-A 测量驱动的范围收敛
+- 实测 150 例库 fused recall **<10ms**（进程启动主导）；签名计算在当前规模可忽略。
+- 结构性发现：`search_fused` 每次查询都 `store::list` + 逐 case `store::load` 全库 + 重算 minhash/embed——**即使基础 `search` 已命中会话缓存**，且融合结果从不写回。
+- 真实瓶颈在大库下是逐 case 文件加载而非签名计算 → 原案「doc 签名冻结缓存」（动 Index 格式 + df 失效维护）为**过度工程**，收敛为「fused 结果会话缓存」。
+
+### P16-B 落地（行为逐字节不变）
+- cache.rs：`key_salted`（基础键 + 配置盐）+ `get_fused`/`put_fused`——内存态、1 小时窗口、gen 代际守卫、不落 qmap.bin。
+- mod.rs：`search_fused` 命中 fused 快照直接返回（跳过全库重载 + 签名重算）；`read_only` 不写；fuse 配置盐含 embed 命令与两路权重，不同配置不串快照。
+- 不触碰评测路径（eval/golden 走 recall::clock/read）→ recall@3 统计与 golden memory_recall 零漂移。
+- 新测试：`fused_key_is_salted_and_isolated`（cache 层盐隔离）+ `search_fused_session_cache_returns_identical_hits`（窗口内二次逐字段一致、read_only 一致）；lib 347→349。
+
+### P16-C 门禁与提交
+- check_bench.sh 全绿：lib 349 + semantic + golden + clippy 0 + fmt + manifest + A2 fidelity。提交 df51fcf。
+
+### P16-D 版本 bump 0.8.0 → 0.9.0
+- Cargo.toml / README（2 处）/ SKILL.md（2 处）同步；Cargo.lock 重新生成。
+
+### P14–P16 累计交付（v0.9.0）
+- p30m r0.3：0.2940 → 0.1887s（**-36%**，173.1 MB/s）；lossless -47%。
+- 阶段 profile（r0.3 p30m，perf 构建）：dedup 117→30ms（**-74%**），lines+terms ~33ms、masks ~33ms 并行均衡，总 ~130–145ms。
+- 已提交：26cf7bb（P14）、d85f106（P15）、df51fcf（P16），均未 push。
