@@ -1,0 +1,154 @@
+{
+ "n": 20,
+ "method": "LLMLingua-2 vs scx (deepseek judge)",
+ "scx": {
+  "cut_mean": 0.777,
+  "keep": 0.55
+ },
+ "llm2": {
+  "cut_mean": 0.746,
+  "keep": 0.45
+ },
+ "rows": [
+  {
+   "idx": 0,
+   "scx_cut": 0.896,
+   "llm_cut": 0.854,
+   "scx_keep": true,
+   "llm_keep": true
+  },
+  {
+   "idx": 1,
+   "scx_cut": 0.904,
+   "llm_cut": 0.873,
+   "scx_keep": true,
+   "llm_keep": true
+  },
+  {
+   "idx": 2,
+   "scx_cut": 0.919,
+   "llm_cut": 0.876,
+   "scx_keep": false,
+   "llm_keep": false
+  },
+  {
+   "idx": 3,
+   "scx_cut": 0.902,
+   "llm_cut": 0.876,
+   "scx_keep": false,
+   "llm_keep": true
+  },
+  {
+   "idx": 4,
+   "scx_cut": 0.915,
+   "llm_cut": 0.876,
+   "scx_keep": false,
+   "llm_keep": false
+  },
+  {
+   "idx": 5,
+   "scx_cut": 0.92,
+   "llm_cut": 0.881,
+   "scx_keep": false,
+   "llm_keep": false
+  },
+  {
+   "idx": 6,
+   "scx_cut": 0.926,
+   "llm_cut": 0.895,
+   "scx_keep": true,
+   "llm_keep": false
+  },
+  {
+   "idx": 7,
+   "scx_cut": 0.0,
+   "llm_cut": -0.015,
+   "scx_keep": true,
+   "llm_keep": true
+  },
+  {
+   "idx": 8,
+   "scx_cut": 0.92,
+   "llm_cut": 0.898,
+   "scx_keep": true,
+   "llm_keep": true
+  },
+  {
+   "idx": 9,
+   "scx_cut": 0.0,
+   "llm_cut": -0.018,
+   "scx_keep": true,
+   "llm_keep": true
+  },
+  {
+   "idx": 10,
+   "scx_cut": 0.911,
+   "llm_cut": 0.873,
+   "scx_keep": false,
+   "llm_keep": false
+  },
+  {
+   "idx": 11,
+   "scx_cut": 0.0,
+   "llm_cut": -0.018,
+   "scx_keep": true,
+   "llm_keep": true
+  },
+  {
+   "idx": 12,
+   "scx_cut": 0.887,
+   "llm_cut": 0.852,
+   "scx_keep": false,
+   "llm_keep": false
+  },
+  {
+   "idx": 13,
+   "scx_cut": 0.9,
+   "llm_cut": 0.864,
+   "scx_keep": true,
+   "llm_keep": false
+  },
+  {
+   "idx": 14,
+   "scx_cut": 0.921,
+   "llm_cut": 0.891,
+   "scx_keep": false,
+   "llm_keep": false
+  },
+  {
+   "idx": 15,
+   "scx_cut": 0.909,
+   "llm_cut": 0.867,
+   "scx_keep": true,
+   "llm_keep": false
+  },
+  {
+   "idx": 16,
+   "scx_cut": 0.925,
+   "llm_cut": 0.89,
+   "scx_keep": false,
+   "llm_keep": false
+  },
+  {
+   "idx": 17,
+   "scx_cut": 0.919,
+   "llm_cut": 0.89,
+   "scx_keep": true,
+   "llm_keep": true
+  },
+  {
+   "idx": 18,
+   "scx_cut": 0.923,
+   "llm_cut": 0.902,
+   "scx_keep": true,
+   "llm_keep": true
+  },
+  {
+   "idx": 19,
+   "scx_cut": 0.939,
+   "llm_cut": 0.906,
+   "scx_keep": false,
+   "llm_keep": false
+  }
+ ]
+}

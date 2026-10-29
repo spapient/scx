@@ -1937,8 +1937,9 @@ judge，与 C1/C2 的 qwen-max 旗舰口径不可直接横向比较；跨口径�
 
 **执行**：`uv pip install llmlingua==0.2.2` 装入 /tmp/scx-eval（torch 2.14.1）。
 `/tmp/d1_llmlingua.py` 对 shape30 前 20 题公平对比：scx r0.44+zh vs
-llmlingua（rate = 1-scx_cut 对齐压缩率），deepseek-v4-pro judge，check
-判 keep。结果 `config/bench/results/p11_d1_results.json`。
+llmlingua（rate = 1-scx_cut 对齐压缩率），deepseek-chat judge，check
+判 keep。结果 `config/bench/results/p11_d1_results.json`（v1 存档
+`p11_d1_v1_results.json`）。
 
 **根因修复（重要）**：llmlingua 0.2.2 与新版 transformers KV cache 结构
 不兼容——llmlingua 全程假设旧式 `[[k,v],...]` 嵌套 tuple，而 torch
@@ -1949,8 +1950,42 @@ llmlingua（rate = 1-scx_cut 对齐压缩率），deepseek-v4-pro judge，check
 list-of-[k,v] → DynamicCache 喂模型，返回 DynamicCache → list-of-[k,v]
 交还 llmlingua 内部逻辑。修复后单题压缩正常（cut 0.726 @ rate 0.2）。
 
+**LLMLingua-1 重跑结果（20 题，deepseek-chat judge）**：
+
 | 压缩器 | cut 均值 | keep | 说明 |
 |---|---|---|---|
-| scx r0.44+zh | 0.777 | 0.65 | deepseek-v4-pro judge |
-| LLMLingua 0.2.2 | — | — | 修复后 20 题重跑结果见本节收尾 |
+| scx r0.44+zh | 0.777 | **0.650** | 压缩更狠且保持率显著更高 |
+| LLMLingua-1 0.2.2 | 0.690 | **0.300** | 修复后真实压缩；keep 仅 0.30 |
+
+**结论（v1）**：同压缩率对齐口径下（rate=1-scx_cut），scx 保持率
+0.650 vs LLMLingua-1 0.300，**+35pp 显著领先**，且 scx 压缩率还更高
+（77.7% vs 69.0%）。LLMLingua-1 的困惑度删除法对代码结构（JSON/SQL/
+正则/日志）保持能力弱，多数题被删到关键信息丢失。
+
+**LLMLingua-2 版（用户指定第二代 token 级分类压缩器）**：llmlingua 0.2.2
+内置 `use_llmlingua2=True`。模型唯一正确仓库名
+`microsoft/llmlingua-2-xlm-roberta-large-meetingbank`（`tinybert-distilled`
+两命名在 HF 均 401），已完整下载至用户指定目录
+`/Users/fei/model/llmlingua-2-xlm-roberta-large-meetingbank/`
+（model.safetensors 2,235,829,648B = 2.24GB，safe_open 391 权重验证通过）。
+encoder-only 无 KV 兼容问题；`force_reserve_digit=True` + `drop_consecutive=True`
+保数字。脚本 `/tmp/d1_llmlingua2.py`（模型名指向本地路径）。
+
+**下载加速要点（留存）**：HF 匿名限速 + 本机 `~/.curlrc` 固定 ssh 隧道代理
+（tinyproxy）→ 单连接仅 121KB/s；`urllib.request` 天然不读 .curlrc 直连
+1.0MB/s；16 段 Range 并发直连合计 ~1.3MB/s。慢段（HF 限速至 20-50KB/s）
+覆盖重下 + 合并前逐段断言。
+
+**LLMLingua-2 结果（20 题，deepseek-chat judge，2026-10-29）**：
+
+| 压缩器 | cut 均值 | keep | 说明 |
+|---|---|---|---|
+| scx r0.44+zh | 0.777 | **0.550** | 压缩更狠且保持率更高 |
+| LLMLingua-2 | 0.746 | **0.450** | token 级分类压缩；512 token 序列上限截断长题 |
+
+**结论（v2）**：第二代 LLMLingua-2 明显优于第一代（keep 0.300→0.450，
+cut 0.690→0.746），说明 token 级分类法比困惑度删除法对代码结构更友好。
+scx 在同口径下仍领先：cut +3.1pp（0.777 vs 0.746）、keep +10pp
+（0.550 vs 0.450）。LLMLingua-2 的 XLM-RoBERTa 512 token 序列上限对其
+长代码题存在固有截断损失，scx 无此限制。
 
