@@ -25,3 +25,4 @@ __pycache__/
 
 # 本地草稿/调研稿：只留本机，不随仓库发布
 docs/comparison-v051.md
+config/bench/perf/corpus_p100m.txt
