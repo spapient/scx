@@ -35,7 +35,7 @@
 | 渠道 | 命名 | 版本 | 状态 | 关键证据 |
 |---|---|---|---|---|
 | crates.io | `scx`（账户 `apex`） | **0.7.0**（11 版，未 yanked） | ✅ 已发布 | 邮箱已验证（haofei.ni@outlook.com）；`cargo install scx` 可用，本机已实测 0.6.7 |
-| GitHub Release | `spapient/scx` | v0.7.0 | ✅ 已发布 | 三平台资产（tar.gz/zip + sha256 已核对）：darwin-arm64 / linux-x86_64（musl 静态）/ windows-x86_64 |
+| GitHub Release | `spapient/scx` | v0.9.0 | ✅ 已发布 | 三平台资产（tar.gz/zip + sha256 已核对）：darwin-arm64 / linux-x86_64（musl 静态）/ windows-x86_64 |
 | Homebrew | tap `spapient/homebrew-scx` | 0.7.0 | ✅ 已发布并实测 | `brew tap spapient/scx && brew install scx` → `/opt/homebrew/bin/scx` 0.6.7 可运行 |
 | npm | `@spapient/scx`（scoped） | **0.7.0** | ✅ 已发布 | `npx -y @spapient/scx mcp` 通过（serverInfo=0.6.7）；包内置 0.6.7 三平台二进制。历史：0.6.2 包误内置 0.6.1 二进制，已重发修复 |
 | npm 纯名 | `scx` | — | ⏳ 回收申请中 | 2017 年空壳包（tu123dou）占用；申请已发 npm 官方（落款 spapient / haofei.ni@outlook.com） |
