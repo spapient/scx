@@ -1,0 +1,82 @@
+{
+  "pipeline": "P12.6 C2 可压缩子集口径重算（剔除 fail-open 未压缩题）",
+  "method": "fail-open = compressed!=True；口径列示 全量 vs 剔除后 两套",
+  "files": [
+    {
+      "file": "bench_code_shape50_v4pro.csv",
+      "n": 100,
+      "models": {
+        "deepseek": {
+          "all": {
+            "pass": 34,
+            "n": 50,
+            "rate": 0.68
+          },
+          "subset": {
+            "pass": 17,
+            "n": 30,
+            "rate": 0.5667
+          },
+          "fail_open": {
+            "n": 20,
+            "pass_in_fo": 17
+          }
+        },
+        "qwen": {
+          "all": {
+            "pass": 32,
+            "n": 50,
+            "rate": 0.64
+          },
+          "subset": {
+            "pass": 18,
+            "n": 30,
+            "rate": 0.6
+          },
+          "fail_open": {
+            "n": 20,
+            "pass_in_fo": 14
+          }
+        }
+      }
+    },
+    {
+      "file": "bench_code_layers50_v4pro.csv",
+      "n": 102,
+      "models": {
+        "deepseek": {
+          "all": {
+            "pass": 19,
+            "n": 51,
+            "rate": 0.3725
+          },
+          "subset": {
+            "pass": 19,
+            "n": 51,
+            "rate": 0.3725
+          },
+          "fail_open": {
+            "n": 0,
+            "pass_in_fo": 0
+          }
+        },
+        "qwen": {
+          "all": {
+            "pass": 14,
+            "n": 51,
+            "rate": 0.2745
+          },
+          "subset": {
+            "pass": 14,
+            "n": 51,
+            "rate": 0.2745
+          },
+          "fail_open": {
+            "n": 0,
+            "pass_in_fo": 0
+          }
+        }
+      }
+    }
+  ]
+}

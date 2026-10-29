@@ -2072,3 +2072,14 @@ bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
 - 在线验证（deepseek-v4-pro + qwen-max，3 场景 instruct 枚举）：full 3/6 → scx 0/6 → **scx+list-keep 6/6**。
 - 冻结：p12_5_listkeep_results.json + p12_5_listkeep_online.json 入 eval-manifest。
 - 门禁：lib 345 + semantic + golden + clippy 0 + fmt + manifest + A2 fidelity 全部通过 ✓
+
+### P2-C2 可压缩子集口径重算
+- `tools/check_subset.py` 幂等统计：fail-open = compressed!=True（透传/未压缩题）。
+- shape50：40% fail-open（透传题通过率虚高），剔除后 deepseek 34/50→17/30（68.0%→56.7%）、qwen 32/50→18/30（64.0%→60.0%）。
+- layers50：0% fail-open，全量=子集（deepseek 37.3%、qwen 27.5%），口径无需调整。
+
+### P3 盲区验证组（RAG / 128k / 内存）
+- RAG hit@k（BM25 代理，零依赖）：24-chunk 文档集早/中/晚三 query，full 与 scx 压缩产物 top-3 检索全部命中（cut 34% 下事实键保持）。
+- 128k token 长文档：32k/64k/128k 三档 cut 34.4%/34.4%/34.3%，耗时 0.0s/0.0s/0.1s（P12 后 ~100MB/s）。
+- 内存曲线：rss 3.5MB→4.0MB→5.1MB（近线性、峰值 <6MB，零第三方栈保持）。
+- 冻结 p12_8_p3_blind.json（frozen 52）。

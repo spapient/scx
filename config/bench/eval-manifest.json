@@ -252,6 +252,16 @@
       "sha256": "4ea2bf71a1380cb699e0d5c9325ce62c00df69d8f2b93df4b29f174a5fe4ba5b",
       "bytes": 3554,
       "rows": 190
+    },
+    "p12_6_c2_subset.json": {
+      "sha256": "dae88b630914a05d5a25aeb59ef1bde8f65d30c8cf2e51c1c6b95402edae45e0",
+      "bytes": 1700,
+      "rows": 82
+    },
+    "p12_8_p3_blind.json": {
+      "sha256": "73e89ef1a6b9846855d6a9f0da7acce7d4136bf2ad63b59a2803b8fc301daba5",
+      "bytes": 1155,
+      "rows": 52
     }
   },
   "present": [

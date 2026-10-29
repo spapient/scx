@@ -1,0 +1,52 @@
+{
+  "pipeline": "P12.8 P3 盲区验证：RAG hit@k(BM25代理) + 128k 长文档 + 内存曲线",
+  "rag": {
+    "cut_char": 0.1229,
+    "hits": [
+      {
+        "target": 2,
+        "query": "模块 2 的唯一事实键是什么？内部资源 res_2 的配置如何？",
+        "hit_full": true,
+        "hit_comp": true
+      },
+      {
+        "target": 12,
+        "query": "模块 12 的唯一事实键是什么？内部资源 res_12 的配置如何？",
+        "hit_full": true,
+        "hit_comp": true
+      },
+      {
+        "target": 22,
+        "query": "模块 22 的唯一事实键是什么？内部资源 res_22 的配置如何？",
+        "hit_full": true,
+        "hit_comp": true
+      }
+    ]
+  },
+  "mem": [
+    {
+      "tokens": 32768,
+      "chars": 60885,
+      "time_s": 0.02,
+      "rss_mb": 3.5,
+      "cut": 0.3441,
+      "ok": true
+    },
+    {
+      "tokens": 65536,
+      "chars": 122524,
+      "time_s": 0.03,
+      "rss_mb": 4.0,
+      "cut": 0.3435,
+      "ok": true
+    },
+    {
+      "tokens": 131072,
+      "chars": 246159,
+      "time_s": 0.05,
+      "rss_mb": 5.1,
+      "cut": 0.3426,
+      "ok": true
+    }
+  ]
+}
