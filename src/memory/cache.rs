@@ -610,6 +610,62 @@ pub(crate) fn put(root: &str, query: &str, hits: Vec<(String, f64, f64)>, gen: u
     }
 }
 
+/// 融合会话键：基础键 + 配置盐（embed 命令与两路权重），不同融合配置不串快照。
+fn key_salted(root: &str, query: &str, salt: &str) -> u64 {
+    let query = normalize(query);
+    parts(&[
+        root.as_bytes(),
+        b"\0",
+        query.as_bytes(),
+        b"\0",
+        salt.as_bytes(),
+    ])
+}
+
+/// 读取融合会话快照（与 `get` 同语义，键含融合配置盐）。
+pub(crate) fn get_fused(
+    root: &str,
+    query: &str,
+    salt: &str,
+    gen: u64,
+    window_secs: u64,
+    k: usize,
+) -> Option<Vec<(String, f64, f64)>> {
+    let key = key_salted(root, query, salt);
+    let hit = shared()
+        .lock()
+        .ok()
+        .and_then(|mut cache| cache.get(key, seconds(), gen, window_secs))?;
+    if hit.hits.len() < k {
+        return None;
+    }
+    let mut hits = hit.hits;
+    hits.truncate(k);
+    Some(hits)
+}
+
+/// 写入融合会话快照；失败静默（缓存只是加速，不影响召回正确性）。
+/// 融合快照仅存内存态：盐键不落 qmap.bin（磁盘 qmap 由基础 `append` 维护）。
+pub(crate) fn put_fused(
+    root: &str,
+    query: &str,
+    salt: &str,
+    hits: Vec<(String, f64, f64)>,
+    gen: u64,
+) {
+    let key = key_salted(root, query, salt);
+    if let Ok(mut cache) = shared().lock() {
+        cache.put(
+            key,
+            Session {
+                hits,
+                born: seconds(),
+                gen,
+            },
+        );
+    }
+}
+
 /// 会话键必须包含库根：同进程可服务多个 `--mem-dir`，query+gen 相同也不能串库。
 fn key(root: &str, query: &str) -> u64 {
     let query = normalize(query);
@@ -621,6 +677,44 @@ mod tests {
     use super::*;
     use crate::memory::util::root;
     use std::fs;
+
+    /// 融合会话键必须含配置盐：不同盐/不同 query/不同库不串快照，
+    /// 且与基础会话快照隔离（键空间互不重叠）。
+    #[test]
+    fn fused_key_is_salted_and_isolated() {
+        let root = root("fused-salt");
+        put_fused(
+            &root,
+            "db timeout",
+            "cfgA",
+            vec![("c1".into(), 1.0, 0.5)],
+            1,
+        );
+        assert!(
+            get_fused(&root, "db timeout", "cfgB", 1, 3600, 1).is_none(),
+            "不同盐必须 miss"
+        );
+        assert!(
+            get_fused(&root, "db other", "cfgA", 1, 3600, 1).is_none(),
+            "不同 query 必须 miss"
+        );
+        assert!(
+            get_fused(&root, "db timeout", "cfgA", 1, 3600, 1).is_some(),
+            "同盐同窗必须命中"
+        );
+        assert!(
+            get_fused(&root, "db timeout", "cfgA", 1, 3600, 2).is_none(),
+            "条数不足 k 必须 miss"
+        );
+        // 基础快照与融合快照互不污染。
+        put(&root, "db timeout", vec![("c9".into(), 9.0, 9.0)], 1);
+        assert_eq!(get(&root, "db timeout", 1, 3600, 1).unwrap()[0].0, "c9");
+        assert_eq!(
+            get_fused(&root, "db timeout", "cfgA", 1, 3600, 1).unwrap()[0].0,
+            "c1"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn qmap_hit_after_append() {

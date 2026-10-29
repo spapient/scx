@@ -166,6 +166,15 @@ pub fn search_fused(
     if k == 0 || (!use_embed && !use_minhash) {
         return Ok(bm25);
     }
+    // 融合快照会话缓存：结果只依赖 (query, 融合配置, 库代际)，与基础 BM25
+    // 快照同窗口复用；键含配置盐，不同 embed/minhash 权重不串快照。命中则
+    // 跳过全库重载 + 签名重算（该步与基础 search 的会话缓存相互独立）。
+    let meta = crate::memory::meta::load(root)?;
+    let salt = fuse_salt(embed_cmd, embed_weight, minhash_weight);
+    let cache_window = (meta.param("session_cache_minutes").max(0.0) * 60.0) as u64;
+    if let Some(out) = session_fused(root, query, &salt, &meta, cache_window, k) {
+        return Ok(out);
+    }
     let ids = store::list(root)?;
     if ids.is_empty() {
         return Ok(bm25);
@@ -219,13 +228,60 @@ pub fn search_fused(
     });
     fused.truncate(k);
 
-    Ok(fused
+    let fused_hits: Vec<Hit> = fused
         .into_iter()
         .map(|(_, id)| {
             let (score, sim) = bm25_meta.get(&id).copied().unwrap_or((0.0, 0.0));
             Hit { id, score, sim }
         })
-        .collect())
+        .collect();
+    writeback_fused(root, query, &salt, &fused_hits, &meta, read_only);
+    Ok(fused_hits)
+}
+
+/// 融合配置盐：embed 命令 + 两路权重（确定性字符串，仅参与内存缓存键）。
+fn fuse_salt(embed_cmd: Option<&str>, embed_weight: f64, minhash_weight: f64) -> String {
+    format!(
+        "fuse\x00{}\x00{embed_weight}\x00{minhash_weight}",
+        embed_cmd.unwrap_or("")
+    )
+}
+
+/// 读融合会话快照（命中条数须达 k，与基础 `session` 同规约）。
+fn session_fused(
+    root: &str,
+    query: &str,
+    salt: &str,
+    meta: &store::Meta,
+    cache_window: u64,
+    k: usize,
+) -> Option<Vec<Hit>> {
+    let hits = cache::get_fused(root, query, salt, meta.gen, cache_window, k)?;
+    let out: Vec<Hit> = hits
+        .into_iter()
+        .map(|(id, score, sim)| Hit { id, score, sim })
+        .collect();
+    debug_assert!(out.len() <= k, "fused session snapshot must respect k");
+    Some(out)
+}
+
+/// 写融合会话快照：只写内存态缓存（不落 qmap.bin、不改 meta），失败静默。
+fn writeback_fused(
+    root: &str,
+    query: &str,
+    salt: &str,
+    hits: &[Hit],
+    meta: &store::Meta,
+    read_only: bool,
+) {
+    if hits.is_empty() || read_only {
+        return;
+    }
+    let snap: Vec<(String, f64, f64)> = hits
+        .iter()
+        .map(|h| (h.id.clone(), h.score, h.sim))
+        .collect();
+    cache::put_fused(root, query, salt, snap, meta.gen);
 }
 
 /// side 信号（embedding/MinHash）的 RRF 排名项：sim 降序，同分按 id 升序（确定性）。
@@ -437,6 +493,25 @@ mod tests {
             hits.iter().all(|h| h.id.contains('_')),
             "case id 形如 YYYY-MM-DD_hex"
         );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 融合会话快照：窗口内二次调用逐字段一致；read_only 路径结果一致
+    /// （只读不写缓存，重算但产出相同）。
+    #[test]
+    fn search_fused_session_cache_returns_identical_hits() {
+        let root = tmp("fuse");
+        seed(
+            &root,
+            "db timeout",
+            "db timeout conn pool\nroot cause: pool exhausted",
+        );
+        seed(&root, "disk full", "disk full errno=28\nfix: clean up");
+        let a = search_fused(&root, "db timeout", 2, false, None, 0.0, 1.0).unwrap();
+        let b = search_fused(&root, "db timeout", 2, false, None, 0.0, 1.0).unwrap();
+        assert_eq!(a, b, "窗口内二次融合召回必须逐字段一致（快照命中）");
+        let c = search_fused(&root, "db timeout", 2, true, None, 0.0, 1.0).unwrap();
+        assert_eq!(a, c, "read_only 路径结果必须与可写路径一致");
         let _ = std::fs::remove_dir_all(&root);
     }
 }
