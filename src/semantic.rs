@@ -513,6 +513,26 @@ mod tests {
     }
 
     #[test]
+    fn shipped_weights_load_accept() {
+        let w = Weights::load("config/semantic/weights.json").expect("随仓权重可加载");
+        assert_eq!(w.dim, 16);
+        // 打分恒在 (0,1)，确定性。
+        let terms = ["conn".to_string(), "error".to_string(), "timeout".to_string()];
+        for (i, ln) in [
+            "db connection lost: conn 9f2a timeout",
+            "warmup complete 2026-10-30 12:00:00 idle",
+            "tick: 1",
+            "ERROR: query cache miss retry",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let s = w.score(&feats(ln, &terms, i, 4, w.dim));
+            assert!((0.0..1.0).contains(&s), "{ln}: score={s}");
+        }
+    }
+
+    #[test]
     fn feats_shape_and_bounds() {
         // 16 维全量：overlap/命中/长度/词边界/唯一率等信号可验证。
         let f = feats("conn 9f2a broken db crash", &["conn".to_string()], 0, 10, 16);
