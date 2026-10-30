@@ -52,6 +52,17 @@ CONFIGS: list[tuple[str, list[str], bool]] = [
     ("semantic", ["--semantic", str(WEIGHTS)], True),
 ]
 
+# P18 组合矩阵：semantic ON × 各保留信号（对照 = 对应 OFF 单开）。
+# 验证 semantic 开启不劣化各信号的 fidelity/cut（交互正交性）。
+COMBO: list[tuple[str, list[str], bool]] = [
+    ("sem+fold", ["--fold", "1", "--semantic", str(WEIGHTS)], True),
+    ("sem+entropy", ["--entropy", "1", "--semantic", str(WEIGHTS)], True),
+    ("sem+anchor", ["--auto-anchor", "1", "--semantic", str(WEIGHTS)], True),
+    ("sem+cluster", ["--cluster", "1", "--semantic", str(WEIGHTS)], True),
+]
+
+COMBO_OUT = ROOT / "config" / "bench" / "results" / "bench_p18_combo.csv"
+
 # ---------- token 口径（本地复刻 src/terms.rs::measure） ----------
 
 _IDEO = re.compile(
@@ -277,10 +288,20 @@ def rebuild_rows(tpl: str, pstream: str) -> list[str] | None:
 
 
 def ensure_sem_bin() -> str:
-    """隔离构建 feature=semantic 二进制（不触碰默认 release binary）。"""
+    """隔离构建 feature=semantic 二进制（不触碰默认 release binary）。
+
+    新鲜度检查：二进制比任一 src/*.rs 或 config/semantic/*.json 旧则重建——
+    否则评测会跑到旧内核（如 fold UTF-8 修复前），产出误导性结果。
+    """
     bin_ = SEM_TARGET / "release" / "scx"
     if bin_.exists():
-        return str(bin_)
+        newest = max(
+            [p.stat().st_mtime for p in (ROOT / "src").rglob("*.rs")]
+            + [p.stat().st_mtime for p in (ROOT / "config" / "semantic").glob("*.json")]
+        )
+        if bin_.stat().st_mtime >= newest:
+            return str(bin_)
+        print("semantic 二进制落后于源码，重建…")
     print(f"构建 semantic 二进制到 {bin_}（隔离 target，不影响默认）…")
     subprocess.run(
         ["cargo", "build", "--release", "--features", "semantic", "--target-dir", str(SEM_TARGET)],
@@ -297,6 +318,7 @@ def main() -> int:
     ap.add_argument("--bin", default=str(ROOT / "target" / "release" / "scx"))
     ap.add_argument("--sem-bin", default=None)
     ap.add_argument("--gate", action="store_true", help="单调性门禁模式（断言 + 退出码）")
+    ap.add_argument("--combo", action="store_true", help="P18 组合模式（semantic on/off × 5 信号）")
     ap.add_argument("--out", default=str(OUT_CSV))
     args = ap.parse_args()
 
@@ -308,6 +330,9 @@ def main() -> int:
         ("log", corpus_log(), "timeout"),
         ("zh", corpus_zh(), "超时"),
     ]
+    if args.combo:
+        return combo_main(default_bin, sem_bin, corpora, args.gate)
+
     rows: list[dict] = []
     for cname, text, query in corpora:
         full_tok = est_tok(text)
@@ -363,6 +388,88 @@ def main() -> int:
                       f"{base['cut']:.4f} - {CUT_TOL}")
                 ok = False
     print("  " + ("OK: 消融单调性门禁全部通过（单开不劣于基线）" if ok else "FAIL: 存在劣化信号"))
+    return 0 if ok else 1
+
+
+def combo_main(
+    default_bin: str, sem_bin: str, corpora: list, gate: bool
+) -> int:
+    """P18 组合评测：semantic ON × 4 信号，对照 OFF 单开（语义交互正交性）。
+
+    断言（gate 模式）：
+      1. fidelity 硬约束：sem+cfg 的 num_cov/token_cov ≥ cfg 单开 − FID_TOL
+         （semantic 开启不得劣化数字/词保真——权重 0.0 特征不干扰证据行）
+      2. cut 不劣（entropy 豁免，与单开门禁一致）
+    输出 bench_p18_combo.csv（3 语料 × (4 组合 + semantic 单开) = 15 行），
+    独立于既有 bench_p17_ablate.csv 18 行冻结。
+    """
+    rows: list[dict] = []
+    # OFF 单开先行（组合对照基准）。
+    off_configs = [c for c in CONFIGS if c[0] != "semantic"]
+    for cname, text, query in corpora:
+        full_tok = est_tok(text)
+        full_words = tokens(text)
+        full_nums = num_tokens(text)
+        for cfg_name, flags, need_sem in off_configs:
+            bin_ = sem_bin if need_sem else default_bin
+            out = compress(bin_, text, query, flags)
+            fid_out = rebuild_folded(out) if cfg_name == "fold" else out
+            rows.append(
+                {
+                    "set": cname,
+                    "cfg": cfg_name,
+                    "cut": 1.0 - est_tok(out) / full_tok,
+                    "num_cov": cov(full_nums, num_tokens(fid_out)),
+                    "token_cov": cov(full_words, tokens(fid_out)),
+                }
+            )
+            print(f"[combo off {cname:4}] {cfg_name:12} cut={rows[-1]['cut']:.4f} "
+                  f"num_cov={rows[-1]['num_cov']:.4f} token_cov={rows[-1]['token_cov']:.4f}")
+    # semantic ON：单开 + ×4 组合。
+    for cname, text, query in corpora:
+        full_tok = est_tok(text)
+        full_words = tokens(text)
+        full_nums = num_tokens(text)
+        for cfg_name, flags, need_sem in [("semantic", ["--semantic", str(WEIGHTS)], True)] + COMBO:
+            bin_ = sem_bin if need_sem else default_bin
+            out = compress(bin_, text, query, flags)
+            fid_out = rebuild_folded(out) if "fold" in cfg_name else out
+            rows.append(
+                {
+                    "set": cname,
+                    "cfg": cfg_name,
+                    "cut": 1.0 - est_tok(out) / full_tok,
+                    "num_cov": cov(full_nums, num_tokens(fid_out)),
+                    "token_cov": cov(full_words, tokens(fid_out)),
+                }
+            )
+            print(f"[combo on {cname:4}] {cfg_name:12} cut={rows[-1]['cut']:.4f} "
+                  f"num_cov={rows[-1]['num_cov']:.4f} token_cov={rows[-1]['token_cov']:.4f}")
+
+    with open(COMBO_OUT, "w", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=["set", "cfg", "cut", "num_cov", "token_cov"])
+        w.writeheader()
+        w.writerows(rows)
+    print(f"写入 {COMBO_OUT}（3 语料 × 5 配置 = {len(rows)} 行）")
+
+    if not gate:
+        return 0
+    ok = True
+    for cname, _, _ in corpora:
+        for cfg_name, _, _ in COMBO:
+            off = next(r for r in rows if r["set"] == cname and r["cfg"] == cfg_name[4:])
+            on = next(r for r in rows if r["set"] == cname and r["cfg"] == cfg_name)
+            for m in ("num_cov", "token_cov"):
+                if on[m] < off[m] - FID_TOL:
+                    print(f"  FAIL [{cname}] {cfg_name}: {m} {on[m]:.4f} < off "
+                          f"{off[m]:.4f} - {FID_TOL}")
+                    ok = False
+            if "entropy" not in cfg_name and on["cut"] < off["cut"] - CUT_TOL:
+                print(f"  FAIL [{cname}] {cfg_name}: cut {on['cut']:.4f} < off "
+                      f"{off['cut']:.4f} - {CUT_TOL}")
+                ok = False
+    print("  " + ("OK: 组合门禁全过（semantic × 各信号交互正交，fidelity/cut 不劣化）"
+                  if ok else "FAIL: 存在 semantic 组合劣化"))
     return 0 if ok else 1
 
 

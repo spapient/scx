@@ -267,6 +267,10 @@
       "sha256": "73e89ef1a6b9846855d6a9f0da7acce7d4136bf2ad63b59a2803b8fc301daba5",
       "bytes": 1155,
       "rows": 52
+    },
+    "bench_p18_combo.csv": {
+      "sha256": "6c88202827778cae88cfc554b90e8bdc95a3985d0229a2173fd7828653158beb",
+      "rows": 31
     }
   },
   "present": [

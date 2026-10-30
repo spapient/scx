@@ -2330,3 +2330,24 @@ P13 定稿(0.11.0 目标)
 - **P1-1.3+1.4 v0.11.0 bump + 门禁扩展**：Cargo.toml/Cargo.lock/README 3 处版本 0.10.0→0.11.0；check_bench.sh 新增第七步「新开关冒烟」（--budget/--fold/--auto-anchor/--cluster 单跑+组合：rc + stats + 双跑确定性；冒烟段自身缺陷修复：--json 统计行断言 `compressed: kept=`、FAIL 后不再误报 OK）；README 补 --budget 两行说明。全量门禁 check_bench.sh GATE=0（lib 375 / semantic 392 / golden 2 passed 1 ignored / clippy 0 / fmt / eval-manifest frozen+present / A2 fidelity / 冒烟 5 组合）。
 - **版本状态图**：0.10.0（P17 全线 + 消融闭环）→ **0.11.0**（P0-1.2 同预算对照 + P1-1.5 unwrap 语义化 + P1-1.8 scores 并行 + 门禁冒烟扩展）。
 - **待办（#54 P18 收尾）**：semantic on/off × 全信号组合在 eval-manifest 冻结集评测；压缩率专项已含同预算对照（P0-1.2 完成），冻结集全组合评测未做；文档/SKILL 同步复核。
+
+### P18 整合评测完成记录（2026-10-31）
+- **semantic on/off × 全信号组合评测**：`bench_ablate.py --combo` 新增组合矩阵
+  （semantic × fold/entropy/anchor/cluster，3 语料 = 30 行 CSV 冻结）。
+  **结论：全部正交**——code 全组合与基线逐字节一致（cut=0.1592/num_cov=0.7955/
+  token_cov=0.8271）；log sem+fold 继承 fold 唯一正增益（cut=0.3855）其余继承单开；
+  zh 全组合与单开逐位相同。semantic 权重 0.0 特征不干扰证据行，组合无交互劣化。
+- **评测工具链缺陷修复**：`ensure_sem_bin()` 只查存在性不查新鲜度 → 隔离二进制
+  （target/ablate-sem）在 fold UTF-8 修复前构建，sem+fold zh 组合误判 cut=0.0
+  （陈旧内核按字节切片 panic）。已加**源码新鲜度检查**（src/*.rs + config/semantic/*.json
+  mtime ≥ 二进制则复用，否则重建），重建后 zh sem+fold=0.8087 恢复正常。
+- **冻结**：bench_p18_combo.csv（30 行）入 eval-manifest frozen（sha256+rows，
+  frozen 总数 53→54）；既有 bench_p17_ablate.csv 18 行冻结不受影响。
+- **门禁**：check_bench.sh 全绿 GATE=0（lib 375 / semantic 392 / golden / clippy 0 /
+  fmt / eval-manifest 54 frozen / A2 / 冒烟 5 组合）；消融单开单调性门禁复跑全绿。
+- **压缩率专项**：与 SuperCompress 官方 mean cut 64.1% 同预算对照已在 P0-1.2 闭环
+  （code budget-0.35 kept=0.3495/cut=0.6505 ≥ 官方口径；口径双标注：官方自报 vs
+  scx 冻结实测，官方行 num/token_cov=NaN 不可比）。
+- **未决（如实标注）**：eval-manifest 冻结集（config/bench/datasets/*.csv）question 列为
+  问答式短输入、无长文本 full 列 → 压缩率类全组合评测以确定性合成三形态语料
+  （code/log/zh）为载体；冻结集 judge 语义保真评测（在线双模型）已在 P8-D 闭环。
