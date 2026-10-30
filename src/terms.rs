@@ -12,8 +12,8 @@ pub(crate) const MAX_QUERY_TERMS: usize = 256;
 pub(crate) const MAX_TERM_BYTES: usize = u8::MAX as usize;
 pub(crate) const STOP: &[&str] = &[
     "the", "and", "for", "with", "that", "this", "from", "your", "are", "was", "were", "not",
-    "you", "use", "using", "的", "了", "是", "在", "和", "与", "或", "把", "被", "我", "你", "请",
-    "帮", "一下", "一个", "这个", "那个", "怎么", "如何", "什么",
+    "you", "use", "using", "please", "kindly", "regarding", "的", "了", "是", "在", "和", "与",
+    "或", "把", "被", "我", "你", "请", "帮", "一下", "一个", "这个", "那个", "怎么", "如何", "什么",
 ];
 
 /// 语义敏感词：裁剪时**永不摘除**（score ≥ 2，同命中词）。
@@ -27,6 +27,9 @@ pub(crate) const KEEP: &[&str] = &[
     "just", "exactly", "但", "而", "虽", "却", "更", "最",
     // 数值语义（推理链骨架）
     "each", "per", "every", "total", "每", "共", "总",
+    // 数量/程度近似（推理链不摘，防答案语义被削；ASCII 整词匹配。
+    // 中文近似词用单字 KEEP（逐字 token 模式），如「每/共/总」）。
+    "about", "around", "approximately", "roughly",
 ];
 
 pub(crate) fn ideograph(c: char) -> bool {

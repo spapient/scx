@@ -247,7 +247,9 @@ fn scan_ascii(
 }
 
 /// 最长词表词字节长（STOP/KEEP 均 ≤ 本值；桶按长度索引）。
-const MAX_DICT_WORD: usize = 8;
+/// 字典桶最长词（字节）：KEEP/STOP 超过此长度不入桶（不参与判定）。
+/// 覆盖 P17-B 数量近似词（approximately=13）。
+const MAX_DICT_WORD: usize = 16;
 
 type Buckets = std::sync::OnceLock<Vec<Vec<&'static str>>>;
 
@@ -551,6 +553,27 @@ mod tests {
         assert!(out.to_lowercase().contains("but"), "转折词必须保留: {out}");
         assert!(out.contains("8"), "数字必须保留: {out}");
         assert!(out.contains("10"), "数字必须保留: {out}");
+    }
+
+    #[test]
+    fn keeps_quantity_approximation_words() {
+        let terms: Vec<String> = vec![];
+        // 数量/程度近似词（P17-B 扩展 KEEP）：削掉会改变答案语义。
+        let en = "about 3 kg, approximately 5 cm around";
+        let out_en = tl(en, &terms, 0.2, false);
+        assert!(
+            out_en.to_lowercase().contains("about"),
+            "about 必须保留: {out_en}"
+        );
+        assert!(
+            out_en.to_lowercase().contains("approximately"),
+            "approximately 必须保留: {out_en}"
+        );
+        assert!(out_en.contains("3"), "数字必须保留: {out_en}");
+        let zh = "甲乙共有 2 个和 3 个苹果";
+        let out_zh = tl(zh, &terms, 0.2, false);
+        assert!(out_zh.contains('共'), "单字 KEEP 必须保留: {out_zh}");
+        assert!(out_zh.contains('2') && out_zh.contains('3'), "数字必须保留: {out_zh}");
     }
 
     #[test]
