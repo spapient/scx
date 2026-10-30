@@ -25,4 +25,7 @@ __pycache__/
 
 # 本地草稿/调研稿：只留本机，不随仓库发布
 docs/comparison-v051.md
-config/bench/perf/corpus_p100m.txt
+config/bench/perf/corpus_p*.txt
+
+# 后台命令残留输出（如 nohup.out），属本地产物，不随仓库分发
+nohup.out
