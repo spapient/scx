@@ -1,8 +1,18 @@
 # scx 发布检查单（crates.io 发布前）
 
-> 状态：**已发布**（0.5.0 → … → 0.7.0 → 0.9.0，crates.io max_version=0.9.0、num_versions=12；0.9.0 含 P14-P16 优化，crate 经 include 白名单瘦身至 634KiB）。
+> 状态：**已发布**（0.5.0 → … → 0.7.0 → 0.9.0 → 0.10.0，crates.io max_version=0.10.0、num_versions=12；0.10.0 含 P12.6 --evidence 强制保留 + ser_b 序列化口径修复，全平台资产 + npm 同步发布）。
 > 下节为历次发布前 dry-run 验证证据模板；本节头部已更新为当前状态。
-> 检查日期：2026-10-25 初版；2026-10-26 随 0.6.x 系列更新。
+> 检查日期：2026-10-25 初版；2026-10-26 随 0.6.x 系列更新；2026-10-30 随 0.10.0 更新。
+
+## v0.10.0 发布记录（2026-10-30）
+
+| 渠道 | 结果 | 证据 |
+|---|---|---|
+| crates.io | ✅ | `cargo publish --locked` 成功；API max_version=0.10.0 / num_versions=12 / downloads=128 |
+| GitHub Release v0.10.0 | ✅ | 4 资产：darwin-arm64.tar.gz（Mach-O arm64，下载回验 `scx 0.10.0`）/ linux-x86_64-musl.tar.gz（static-pie）/ windows-x86_64.zip（PE32+）/ SHA256SUMS-0.10.0 |
+| npm @spapient/scx | ✅ | latest=0.10.0；安装冒烟 `scx --version`=0.10.0；evidence 行保留 + ser_b 字段实测 |
+| 门禁 | ✅ | P12.6 提交 24d5024 在发布链上（HEAD 51c7f56 祖先）；bash tools/check_bench.sh 全绿（发布前） |
+| 资产校验 | ✅ | SHA256SUMS-0.10.0：darwin 1b63bca4… / linux-musl 09938c0a… / windows 7ff2d3ab… |
 
 ## 已验证（本轮 dry-run 证据）
 
