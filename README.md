@@ -81,9 +81,10 @@ brew tap spapient/scx && brew install scx
 # Node ≥18 环境（含 MCP 入口，包内置三平台二进制）
 npx -y @spapient/scx
 
-# Windows（winget / Scoop，PR 合并后可用）
-winget install Spapient.Scx
-scoop install scx
+# Windows（Scoop 自建 bucket 即时可用 / winget PR 合入后可用）
+scoop bucket add scx https://github.com/spapient/scoop-scx
+scoop install scx/scx
+winget install Spapient.Scx    # 待 microsoft/winget-pkgs PR #466131 合并
 ```
 
 完整发布渠道矩阵与各平台接入状态（豆包/千问办公等）见 [docs/install-plan.md](docs/install-plan.md)。
