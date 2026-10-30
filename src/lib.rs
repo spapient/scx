@@ -307,6 +307,9 @@ pub struct Config {
     /// 熵近似评分（`--entropy 1`，默认 0 = 现状逐字节一致）。无模型
     /// 统计信息密度信号，补偿无 query 命中的信息密集行召回。
     pub entropy: bool,
+    /// 自动锚（`--auto-anchor 1`，默认 0 = 现状逐字节一致）。query 词形
+    /// 变体自动加入命中锚，降低 --evidence 配置负担。
+    pub auto_anchor: bool,
     pub trim_ratio: f64,
     /// 算术符号（`+ = * -`）作为结构锚保留（`--trim-op-keep`，默认 0）。
     /// 代码/算式场景需要；GSM8K 数学场景默认关保持 P6d 无损最优。
@@ -376,6 +379,7 @@ impl Default for Config {
             trim: crate::policy::DEFAULT_TRIM,
             fold: crate::policy::DEFAULT_FOLD,
             entropy: crate::policy::DEFAULT_ENTROPY,
+            auto_anchor: crate::policy::DEFAULT_AUTO_ANCHOR,
             trim_ratio: crate::policy::DEFAULT_TRIM_RATIO,
             trim_op_keep: crate::policy::DEFAULT_TRIM_OP_KEEP,
             code_keep: crate::policy::DEFAULT_CODE_KEEP,

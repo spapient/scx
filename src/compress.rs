@@ -114,6 +114,43 @@ pub(crate) enum Force {
     /// 手写正则（已解析并预编译；非法模式不参与匹配，CLI 层解析时已报错）。
     Re(crate::regex::Compiled),
 }
+/// P17-D 轻量词形扩展：去常见后缀（s/es/ed/ing/ly/er）并还原双写辅音
+/// （running→run）。`--auto-anchor 1` 时并入命中锚词表。
+fn word_forms(w: &str) -> Vec<String> {
+    let mut v = Vec::new();
+    for suf in ["s", "es", "ed", "ing", "ly", "er"] {
+        let Some(stem) = w.strip_suffix(suf) else {
+            continue;
+        };
+        if stem.len() < 3 {
+            continue;
+        }
+        v.push(stem.to_string());
+        let b = stem.as_bytes();
+        if b.len() >= 4 && b[b.len() - 1] == b[b.len() - 2] {
+            v.push(stem[..stem.len() - 1].to_string());
+        }
+    }
+    v
+}
+
+/// 锚词表构造（`--auto-anchor 1` 时扩展词形，否则原词表）。
+fn anchor_terms(cfg: &Config, terms: &[String]) -> Vec<String> {
+    if !cfg.auto_anchor || terms.is_empty() {
+        return terms.to_vec();
+    }
+    let mut v = Vec::with_capacity(terms.len() * 2);
+    for t in terms {
+        v.push(t.clone());
+        for f in word_forms(t) {
+            if !v.contains(&f) {
+                v.push(f);
+            }
+        }
+    }
+    v
+}
+
 fn forces(forces: &[String]) -> Vec<Force> {
     let mut pats: Vec<Force> = Vec::new();
     for f in forces {
@@ -162,6 +199,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let mut nl_buf: Option<String> = None;
     let lines = lines(original, &mut nl_buf);
     let uniq_terms = terms(query);
+    // P17-D 自动锚（--auto-anchor 1，默认关 = 现状逐字节一致）：query 词形
+    // 变体（去 s/es/ed/ing/ly/er，双写辅音还原）自动加入命中锚，无需手写
+    // --evidence。与 P13-B stem_expand 同语义的轻量规则版（非门控，默认
+    // 构建可用）。仅扩展 hits 判定词表，terms 计数/语义打分口径不变。
+    let anchor_terms = anchor_terms(cfg, &uniq_terms);
     let force_pats = forces(&cfg.forces);
     let total = lines.len();
     // token 估算只服务小输入直通与可选预算；针尖档大盘无需整份扫描。
@@ -252,7 +294,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
     let masks = masks(
         &lines,
-        &uniq_terms,
+        &anchor_terms,
         &force_pats,
         small_tok,
         do_tok,
@@ -1159,6 +1201,46 @@ mod tests {
         assert!(yaml_anchor("- item"));
         assert!(!yaml_anchor("# comment"));
         assert!(!yaml_anchor("key: value"));
+    }
+
+    #[test]
+    fn word_forms_strips_suffixes_and_doubled_consonants() {
+        // 去 -ing：connecting → connect。
+        let mut forms = word_forms("connecting");
+        forms.sort();
+        assert!(forms.contains(&"connect".to_string()), "{forms:?}");
+        // 双写辅音还原：running → runn + run。
+        let mut f2 = word_forms("running");
+        f2.sort();
+        assert!(f2.contains(&"runn".to_string()) && f2.contains(&"run".to_string()), "{f2:?}");
+        assert!(word_forms("errors").contains(&"error".to_string()));
+        assert!(word_forms("closely").contains(&"close".to_string()));
+        // 短词不剥到 <3 字符。
+        assert!(!word_forms("is").contains(&"i".to_string()));
+        // 无后缀词零扩展。
+        assert!(word_forms("alpha").is_empty());
+    }
+
+    #[test]
+    fn auto_anchor_off_is_noop_on_masks_terms() {
+        // --auto-anchor 默认关：锚词表=原词表，命中行为与现状一致。
+        let mut cfg = crate::Config::default();
+        let lines = ["worker running to server", "worker runs the server", "idle line here"];
+        let q = "running";
+        let uniq = crate::terms::terms(q);
+        let anchor = anchor_terms(&cfg, &uniq);
+        assert_eq!(anchor, uniq, "默认关时锚词表=原词表");
+        cfg.auto_anchor = true;
+        let anchor_on = anchor_terms(&cfg, &uniq);
+        assert!(
+            anchor_on.len() > anchor.len(),
+            "开启后扩展词形: {} vs {}",
+            anchor_on.len(),
+            anchor.len()
+        );
+        assert!(anchor_on.contains(&"run".to_string()));
+        assert!(anchor_on.contains(&"runn".to_string()));
+        let _ = lines;
     }
 
     #[test]
