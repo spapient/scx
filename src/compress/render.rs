@@ -23,18 +23,57 @@ pub(crate) fn render(
         out: String::with_capacity(lines.len() / 2),
         numbers: Vec::with_capacity(keep.len()),
     };
+    if cfg.fold {
+        render_folded(&mut sink, lines, keep, cfg, raw, &trimmed);
+    } else {
+        render_plain(&mut sink, lines, keep, cfg, raw, &trimmed);
+    }
+    // perf 诊断：输出逐行 trim 的累计分段耗时（仅 feature="perf"，默认零开销）。
+    crate::perf::T::start().dump_agg("trim_line");
+    (sink.out, sink.numbers)
+}
+
+/// 默认输出路径：逐行 emit（gap 标记 + 保留行落地）。
+fn render_plain(
+    sink: &mut Sink,
+    lines: &[&str],
+    keep: &[bool],
+    cfg: &Config,
+    raw: &[bool],
+    trimmed: &[Option<String>],
+) {
     let mut in_gap = false;
     for (i, &k) in keep.iter().enumerate() {
         if k {
-            emit_kept(&mut sink, &mut in_gap, i, lines[i], cfg, raw, &trimmed);
+            emit_kept(sink, &mut in_gap, i, lines[i], cfg, raw, trimmed);
         } else {
             in_gap = true;
         }
     }
-    flush_gap(&mut sink, in_gap, cfg);
-    // perf 诊断：输出逐行 trim 的累计分段耗时（仅 feature="perf"，默认零开销）。
-    crate::perf::T::start().dump_agg("trim_line");
-    (sink.out, sink.numbers)
+    flush_gap(sink, in_gap, cfg);
+}
+
+/// 折叠模式（P17-A）：连续保留块收集，块结束时做跨行模板折叠。
+fn render_folded(
+    sink: &mut Sink,
+    lines: &[&str],
+    keep: &[bool],
+    cfg: &Config,
+    raw: &[bool],
+    trimmed: &[Option<String>],
+) {
+    let mut in_gap = false;
+    let mut block: Vec<usize> = Vec::new();
+    for (i, &k) in keep.iter().enumerate() {
+        if k {
+            block.push(i);
+        } else {
+            flush_fold_block(sink, &mut in_gap, &mut block, lines, cfg, raw, trimmed);
+            in_gap = true;
+        }
+    }
+    flush_fold_block(sink, &mut in_gap, &mut block, lines, cfg, raw, trimmed);
+    flush_gap(sink, in_gap, cfg);
 }
 
 /// 保留行落地：先行写省略标记（若前置非保留行段），再输出该行。
@@ -64,6 +103,46 @@ fn flush_gap(sink: &mut Sink, in_gap: bool, cfg: &Config) {
     if in_gap && cfg.elide {
         sink.out.push_str("...\n");
     }
+}
+
+/// 折叠模式块落地：先写省略标记（若前置被裁段），再对块内行做
+/// 跨行模板折叠输出。折叠后每输出行记模板行号（首行行号）。
+fn flush_fold_block(
+    sink: &mut Sink,
+    in_gap: &mut bool,
+    block: &mut Vec<usize>,
+    lines: &[&str],
+    cfg: &Config,
+    raw: &[bool],
+    trimmed: &[Option<String>],
+) {
+    if block.is_empty() {
+        return;
+    }
+    if *in_gap && cfg.elide {
+        sink.out.push_str("...\n");
+    }
+    *in_gap = false;
+    let texts: Vec<&str> = block
+        .iter()
+        .map(|&i| {
+            if cfg.trim && !raw[i] {
+                trimmed[i].as_deref().unwrap_or(lines[i])
+            } else {
+                lines[i]
+            }
+        })
+        .collect();
+    let anchor = block[0];
+    for f in crate::fold::collapse(&texts, crate::fold::FOLD_MIN) {
+        if cfg.lineno {
+            prefix(&mut sink.out, anchor + 1);
+        }
+        sink.out.push_str(&f);
+        sink.out.push('\n');
+        sink.numbers.push(anchor + 1);
+    }
+    block.clear();
 }
 
 /// 并行计算所有 trim 行的裁剪结果（`keep[i] && !raw[i]`），其余为 None。
