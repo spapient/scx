@@ -5,7 +5,7 @@ use super::*;
 
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--sem-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--fold 0|1] [--entropy 0|1] [--auto-anchor 0|1] [--cluster 0|1] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--budget F] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--sem-weight F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--fold 0|1] [--entropy 0|1] [--auto-anchor 0|1] [--cluster 0|1] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -14,6 +14,11 @@ pub fn usage() -> String {
     s.push_str("  --ratio R            optional-content budget (default ");
     s.push_str(&Config::DEFAULT_RATIO.to_string());
     s.push_str("); evidence lines and minimum neighborhood are exempt\n");
+    s.push_str("  --budget F           hard kept-token ceiling (0 < F <= 1, default 0 = off):\n");
+    s.push_str("                       final kept tokens capped at F of input; over-budget rows\n");
+    s.push_str(
+        "                       dropped by reason priority (evidence/number/structure first)\n",
+    );
     s.push_str("  --context N          context 0 = needle mode: skip optional fill, keep evidence lines only (0..=4)\n");
     s.push_str(
         "  --max-tokens N       hard token ceiling; evidence floor wins, overflow is reported as\n",
@@ -353,6 +358,12 @@ pub(crate) fn float(
             }
             s.config.ratio = parsed;
         }
+        "--budget" => {
+            if parsed <= 0.0 || parsed > 1.0 {
+                return Err(format!("{} must be a finite number in (0, 1]", f.name));
+            }
+            s.config.budget = parsed;
+        }
         "--sim-weight" => {
             if parsed < 0.0 {
                 return Err(format!("{} must be a finite number >= 0", f.name));
@@ -535,6 +546,7 @@ pub(crate) fn pipeline(
 
 pub(crate) const POLICY_TABLE: &[(&str, &str)] = &[
     ("ratio", "--ratio"),
+    ("budget", "--budget"),
     ("context", "--context"),
     ("window", "--window"),
     ("elide", "--elide"),

@@ -354,6 +354,90 @@ pub(crate) fn tokens(lines: &[&str], keep: &[bool], tok: &[f64]) -> f64 {
     sum
 }
 
+/// `--budget` 硬 kept 上限：最终输出 token（保留行 + elide 省略标记 `...`）占比
+/// ≤ budget。超预算行按保真优先级（reason 编号升序 = 可选填充 → 保真锚 → 证据
+/// 最后裁，同优先级按分数升序）反向裁剪。确定性：排序键 `(priority, score, idx)`。
+/// 与 SuperCompress 官方 kept≈36%（mean cut 64.1%）同预算对照的硬预算路径；
+/// 0 = 关闭（默认路径逐字节一致）。
+///
+/// 预算精确口径：输出 = Σ estimate(保留行) + GAP_TOK × false 段数（`...` 标记
+/// 每段 1 行，estimate("...") = 3/4+1 = 1.75）。裁剪循环增量维护 false 段数：
+/// 裁行 i 的段数变化 = gap_delta（见下），保证预算达成含省略标记、无二次漂移。
+pub(crate) fn budget_trim(
+    lines: &[&str],
+    keep: &mut [bool],
+    reason: &mut [u8],
+    scores: &[f64],
+    boost: &[f64],
+    tok: &[f64],
+    budget_tok: f64,
+) -> f64 {
+    const GAP_TOK: f64 = 1.75; // estimate("...")，与 terms::estimate 同式。
+
+    let cur = tokens(lines, keep, tok);
+    let gaps = gap_count(keep);
+    let mut used = cur + GAP_TOK * gaps as f64;
+    if used <= budget_tok {
+        return cur;
+    }
+    let mut order: Vec<(u8, i64, usize)> = (0..keep.len())
+        .filter(|&i| keep[i])
+        .map(|i| {
+            let sc = scores[i] + boost[i];
+            // 排序键：优先级（reason 编号升序先裁）→ 分数降序（高分保留）→ 索引升序。
+            (reason[i], (sc * 1e9) as i64, i)
+        })
+        .collect();
+    order.sort_unstable();
+    for &(_, _, i) in &order {
+        if used <= budget_tok {
+            break;
+        }
+        let t = est(tok, lines, i);
+        used -= t;
+        used += GAP_TOK * gap_delta(keep, i) as f64;
+        keep[i] = false;
+        reason[i] = 0;
+    }
+    // 返回最终保留行的 token 和（不含省略标记）。
+    used - GAP_TOK * gap_count(keep) as f64
+}
+
+/// false（被裁）段数：连续非保留行组数，含首尾段——render_plain 每个段输出
+/// 一个 `...` 标记（elide=true）。
+fn gap_count(keep: &[bool]) -> usize {
+    let mut n = 0usize;
+    let mut in_gap = false;
+    for &k in keep {
+        if !k {
+            in_gap = true;
+        } else if in_gap {
+            n += 1;
+            in_gap = false;
+        }
+    }
+    if in_gap {
+        n += 1;
+    }
+    n
+}
+
+/// 裁掉保留行 i（裁前 keep[i]=true）后 false 段数变化：
+/// - 段内（左右均为保留或边界邻保留）→ 段裂开或唯一行变段 → +1；
+/// - 孤立行夹在两组被裁行之间 → 两段合并 → −1；
+/// - 边缘（一侧被裁、一侧保留/边界）→ 段结构不变 → 0。
+fn gap_delta(keep: &[bool], i: usize) -> i64 {
+    let lf = i > 0 && !keep[i - 1];
+    let rf = i + 1 < keep.len() && !keep[i + 1];
+    if !lf && !rf {
+        1
+    } else if lf && rf {
+        -1
+    } else {
+        0
+    }
+}
+
 pub(crate) fn audit(keep: &[bool], err: &[bool], hits: &[usize], tbl: &Limits) -> Risk {
     let (err_dropped, hit_dropped) = dropped(keep, err, hits);
     let kept = keep.iter().filter(|&&k| k).count();

@@ -171,6 +171,15 @@ pub(crate) static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
+        name: "--budget",
+        once: true,
+        kind: Kind::F64,
+        what: "a number in (0, 1]",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
         name: "--context",
         once: true,
         kind: Kind::I64,

@@ -252,6 +252,9 @@ fn session_like(s: &str) -> bool {
 #[derive(Clone)]
 pub struct Config {
     pub ratio: f64,
+    /// 硬 kept-token 上限（0 = 关，现状行为）：最终保留 token 占比 ≤ budget，
+    /// 超预算行按 reason 优先级（证据/数字/结构锚 → 可选填充）反向裁剪。
+    pub budget: f64,
     pub context: i64,
     pub window: i64,
     pub elide: bool,
@@ -360,6 +363,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             ratio: Self::DEFAULT_RATIO,
+            budget: 0.0,
             context: Self::DEFAULT_CONTEXT,
             window: Self::DEFAULT_WINDOW,
             elide: true,

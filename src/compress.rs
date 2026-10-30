@@ -184,6 +184,39 @@ fn force(pats: &mut Vec<Force>, p: String) {
         pats.push(Force::Sub(p));
     }
 }
+/// `--budget` 裁剪只读上下文：行 + 打分 + 提升 + token 表。
+struct BudgetIn<'a> {
+    lines: &'a [&'a str],
+    scores: &'a [f64],
+    boost: &'a [f64],
+    tok: &'a [f64],
+}
+
+/// `--budget` 应用点：0 = 关闭（原样返回 kept）；否则按 total_tok × budget
+/// 硬裁剪并重算 kept。独立成函数保持 compress() 认知复杂度 < 6。
+/// 只读侧打包为 `BudgetIn`，参数数压到 clippy 阈值（7）内。
+fn apply_budget(
+    keep: &mut [bool],
+    reason: &mut [u8],
+    budget: f64,
+    total_tok: f64,
+    ctx: BudgetIn,
+) -> usize {
+    if budget <= 0.0 {
+        return keep.iter().filter(|&&k| k).count();
+    }
+    budget_trim(
+        ctx.lines,
+        keep,
+        reason,
+        ctx.scores,
+        ctx.boost,
+        ctx.tok,
+        total_tok * budget,
+    );
+    keep.iter().filter(|&&k| k).count()
+}
+
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let mut prof = crate::perf::T::start();
     let (ratio, context, window) = config(cfg);
@@ -468,6 +501,21 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     if overflow.is_none() {
         overflow = last(final_tok, cfg.limit);
     }
+
+    // --budget 硬 kept 上限（P18 SuperCompress 同预算对照路径）：超预算行按
+    // reason 保真优先级（可选填充 → 保真锚 → 证据）反向裁剪；0 = 现状逐字节一致。
+    let kept = apply_budget(
+        &mut keep,
+        &mut reason,
+        cfg.budget,
+        masks.total_tok,
+        BudgetIn {
+            lines: &lines,
+            scores: &scores,
+            boost: &boost,
+            tok: &masks.tok,
+        },
+    );
 
     // 预算过紧或只有高频单查询命中时可能选不出任何行；此时回退原文，不返回静默空结果。
     if kept == 0 {
@@ -1458,5 +1506,64 @@ mod tests {
         );
         assert!(!keep3.iter().any(|&k| k), "越界行号不影响任何行");
         assert_eq!(kept3, 0);
+    }
+
+    #[test]
+    fn budget_trim_enforces_hard_kept_cap() {
+        use crate::compress::score::{budget_trim, R_EVIDENCE, R_FILL, R_NUM_LINE};
+        let lines = ["fill low", "fill high", "num 42 line", "evidence line"];
+        let tok = [3.0, 3.0, 3.0, 3.0];
+        // 全保留：12 token；预算 9（输出 = 行 + gap 标记 ≤ 9）。
+        // 裁 i=0 后 [F,T,T,T]：9 行 token + 1.75 gap = 10.75 > 9 → 继续裁；
+        // 裁 i=1 后 [F,F,T,T]：6 行 token + 1.75 gap = 7.75 ≤ 9 ✓（保真锚全留）。
+        let mut keep = vec![true; 4];
+        let mut reason = vec![R_FILL, R_FILL, R_NUM_LINE, R_EVIDENCE];
+        let scores = [0.1, 0.9, 0.5, 2.0];
+        let boost = [0.0; 4];
+        let used = budget_trim(&lines, &mut keep, &mut reason, &scores, &boost, &tok, 9.0);
+        // 返回行 token 和：6 = 2 保留行 × 3；输出 = 6 + 1.75×1 段 ≤ 9。
+        assert_eq!(used, 6.0, "行 token 与 gap 合计受预算约束");
+        assert!(!keep[0] && !keep[1], "低分填充行先裁（先低分后高分）");
+        assert!(keep[2] && keep[3], "数字/证据行保留（保真锚最后裁）");
+        assert_eq!(reason[2], R_NUM_LINE);
+        assert_eq!(reason[3], R_EVIDENCE);
+    }
+
+    #[test]
+    fn budget_trim_noop_when_within_budget() {
+        use crate::compress::score::budget_trim;
+        let lines = ["a", "b"];
+        let tok = [2.0, 2.0];
+        let mut keep = vec![true; 2];
+        let mut reason = vec![1u8, 2u8];
+        let scores = [1.0, 1.0];
+        let boost = [0.0; 2];
+        let used = budget_trim(&lines, &mut keep, &mut reason, &scores, &boost, &tok, 5.0);
+        assert_eq!(used, 4.0, "预算未超时零操作");
+        assert!(keep[0] && keep[1]);
+    }
+
+    #[test]
+    fn budget_flag_deterministic_and_off_by_default() {
+        // 默认路径逐字节一致：budget=0 时压缩输出与无 flag 完全一致。
+        let text = "line one has alpha beta\nline two took 42ms id=7\nline three gamma delta\n";
+        let cfg = crate::Config::default();
+        let out = compress(text, "alpha", &cfg);
+        let cfg_b = crate::Config {
+            budget: 0.0,
+            ..cfg.clone()
+        };
+        let out_b = compress(text, "alpha", &cfg_b);
+        assert_eq!(out.text, out_b.text, "budget=0 与默认逐字节一致");
+        // 硬预算下 kept token 占比受控：重复结构文本 + 紧预算。
+        let big = "error: timeout on host A\n".repeat(40) + "summary: all ok\n";
+        let cfg35 = crate::Config {
+            budget: 0.35,
+            ..cfg.clone()
+        };
+        let o35 = compress(&big, "timeout", &cfg35);
+        assert!(o35.cut > 0.5, "35% 硬预算下 cut 应显著: {}", o35.cut);
+        let o35b = compress(&big, "timeout", &cfg35);
+        assert_eq!(o35.text, o35b.text, "硬预算路径确定性");
     }
 }
