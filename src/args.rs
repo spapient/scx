@@ -370,6 +370,15 @@ pub(crate) static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
+        name: "--cluster",
+        once: true,
+        kind: Kind::Bool01,
+        what: "",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
         name: "--trim-ratio",
         once: true,
         kind: Kind::F64,

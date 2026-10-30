@@ -362,7 +362,9 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // P17-C 熵近似评分（--entropy 1，默认关=零影响）。
     crate::compress::plan::entropy_signal(cfg, &lines, &dup, &mut scores);
     apply_sims(cfg, &mut scores, &dup, total);
-    let boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
+    let mut boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
+    // P17-E 证据簇密度加权（--cluster 1，默认关=零影响）。
+    crate::compress::plan::cluster_signal(cfg, &scores, &dup, &mut boost, window as usize, &DEFAULT_SCORES);
     prof.mark("spans+scores");
     // 逐行保留原因（--explain 用）：0=删除，其余见 R_* 常量。
     let mut reason = vec![0u8; total];

@@ -1150,6 +1150,41 @@ pub(crate) fn apply_sims(cfg: &Config, scores: &mut [f64], dup: &[bool], total: 
     }
 }
 
+/// 窗口内证据行计数（≥ `thr` 的高分行，dup 行不计）。
+fn evidence_hits(scores: &[f64], dup: &[bool], i: usize, window: usize, thr: f64) -> usize {
+    let total = scores.len();
+    let mut hit = 0usize;
+    for d in -(window as i64)..=window as i64 {
+        let j = i as i64 + d;
+        if j >= 0 && (j as usize) < total && !dup[j as usize] && scores[j as usize] >= thr {
+            hit += 1;
+        }
+    }
+    hit
+}
+
+/// P17-E 证据簇密度加权（`--cluster 1`，默认关 = 现状逐字节一致）：
+/// boost 窗口内高分行聚集处（≥2 证据行）整簇加权翻倍，保留完整上下文块
+/// （同一错误栈/同一段日志）。受 `boost_cap` 约束，确定性、无副作用。
+pub(crate) fn cluster_signal(
+    cfg: &Config,
+    scores: &[f64],
+    dup: &[bool],
+    boost: &mut [f64],
+    window: usize,
+    tbl: &Weights,
+) {
+    if !cfg.cluster {
+        return;
+    }
+    let thr = tbl.heading_bonus;
+    for i in 0..boost.len() {
+        if !dup[i] && evidence_hits(scores, dup, i, window, thr) >= 2 {
+            boost[i] = (boost[i] * 2.0).min(tbl.boost_cap);
+        }
+    }
+}
+
 /// P17-C 熵近似评分（`--entropy 1`，默认关 = 零影响）：
 /// 无模型的统计信息密度信号——字符分布熵（高熵=信息密集）加权，
 /// 字符重复率（zipf 高频填充）降权。对无 query 命中的信息密集行召回补偿。
@@ -1298,5 +1333,36 @@ mod tests {
         cfg.entropy = true;
         entropy_signal(&cfg, &lines, &dup, &mut sc);
         assert!(sc.iter().all(|v| *v > 1.0), "开启后非 dup 行加分: {sc:?}");
+    }
+
+    #[test]
+    fn cluster_off_is_noop_and_on_weights_dense_evidence() {
+        let mut cfg = crate::Config::default();
+        // 两处证据簇：行 1-2 密集（≥2 高分行），行 9 孤立高分行。
+        let scores = [
+            1.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 0.0, 0.0, 0.0,
+        ];
+        let dup = [false; 12];
+        let tbl = &crate::policy::DEFAULT_SCORES;
+        let mut boost = crate::compress::plan::boost(&scores, &dup, 1, tbl);
+        let before = boost.clone();
+        cluster_signal(&cfg, &scores, &dup, &mut boost, 1, tbl);
+        assert_eq!(boost, before, "默认关 = 零影响");
+        cfg.cluster = true;
+        cluster_signal(&cfg, &scores, &dup, &mut boost, 1, tbl);
+        // 簇内行（0/1/2 窗口内均见 ≥2 高分行）加权翻倍。
+        assert!(
+            boost[0] > before[0] && boost[1] > before[1],
+            "簇内加权: before={before:?} after={boost:?}"
+        );
+        // 孤立高分行（9）仅自身 1 个 → 不加权。
+        assert!(
+            (boost[9] - before[9]).abs() < 1e-12,
+            "孤立行不加权: {} vs {}",
+            boost[9],
+            before[9]
+        );
+        // 受 boost_cap 约束。
+        assert!(boost.iter().all(|v| *v <= tbl.boost_cap));
     }
 }
