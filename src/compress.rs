@@ -101,7 +101,7 @@ fn chars(text: &str) -> usize {
 pub(crate) fn lines<'b, 'a: 'b>(text: &'a str, buf: &'b mut Option<String>) -> Vec<&'b str> {
     let src: &str = if text.contains('\r') {
         buf.replace(text.replace("\r\n", "\n"));
-        buf.as_ref().unwrap().as_str()
+        buf.as_ref().expect("buf 刚 replace 写入，必有值").as_str()
     } else {
         text
     };

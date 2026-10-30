@@ -197,7 +197,7 @@ pub(crate) fn advance(root: &str) -> std::io::Result<()> {
         }
         if let Some(v) = value(t) {
             next = Some(v.saturating_add(1));
-            out.push(format!("gen = {}", next.unwrap()));
+            out.push(format!("gen = {}", next.expect("刚写入 Some，gen 必有值")));
             continue;
         }
         out.push(line.to_string());

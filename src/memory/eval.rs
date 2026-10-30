@@ -424,7 +424,11 @@ fn report(
     ));
     for l in &acc.layers {
         let e = acc.agg.get(l).unwrap_or(&[0.0; 9]);
-        out.push(layer(l, e, acc.per.get(l).unwrap()));
+        out.push(layer(
+            l,
+            e,
+            acc.per.get(l).expect("per 与 layers 同键构建，键必存在"),
+        ));
     }
     // L1 直答命中率出表。
     let l1_rate = if acc.l1_total > 0 {

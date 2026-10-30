@@ -82,7 +82,7 @@ impl<'a> Parser<'a> {
             arms.push(self.seq()?);
         }
         if arms.len() == 1 {
-            Ok(arms.pop().unwrap())
+            Ok(arms.pop().expect("arms.len()==1 分支 pop 必有值"))
         } else {
             Ok(Node::Alt(arms))
         }
@@ -103,7 +103,7 @@ impl<'a> Parser<'a> {
             return Err(format!("re: empty alternative; {SUBSET}"));
         }
         if items.len() == 1 {
-            Ok(items.pop().unwrap())
+            Ok(items.pop().expect("items 单元素分支 pop 必有值"))
         } else {
             Ok(Node::Seq(items))
         }

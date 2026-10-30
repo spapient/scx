@@ -649,7 +649,7 @@ pub(crate) fn prefix(out: &mut String, n: usize) {
             break;
         }
     }
-    out.push_str(std::str::from_utf8(&buf[i..]).unwrap());
+    out.push_str(std::str::from_utf8(&buf[i..]).expect("自生成 ASCII 数字恒合法 UTF-8"));
     out.push_str(": ");
 }
 

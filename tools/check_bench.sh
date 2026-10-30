@@ -77,6 +77,9 @@ for FLAG in "--budget 0.5" "--fold 1" "--auto-anchor 1" "--cluster 1" "--budget 
 done
 [ "$FAIL" = "0" ] && echo "  OK: 四新开关冒烟全过（rc + stats + 双跑确定性）"
 
+step "unwrap/panic 审计（生产裸 unwrap=0，消息非空）"
+python3 tools/audit_unwrap.py || fail "audit_unwrap"
+
 if [ "$FAIL" = "0" ]; then
   echo; echo "check_bench: 全部通过 ✓"
 else

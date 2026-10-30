@@ -98,7 +98,7 @@ fn once(s: &str) -> Option<String> {
             i += len;
             continue;
         }
-        let ch = s[i..].chars().next().unwrap();
+        let ch = s[i..].chars().next().expect("循环不变量 i<len，切片非空");
         out.push(ch);
         i += ch.len_utf8();
     }

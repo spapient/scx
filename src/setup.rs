@@ -304,7 +304,9 @@ fn obj_mut(root: &mut Json) -> &mut Vec<(String, Json)> {
     if !matches!(root, Json::Obj(_)) {
         *root = Json::Obj(vec![]);
     }
-    let Json::Obj(kv) = root else { unreachable!() };
+    let Json::Obj(kv) = root else {
+        unreachable!("obj_mut 已就地替换为非对象为空对象，必为 Obj")
+    };
     kv
 }
 

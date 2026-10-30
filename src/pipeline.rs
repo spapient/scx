@@ -224,16 +224,18 @@ fn set1(
 fn apply_plan(p: &Plan, cfg: &mut Config, set: &dyn Fn(&str) -> bool) -> Vec<&'static str> {
     let mut a = Vec::new();
     if p.ratio.is_some() {
-        set1(&mut a, cfg, set, "--ratio", |c| c.ratio = p.ratio.unwrap());
+        set1(&mut a, cfg, set, "--ratio", |c| {
+            c.ratio = p.ratio.expect("plan 字段由 is_some 守卫，必为 Some")
+        });
     }
     if p.window.is_some() {
         set1(&mut a, cfg, set, "--window", |c| {
-            c.window = p.window.unwrap()
+            c.window = p.window.expect("plan 字段由 is_some 守卫，必为 Some")
         });
     }
     if p.context.is_some() {
         set1(&mut a, cfg, set, "--context", |c| {
-            c.context = p.context.unwrap()
+            c.context = p.context.expect("plan 字段由 is_some 守卫，必为 Some")
         });
     }
     if p.limit.is_some() {
@@ -252,16 +254,18 @@ fn apply_trim(t: &Trim, cfg: &mut Config, set: &dyn Fn(&str) -> bool) -> Vec<&'s
 fn apply_trim_switch(t: &Trim, cfg: &mut Config, set: &dyn Fn(&str) -> bool) -> Vec<&'static str> {
     let mut a = Vec::new();
     if t.enable.is_some() {
-        set1(&mut a, cfg, set, "--trim", |c| c.trim = t.enable.unwrap());
+        set1(&mut a, cfg, set, "--trim", |c| {
+            c.trim = t.enable.expect("plan trim 由 is_some 守卫，必为 Some")
+        });
     }
     if t.ratio.is_some() {
         set1(&mut a, cfg, set, "--trim-ratio", |c| {
-            c.trim_ratio = t.ratio.unwrap()
+            c.trim_ratio = t.ratio.expect("plan trim 由 is_some 守卫，必为 Some")
         });
     }
     if t.op_keep.is_some() {
         set1(&mut a, cfg, set, "--trim-op-keep", |c| {
-            c.trim_op_keep = t.op_keep.unwrap()
+            c.trim_op_keep = t.op_keep.expect("plan trim 由 is_some 守卫，必为 Some")
         });
     }
     a
@@ -271,27 +275,31 @@ fn apply_trim_keep(t: &Trim, cfg: &mut Config, set: &dyn Fn(&str) -> bool) -> Ve
     let mut a = Vec::new();
     if t.code_keep.is_some() {
         set1(&mut a, cfg, set, "--code-keep", |c| {
-            c.code_keep = t.code_keep.unwrap()
+            c.code_keep = t.code_keep.expect("plan trim 由 is_some 守卫，必为 Some")
         });
     }
     if t.zh_keep.is_some() {
         set1(&mut a, cfg, set, "--zh-keep", |c| {
-            c.zh_keep = t.zh_keep.unwrap()
+            c.zh_keep = t.zh_keep.expect("plan trim 由 is_some 守卫，必为 Some")
         });
     }
     if t.num_line_keep.is_some() {
         set1(&mut a, cfg, set, "--num-line-keep", |c| {
-            c.num_line_keep = t.num_line_keep.unwrap()
+            c.num_line_keep = t
+                .num_line_keep
+                .expect("plan trim 由 is_some 守卫，必为 Some")
         });
     }
     if t.sym_line_keep.is_some() {
         set1(&mut a, cfg, set, "--sym-line-keep", |c| {
-            c.sym_line_keep = t.sym_line_keep.unwrap()
+            c.sym_line_keep = t
+                .sym_line_keep
+                .expect("plan trim 由 is_some 守卫，必为 Some")
         });
     }
     if t.list_keep.is_some() {
         set1(&mut a, cfg, set, "--list-keep", |c| {
-            c.list_keep = t.list_keep.unwrap()
+            c.list_keep = t.list_keep.expect("plan trim 由 is_some 守卫，必为 Some")
         });
     }
     a
@@ -301,12 +309,14 @@ fn apply_anchor(a: &Anchor, cfg: &mut Config, set: &dyn Fn(&str) -> bool) -> Vec
     let mut out = Vec::new();
     if a.structure.is_some() {
         set1(&mut out, cfg, set, "--structure", |c| {
-            c.structure = a.structure.unwrap()
+            c.structure = a.structure.expect("plan anchor 由 is_some 守卫，必为 Some")
         });
     }
     if a.fill_floor.is_some() {
         set1(&mut out, cfg, set, "--fill-floor", |c| {
-            c.fill_floor = a.fill_floor.unwrap()
+            c.fill_floor = a
+                .fill_floor
+                .expect("plan anchor 由 is_some 守卫，必为 Some")
         });
     }
     if let Some(anchors) = &a.anchors {

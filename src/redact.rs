@@ -108,7 +108,7 @@ fn mask_digit_runs(s: &str, pred: impl Fn(&[u8], usize, usize) -> Option<usize>)
             }
             continue;
         }
-        let ch = s[i..].chars().next().unwrap();
+        let ch = s[i..].chars().next().expect("循环不变量 i<len，切片非空");
         out.push(ch);
         i += ch.len_utf8();
     }
@@ -141,7 +141,7 @@ fn mask_email(s: &str) -> String {
                 continue;
             }
         }
-        let ch = s[i..].chars().next().unwrap();
+        let ch = s[i..].chars().next().expect("循环不变量 i<len，切片非空");
         out.push(ch);
         i += ch.len_utf8();
     }
