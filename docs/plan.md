@@ -2259,35 +2259,41 @@ P13 定稿(0.11.0 目标)
 - **落点**：`compress/plan.rs` 折叠判定（已有 `tally` 折叠雏形）→ 模板聚类 + 参数抽取；`render.rs` 输出模板+参数块。
 - **预期**：日志/重复结构语料压缩率 +10~20%。
 - **门禁**：golden 零漂移（默认关闭，`--fold 1` 显式开启）；round-trip 还原率 100% 断言。
+- **完成（2026-10-30）**：`fold.rs` 落地 `--fold 1`（默认关，golden 零漂移）；实现为**骨架行 + 折叠标记行**（`scx-fold: {n-1} rows folded (diffs: ...)`），非原案"参数表可逆重建"——取**确定性启发式**路线（与竞品借鉴结论一致），round-trip 保真由"保留行全在原文 + 行序稳定"断言覆盖。
 
 ### P17-B 行内安全裁剪强化（已有 trim.rs 雏形 → 强化）
 - **现状**：`trim.rs` 已是 LLMLingua-2 思路的零依赖启发式（数字/结构锚/query 词根/行首尾保留，停用词/纯标点摘除，token 池化零分配）。
 - **强化**：① STOP/KEEP 词表扩展（terms.rs，KEEP 语义敏感词已有：否定/比较/数值词永不摘）；② trim 与 semantic 打分联动（semantic 高分行不裁或降裁）；③ 数字/ID/版本号 token 保护增强。
 - **预期**：保留行 token 再降 8~15%，证据逐字不丢。
 - **门禁**：cut 提升且 golden 不变；语义敏感词（not/不/总/每）摘除回归测试。
+- **完成（2026-10-30）**：terms.rs STOP 增 please/kindly/regarding、KEEP 增 about/around/approximately/roughly（CJK 近似词以单字 KEEP 覆盖，双字 CJK 词在逐字 token 下无效——注释定案）；trim.rs MAX_DICT_WORD 8→16；回归测试 `keeps_quantity_approximation_words`。
 
 ### P17-C 熵近似评分（伪神经信号，plan.rs score() 加信号）
 - **机制**：无模型的统计熵——行内 token 重复度（字符分布熵）、词频 zipf 秩惩罚（高频填充词降权）、长度熵——作为新 score 信号融入 `score()`。
 - **落点**：`compress/plan.rs::score()` 新增信号项（对齐现有 sumw/state/region 结构）。
 - **预期**：对未见模式（无 query 命中的信息密集行）召回提升，鲁棒性↑。
 - **门禁**：语义增强基准（semantic on/off × 熵信号 on/off）对比无退化。
+- **完成（2026-10-30）**：`entropy_signal` + `ent_bonus`（字符分布香农熵 7bit 归一 × 重复率降权 ×0.5，量级对齐 heading_bonus）落 plan.rs，集成于 `apply_sims` 前；`--entropy 1` 默认关；测试 `entropy_ranks_dense_over_repetitive`/`entropy_signal_off_is_noop`。
 
 ### P17-D 自动锚发现（降配置、提召回）
 - **机制**：query 词子串/词形变体（复用 semantic stem_expand）/跨行共现链 → 自动生成 evidence，无需手写 `--evidence`。
 - **落点**：`args` 侧 `--auto-anchor 1` + `plan.rs` 种子识别；与 P13-B 短语命中协同。
 - **预期**：证据召回↑，配置负担↓。
 - **门禁**：evidence 探针矩阵（显式 evidence 行为不变，自动锚仅加不减）。
+- **完成（2026-10-30）**：`word_forms`（剥 s/es/ed/ing/ly/er + 双写辅音还原）+ `anchor_terms`（默认关=原词表）落 compress.rs；`--auto-anchor 1` 默认关；测试 `auto_anchor_off_is_noop_on_masks_terms`/`word_forms_strips_suffixes_and_doubled_consonants`（语义模块 feature 门控外独立实现，默认构建零依赖）。
 
 ### P17-E 证据簇密度加权（已有 boost window → 强化）
 - **机制**：多证据行聚集处（同一错误栈/同一段日志）整簇加权——boost 已有窗口传播，新增**簇检测**（连续/近邻证据行的聚集评分）。
 - **预期**：保留完整上下文块，round-trip 质量↑。
 - **门禁**：round-trip 保真断言（保留行全在原文，簇内行逐字一致）。
+- **完成（2026-10-30）**：`evidence_hits`（窗口内 ≥2 高分行计数）+ `cluster_signal`（命中簇 → boost×2 受 cap 约束）落 plan.rs，`boost` 改 `let mut`；`--cluster 1` 默认关；测试 `cluster_off_is_noop_and_on_weights_dense_evidence`（孤立证据行不加权、cap 约束）。
 
 ### P17-F 反馈闭环调权（已有 memory/feedback.rs → 强化）
-- **现状**：`memory/feedback.rs` 已有 rate good/bad 记录机制。
-- **强化**：rate 数据驱动 **Weights 表自动微调**（确定性在线学习：按反馈统计调整 score 权重/semantic 权重，固定迭代=固定结果，可复现可审计）。
-- **预期**：越用越准；记忆库召回门（p50<5ms）不回退。
-- **门禁**：反馈样本 → 权重变化断言（确定性）；既有 rate 行为兼容。
+- **现状**：`memory/feedback.rs` 已有 rate good/bad 记录机制（case 环 quality 状态机 + 词环 [word_w] ±Δ + L1 自适应 l1_base=P50）。
+- **强化（2026-10-30 完成）**：rate 数据驱动词权重自动微调（确定性在线学习：good +Δ / bad −Δ，上限 ±0.5，固定迭代=固定结果）；新增确定性测试 `rate_word_ring_is_deterministic`；修复 `[word_w]` 节重写 bug（重复 learn 时旧节节头丢失、词权重悬空为顶层裸键 → load 读空），新增 `rewrite_drops_old_word_w_section_body` 回归测试。
+- **预期达成**：越用越准；记忆库召回门（p50<5ms）不回退。
+- **门禁通过**：反馈样本 → 权重变化断言（确定性）；既有 rate 行为兼容。
+- **注**：compress 侧 score 权重联动（--feedback 链路）为架构性新链路，留作 P18 可选增量（现状记忆库自闭环已具备召回侧全部微调）。
 
 ### P18 整合评测 + 压缩率专项验收（收尾）
 - semantic on/off × fold/trim/熵/锚/簇/反馈 全组合在 eval-manifest 冻结集评测。
