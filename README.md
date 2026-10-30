@@ -353,7 +353,7 @@ scx --query "..." [OPTIONS] [file...]
 | `--trim <0\|1>` | 保留行内 token 级重要性裁剪（默认 `0` = 现状）；`1` 时数字/命中词/结构锚保留，停用词与低信息量 token 按 `--trim-ratio` 摘除；**CJK/中文逐字 token 化**——命中 query 的汉字完整保留（如"内存"成词不拆散）、虚词可摘、全角数字保留，中文行不再丢字 |
 | `--trim-ratio <F>` | `--trim 1` 时的低分 token 保留比例（默认 `0.5`；范围 `0.1..=1.0`） |
 | `--force <P>` | 强制保留匹配行；字面子串（大小写不敏感）；`re:` 前缀进入有限正则子集（`\|` 交替、`[...]` 字符类、`*` `+` `?` 量词，Thompson NFA，非法模式报错并提示支持子集） |
-| `--semantic <WEIGHTS>` | 可选神经重打分（需 `cargo build --features semantic` 构建）；权重文件自描述 JSON `{schema,dim,weights,sha256}`，SHA256 校验失败即拒绝运行；不启用时默认路径逐字节不变 |
+| `--semantic <WEIGHTS>` | 可选神经重打分（需 `cargo build --features semantic` 构建）；权重文件自描述 JSON：v2 `{schema:"scx-sem-2",features,weights,sha256}`（命名式，特征可任意子集/顺序）或 v1 `{schema:"scx-sem-1",dim,weights,sha256}`（位置式，兼容）；SHA256 校验失败即拒绝运行；打分 `sigmoid(w·x)` 经居中化（`2·sigmoid−1`）做有符号叠加——正提升、负降权；不启用时默认路径逐字节不变 |
 | `--help`, `--version` | 显示用法或版本 |
 
 ### 本地记忆库

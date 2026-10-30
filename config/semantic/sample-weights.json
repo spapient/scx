@@ -1,13 +1,6 @@
 {
- "schema": "scx-sem-1",
- "dim": 6,
- "weights": [
-  0.5,
-  0.8,
-  0.05,
-  0.2,
-  -0.1,
-  0.3
- ],
- "sha256": "8cb509c8dfc79ec360118d9bc6db5237c31ce9a4b40df1a14e1d2211f9dbe61c"
+  "schema": "scx-sem-2",
+  "features": ["overlap", "hit", "ln_len", "cap_ratio", "dig_ratio", "structure"],
+  "weights": [0.5, 0.8, 0.05, 0.2, -0.1, 0.3],
+  "sha256": "201c78057249d25100e86ab38078dc07b30de56603aa15051d45b2acc58c96f9"
 }

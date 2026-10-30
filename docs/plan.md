@@ -2304,3 +2304,19 @@ P13 定稿(0.11.0 目标)
 - 零第三方 crate / 零模型 / 确定性 / golden 零漂移：不可破。
 - 所有新增能力**默认关闭**（显式 flag 开启），默认路径与 v0.10.0 逐字节一致。
 - 每阶段门禁不过不进下一阶段：`cargo test --all-features` 407+ / clippy 0 / fmt / golden / eval-manifest / A2 fidelity。
+
+### semantic v2 能力升级（2026-10-31）
+- **居中式有符号打分**：`scores += sem_weight·(2·sigmoid(w·x)−1)` ∈ (−sem_weight, +sem_weight)
+  ——旧实现 `sigmoid ∈ (0,1)` 只能加分、无法降权；现在高 logit 提升、低 logit 降权
+  （可表达“子串命中但实为噪声”）。证据/最小邻域由 `floor` 无条件保留，降权只作用于
+  可选填充排序，证据优先不变量不受影响。
+- **命名式权重 schema v2**：`{"schema":"scx-sem-2","features":[...],"weights":[...],
+  "sha256":...}`；features 为 `FEATURE_NAMES` 子集、任意顺序；sha256 绑定权重+特征名
+  （篡改任一列即拒绝）。v1 `scx-sem-1`（位置式 dim）保持向后兼容。
+- **特征注册表扩到 18 维**：新增 `cjk_bigram`（CJK 查询 bigram 重叠，中文转述信号）
+  与 `term_prox`（query 词共现紧密度，短语级语义）；随仓 `weights.json` 迁 v2、两新
+  维权重置 0.0（未校准，机制就绪——不虚构训练权重）。
+- **数值稳定 sigmoid**：分支配方避免 exp 上下溢，结果恒在 (0,1)。
+- 门禁：默认轨 364/0 逐字节不变（golden 零漂移）；semantic 轨 381/0（+17 semantic 测试）；
+  `cargo test --all-features` / clippy（默认+all-features）`-D warnings` / fmt / rustdoc /
+  MSRV 1.82 三轨 / `cargo package` / check_bench.sh 全绿。

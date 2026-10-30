@@ -250,10 +250,9 @@ pub(crate) fn semantic(
             if dup[i] {
                 continue;
             }
-            scores[i] += cfg.sem_weight
-                * w.score(&crate::semantic::feats(
-                    lines[i], uniq_terms, i, total, w.dim,
-                ));
+            // 居中式有符号叠加：正 logit 提升、负 logit 降权（旧实现 sigmoid
+            // ∈ (0,1) 只能加分，无法表达“子串命中但实为噪声”的降权）。
+            scores[i] += cfg.sem_weight * w.centered_line(lines[i], uniq_terms, i, total);
         }
     }
 }
