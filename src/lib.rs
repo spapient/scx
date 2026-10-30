@@ -281,6 +281,9 @@ pub struct Config {
     pub semantic: Option<crate::semantic::Weights>,
     /// 相似度注入权重（`--sim-weight`，默认 1.0）；仅在 `sims` 存在时参与打分。
     pub sim_weight: f64,
+    /// semantic 加分缩放（`--sem-weight`，默认 1.0；feature=semantic 且
+    /// `--semantic` 启用时生效）。放大可增强语义信号对保留决策的影响。
+    pub sem_weight: f64,
     /// 预计算的「query 与每行」相似度（`--embed-cmd` 时由 `ops` 层填充；
     /// 长度须 == 输入行数）。`None` = 不注入，默认路径逐字节不变。
     pub sims: Option<Vec<f64>>,
@@ -357,6 +360,7 @@ impl Default for Config {
             #[cfg(feature = "semantic")]
             semantic: None,
             sim_weight: 1.0,
+            sem_weight: 1.0,
             sims: None,
             evidence: Vec::new(),
             structure_anchors: Vec::new(),

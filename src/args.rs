@@ -289,6 +289,15 @@ pub(crate) static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
+        name: "--sem-weight",
+        once: true,
+        kind: Kind::F64,
+        what: "a number",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
         name: "--minhash-weight",
         once: true,
         kind: Kind::F64,
@@ -981,11 +990,22 @@ mod tests {
             "python embed.py",
             "--sim-weight",
             "2.5",
+            "--sem-weight",
+            "3.5",
         ]))
         .unwrap();
         assert_eq!(o.embed_cmd.as_deref(), Some("python embed.py"));
         assert_eq!(o.config.sim_weight, 2.5);
+        assert_eq!(o.config.sem_weight, 3.5);
         assert_eq!(o.config.sims, None, "sims 由 ops 层填充，arg 解析不设置");
+    }
+
+    #[test]
+    fn sem_weight_rejects_nonfinite_and_negative() {
+        assert!(all(argv(&["--query", "q", "--sem-weight", "-1"])).is_err());
+        assert!(all(argv(&["--query", "q", "--sem-weight", "abc"])).is_err());
+        let o = all(argv(&["--query", "q", "--sem-weight", "0"])).unwrap();
+        assert_eq!(o.config.sem_weight, 0.0);
     }
 
     #[test]
