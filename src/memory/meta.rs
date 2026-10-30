@@ -436,13 +436,17 @@ mod tests {
     fn rewrite_drops_old_word_w_section_body() {
         // 回归（P17-F）：重复 learn 时旧 [word_w] 节体必须整段跳过，
         // 否则节头丢失、词权重悬空为顶层裸键、load 读空。
-        let old = "[df]\na = 1\n\n[word_w]\ntimeout = 0.1\nconn = 0.1\n\n[params]\nl1_base = 0.55\n";
+        let old =
+            "[df]\na = 1\n\n[word_w]\ntimeout = 0.1\nconn = 0.1\n\n[params]\nl1_base = 0.55\n";
         let fresh = rewrite(old, &[("timeout".into(), 0.2)]);
         let text = fresh.join("\n");
         assert!(text.contains("[word_w]"), "新节头存在: {text}");
         assert!(!text.contains("conn = 0.1"), "旧节体被跳过: {text}");
         assert!(text.contains("timeout = 0.200"), "新值写入: {text}");
-        assert!(text.contains("[params]\nl1_base = 0.55"), "[params] 保留: {text}");
+        assert!(
+            text.contains("[params]\nl1_base = 0.55"),
+            "[params] 保留: {text}"
+        );
     }
 
     #[test]

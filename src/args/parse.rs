@@ -45,9 +45,7 @@ pub fn usage() -> String {
     s.push_str(
         "  --sim-weight F       weight of injected similarity in ranking (default 1.0; >=0)\n",
     );
-    s.push_str(
-        "  --sem-weight F       scale factor of semantic re-score (default 1.0; >=0)\n",
-    );
+    s.push_str("  --sem-weight F       scale factor of semantic re-score (default 1.0; >=0)\n");
     s.push_str(
         "  --minhash-weight F   weight of MinHash-LSH Jaccard recall in RRF fusion (default 0; >=0)\n",
     );
@@ -68,11 +66,21 @@ pub fn usage() -> String {
     s.push_str(
         "  --trim-ratio F       per-line token keep ratio for --trim (default 0.5; 0.1..=1.0)\n",
     );
-    s.push_str("  --fold 0|1           fold ≥3 same-skeleton consecutive rows into 1 row + marker\n");
-    s.push_str("                       (default 0; collapses log-storm lines, keeps first row verbatim)\n");
-    s.push_str("  --entropy 0|1        add model-free info-density signal to scoring (default 0)\n");
-    s.push_str("  --auto-anchor 0|1    auto-add query word-form variants as hit anchors (default 0)\n");
-    s.push_str("  --cluster 0|1        cluster-weight dense evidence rows in boost window (default 0)\n");
+    s.push_str(
+        "  --fold 0|1           fold ≥3 same-skeleton consecutive rows into 1 row + marker\n",
+    );
+    s.push_str(
+        "                       (default 0; collapses log-storm lines, keeps first row verbatim)\n",
+    );
+    s.push_str(
+        "  --entropy 0|1        add model-free info-density signal to scoring (default 0)\n",
+    );
+    s.push_str(
+        "  --auto-anchor 0|1    auto-add query word-form variants as hit anchors (default 0)\n",
+    );
+    s.push_str(
+        "  --cluster 0|1        cluster-weight dense evidence rows in boost window (default 0)\n",
+    );
     s.push_str("  --trim-op-keep 1     keep arithmetic ops (+ = * -) as anchors in --trim\n");
     s.push_str("                       (default 0; GSM8K lossless optimum, enable 1 for code)\n");
     s.push_str("  --code-keep 1        keep ``` fenced code lines whole in --trim\n");

@@ -364,7 +364,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     apply_sims(cfg, &mut scores, &dup, total);
     let mut boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     // P17-E 证据簇密度加权（--cluster 1，默认关=零影响）。
-    crate::compress::plan::cluster_signal(cfg, &scores, &dup, &mut boost, window as usize, &DEFAULT_SCORES);
+    crate::compress::plan::cluster_signal(
+        cfg,
+        &scores,
+        &dup,
+        &mut boost,
+        window as usize,
+        &DEFAULT_SCORES,
+    );
     prof.mark("spans+scores");
     // 逐行保留原因（--explain 用）：0=删除，其余见 R_* 常量。
     let mut reason = vec![0u8; total];
@@ -1214,7 +1221,10 @@ mod tests {
         // 双写辅音还原：running → runn + run。
         let mut f2 = word_forms("running");
         f2.sort();
-        assert!(f2.contains(&"runn".to_string()) && f2.contains(&"run".to_string()), "{f2:?}");
+        assert!(
+            f2.contains(&"runn".to_string()) && f2.contains(&"run".to_string()),
+            "{f2:?}"
+        );
         assert!(word_forms("errors").contains(&"error".to_string()));
         assert!(word_forms("closely").contains(&"close".to_string()));
         // 短词不剥到 <3 字符。
@@ -1227,7 +1237,11 @@ mod tests {
     fn auto_anchor_off_is_noop_on_masks_terms() {
         // --auto-anchor 默认关：锚词表=原词表，命中行为与现状一致。
         let mut cfg = crate::Config::default();
-        let lines = ["worker running to server", "worker runs the server", "idle line here"];
+        let lines = [
+            "worker running to server",
+            "worker runs the server",
+            "idle line here",
+        ];
         let q = "running";
         let uniq = crate::terms::terms(q);
         let anchor = anchor_terms(&cfg, &uniq);

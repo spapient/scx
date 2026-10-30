@@ -250,13 +250,10 @@ pub(crate) fn semantic(
             if dup[i] {
                 continue;
             }
-            scores[i] += cfg.sem_weight * w.score(&crate::semantic::feats(
-                lines[i],
-                uniq_terms,
-                i,
-                total,
-                w.dim,
-            ));
+            scores[i] += cfg.sem_weight
+                * w.score(&crate::semantic::feats(
+                    lines[i], uniq_terms, i, total, w.dim,
+                ));
         }
     }
 }

@@ -254,8 +254,8 @@ fn next<'a>(
     out: &mut Vec<&'a str>,
 ) -> usize {
     let c = b[i];
-    let is_word = c.is_ascii_alphanumeric()
-        || matches!(c, b'_' | b'-' | b'.' | b':' | b'/' | b'@' | b'\\');
+    let is_word =
+        c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.' | b':' | b'/' | b'@' | b'\\');
     let is_cjk = is_cjk_lead(c) && i + 2 < b.len();
     if is_word || is_cjk {
         if cur.is_none() {
@@ -517,7 +517,11 @@ mod tests {
         let w = Weights::load("config/semantic/weights.json").expect("随仓权重可加载");
         assert_eq!(w.dim, 16);
         // 打分恒在 (0,1)，确定性。
-        let terms = ["conn".to_string(), "error".to_string(), "timeout".to_string()];
+        let terms = [
+            "conn".to_string(),
+            "error".to_string(),
+            "timeout".to_string(),
+        ];
         for (i, ln) in [
             "db connection lost: conn 9f2a timeout",
             "warmup complete 2026-10-30 12:00:00 idle",
@@ -535,7 +539,13 @@ mod tests {
     #[test]
     fn feats_shape_and_bounds() {
         // 16 维全量：overlap/命中/长度/词边界/唯一率等信号可验证。
-        let f = feats("conn 9f2a broken db crash", &["conn".to_string()], 0, 10, 16);
+        let f = feats(
+            "conn 9f2a broken db crash",
+            &["conn".to_string()],
+            0,
+            10,
+            16,
+        );
         assert_eq!(f.len(), 16);
         assert!(f[0] > 0.0, "overlap 非零");
         assert!(f[0] <= 1.0);
@@ -645,6 +655,9 @@ mod tests {
         let toks = tokens("service connecting to db");
         assert!(word_hit_ratio(&["connect".to_string()], "service connecting to db", &toks) > 0.0);
         let miss = tokens("alpha beta");
-        assert_eq!(word_hit_ratio(&["connect".to_string()], "alpha beta", &miss), 0.0);
+        assert_eq!(
+            word_hit_ratio(&["connect".to_string()], "alpha beta", &miss),
+            0.0
+        );
     }
 }

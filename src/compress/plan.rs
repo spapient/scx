@@ -1339,9 +1339,7 @@ mod tests {
     fn cluster_off_is_noop_and_on_weights_dense_evidence() {
         let mut cfg = crate::Config::default();
         // 两处证据簇：行 1-2 密集（≥2 高分行），行 9 孤立高分行。
-        let scores = [
-            1.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 0.0, 0.0, 0.0,
-        ];
+        let scores = [1.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 0.0, 0.0, 0.0];
         let dup = [false; 12];
         let tbl = &crate::policy::DEFAULT_SCORES;
         let mut boost = crate::compress::plan::boost(&scores, &dup, 1, tbl);

@@ -43,9 +43,7 @@ fn split(line: &str) -> (String, Vec<String>) {
 /// 单字节推进：返回 (是否词字符, 步长)。CJK 3 字节；ASCII 词字符 1 字节。
 fn step(b: &[u8], i: usize) -> (bool, usize) {
     let c = b[i];
-    if c.is_ascii_alphanumeric()
-        || matches!(c, b'_' | b'-' | b'.' | b':' | b'/' | b'@' | b'\\')
-    {
+    if c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.' | b':' | b'/' | b'@' | b'\\') {
         (true, 1)
     } else if (0xE4..=0xE9).contains(&c) && i + 2 < b.len() {
         (true, 3)
@@ -149,10 +147,7 @@ mod tests {
 
     #[test]
     fn below_min_no_collapse() {
-        let block = vec![
-            "ERROR conn timeout id=abc",
-            "ERROR conn timeout id=def",
-        ];
+        let block = vec!["ERROR conn timeout id=abc", "ERROR conn timeout id=def"];
         let out = collapse(&block, FOLD_MIN);
         assert_eq!(out.len(), 2);
         assert_eq!(out[0], block[0]);
@@ -161,11 +156,7 @@ mod tests {
 
     #[test]
     fn identical_params_marker() {
-        let block = vec![
-            "tick 5 ok",
-            "tick 5 ok",
-            "tick 5 ok",
-        ];
+        let block = vec!["tick 5 ok", "tick 5 ok", "tick 5 ok"];
         let out = collapse(&block, FOLD_MIN);
         assert_eq!(out.len(), 2);
         assert!(out[1].contains("(identical)"), "{}", out[1]);
@@ -173,11 +164,7 @@ mod tests {
 
     #[test]
     fn distinct_skeleton_no_collapse() {
-        let block = vec![
-            "first line alpha",
-            "second line beta",
-            "third line gamma",
-        ];
+        let block = vec!["first line alpha", "second line beta", "third line gamma"];
         let out = collapse(&block, FOLD_MIN);
         assert_eq!(out.len(), 3);
     }

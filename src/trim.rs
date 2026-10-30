@@ -573,7 +573,10 @@ mod tests {
         let zh = "甲乙共有 2 个和 3 个苹果";
         let out_zh = tl(zh, &terms, 0.2, false);
         assert!(out_zh.contains('共'), "单字 KEEP 必须保留: {out_zh}");
-        assert!(out_zh.contains('2') && out_zh.contains('3'), "数字必须保留: {out_zh}");
+        assert!(
+            out_zh.contains('2') && out_zh.contains('3'),
+            "数字必须保留: {out_zh}"
+        );
     }
 
     #[test]
