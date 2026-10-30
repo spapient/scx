@@ -304,7 +304,7 @@ query + input
 | `--force` | 无 | 强制保留匹配行；大小写不敏感的字面子串；`re:` 前缀进入有限正则子集 |
 | `--max-tokens` | 无 | 输出 token 硬上限；证据行及其最小邻域优先，超限报 `overflow:evidence`/`overflow:fill`，绝不静默丢弃证据 |
 | `--structure` | `0` | `1` 时启用结构感知邻域：fence 代码块、`import`/`use`/`#include` 块、堆栈 `at` 链整体并入 |
-| `--policy-file` | 无 | 策略文本覆盖默认值（键白名单与下方 `--policy-file` 行一致：`ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`）；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--policy-file` | 无 | 策略文本覆盖默认值（键白名单与下方 `--policy-file` 行一致：`ratio`/`budget`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`）；优先级 CLI 显式 > 文件 > DEFAULT |
 | `--pipeline` | 无 | JSON 管线配置（`config/pipeline.json` 或 `config/bench/profiles/*.json`）；plan/trim/anchor 三阶段声明式装配；未知键/越界 fail-loud；优先级 CLI 显式 > 文件 > DEFAULT |
 
 ### 四条行为保证
@@ -347,7 +347,7 @@ scx --query "..." [OPTIONS] [file...]
 | `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计；含 `dropped` 区间明细（`--max-tokens`/预算裁剪）与 `max_tokens`/`tok_est` 字段 |
 | `--max-tokens <N>` | 输出 token 硬上限；证据地板最高优先，超限报 `overflow:evidence`/`overflow:fill` |
 | `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
-| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`budget`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
 | `--pipeline <PATH>` | JSON 管线配置（plan/trim/anchor 三阶段声明式）；键白名单 `plan.ratio/window/context/limit`、`trim.enable/ratio/op_keep/code_keep/zh_keep/num_line_keep/sym_line_keep/list_keep`、`anchor.structure/anchors/fill_floor`；未知键/越界 fail-loud 报错；优先级 CLI 显式 > 文件 > DEFAULT；评测档位模板 `config/bench/profiles/{r02,r03,r04}.json` |
 | `--fill-floor <F>` | 上下文/填充行最低分数门槛（默认 `0` = 现状）；`F>0` 时分数低于门槛的邻域与填充行被裁剪，压缩更深 |
 | `--trim <0\|1>` | 保留行内 token 级重要性裁剪（默认 `0` = 现状）；`1` 时数字/命中词/结构锚保留，停用词与低信息量 token 按 `--trim-ratio` 摘除；**CJK/中文逐字 token 化**——命中 query 的汉字完整保留（如"内存"成词不拆散）、虚词可摘、全角数字保留，中文行不再丢字 |
