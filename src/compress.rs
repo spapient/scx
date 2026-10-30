@@ -49,7 +49,10 @@ mod hash {
         fn write(&mut self, bytes: &[u8]) {
             let mut chunks = bytes.chunks_exact(8);
             for c in &mut chunks {
-                self.add(u64::from_ne_bytes(c.try_into().unwrap()));
+                // chunks_exact(8) 保证 c.len() == 8：定长拷贝消除 try_into+unwrap。
+                let mut a = [0u8; 8];
+                a.copy_from_slice(c);
+                self.add(u64::from_ne_bytes(a));
             }
             let rest = chunks.remainder();
             if !rest.is_empty() {

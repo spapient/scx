@@ -978,7 +978,7 @@ impl Brace {
             self.depth = self.depth.saturating_add(opens).saturating_sub(closes);
             if self.depth == 0 {
                 regions.push(Span {
-                    start: self.start.unwrap(),
+                    start: self.start.expect("region close without open"),
                     end: i,
                 });
                 self.start = None;

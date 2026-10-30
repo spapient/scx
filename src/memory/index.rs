@@ -373,7 +373,7 @@ fn word(body: &[u8], i: &mut usize) -> Option<u32> {
     if *i + 4 > body.len() {
         return None;
     }
-    let v = u32::from_le_bytes(body[*i..*i + 4].try_into().unwrap());
+    let v = u32::from_le_bytes(arr::<4>(&body[*i..*i + 4]));
     *i += 4;
     Some(v)
 }
@@ -419,16 +419,24 @@ fn float(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<f32> {
     if *i + 4 > body.len() {
         return Err(corrupt(what));
     }
-    let v = f32::from_le_bytes(body[*i..*i + 4].try_into().unwrap());
+    let v = f32::from_le_bytes(arr::<4>(&body[*i..*i + 4]));
     *i += 4;
     Ok(v)
+}
+
+/// 定长 N 字节数组拷贝：调用方已验边界（切片长度 >= N），copy_from_slice 不越界，
+/// 把「try_into + unwrap」的隐含 panic 语义替换为显式定长解释（const 泛型静态保证）。
+fn arr<const N: usize>(s: &[u8]) -> [u8; N] {
+    let mut a = [0u8; N];
+    a.copy_from_slice(&s[..N]);
+    a
 }
 
 /// 校验 header（magic/version/body_len/crc32），返回 body 切片。
 fn open(buf: &[u8]) -> std::io::Result<&[u8]> {
     let (body_end, total_len) = valid(buf)?;
     let body = &buf[14..body_end];
-    let stored = u32::from_le_bytes(buf[body_end..total_len].try_into().unwrap());
+    let stored = u32::from_le_bytes(arr::<4>(&buf[body_end..total_len]));
     if checksum(body) != stored {
         return Err(corrupt("crc mismatch"));
     }
@@ -439,11 +447,11 @@ fn valid(buf: &[u8]) -> std::io::Result<(usize, usize)> {
     if buf.len() < 14 {
         return Err(corrupt("too short"));
     }
-    let magic = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+    let magic = u32::from_le_bytes(arr::<4>(&buf[..4]));
     if magic != POST_MAGIC {
         return Err(corrupt("bad magic"));
     }
-    let ver = u16::from_le_bytes(buf[4..6].try_into().unwrap());
+    let ver = u16::from_le_bytes(arr::<2>(&buf[4..6]));
     if ver != POST_VER {
         return Err(corrupt("bad version"));
     }
@@ -455,7 +463,7 @@ fn valid(buf: &[u8]) -> std::io::Result<(usize, usize)> {
 }
 
 fn lengths(buf: &[u8]) -> std::io::Result<(usize, usize)> {
-    let body_len = usize::try_from(u64::from_le_bytes(buf[6..14].try_into().unwrap()))
+    let body_len = usize::try_from(u64::from_le_bytes(arr::<8>(&buf[6..14])))
         .map_err(|_| corrupt("body_len too large"))?;
     let body_end = 14usize
         .checked_add(body_len)
@@ -556,14 +564,14 @@ fn term(
     if *i + 2 > body.len() {
         return Err(corrupt("term len truncated"));
     }
-    let tlen = u16::from_le_bytes(body[*i..*i + 2].try_into().unwrap()) as usize;
+    let tlen = u16::from_le_bytes(arr::<2>(&body[*i..*i + 2])) as usize;
     *i += 2;
     if *i + tlen + 4 > body.len() {
         return Err(corrupt("term overflow"));
     }
     let term = String::from_utf8_lossy(&body[*i..*i + tlen]).into_owned();
     *i += tlen;
-    let df = u32::from_le_bytes(body[*i..*i + 4].try_into().unwrap()) as usize;
+    let df = u32::from_le_bytes(arr::<4>(&body[*i..*i + 4])) as usize;
     *i += 4;
     if df > body.len() {
         return Err(corrupt("df exceeds body"));
@@ -607,7 +615,7 @@ fn header(body: &[u8], i: &mut usize) -> std::io::Result<(usize, usize, usize)> 
     if *i + 8 > body.len() {
         return Err(corrupt("no total_len"));
     }
-    let total_len = u64::from_le_bytes(body[*i..*i + 8].try_into().unwrap()) as usize;
+    let total_len = u64::from_le_bytes(arr::<8>(&body[*i..*i + 8])) as usize;
     *i += 8;
     let n_terms = word(body, i).ok_or_else(|| corrupt("no n_terms"))? as usize;
     if n_terms > body.len() {

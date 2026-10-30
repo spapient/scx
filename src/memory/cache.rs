@@ -289,8 +289,14 @@ fn valid(buf: &[u8]) -> bool {
     if buf.len() < HEADER_LEN {
         return false;
     }
-    let magic = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-    let ver = u16::from_le_bytes(buf[4..6].try_into().unwrap());
+    // 头部固定宽度（magic=4/ver=2），buf.len() >= HEADER_LEN 已验边界；
+    // 定长拷贝消除 try_into + unwrap 的隐含 panic 语义。
+    let mut magic_b = [0u8; 4];
+    magic_b.copy_from_slice(&buf[..4]);
+    let mut ver_b = [0u8; 2];
+    ver_b.copy_from_slice(&buf[4..6]);
+    let magic = u32::from_le_bytes(magic_b);
+    let ver = u16::from_le_bytes(ver_b);
     magic == QMAP_MAGIC && ver == QMAP_VER
 }
 
@@ -319,19 +325,26 @@ struct Reader<'a> {
 }
 
 impl Reader<'_> {
+    /// 定长数组读取：边界不足返回 None；长度由 const 泛型静态保证，
+    /// 转换调用点（u16/u32/u64/f32::from_le_bytes）直接消费 `[u8; N]`，
+    /// 无 try_into/unwrap 隐含 panic 路径。
+    fn array<const N: usize>(&mut self) -> Option<[u8; N]> {
+        let s = self.bytes(N)?;
+        let mut a = [0u8; N];
+        a.copy_from_slice(s);
+        Some(a)
+    }
+
     fn short(&mut self) -> Option<u16> {
-        let bytes = self.bytes(2)?;
-        Some(u16::from_le_bytes(bytes.try_into().ok()?))
+        Some(u16::from_le_bytes(self.array()?))
     }
 
     fn word(&mut self) -> Option<u32> {
-        let bytes = self.bytes(4)?;
-        Some(u32::from_le_bytes(bytes.try_into().ok()?))
+        Some(u32::from_le_bytes(self.array()?))
     }
 
     fn long(&mut self) -> Option<u64> {
-        let bytes = self.bytes(8)?;
-        Some(u64::from_le_bytes(bytes.try_into().ok()?))
+        Some(u64::from_le_bytes(self.array()?))
     }
 
     fn text(&mut self) -> Option<String> {
@@ -347,8 +360,7 @@ impl Reader<'_> {
     }
 
     fn float(&mut self) -> Option<f32> {
-        let bytes = self.bytes(4)?;
-        Some(f32::from_le_bytes(bytes.try_into().ok()?))
+        Some(f32::from_le_bytes(self.array()?))
     }
 
     fn hit(&mut self) -> Option<Hit> {
