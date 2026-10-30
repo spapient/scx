@@ -103,7 +103,13 @@ fn remember(root: &str, fp: &str, id: &str) -> io::Result<()> {
 
 /// case 删除后让去重索引在下一次写入时惰性重建。
 pub(crate) fn invalidate(root: &str) {
-    let _ = fs::remove_file(ready(root));
+    if let Err(e) = fs::remove_file(ready(root)) {
+        // ready 标记本就可能不存在（首次写入/已失效），NotFound 属预期；
+        // 其余失败（权限/占用）需如实告警，否则去重索引可能一直不重建。
+        if e.kind() != io::ErrorKind::NotFound {
+            eprintln!("[scx] warning: 去重索引作废失败: {e}");
+        }
+    }
 }
 
 /// 按身份指纹查库内是否已存在 case，返回其 id。

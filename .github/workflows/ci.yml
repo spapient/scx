@@ -31,10 +31,16 @@ jobs:
           components: rustfmt, clippy
       - name: Format
         run: cargo fmt -- --check
-      - name: Clippy
+      - name: Clippy (default features)
         run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Clippy (all features)
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --locked
+      - name: Test (all features)
+        run: cargo test --locked --all-features
+      - name: Check (no default features)
+        run: cargo check --locked --no-default-features
       - name: Release build
         run: cargo build --release --locked
       - name: Evaluator selftest (Unix)
@@ -222,4 +228,7 @@ jobs:
         with:
           toolchain: 1.82.0
       - name: Check declared MSRV
-        run: cargo check --locked --all-targets
+        run: |
+          cargo check --locked --all-targets
+          cargo check --locked --all-targets --all-features
+          cargo check --locked --all-targets --no-default-features

@@ -2,16 +2,26 @@
 //!
 //! 诊断用途：在压缩主链各阶段插桩 `mark`，结束时打印分阶段耗时（微秒）。
 //! 行为中性：`perf` feature 关闭时本模块 cfg 排除，压缩输出与默认构建逐字节一致；
-//! 开启时也只向 stderr 打印，不进入 Outcome/文本输出。
+//! 开启时也只在 `SCX_PERF` 环境变量非空且非 `0` 时向 stderr 打印，不进入
+//! Outcome/文本输出——因此 `--all-features` 构建在默认环境下与默认构建逐字节一致，
+//! golden 差分门不受计时输出污染。
 
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "perf")]
 mod inner {
-    use super::*;
     use std::time::Instant;
 
-    /// 跨调用累计表（高频路径逐行分段累计，循环结束一次输出）。
+    /// 运行期打印开关：`SCX_PERF` 非空且非 `0` 才打印。编译期 feature 只决定
+    /// 是否插桩；是否输出由运行期环境决定，保证全 feature 构建的默认输出稳定。
+    fn enabled() -> bool {
+        match std::env::var_os("SCX_PERF") {
+            Some(v) if !v.is_empty() => v.to_string_lossy() != "0",
+            _ => false,
+        }
+    }
+
+    // 跨调用累计表（高频路径逐行分段累计，循环结束一次输出）。
     thread_local! {
         static AGG: std::cell::RefCell<Vec<(&'static str, f64)>> =
             const { std::cell::RefCell::new(Vec::new()) };
@@ -45,6 +55,13 @@ mod inner {
 
         /// 输出分阶段耗时表（stderr），随后清空。
         pub fn finish(&mut self, label: &str) {
+            if !enabled() {
+                self.marks.clear();
+                let now = Instant::now();
+                self.t0 = Some(now);
+                self.last = Some(now);
+                return;
+            }
             let now = Instant::now();
             let total = now.duration_since(self.t0.unwrap_or(now)).as_micros() as f64;
             eprintln!("[perf] {label} total={total:.0}us");
@@ -74,6 +91,9 @@ mod inner {
 
         /// 输出累计表（循环结束后调用一次）。
         pub fn dump_agg(&self, label: &str) {
+            if !enabled() {
+                return;
+            }
             AGG.with(|a| {
                 let a = a.borrow();
                 let mut total = 0.0;

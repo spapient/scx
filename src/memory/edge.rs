@@ -66,7 +66,7 @@ pub(crate) fn build(root: &str) -> std::io::Result<Edges> {
 fn cached(root: &str) -> std::io::Result<Arc<Edges>> {
     let p = std::path::Path::new(root).join("meta.toml");
     let mt = p.metadata().and_then(|m| m.modified()).ok();
-    let mut g = cache().lock().unwrap();
+    let mut g = cache().lock().unwrap_or_else(|e| e.into_inner());
     if let Some((r, t, idx)) = g.as_ref() {
         if r == root && *t == mt {
             return Ok(idx.clone());

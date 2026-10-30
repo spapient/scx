@@ -97,13 +97,19 @@ pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
 /// 写 meta.toml [df] 快照（来自 index::build）。
 /// 不写 `index_force`：索引只是缓存，重建不得改变召回语义
 /// （线性/索引两条路径的 df/avgdl 均为全库口径，桶过滤只裁候选；强制索引只用于
-/// A/B 对拍，不写回 meta）。索引启用只由规模阈值决定。失败静默旁路。
+/// A/B 对拍，不写回 meta）。索引启用只由规模阈值决定。失败不阻断 rebuild，
+/// 但必须如实告警（[df] 是缓存快照，缺失只会退化为按需重算，不静默吞错）。
 fn write(root: &str, n_docs: usize, df: &[(String, usize)]) {
     let Ok(_g) = crate::memory::lock::acquire(root, "meta.lock") else {
+        eprintln!("[scx] warning: rebuild 跳过 [df] 快照（meta.lock 获取失败）");
         return;
     };
     let p = Path::new(root).join("meta.toml");
     let Ok(txt) = fs::read_to_string(&p) else {
+        eprintln!(
+            "[scx] warning: rebuild 跳过 [df] 快照（读取 {} 失败）",
+            p.display()
+        );
         return;
     };
     // 持 meta.lock 重数一遍：build 起点到此处之间可能有并发 ingest 新增 case 并
@@ -135,7 +141,12 @@ fn write(root: &str, n_docs: usize, df: &[(String, usize)]) {
     }
     let mut body = out.join("\n");
     body.push('\n');
-    let _ = crate::memory::lock::atomic(&p, body.as_bytes());
+    crate::memory::lock::atomic(&p, body.as_bytes()).unwrap_or_else(|e| {
+        eprintln!(
+            "[scx] warning: rebuild 写回 [df] 快照失败（{}）: {e}",
+            p.display()
+        );
+    });
 }
 
 fn section(t: &str) -> bool {

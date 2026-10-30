@@ -255,7 +255,7 @@ pub(crate) fn raw(
         Kind::Anchors => anchors(s, f, inline, args, i),
         Kind::Redact => redact(s, f, inline, args, i),
         Kind::ContentType => content_kind(s, f, inline, args, i),
-        _ => unreachable!("valueish flag without handler: {}", f.name),
+        _ => Err(format!("{} 缺少值处理器", f.name)),
     }
 }
 
@@ -271,7 +271,7 @@ pub(crate) fn numeric(
         Kind::I64 => signed(s, f, inline, args, i),
         Kind::U64 => count(s, f, inline, args, i),
         Kind::Bool01 => either(s, f, inline, args, i),
-        _ => unreachable!("numeric flag without handler: {}", f.name),
+        _ => Err(format!("{} 缺少数值处理器", f.name)),
     }
 }
 
@@ -370,7 +370,7 @@ pub(crate) fn float(
             }
             s.config.trim_ratio = parsed;
         }
-        _ => unreachable!("F64 flag without arm: {}", f.name),
+        _ => return Err(format!("{} 缺少 F64 分支", f.name)),
     }
     Ok(())
 }
@@ -418,19 +418,19 @@ pub(crate) fn count(
     if parsed < f.min {
         return Err(format!("{} {}", f.name, f.err_zero));
     }
-    unsigned(s, f, parsed);
-    Ok(())
+    unsigned(s, f, parsed)
 }
 
-pub(crate) fn unsigned(s: &mut ParseState, f: &Flag, parsed: u64) {
+pub(crate) fn unsigned(s: &mut ParseState, f: &Flag, parsed: u64) -> Result<(), String> {
     match f.name {
         "--seed" => s.seed = parsed,
         "--annotate-max" => s.annotate_max = parsed as usize,
         "--recall" => s.recall = parsed as usize,
         "--max-bytes" => s.max_bytes = Some(parsed),
         "--max-tokens" => s.limit = Some(parsed),
-        _ => unreachable!("U64 flag without arm: {}", f.name),
+        _ => return Err(format!("{} 缺少 U64 分支", f.name)),
     }
+    Ok(())
 }
 
 #[cfg(feature = "semantic")]
@@ -470,9 +470,14 @@ pub(crate) fn policy(
         let key = le.entry.key;
         let v = le.entry.value;
         let Some(flag) = lookup(key) else {
+            let allowed = POLICY_TABLE
+                .iter()
+                .map(|(k, _)| *k)
+                .collect::<Vec<_>>()
+                .join("/");
             return Err(format!(
-                "{}: {}:{}: unknown policy key `{}` (allowed: ratio/context/window/elide/risk_gate/scoped/strict/lineno/max_tokens/structure)",
-                f.name, path, le.line, key
+                "{}: {}:{}: unknown policy key `{}` (allowed: {})",
+                f.name, path, le.line, key, allowed
             ));
         };
         // CLI 显式参数优先：文件只填 DEFAULT 层（CLI 未指定的字段）。
@@ -550,7 +555,7 @@ pub(crate) fn apply(
         "max_tokens" => tokens(s, v, path, line)?,
         "fill_floor" => fill_floor(s, v, path, line)?,
         "trim_ratio" => trim_ratio_key(s, v, path, line)?,
-        _ => unreachable!("policy key whitelist"),
+        _ => return Err(error(path, line, format!("unknown policy key {key:?}"))),
     }
     Ok(())
 }
@@ -566,7 +571,7 @@ pub(crate) fn number(
         "ratio" => ratio(s, v, path, line),
         "context" => context(s, v, path, line),
         "window" => window(s, v, path, line),
-        _ => unreachable!("numeric policy key whitelist"),
+        _ => Err(error(path, line, format!("{key:?} 不是数值型策略键"))),
     }
 }
 
@@ -636,7 +641,7 @@ pub(crate) fn toggle(
         "num_line_keep" => s.config.num_line_keep = b,
         "sym_line_keep" => s.config.sym_line_keep = b,
         "list_keep" => s.config.list_keep = b,
-        _ => unreachable!("bool policy key whitelist"),
+        _ => return Err(error(path, line, format!("{key:?} 不是布尔型策略键"))),
     }
     Ok(())
 }

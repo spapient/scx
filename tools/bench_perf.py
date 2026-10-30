@@ -3,7 +3,7 @@
 import json, os, subprocess, sys, time
 from pathlib import Path
 
-ROOT = Path("/Users/fei/code/scx")
+ROOT = Path(__file__).resolve().parents[1]
 BIN = ROOT / "target/release/scx"
 PERF_DIR = ROOT / "config/bench/perf"
 OUT = PERF_DIR / "perf_baseline.json"

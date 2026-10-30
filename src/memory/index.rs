@@ -156,10 +156,19 @@ pub(crate) fn lock(root: &str) -> std::io::Result<crate::memory::lock::Lock> {
 pub(crate) fn clear(root: &str) {
     let p = postings(root);
     if p.exists() {
-        let _ = fs::remove_file(&p);
+        if let Err(e) = fs::remove_file(&p) {
+            // postings.bin 只是缓存：删除失败不影响召回语义（回退线性），
+            // 但需如实告知，避免“以为索引已失效”的静默错位。
+            if e.kind() != std::io::ErrorKind::NotFound {
+                eprintln!(
+                    "[scx] warning: cannot remove index cache {}: {e}",
+                    p.display()
+                );
+            }
+        }
     }
     // 进程内缓存随之失效：mtime 键已失（文件删除 → 下次 load 短路 None）。
-    let mut g = cache().lock().unwrap();
+    let mut g = cache().lock().unwrap_or_else(|e| e.into_inner());
     if let Some((r, _, _)) = g.as_ref() {
         if r == root {
             *g = None;
@@ -342,14 +351,14 @@ pub(crate) fn load(root: &str) -> std::io::Result<Option<Arc<Index>>> {
 
 fn cached(root: &str, mtime: Option<&Key>) -> Option<Arc<Index>> {
     let mt = mtime?;
-    let g = cache().lock().unwrap();
+    let g = cache().lock().unwrap_or_else(|e| e.into_inner());
     let (r, t, idx) = g.as_ref()?;
     (r == root && t == mt).then(|| idx.clone())
 }
 
 fn store(root: &str, mtime: Option<Key>, idx: Option<&Arc<Index>>) {
     if let (Some(mt), Some(idx)) = (mtime, idx) {
-        let mut g = cache().lock().unwrap();
+        let mut g = cache().lock().unwrap_or_else(|e| e.into_inner());
         *g = Some((root.to_string(), mt, idx.clone()));
     }
 }
