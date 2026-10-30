@@ -9,10 +9,21 @@
 | 渠道 | 结果 | 证据 |
 |---|---|---|
 | crates.io | ✅ | `cargo publish --locked` 成功；API max_version=0.10.0 / num_versions=12 / downloads=128 |
-| GitHub Release v0.10.0 | ✅ | 4 资产：darwin-arm64.tar.gz（Mach-O arm64，下载回验 `scx 0.10.0`）/ linux-x86_64-musl.tar.gz（static-pie）/ windows-x86_64.zip（PE32+）/ SHA256SUMS-0.10.0 |
+| GitHub Release v0.10.0 | ✅ | 4 资产：darwin-arm64.tar.gz（Mach-O arm64，下载回验 `scx 0.10.0`）/ linux-x86_64-musl.tar.gz（static-pie，根=scx）/ windows-x86_64.zip（PE32+）/ SHA256SUMS-0.10.0 |
 | npm @spapient/scx | ✅ | latest=0.10.0；安装冒烟 `scx --version`=0.10.0；evidence 行保留 + ser_b 字段实测 |
-| 门禁 | ✅ | P12.6 提交 24d5024 在发布链上（HEAD 51c7f56 祖先）；bash tools/check_bench.sh 全绿（发布前） |
-| 资产校验 | ✅ | SHA256SUMS-0.10.0：darwin 1b63bca4… / linux-musl 09938c0a… / windows 7ff2d3ab… |
+| Homebrew tap | ✅ | formula 0.10.0（darwin tar.gz + sha 1b63bca4…），brew info 识别 0.9.0→0.10.0 |
+| Scoop 自建 bucket | ✅ | spapient/scoop-scx（0.10.0 + checkver/autoupdate，license=MIT OR Apache-2.0）；`scoop bucket add scx https://github.com/spapient/scoop-scx` 即时可用 |
+| winget | ⏳ | PR #466131（0.10.0 单版本 manifest，CLA 已签 agree，旧 PR #461786 关闭）；微软验证流水线 pending 排队中 |
+| 门禁 | ✅ | P12.6 提交 24d5024 在发布链上（HEAD 51c7f56 祖先）；`cargo test --all-features` 407 通过；clippy 0 告警（深度测试复验） |
+| 资产校验 | ✅ | SHA256SUMS-0.10.0：darwin 1b63bca4… / linux-musl 2e69399d… / windows 7ff2d3ab… |
+
+## v0.10.0 深度测试修复（2026-10-30）
+
+| # | 发现 | 修复 | 验证 |
+|---|---|---|---|
+| 1 | Scoop manifest license=MIT，与项目 MIT OR Apache-2.0（LICENSE-MIT/LICENSE-APACHE）不一致 | bucket license 改为 `MIT OR Apache-2.0` 并推送 | GitHub API 直读确认生效 |
+| 2 | `wrap_maps_signal_exit_to_128_plus_signal` 测试在 macOS 本地失败（kill -TERM $$ 返回 0） | 根因：agent shell 继承 SIG_IGN（SIGTERM 被忽略）；改用不可忽略的 SIGKILL（期望 128+9=137）；Linux release 二进制实测 `scx wrap -- sh -c 'kill -TERM $$'`=143 证明实现正确 | 本机 + Linux 双验证；全量 407 测试通过 |
+| 3 | linux 归档内二进制名为 `scx-linux-x86_64-musl`，与 darwin（scx）/win（scx.exe）命名不一致 | 重打归档（根=scx），重传 release 资产 + 更新 SHA256SUMS-0.10.0（linux hash → 2e69399d…） | 线上下载核验 hash 一致、根=scx；darwin/win hash 不变（Homebrew/Scoop/winget 引用不受影响） |
 
 ## 已验证（本轮 dry-run 证据）
 

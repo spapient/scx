@@ -581,12 +581,14 @@ fn wrap_hands_its_stdin_to_the_child() {
 #[cfg(unix)]
 #[test]
 fn wrap_maps_signal_exit_to_128_plus_signal() {
+    // SIGKILL（非 15/SIGTERM）：SIGKILL 不可忽略/不可捕获，
+    // 不受 shell 继承 SIG_IGN 干扰（macOS bash 与 Linux dash 均稳定终止）。
     let out = Command::new(bin())
-        .args(["wrap", "--", "sh", "-c", "kill -TERM $$"])
+        .args(["wrap", "--", "sh", "-c", "kill -KILL $$"])
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(143), "SIGTERM must map to 128+15");
+    assert_eq!(out.status.code(), Some(137), "SIGKILL must map to 128+9");
 }
 
 #[test]
