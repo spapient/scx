@@ -304,6 +304,9 @@ pub struct Config {
     /// 跨行模板折叠（`--fold 1`，默认 0 = 现状逐字节一致）。连续块内
     /// 骨架相同的相似行（≥3）折叠为首行 + 标记行，压缩日志风暴类输入。
     pub fold: bool,
+    /// 熵近似评分（`--entropy 1`，默认 0 = 现状逐字节一致）。无模型
+    /// 统计信息密度信号，补偿无 query 命中的信息密集行召回。
+    pub entropy: bool,
     pub trim_ratio: f64,
     /// 算术符号（`+ = * -`）作为结构锚保留（`--trim-op-keep`，默认 0）。
     /// 代码/算式场景需要；GSM8K 数学场景默认关保持 P6d 无损最优。
@@ -372,6 +375,7 @@ impl Default for Config {
             fill_floor: crate::policy::DEFAULT_FILL_FLOOR,
             trim: crate::policy::DEFAULT_TRIM,
             fold: crate::policy::DEFAULT_FOLD,
+            entropy: crate::policy::DEFAULT_ENTROPY,
             trim_ratio: crate::policy::DEFAULT_TRIM_RATIO,
             trim_op_keep: crate::policy::DEFAULT_TRIM_OP_KEEP,
             code_keep: crate::policy::DEFAULT_CODE_KEEP,

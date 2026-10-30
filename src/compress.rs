@@ -317,6 +317,8 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 语义增强（可选）：feature=semantic 且显式加载权重时，对非 dup 候选行
     // 叠加 sigmoid 打分作为排序加分；不启用时与 v0.4.1 逐字节一致。
     semantic(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
+    // P17-C 熵近似评分（--entropy 1，默认关=零影响）。
+    crate::compress::plan::entropy_signal(cfg, &lines, &dup, &mut scores);
     apply_sims(cfg, &mut scores, &dup, total);
     let boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     prof.mark("spans+scores");

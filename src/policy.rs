@@ -17,6 +17,8 @@ pub const MAX_FILL_FLOOR: f64 = 10.0;
 pub const DEFAULT_TRIM: bool = false;
 /// 跨行模板折叠默认关（`--fold 1` 显式开启，保证默认路径逐字节一致）。
 pub const DEFAULT_FOLD: bool = false;
+/// 熵近似评分默认关（`--entropy 1` 显式开启）。
+pub const DEFAULT_ENTROPY: bool = false;
 /// 行内 token 保留比例（`--trim-ratio`，默认 0.5 = 每行最多摘一半 token）。
 pub const DEFAULT_TRIM_RATIO: f64 = 0.5;
 pub const MIN_TRIM_RATIO: f64 = 0.1;

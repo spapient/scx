@@ -1150,6 +1150,49 @@ pub(crate) fn apply_sims(cfg: &Config, scores: &mut [f64], dup: &[bool], total: 
     }
 }
 
+/// P17-C 熵近似评分（`--entropy 1`，默认关 = 零影响）：
+/// 无模型的统计信息密度信号——字符分布熵（高熵=信息密集）加权，
+/// 字符重复率（zipf 高频填充）降权。对无 query 命中的信息密集行召回补偿。
+pub(crate) fn entropy_signal(cfg: &Config, lines: &[&str], dup: &[bool], scores: &mut [f64]) {
+    if !cfg.entropy {
+        return;
+    }
+    for (i, line) in lines.iter().enumerate() {
+        if dup[i] {
+            continue;
+        }
+        scores[i] += ent_bonus(line);
+    }
+}
+
+/// 行信息密度加分 ∈ [0, 1)：字符分布熵归一化 × 重复降权。
+fn ent_bonus(line: &str) -> f64 {
+    let mut cnt = [0u32; 128];
+    let mut n = 0usize;
+    for &b in line.as_bytes() {
+        if b < 128 {
+            cnt[b as usize] += 1;
+            n += 1;
+        }
+    }
+    if n < 2 {
+        return 0.0;
+    }
+    // 香农熵 H = -Σ p·log2(p)，上限 7 bit。
+    let mut h = 0.0;
+    for &c in cnt.iter() {
+        if c > 0 {
+            let p = c as f64 / n as f64;
+            h -= p * p.log2();
+        }
+    }
+    let h_norm = (h / 7.0).min(1.0);
+    // 重复率：出现过 ≥2 次的字符占比（重复越多信息量越低）。
+    let reps = cnt.iter().filter(|&&c| c > 1).count() as f64 / 128.0;
+    // 与 heading_bonus(1.0) 同量级，保守取 0.5 上限。
+    h_norm * (1.0 - 0.5 * reps) * 0.5
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1223,5 +1266,37 @@ mod tests {
             (h1, h2, len),
             "non-deterministic for {s:?}"
         );
+    }
+
+    #[test]
+    fn entropy_ranks_dense_over_repetitive() {
+        // 信息密集（字符多样）行熵加分 > 重复/单调行。
+        let dense = "panic: index out of bounds at src/ops/query.rs:42";
+        let mono = "aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa";
+        assert!(
+            ent_bonus(dense) > ent_bonus(mono),
+            "dense={} mono={}",
+            ent_bonus(dense),
+            ent_bonus(mono)
+        );
+        // 空/单字符无信号。
+        assert_eq!(ent_bonus(""), 0.0);
+        assert_eq!(ent_bonus("x"), 0.0);
+        // 上界：不超过 heading_bonus(1.0) 量级。
+        assert!(ent_bonus(dense) < 1.0);
+    }
+
+    #[test]
+    fn entropy_signal_off_is_noop() {
+        let lines = ["alpha beta", "gamma delta", "epsilon zeta"];
+        let dup = [false, false, false];
+        let mut cfg = crate::Config::default();
+        let mut sc = vec![1.0f64; 3];
+        let before = sc.clone();
+        entropy_signal(&cfg, &lines, &dup, &mut sc);
+        assert_eq!(sc, before, "默认关 = 零影响");
+        cfg.entropy = true;
+        entropy_signal(&cfg, &lines, &dup, &mut sc);
+        assert!(sc.iter().all(|v| *v > 1.0), "开启后非 dup 行加分: {sc:?}");
     }
 }
