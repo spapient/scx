@@ -170,7 +170,7 @@ Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技
 scx --version                                  # 已将入口加入 PATH 时
 ```
 
-三条命令都应输出版本号（当前为 `scx 0.10.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
+三条命令都应输出版本号（当前为 `scx 0.11.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
 
 只对实际安装过的入口执行上述检查；未安装的路径报“不存在”不代表工具本身异常。
 
@@ -303,6 +303,7 @@ query + input
 | `--lineno` | `0` | 为筛选输出添加 `N: ` 原文行号前缀 |
 | `--force` | 无 | 强制保留匹配行；大小写不敏感的字面子串；`re:` 前缀进入有限正则子集 |
 | `--max-tokens` | 无 | 输出 token 硬上限；证据行及其最小邻域优先，超限报 `overflow:evidence`/`overflow:fill`，绝不静默丢弃证据 |
+| `--budget` | `0` | 硬 kept-token 占比上限（`0 < F ≤ 1`，`0`=关）；最终输出 token（保留行 + elide 省略标记）≤ F×输入；超预算行按保真优先级反向裁剪（证据/数字/结构最后裁）；与 SuperCompress 官方 mean cut 64.1% 同预算对照路径 |
 | `--structure` | `0` | `1` 时启用结构感知邻域：fence 代码块、`import`/`use`/`#include` 块、堆栈 `at` 链整体并入 |
 | `--policy-file` | 无 | 策略文本覆盖默认值（键白名单与下方 `--policy-file` 行一致：`ratio`/`budget`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`）；优先级 CLI 显式 > 文件 > DEFAULT |
 | `--pipeline` | 无 | JSON 管线配置（`config/pipeline.json` 或 `config/bench/profiles/*.json`）；plan/trim/anchor 三阶段声明式装配；未知键/越界 fail-loud；优先级 CLI 显式 > 文件 > DEFAULT |
@@ -346,6 +347,7 @@ scx --query "..." [OPTIONS] [file...]
 | `... --no-stats` | 只输出正文，不输出统计行 |
 | `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计；含 `dropped` 区间明细（`--max-tokens`/预算裁剪）与 `max_tokens`/`tok_est` 字段 |
 | `--max-tokens <N>` | 输出 token 硬上限；证据地板最高优先，超限报 `overflow:evidence`/`overflow:fill` |
+| `--budget <F>` | 硬 kept-token 占比上限（`0 < F ≤ 1`，`0`=关）；输出 token（保留行 + elide 省略标记）≤ F×输入 token；超预算按保真优先级反向裁剪（R_FILL<R_ANCHOR<R_NUM_LINE<R_EVIDENCE），证据/数字/结构最后裁 |
 | `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
 | `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`budget`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
 | `--pipeline <PATH>` | JSON 管线配置（plan/trim/anchor 三阶段声明式）；键白名单 `plan.ratio/window/context/limit`、`trim.enable/ratio/op_keep/code_keep/zh_keep/num_line_keep/sym_line_keep/list_keep`、`anchor.structure/anchors/fill_floor`；未知键/越界 fail-loud 报错；优先级 CLI 显式 > 文件 > DEFAULT；评测档位模板 `config/bench/profiles/{r02,r03,r04}.json` |
@@ -609,7 +611,7 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 - **单机本地工具**：记忆库是本地目录，不是多租户服务或分布式数据库。
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。
 - **输入有上限**：CLI 单次输入总计 64 MiB；更大的输入需要分段。
-- **pre-1.0 状态**：当前版本 `0.10.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
+- **pre-1.0 状态**：当前版本 `0.11.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
 
 ## 贡献与安全
 

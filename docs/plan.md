@@ -2320,3 +2320,13 @@ P13 定稿(0.11.0 目标)
 - 门禁：默认轨 364/0 逐字节不变（golden 零漂移）；semantic 轨 381/0（+17 semantic 测试）；
   `cargo test --all-features` / clippy（默认+all-features）`-D warnings` / fmt / rustdoc /
   MSRV 1.82 三轨 / `cargo package` / check_bench.sh 全绿。
+
+### P0/P1 顶尖级收尾完成记录（2026-10-31，版本 0.11.0）
+- **P0-1.6 可逆模板折叠**：split→step/flush_word、rebuild→parse_template/parse_params/expand_row 重构，认知复杂度<10；修复 `step()` 对中文标点/全角多字节字符按字节切片 panic（UTF-8 前导字节定宽整字符跳过）；fold 测试 15 全绿。
+- **P0-1.1 消融评测**：`tools/bench_ablate.py` 确定性三形态语料（LCG seed 42 零外部依赖），6 配置矩阵（baseline/fold/entropy/anchor/cluster/semantic）；诊断链：fail-open query 修正（"parse"→"build" 75 次命中）、zh fold UTF-8 panic 修复、entropy 数字保真 guard（`entropy_signal` 跳过含 ASCII 数字行 + 0.01 平局权重）；**18 行数字冻结**（code 全配置 cut=0.1592/num_cov=0.7955/token_cov=0.8271；log baseline cut=0.3403、fold 唯一正增益 cut=0.3855；zh 全配置与基线逐字节相同）。机制事实：anchor/cluster/semantic 三信号在本语料零独立增益（触发条件或排序不翻转边界），留 P18 整合评测核。
+- **P0-1.2 同预算对照**：与 SuperCompress 官方 mean cut 64.1% 同预算（35% kept）对照闭环。`--budget` 硬预算后处理（超预算按 R_* 保真优先级反向裁剪：R_FILL=3<R_ANCHOR=5<R_NUM_LINE=6<R_EVIDENCE=10）；修复 gap 省略标记 `...` 未计预算缺陷（预算口径 = Σ行 token + GAP_TOK×false 段数，裁剪循环增量维护段数）；bench_budget.py 三断言门禁。最终：code budget-0.35 kept=0.3495/cut=0.6505/num_cov=0.3138/token_cov=0.3285；log kept=0.3492/cut=0.6508；zh 全档与 baseline 相同（逐字节一致守卫 ✓）。三提交 0631a00/ff465cc/cc117e8。
+- **P1-1.5 #51 unwrap 语义化**：memory/index.rs + cache.rs + compress.rs 全部 try_into().unwrap()/.ok()? 替换为定长数组拷贝（const 泛型 `arr::<N>` + copy_from_slice + from_le_bytes），9 处边界已验证字节读取统一定长解释；plan.rs region close unwrap→expect。生产路径 unwrap 清零（join().unwrap() 保留——scope 惯用语义正确）。提交 6ba4dfa。
+- **P1-1.8 scores() 并行化**：逐行打分纯只读共享、scores 分块写不重叠 → ≥ PAR_MIN（20k）分 6 线程（与 masks/tally 同模板同阈值）；并行与串行逐字节一致（golden 零漂移）；A/B 实测 60k 行 3.2MB：spans+scores 1257us vs 串行 2692-2865us ≈ **2.2× 加速**。提交 c30f4d0。
+- **P1-1.3+1.4 v0.11.0 bump + 门禁扩展**：Cargo.toml/Cargo.lock/README 3 处版本 0.10.0→0.11.0；check_bench.sh 新增第七步「新开关冒烟」（--budget/--fold/--auto-anchor/--cluster 单跑+组合：rc + stats + 双跑确定性；冒烟段自身缺陷修复：--json 统计行断言 `compressed: kept=`、FAIL 后不再误报 OK）；README 补 --budget 两行说明。全量门禁 check_bench.sh GATE=0（lib 375 / semantic 392 / golden 2 passed 1 ignored / clippy 0 / fmt / eval-manifest frozen+present / A2 fidelity / 冒烟 5 组合）。
+- **版本状态图**：0.10.0（P17 全线 + 消融闭环）→ **0.11.0**（P0-1.2 同预算对照 + P1-1.5 unwrap 语义化 + P1-1.8 scores 并行 + 门禁冒烟扩展）。
+- **待办（#54 P18 收尾）**：semantic on/off × 全信号组合在 eval-manifest 冻结集评测；压缩率专项已含同预算对照（P0-1.2 完成），冻结集全组合评测未做；文档/SKILL 同步复核。
