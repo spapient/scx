@@ -323,31 +323,38 @@ fn steps(meta: &mut Meta, terms: &[String], step: f64, limit: f64) {
     }
 }
 
-/// [word_w] 节重写：旧节整体跳过，在其后第一个节头前插入新节；
-/// 文件无节头时在末尾追加。
+/// [word_w] 节重写：定位旧节（节头+节体）整体替换为新节，其余行原样保留；
+/// 无旧节时在文件末尾追加。
 fn rewrite(txt: &str, word_w: &[(String, f64)]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut wrote_w = false;
-    for line in txt.lines() {
-        let t = line.trim();
-        if t.starts_with('[') && t.ends_with(']') {
-            if t == "[word_w]" {
-                // 跳过旧节，统一在末尾重写。
-                wrote_w = true;
-                continue;
-            }
-            if !wrote_w && !word_w.is_empty() {
-                out.extend(block(word_w));
-                out.push("".to_string());
-                wrote_w = true;
-            }
-        }
-        out.push(line.to_string());
+    let lines: Vec<&str> = txt.lines().collect();
+    if word_w.is_empty() {
+        return lines.iter().map(|l| l.to_string()).collect();
     }
-    if !wrote_w {
-        out.extend(block(word_w));
+    let start = lines.iter().position(|l| l.trim() == "[word_w]");
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 4);
+    match start {
+        None => {
+            out.extend(lines.iter().map(|l| l.to_string()));
+            out.push(String::new());
+            out.extend(block(word_w));
+        }
+        Some(s) => {
+            let end = lines[s + 1..]
+                .iter()
+                .position(|l| section_head(l.trim()))
+                .map(|p| s + 1 + p)
+                .unwrap_or(lines.len());
+            out.extend(lines[..s].iter().map(|l| l.to_string()));
+            out.extend(block(word_w));
+            out.push(String::new());
+            out.extend(lines[end..].iter().map(|l| l.to_string()));
+        }
     }
     out
+}
+
+fn section_head(t: &str) -> bool {
+    t.starts_with('[') && t.ends_with(']')
 }
 
 fn block(word_w: &[(String, f64)]) -> Vec<String> {
@@ -424,6 +431,19 @@ mod tests {
     use super::*;
     use crate::memory::util::root;
     use std::fs;
+
+    #[test]
+    fn rewrite_drops_old_word_w_section_body() {
+        // 回归（P17-F）：重复 learn 时旧 [word_w] 节体必须整段跳过，
+        // 否则节头丢失、词权重悬空为顶层裸键、load 读空。
+        let old = "[df]\na = 1\n\n[word_w]\ntimeout = 0.1\nconn = 0.1\n\n[params]\nl1_base = 0.55\n";
+        let fresh = rewrite(old, &[("timeout".into(), 0.2)]);
+        let text = fresh.join("\n");
+        assert!(text.contains("[word_w]"), "新节头存在: {text}");
+        assert!(!text.contains("conn = 0.1"), "旧节体被跳过: {text}");
+        assert!(text.contains("timeout = 0.200"), "新值写入: {text}");
+        assert!(text.contains("[params]\nl1_base = 0.55"), "[params] 保留: {text}");
+    }
 
     #[test]
     fn meta_roundtrip() {

@@ -167,6 +167,45 @@ mod tests {
     }
 
     #[test]
+    fn rate_word_ring_is_deterministic() {
+        // P17-F：反馈调权确定性——相同 rate 序列 → 词权重逐项一致
+        // （固定迭代 = 固定结果，可复现可审计）；[word_w] 节重复重写完整。
+        let run = |tag: &str| {
+            let r = root(tag);
+            ingest(
+                &r,
+                "连接超时",
+                vec!["timeout".into()],
+                "ERROR conn timeout gamma",
+                vec!["/a.log".into()],
+                &stats(),
+                vec![],
+            )
+            .unwrap();
+            let id = store::list(&r).unwrap()[0].clone();
+            rate(&r, &id, true).unwrap();
+            let after1 = crate::memory::meta::load(&r).unwrap().word_w.clone();
+            let _c2 = rate(&r, &id, true).unwrap();
+            let after2 = crate::memory::meta::load(&r).unwrap().word_w.clone();
+            let _ = fs::remove_dir_all(&r);
+            (after1, after2)
+        };
+        let (a1, a2) = run("det1");
+        let (b1, b2) = run("det2");
+        assert_eq!(a1, b1, "同输入同输出（step1）");
+        assert_eq!(a2, b2, "同输入同输出（step2）");
+        let w = |list: &[(String, f64)], k: &str| {
+            list.iter()
+                .find(|(key, _)| key == k)
+                .map(|(_, v)| *v)
+                .unwrap_or(0.0)
+        };
+        // 两次 good：timeout 权重递增，且重复重写后节仍完整可读。
+        assert!(w(&a2, "timeout") > w(&a1, "timeout"), "{a1:?} {a2:?}");
+        assert!(w(&a2, "timeout") > 0.0, "{a2:?}");
+    }
+
+    #[test]
     fn l1_qualified_requires_base_and_margin() {
         assert!(qualified(0.8, 0.4, 0.6, 0.15), "达标");
         assert!(!qualified(0.8, 0.7, 0.6, 0.15), "margin 不足");
