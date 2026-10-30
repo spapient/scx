@@ -30,11 +30,25 @@ fn is_param(t: &str) -> bool {
 fn step(b: &[u8], i: usize) -> (bool, usize) {
     let c = b[i];
     if c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.' | b':' | b'/' | b'@' | b'\\') {
-        (true, 1)
-    } else if (0xE4..=0xE9).contains(&c) && i + 2 < b.len() {
-        (true, 3)
-    } else {
-        (false, 1)
+        return (true, 1);
+    }
+    // UTF-8 多字节：按首字节定宽完整跳过（词=常见 CJK 首字节 E4-E9，
+    // 其余多字节——中文标点/全角/其他文字——为非词但也必须整字符跳过，
+    // 否则按字节切片会落在字符中间 panic）。
+    let len = utf8_len(c).min(b.len() - i);
+    if len == 1 {
+        return (false, 1);
+    }
+    (matches!(c, 0xE4..=0xE9), len)
+}
+
+/// UTF-8 字符宽度（按首字节）：ASCII 1 / 2 字节区 / 3 字节区 / 4 字节区。
+fn utf8_len(c: u8) -> usize {
+    match c {
+        0x00..=0x7F => 1,
+        0xC0..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        _ => 4,
     }
 }
 
@@ -339,6 +353,17 @@ mod tests {
         ];
         let out = collapse(&block, FOLD_MIN);
         assert_eq!(out.len(), 3);
+        roundtrip(&block);
+    }
+
+    #[test]
+    fn roundtrip_cjk_punct() {
+        // 中文标点/全角符号为多字节非词字符：按整字符跳过，不得 panic 或丢字节。
+        let block = vec![
+            "[01] 网关 连接超时：请求 1 重试 0 次",
+            "[02] 网关 连接超时：请求 2 重试 1 次",
+            "[03] 网关 连接超时：请求 3 重试 2 次",
+        ];
         roundtrip(&block);
     }
 
