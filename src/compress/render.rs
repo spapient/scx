@@ -171,7 +171,7 @@ pub(crate) fn semantic(
             if dup[i] {
                 continue;
             }
-            scores[i] += w.score(&crate::semantic::feats(lines[i], uniq_terms, w.dim));
+            scores[i] += w.score(&crate::semantic::feats(lines[i], uniq_terms, i, total, w.dim));
         }
     }
 }

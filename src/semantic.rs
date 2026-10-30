@@ -110,9 +110,27 @@ fn encode(ws: &[f64]) -> Vec<u8> {
     out
 }
 
-/// 行 → dim 维确定性特征向量（前 6 维有语义，其余补 0）。
+/// 行 → dim 维确定性特征向量（前 6 维有语义并向后兼容，7–15 为 P13-A 扩展）。
 /// 特征模板与 compress 打分表正交，只作可选加分项。
-pub fn feats(line: &str, query_terms: &[String], dim: usize) -> Vec<f64> {
+///
+/// 特征清单（16 维，dim>16 时补 0，dim<16 时 score 只取前缀——旧权重文件兼容）：
+///   0  overlap            query 子串命中比例（旧）
+///   1  hit                是否命中 0/1（旧）
+///   2  ln(1+chars)        行长度（旧）
+///   3  cap_ratio          大写比例（旧）
+///   4  dig_ratio          数字比例（旧）
+///   5  structure          结构行标志（旧，前缀扩展）
+///   6  word_hit_ratio     词边界整词命中比例（P13-A 新，降子串误报）
+///   7  cjk_ratio          CJK 字符比例（中文信号）
+///   8  errcode_density    错误码密度（含字母+数字 token，如 404/0x1f/ERR123）
+///   9  token_uniq         唯一 token 率（信息熵近似）
+///  10  sym_density        非字母数字符号密度（代码/结构化信号）
+///  11  pos_norm           行位置归一化 0..1
+///  12  edge               文档头尾 5% 标志
+///  13  long_flag          超长行（>200 字符）
+///  14  code_line          代码行信号（{} / () / 箭头）
+///  15  bias               常数 1.0（可学习偏置）
+pub fn feats(line: &str, query_terms: &[String], i: usize, total: usize, dim: usize) -> Vec<f64> {
     let lower = line.to_lowercase();
     let hit = hits(query_terms, &lower);
     let overlap = overlap(hit, query_terms.len());
@@ -122,6 +140,24 @@ pub fn feats(line: &str, query_terms: &[String], dim: usize) -> Vec<f64> {
     let cap_ratio = ratio(caps as f64, chars as f64);
     let dig_ratio = ratio(digits as f64, chars as f64);
     let structure = shape(line);
+    let toks = tokens(&lower);
+    let w_hit = word_hit_ratio(query_terms, &lower, &toks);
+    let cjk = ratio(cjk_chars(line) as f64, chars as f64);
+    let errcode = ratio(err_code_tokens(&toks) as f64, toks.len() as f64);
+    let uniq = unique_rate(&toks);
+    let sym = sym_ratio(line);
+    let pos_norm = if total <= 1 {
+        0.0
+    } else {
+        i as f64 / (total - 1) as f64
+    };
+    let edge = if i < total / 20 || i >= total.saturating_sub(total / 20) {
+        1.0
+    } else {
+        0.0
+    };
+    let long_flag = if chars > 200 { 1.0 } else { 0.0 };
+    let code = code_signal(line);
     let mut out = vec![
         overlap,
         hit.min(1) as f64,
@@ -129,6 +165,16 @@ pub fn feats(line: &str, query_terms: &[String], dim: usize) -> Vec<f64> {
         cap_ratio,
         dig_ratio,
         structure,
+        w_hit,
+        cjk,
+        errcode,
+        uniq,
+        sym,
+        pos_norm,
+        edge,
+        long_flag,
+        code,
+        1.0,
     ];
     out.resize(dim, 0.0);
     out
@@ -166,7 +212,150 @@ fn shape(line: &str) -> f64 {
         || t.starts_with("#include")
         || t.starts_with("at ")
         || t.to_lowercase().starts_with("caused by:")
+        || t.starts_with("->")
+        || t.starts_with("=>")
+        || t.starts_with("panic! ")
+        || t.starts_with("error:")
     {
+        1.0
+    } else {
+        0.0
+    }
+}
+
+/// CJK 基础区首字节（U+4E00..U+9FFF 的 UTF-8 三字节首字节 0xE4..0xE9）。
+#[inline]
+fn is_cjk_lead(c: u8) -> bool {
+    (0xE4..=0xE9).contains(&c)
+}
+
+/// P13-A：轻量分词——ASCII 词内字符连续段 + CJK 连续段，其余字符为单字分隔。
+/// 纯 std、确定性；仅 semantic feature 开启时调用（默认路径不受影响）。
+fn tokens(line: &str) -> Vec<&str> {
+    let b = line.as_bytes();
+    let mut out = Vec::new();
+    let mut cur: Option<usize> = None;
+    let mut i = 0usize;
+    while i < b.len() {
+        i = next(line, b, i, &mut cur, &mut out);
+    }
+    if let Some(st) = cur {
+        out.push(&line[st..b.len()]);
+    }
+    out
+}
+
+/// 单字符推进：词字符并入当前 token，分隔符结算已积累 token。返回下一偏移。
+fn next<'a>(
+    line: &'a str,
+    b: &'a [u8],
+    i: usize,
+    cur: &mut Option<usize>,
+    out: &mut Vec<&'a str>,
+) -> usize {
+    let c = b[i];
+    let is_word = c.is_ascii_alphanumeric()
+        || matches!(c, b'_' | b'-' | b'.' | b':' | b'/' | b'@' | b'\\');
+    let is_cjk = is_cjk_lead(c) && i + 2 < b.len();
+    if is_word || is_cjk {
+        if cur.is_none() {
+            *cur = Some(i);
+        }
+    } else if let Some(st) = cur.take() {
+        out.push(&line[st..i]);
+    }
+    i + if is_cjk { 3 } else { 1 }
+}
+
+/// 词边界整词命中比例：query term 在行内作为完整 token 出现（含屈折词根匹配）。
+/// 纯 ASCII 单词要求严格整词/词根命中；含词内字符（`_./:\@-`）、CJK 或多词短语
+/// 的 term 无法整词匹配，回退子串包含（如 "conn_id"、"caused by:"、"数据库"）。
+fn word_hit_ratio(terms: &[String], lower: &str, toks: &[&str]) -> f64 {
+    if terms.is_empty() {
+        return 0.0;
+    }
+    let mut n = 0usize;
+    for t in terms {
+        if t.is_empty() {
+            continue;
+        }
+        let plain = t.bytes().all(|b| b.is_ascii_alphanumeric());
+        if toks.iter().any(|tok| root_match(tok, t.as_str()))
+            || (!plain && lower.contains(t.as_str()))
+        {
+            n += 1;
+        }
+    }
+    n as f64 / terms.len() as f64
+}
+
+/// P13-B：词根判定——整词相等，或双方规则词干相等，或一方词干等于另一方原词。
+/// 覆盖屈折变体召回（connecting↔connected↔connect）、规则复数（errors↔error）。
+/// 纯 std、确定性；错误词根最坏不命中任何 doc（保守无害）。
+fn root_match(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    match (stem(a), stem(b)) {
+        (Some(x), Some(y)) => x == y,
+        (Some(x), None) => x == b,
+        (None, Some(y)) => a == y,
+        (None, None) => false,
+    }
+}
+
+/// CJK 统一表意文字计数（含扩展区首面基础块）。
+fn cjk_chars(line: &str) -> usize {
+    line.chars()
+        .filter(|&c| ('\u{4E00}'..='\u{9FFF}').contains(&c))
+        .count()
+}
+
+/// 错误码 token：含字母且含数字（404 / 0x1f / ERR123 / conn_id）。
+fn err_code_tokens(toks: &[&str]) -> usize {
+    toks.iter()
+        .filter(|t| {
+            t.bytes().any(|b| b.is_ascii_alphabetic()) && t.bytes().any(|b| b.is_ascii_digit())
+        })
+        .count()
+}
+
+/// 唯一 token 率（信息熵近似）：0 = 全重复行，1 = 全唯一。
+fn unique_rate(toks: &[&str]) -> f64 {
+    if toks.is_empty() {
+        return 0.0;
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    for t in toks {
+        if !seen.contains(t) {
+            seen.push(t);
+        }
+    }
+    seen.len() as f64 / toks.len() as f64
+}
+
+/// 非字母数字空白符号密度（代码/结构化/错误标记信号）。
+fn sym_ratio(line: &str) -> f64 {
+    let mut sym = 0usize;
+    let mut tot = 0usize;
+    for c in line.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        tot += 1;
+        if !c.is_ascii_alphanumeric() {
+            sym += 1;
+        }
+    }
+    ratio(sym as f64, tot as f64)
+}
+
+/// 代码行信号：成对括号或箭头（代码/配置/结构化内容）。
+fn code_signal(line: &str) -> f64 {
+    let has_brace = line.contains('{') && line.contains('}');
+    let has_paren = line.contains('(') && line.contains(')');
+    let has_arrow = line.contains("->") || line.contains("=>") || line.contains("::");
+    if has_brace || has_paren || has_arrow {
         1.0
     } else {
         0.0
@@ -202,8 +391,15 @@ fn stem(w: &str) -> Option<String> {
     strip_affix(w).filter(|s| s.len() >= 3)
 }
 
-/// 最长后缀优先：ies→y；咝音后 es 脱落；其余尾 s 脱落。
+/// 最长后缀优先：ing → 去 ing（≥4）；ed → 去 ed（≥4）；ies→y；
+/// 咝音后 es 脱落；其余尾 s 脱落。
 fn strip_affix(w: &str) -> Option<String> {
+    if let Some(r) = w.strip_suffix("ing") {
+        return (r.len() >= 4).then(|| r.to_string());
+    }
+    if let Some(r) = w.strip_suffix("ed") {
+        return (r.len() >= 4).then(|| r.to_string());
+    }
     if let Some(r) = w.strip_suffix("ies") {
         return Some(format!("{r}y"));
     }
@@ -318,15 +514,45 @@ mod tests {
 
     #[test]
     fn feats_shape_and_bounds() {
-        let f = feats("conn 9f2a broken db crash", &["conn".to_string()], 6);
-        assert_eq!(f.len(), 6);
+        // 16 维全量：overlap/命中/长度/词边界/唯一率等信号可验证。
+        let f = feats("conn 9f2a broken db crash", &["conn".to_string()], 0, 10, 16);
+        assert_eq!(f.len(), 16);
         assert!(f[0] > 0.0, "overlap 非零");
         assert!(f[0] <= 1.0);
         assert!(f[2] > 0.0, "长度特征非零");
-        let f8 = feats("x", &["y".to_string()], 8);
+        assert!(f[6] > 0.0, "词边界整词命中非零");
+        assert!(f[9] > 0.0, "唯一 token 率非零");
+        assert!(f[15] == 1.0, "bias 常数维=1");
+        // dim 截断：第 8 维 cjk（"x" 无 CJK）与第 15 维 bias 被截掉。
+        let f8 = feats("x", &["y".to_string()], 3, 10, 8);
         assert_eq!(f8.len(), 8);
         assert_eq!(f8[6], 0.0);
         assert_eq!(f8[7], 0.0);
+        // 词边界：子串包含但非整词 → word_hit 为 0（旧 overlap 仍可为正，兼容）。
+        let g = feats("errorhandler reset", &["error".to_string()], 0, 2, 16);
+        assert_eq!(g[6], 0.0, "error 非整词命中");
+    }
+
+    #[test]
+    fn tokens_splits_ascii_and_cjk() {
+        let t = tokens("conn_id 连接超时, retry!");
+        assert!(t.contains(&"conn_id"));
+        assert!(t.contains(&"连接超时"));
+        assert!(t.contains(&"retry"));
+        assert!(!t.iter().any(|s| s.contains(',')));
+        // 纯 ASCII 混合标点；词内字符（.）并入 token。
+        let u = tokens("a+b=c, d.e");
+        assert_eq!(u, vec!["a", "b", "c", "d.e"]);
+    }
+
+    #[test]
+    fn errcode_and_cjk_features() {
+        // ERR123 含字母数字 → 错误码；中文行 CJK 比例 > 0。
+        let e = feats("ERR123 0x1f 404", &["zzz".to_string()], 1, 3, 16);
+        assert!(e[8] > 0.0, "错误码密度非零");
+        let z = feats("数据库连接超时 重试", &["数据库".to_string()], 1, 3, 16);
+        assert!(z[7] > 0.0, "CJK 比例非零");
+        assert!(z[6] > 0.0, "中文整词命中非零");
     }
 
     #[test]
@@ -377,5 +603,28 @@ mod tests {
         assert_eq!(got.iter().filter(|t| t.as_str() == "error").count(), 1);
         // 无词形可追的 token 原样透传。
         assert_eq!(stem_expand(&["zzz".into()]), vec!["zzz".to_string()]);
+    }
+
+    #[test]
+    fn root_match_covers_inflections() {
+        // 屈折变体：ing/ed 同根召回。
+        assert!(root_match("connecting", "connect"));
+        assert!(root_match("connected", "connect"));
+        assert!(root_match("connecting", "connected"));
+        // 规则复数。
+        assert!(root_match("errors", "error"));
+        assert!(root_match("boxes", "box"));
+        // 非同类不误报。
+        assert!(!root_match("errorhandler", "error"));
+        assert!(!root_match("running", "run"));
+        assert!(!root_match("stress", "stre"));
+    }
+
+    #[test]
+    fn word_hit_uses_root_match() {
+        let toks = tokens("service connecting to db");
+        assert!(word_hit_ratio(&["connect".to_string()], "service connecting to db", &toks) > 0.0);
+        let miss = tokens("alpha beta");
+        assert_eq!(word_hit_ratio(&["connect".to_string()], "alpha beta", &miss), 0.0);
     }
 }

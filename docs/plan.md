@@ -2171,3 +2171,130 @@ bench_{cuda60,zh_cn30,mix30,shape30,layers15,layers50}.csv；git 提交链
 - `bash tools/check_bench.sh` 全绿：lib 359（+3：evidence 单测 + 端到端×3 于 tests/evidence.rs）+ semantic + golden（基线已更新）+ clippy 0 + fmt + eval-manifest frozen 匹配 + A2 fidelity 全过。
 - 版本 bump 0.9.0 → 0.10.0（Cargo.toml / README 2 处 / SKILL.md 2 处同步）。
 - 提交 24d5024。
+
+---
+
+## P13 计划（2026-10-30 定稿，semantic 能力提升 + 整体优化，目标版本 0.11.0）
+
+### 背景与现状分析（基于源码通读）
+`src/semantic.rs`（381 行，`cargo feature="semantic"`，零第三方 crate）现状：
+- **打分器**：`sigmoid(w·x)`，权重文件为自描述 JSON（schema `scx-sem-1`，sha256 校验，篡改即拒绝）——确定性有保障。
+- **特征仅 6 维且粗糙**：`[overlap, hit, ln(1+chars), cap_ratio, dig_ratio, structure]`；overlap/hit 用**子串包含**匹配（无词边界，`error` 误命中 `errorhandler`）；structure 仅硬编码 6 个前缀（```/~~~ / import/ use/ #include/ at/ caused by:），与 `analysis.rs` 的 frame/stack/diff/fence 识别**未复用**。
+- **融合方式**：`render.rs` 里 `scores[i] += w.score(...)` 简单加法，无量纲对齐/缩放开关。
+- **无权重获取路径**：权重文件只能手写/外部训练，无离线拟合工具。
+- **词形召回**：`stem_expand()` 规则词干（ies→y、s 脱落）已有，英文单复数已桥接；无词边界、无 CJK 处理。
+- **中文特征短板**：cap_ratio 对中文恒 0，仅 dig_ratio/长度有效。
+
+### 阶段拆分（每阶段门禁不过不进下一阶段）
+
+**P13-A 特征工程强化（6 维 → 16 维）**
+- 词边界命中（整词匹配替代子串 contains，降误报）
+- query 词 IDF 加权命中强度（复用 plan 词表，与 IDf 对齐）
+- 位置信号（行号归一化 + edge 头尾）、邻居证据簇密度（window 内命中数）
+- 结构信号统一复用 `analysis.rs`（frame/stack/diff/fence/meta/import），替换硬编码前缀
+- 新增：CJK 字符比例、错误码模式密度、行内 token 重复度（熵近似）、bias 常数维=1.0
+- 门禁：golden 零漂移（feature 关闭路径逐字节不变）+ semantic 特征单测
+
+**P13-B 词形/召回强化**
+- 子串→词边界过渡 + 数字 token 保护（ID/端口/版本号不拆词）
+- 短语命中（query 连续多词序）与跨行共现链（自动锚，配合自动 evidence）
+- 中文：无词形操作，验证子串命中与 CJK 密度特征有效性
+- 门禁：recall 探针矩阵（稀有词/常见词/零信号三分支回归）
+
+**P13-C 打分器与融合增强**
+- 打分器：显式 bias + 温度参数（sigmoid 带宽可控），仍纯 std 确定性
+- 融合：`--sem-weight F` 缩放系数（默认保守，保证确定性证据地板不被压过）+ 量纲对齐（plan score 归一化后相加）
+- 门禁：semantic on/off 双路径评测对比 + golden 不变
+
+**P13-D 权重获取路径（离线拟合，无模型）**
+- `tools/fit_weights.py`：用 `config/bench/datasets` 现有评测集离线做逻辑回归拟合 16 维权重 → 生成合法 `scx-sem-1` JSON（含 sha256）
+- 确定性：固定数据 + 固定 seed + 固定迭代 = 固定权重
+- 交付默认 `config/semantic/weights.json`（随仓）
+
+**P13-E 评测与门禁闭环**
+- semantic 开启评测矩阵：在 eval-manifest 冻结集上跑 semantic on/off 对比（保真/压缩率/耗时）
+- check_bench.sh 新增 semantic 段（特征/打分/权重加载/fit 复现性）
+- 验收：语义加分在保真不变前提下压缩率不倒退、证据地板不破
+
+### 风险与约束
+- 零第三方 crate、零模型、确定性、golden 零漂移：四条命根子不可破——所有新增特征/打分均为纯 std 确定性实现。
+- semantic 是可选 feature 且默认不启用：任何改动不得影响默认路径字节输出（v0.10.0 兼容）。
+- 权重文件 schema `scx-sem-1` 若扩展特征需升 schema 版本（`scx-sem-2`）或保持 dim 兼容——倾向保持 1 并允许 dim 增长。
+
+### 状态图（P13 计划）
+```
+P13 定稿(0.11.0 目标)
+  ├─ P13-A 特征工程 6→16 维 ──门禁A──┐
+  ├─ P13-B 词形/召回强化 ──门禁B────┤
+  ├─ P13-C 打分器/融合 ──门禁C──────┼→ P13-E 评测门禁闭环 → 版本 0.11.0 发布
+  ├─ P13-D 权重拟合路径 ──门禁D─────┘
+  └─ 全程：golden 零漂移 + clippy 0 + 407 测试 + feature 关闭路径逐字节不变
+```
+
+---
+
+## P17 计划（2026-10-30 定稿，整体管线强化 · 竞品借鉴整合，与 P13 同批推进，目标版本 0.11.0）
+
+### 规划原则（先盘点后强化）
+竞品借鉴点先对照现状：**已有雏形 → 强化**；**无 → 新建**。全程零第三方 crate、零模型、确定性、golden 零漂移。
+
+### P13–P17 整体能力提升总览（两模块并行：P13 semantic 线 + P17 管线线）
+
+```
+                     ┌── P13-A 特征工程 6→16 维 ──门禁A──┐
+  P13 semantic 线 ───┼── P13-B 词形/召回 ──门禁B───────┤
+   (模块自身强化)     ├── P13-C 打分器/融合 ──门禁C──────┼─┐
+                     └── P13-D 权重拟合路径 ──门禁D─────┘ │
+                                                          ├→ P18 整合评测+压缩率专项 → v0.11.0
+  P17 管线线 ──────  P17-A 跨行模板折叠 ──门禁A──┐        │
+   (竞品借鉴整合)     P17-B 行内裁剪强化 ──门禁B──┤        │
+                     P17-C 熵近似评分 ──门禁C───┤        │
+                     P17-D 自动锚发现 ──门禁D───┼─ 门禁E ┘
+                     P17-E 证据簇密度加权 ──门禁E─┘
+                     P17-F 反馈闭环调权（续 P14 线收尾）
+```
+
+### P17-A 跨行模板折叠（最大压缩率增量，新建）
+- **机制**：复用 `sim.rs`（minhash 签名）+ 模板识别——同模板不同参数的行（日志/错误/JSON/CSV 行）→ 保留模板 1 行 + 参数表（可逆重建），round-trip 可还原原文。
+- **落点**：`compress/plan.rs` 折叠判定（已有 `tally` 折叠雏形）→ 模板聚类 + 参数抽取；`render.rs` 输出模板+参数块。
+- **预期**：日志/重复结构语料压缩率 +10~20%。
+- **门禁**：golden 零漂移（默认关闭，`--fold 1` 显式开启）；round-trip 还原率 100% 断言。
+
+### P17-B 行内安全裁剪强化（已有 trim.rs 雏形 → 强化）
+- **现状**：`trim.rs` 已是 LLMLingua-2 思路的零依赖启发式（数字/结构锚/query 词根/行首尾保留，停用词/纯标点摘除，token 池化零分配）。
+- **强化**：① STOP/KEEP 词表扩展（terms.rs，KEEP 语义敏感词已有：否定/比较/数值词永不摘）；② trim 与 semantic 打分联动（semantic 高分行不裁或降裁）；③ 数字/ID/版本号 token 保护增强。
+- **预期**：保留行 token 再降 8~15%，证据逐字不丢。
+- **门禁**：cut 提升且 golden 不变；语义敏感词（not/不/总/每）摘除回归测试。
+
+### P17-C 熵近似评分（伪神经信号，plan.rs score() 加信号）
+- **机制**：无模型的统计熵——行内 token 重复度（字符分布熵）、词频 zipf 秩惩罚（高频填充词降权）、长度熵——作为新 score 信号融入 `score()`。
+- **落点**：`compress/plan.rs::score()` 新增信号项（对齐现有 sumw/state/region 结构）。
+- **预期**：对未见模式（无 query 命中的信息密集行）召回提升，鲁棒性↑。
+- **门禁**：语义增强基准（semantic on/off × 熵信号 on/off）对比无退化。
+
+### P17-D 自动锚发现（降配置、提召回）
+- **机制**：query 词子串/词形变体（复用 semantic stem_expand）/跨行共现链 → 自动生成 evidence，无需手写 `--evidence`。
+- **落点**：`args` 侧 `--auto-anchor 1` + `plan.rs` 种子识别；与 P13-B 短语命中协同。
+- **预期**：证据召回↑，配置负担↓。
+- **门禁**：evidence 探针矩阵（显式 evidence 行为不变，自动锚仅加不减）。
+
+### P17-E 证据簇密度加权（已有 boost window → 强化）
+- **机制**：多证据行聚集处（同一错误栈/同一段日志）整簇加权——boost 已有窗口传播，新增**簇检测**（连续/近邻证据行的聚集评分）。
+- **预期**：保留完整上下文块，round-trip 质量↑。
+- **门禁**：round-trip 保真断言（保留行全在原文，簇内行逐字一致）。
+
+### P17-F 反馈闭环调权（已有 memory/feedback.rs → 强化）
+- **现状**：`memory/feedback.rs` 已有 rate good/bad 记录机制。
+- **强化**：rate 数据驱动 **Weights 表自动微调**（确定性在线学习：按反馈统计调整 score 权重/semantic 权重，固定迭代=固定结果，可复现可审计）。
+- **预期**：越用越准；记忆库召回门（p50<5ms）不回退。
+- **门禁**：反馈样本 → 权重变化断言（确定性）；既有 rate 行为兼容。
+
+### P18 整合评测 + 压缩率专项验收（收尾）
+- semantic on/off × fold/trim/熵/锚/簇/反馈 全组合在 eval-manifest 冻结集评测。
+- **压缩率专项**：与 SuperCompress 官方 mean cut 64.1% 同预算（35% kept）对照基线（标注口径：官方自报 vs scx 冻结实测）；目标：同预算下 cut ≥ 官方口径，fidelity 不回退。
+- 版本 bump 0.10.0 → 0.11.0；check_bench.sh 扩展全部新段；文档/README/SKILL 同步。
+
+### 铁律（全计划）
+- 零第三方 crate / 零模型 / 确定性 / golden 零漂移：不可破。
+- 所有新增能力**默认关闭**（显式 flag 开启），默认路径与 v0.10.0 逐字节一致。
+- 每阶段门禁不过不进下一阶段：`cargo test --all-features` 407+ / clippy 0 / fmt / golden / eval-manifest / A2 fidelity。
