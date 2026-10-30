@@ -62,6 +62,21 @@ PY
 step "A2 保真断言（fidelity_thresholds 分档）"
 /tmp/scx-eval/bin/python tools/check_fidelity.py || fail "A2 fidelity"
 
+step "新开关冒烟（P1/P0 新增 flag：budget/fold/auto-anchor/cluster）"
+cargo build --release --locked >/dev/null 2>&1 || fail "smoke build"
+B=target/release/scx
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+printf 'task start\n  log: build err=42 retry timeout\n  log: build ok step 2\n  log: flush cache err=7\n  a=1 b=2\n  summary: done\n' > "$T/in.txt"
+"$B" --version | grep -q "0.11.0" || fail "smoke version"
+for FLAG in "--budget 0.5" "--fold 1" "--auto-anchor 1" "--cluster 1" "--budget 0.35 --cluster 1"; do
+  # shellcheck disable=SC2086
+  "$B" "$T/in.txt" --query "build timeout" $FLAG --json > "$T/out.json" 2>/dev/null || fail "smoke $FLAG rc"
+  grep -q "compressed: kept=" "$T/out.json" || fail "smoke $FLAG stats"
+  "$B" "$T/in.txt" --query "build timeout" $FLAG --json > "$T/out2.json" 2>/dev/null
+  cmp -s "$T/out.json" "$T/out2.json" || fail "smoke $FLAG nondeterministic"
+done
+[ "$FAIL" = "0" ] && echo "  OK: 四新开关冒烟全过（rc + stats + 双跑确定性）"
+
 if [ "$FAIL" = "0" ]; then
   echo; echo "check_bench: 全部通过 ✓"
 else
