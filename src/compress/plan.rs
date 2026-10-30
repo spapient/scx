@@ -1104,14 +1104,34 @@ pub(crate) fn scores(
     force: &[bool],
     tbl: &Weights,
 ) -> Vec<f64> {
-    // 逐行打分工作量小（约 20-30ms/30MB），并行线程开销大于收益，保持串行。
+    // 逐行打分纯只读（lines/hits/sumw/err/force/tbl 共享读，scores 分块写不重叠）。
+    // ≥ PAR_MIN 行分 6 线程（与 masks/tally 同模板、同阈值）；小输入保持串行零开销。
+    // 并行与串行逐字节一致：每行独立计算、无全局状态、无排序依赖。
     let total = lines.len();
     let mut scores = vec![0.0f64; total];
-    for i in 0..total {
-        if dup[i] {
-            continue;
+    let n_t = if total >= PAR_MIN { 6 } else { 1 };
+    let chunk = total.div_ceil(n_t);
+    if n_t > 1 {
+        let parts = split_parts(&mut scores, chunk);
+        std::thread::scope(|s| {
+            for (k, part) in parts.into_iter().enumerate() {
+                let base = k * chunk;
+                s.spawn(move || {
+                    for (j, slot) in part.iter_mut().enumerate() {
+                        let i = base + j;
+                        if !dup[i] {
+                            *slot = score(lines, hits, sumw, err, force, i, tbl);
+                        }
+                    }
+                });
+            }
+        });
+    } else {
+        for i in 0..total {
+            if !dup[i] {
+                scores[i] = score(lines, hits, sumw, err, force, i, tbl);
+            }
         }
-        scores[i] = score(lines, hits, sumw, err, force, i, tbl);
     }
     scores
 }
