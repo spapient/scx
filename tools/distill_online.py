@@ -75,68 +75,96 @@ def call_teacher(t: dict, prompt: str, max_new: int = 1500) -> str:
     raise RuntimeError(f"{t['name']}: unreachable")
 
 
-def teacher_prompt(cname: str, query: str, lines: list[str]) -> str:
-    """带行号的文档 + query，请教师输出保留行号 JSON。"""
-    body = "\n".join(f"{i + 1}| {ln}" for i, ln in enumerate(lines))
+CHUNK = 150  # 分块标注：每块行数（避免教师输出被 max_tokens 截断）
+
+
+def teacher_prompt(cname: str, query: str, lines: list[str], base: int) -> str:
+    """带全局行号的文本块 + query，请教师输出保留行号数组（严格格式）。"""
+    body = "\n".join(f"{base + i + 1}| {ln}" for i, ln in enumerate(lines))
     return (
-        f"你是上下文治理专家。以下是一份 {cname} 语料文本（每行带行号）。"
-        f"场景：在压缩后仍需回答用户问题「{query}」。\n"
-        "请判断每一行：若该行对回答「{query}」或维持文本语义结构是必要的，保留；否则可删除。\n"
-        "输出纯 JSON 数组（不要任何其他文字）：需要保留的行号列表，例如 [1,3,7]。\n"
-        f"文本如下：\n{body}"
+        f"你是上下文治理专家。这是 {cname} 语料的一部分（每行带全局行号）。"
+        f"场景：压缩后仍需回答「{query}」。\n"
+        "对每一行判断：对回答该问题或维持语义结构必要则保留，否则删除。\n"
+        "只输出保留行号的纯数字 JSON 数组，例如 [1,5,9]。禁止输出对象、解释或逐行分析。\n"
+        f"文本：\n{body}"
     )
 
 
 def parse_rows(text: str, n: int) -> list[int] | None:
-    """从教师输出提取行号 JSON 数组（容忍 markdown 围栏/前后噪声）。"""
-    m = re.search(r"\[[\d,\s]+\]", text)
+    """从教师输出提取保留行号（容忍 markdown 围栏/对象数组/前后噪声）。
+    兼容两种形态：[1,3,7] 与 [{"line":1,...},{"line":3,...}]。"""
+    m = re.search(r"\[[\s\S]*\]", text)
     if not m:
         return None
     try:
-        rows = json.loads(m.group(0))
+        arr = json.loads(m.group(0))
     except Exception:
         return None
-    if not isinstance(rows, list) or not rows:
+    if not isinstance(arr, list) or not arr:
         return None
     out = []
-    for r in rows:
-        if isinstance(r, (int, float)):
-            v = int(r)
-            if 1 <= v <= n and v not in out:
-                out.append(v)
+    for it in arr:
+        if isinstance(it, (int, float)):
+            v = int(it)
+        elif isinstance(it, dict) and isinstance(it.get("line"), (int, float)):
+            v = int(it["line"])
+        else:
+            continue
+        if 1 <= v <= n and v not in out:
+            out.append(v)
     return out or None
 
 
+def label_chunk(cname: str, query: str, lines: list[str], base: int,
+                t: dict, log: list[dict]) -> set[int]:
+    """单教师单块标注（独立调用，供并行）。失败回退全保留（保守）。"""
+    for attempt in (1, 2):
+        try:
+            raw = call_teacher(t, teacher_prompt(cname, query, lines, base))
+            rows = parse_rows(raw, base + len(lines))
+            if rows is not None:
+                log.append({"teacher": t["name"], "corpus": cname, "chunk": base // CHUNK,
+                            "ok": len(rows), "rows": ",".join(map(str, rows))})
+                return set(rows)
+        except Exception as e:
+            raw = f"ERROR: {e}"
+        if attempt == 2:
+            log.append({"teacher": t["name"], "corpus": cname, "chunk": base // CHUNK,
+                        "ok": 0, "rows": "ERROR"})
+    return set(range(base + 1, base + len(lines) + 1))
+
+
+CACHE = ROOT / "config" / "bench" / "results" / "distill_cache.json"
+
+
 def label_corpus(cname: str, query: str, text: str) -> tuple[list[int], list[dict]]:
-    """双教师交叉标注：两模型一致保留 = 保留。返回保留行号集 + 标注日志。"""
+    """分块 + 双教师并行标注（带缓存）；并集（任一教师认为必要即保留）。"""
     lines = text.splitlines()
     n = len(lines)
-    keep_sets: dict[str, set[int]] = {}
-    log = []
+    cache: dict = {}
+    if CACHE.exists():
+        cache = json.loads(CACHE.read_text(encoding="utf-8"))
+    if cname in cache:
+        keep = [int(x) for x in cache[cname]]
+        print(f"[{cname}] {n} 行: 命中缓存 {len(keep)} 行")
+        return keep, [{"teacher": "cache", "corpus": cname, "chunk": -1, "ok": len(keep), "rows": ""}]
+    log: list[dict] = []
+    keep_sets = {t["name"]: set() for t in TEACHERS}
+    chunks = [lines[i:i + CHUNK] for i in range(0, n, CHUNK)]
+    from concurrent.futures import ThreadPoolExecutor
     for t in TEACHERS:
-        for attempt in (1, 2):
-            try:
-                raw = call_teacher(t, teacher_prompt(cname, query, lines))
-                rows = parse_rows(raw, n)
-                break
-            except Exception as e:
-                raw = f"ERROR: {e}"
-                rows = None
-                if attempt == 2:
-                    log.append({"teacher": t["name"], "corpus": cname, "ok": 0, "rows": "ERROR"})
-        if rows is None:
-            # 标注失败：回退全保留（保守，不丢行），记日志。
-            keep_sets[t["name"]] = set(range(1, n + 1))
-            log.append({"teacher": t["name"], "corpus": cname, "ok": 0, "rows": "fallback-all"})
-        else:
-            keep_sets[t["name"]] = set(rows)
-            log.append({"teacher": t["name"], "corpus": cname, "ok": len(rows), "rows": ",".join(map(str, rows))})
-        time.sleep(0.3)
-    inter = set.intersection(*keep_sets.values())
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            futs = [ex.submit(label_chunk, cname, query, ch, i * CHUNK, t, log)
+                    for i, ch in enumerate(chunks) if ch]
+        for f in futs:
+            keep_sets[t["name"]] |= f.result()
     union = set.union(*keep_sets.values())
     print(f"[{cname}] {n} 行: deepseek={len(keep_sets['deepseek'])} "
-          f"qwen={len(keep_sets['qwen'])} 交集={len(inter)} 并集={len(union)}")
-    return sorted(inter), log
+          f"qwen={len(keep_sets['qwen'])} 并集={len(union)}")
+    cache[cname] = sorted(union)
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    CACHE.write_text(json.dumps(cache), encoding="utf-8")
+    return sorted(union), log
 
 
 # ---- 18 维特征复刻（与 src/semantic.rs feats 逐维一致） ----
@@ -250,8 +278,13 @@ def fit(X: list[list[float]], y: list[int], lr: float = 0.05, epochs: int = 150,
     return w
 
 
-def encode(ws: list[float]) -> bytes:
-    return b"".join(struct.pack(">d", w) for w in ws)
+def encode(ws: list[float], feats: list[str] | None = None) -> bytes:
+    """scx-sem-2 校验编码：weights 每 f64 大端 8 字节 || 每个特征名 + '\n'。"""
+    b = b"".join(struct.pack(">d", w) for w in ws)
+    if feats:
+        for f in feats:
+            b += f.encode("utf-8") + b"\n"
+    return b
 
 
 def main() -> int:
@@ -287,7 +320,7 @@ def main() -> int:
         "schema": "scx-sem-2",
         "features": FEATURES,
         "weights": ws,
-        "sha256": hashlib.sha256(encode(ws)).hexdigest(),
+        "sha256": hashlib.sha256(encode(ws, FEATURES)).hexdigest(),
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -296,7 +329,7 @@ def main() -> int:
     # 标注日志
     with open(ROOT / "config" / "bench" / "results" / "distill_labels.csv", "w",
               encoding="utf-8", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=["teacher", "corpus", "ok", "rows", "n", "keep"])
+        w = csv.DictWriter(fh, fieldnames=["teacher", "corpus", "chunk", "ok", "rows", "n", "keep"])
         w.writeheader()
         w.writerows(labels)
     print("标注日志写入 config/bench/results/distill_labels.csv")
