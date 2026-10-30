@@ -1193,7 +1193,9 @@ pub(crate) fn entropy_signal(cfg: &Config, lines: &[&str], dup: &[bool], scores:
         return;
     }
     for (i, line) in lines.iter().enumerate() {
-        if dup[i] {
+        if dup[i] || line.bytes().any(|b| b.is_ascii_digit()) {
+            // 数字保真绝对优先：含数字行不参与熵竞争（消融评测证明熵加分
+            // 会整体挤掉数字证据行，log 档 num_cov 0.74→0.67）。
             continue;
         }
         scores[i] += ent_bonus(line);
@@ -1224,8 +1226,10 @@ fn ent_bonus(line: &str) -> f64 {
     let h_norm = (h / 7.0).min(1.0);
     // 重复率：出现过 ≥2 次的字符占比（重复越多信息量越低）。
     let reps = cnt.iter().filter(|&&c| c > 1).count() as f64 / 128.0;
-    // 与 heading_bonus(1.0) 同量级，保守取 0.5 上限。
-    h_norm * (1.0 - 0.5 * reps) * 0.5
+    // 平局决胜权重（0.01 上限）：熵信号只打破同分带内的次序，绝不翻转由
+    // query 命中/数字/结构锚主导的保留排序。消融评测证明更高量级会在
+    // log 档挤出数字证据行（num_cov 0.74→0.67）——保真优先铁律。
+    h_norm * (1.0 - 0.5 * reps) * 0.01
 }
 
 #[cfg(test)]
@@ -1333,6 +1337,23 @@ mod tests {
         cfg.entropy = true;
         entropy_signal(&cfg, &lines, &dup, &mut sc);
         assert!(sc.iter().all(|v| *v > 1.0), "开启后非 dup 行加分: {sc:?}");
+    }
+
+    #[test]
+    fn entropy_skips_digit_lines() {
+        // 数字保真绝对优先：含数字行不参与熵竞争（消融评测证据：
+        // 熵加分整体挤掉数字证据行，log 档 num_cov 0.74→0.67）。
+        let lines = ["alpha beta", "took 42ms id=7", "alpha beta"];
+        let dup = [false, false, false];
+        let cfg = crate::Config {
+            entropy: true,
+            ..crate::Config::default()
+        };
+        let mut sc = vec![1.0f64; 3];
+        entropy_signal(&cfg, &lines, &dup, &mut sc);
+        assert_eq!(sc[0], sc[2], "相同文本行公平加分");
+        assert!(sc[0] > 1.0);
+        assert_eq!(sc[1], 1.0, "含数字行不加分（保真锚不被挤出）");
     }
 
     #[test]
