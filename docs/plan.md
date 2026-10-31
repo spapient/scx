@@ -2603,3 +2603,10 @@ eval-manifest 冻结（sha256+rows，check_bench 校验）。
 - check_bench.sh 全绿：lib 397 + semantic 418 + golden 重新冻结（memory_eval 增
   layer_cd/channels 行；memory_stats 补 P1–P3 tier/life/kind/conflicts 行；日期快照随
   当天刷新）+ clippy 0 + fmt + eval-manifest（+3 frozen）+ A2 fidelity + 四 flag 冒烟。
+
+## P17 完成记录（2026-10-31，版本 0.11.0）——截断对手基线 + 证据保留率审计
+
+- 资产已在早前轮次落地（commit 9490340：docs/containcmp.md 同场对照 + docs/contain5-compare.json 逐片明细 + plan 事项 2），本轮完成**冻结与复现闭环**：
+- 复现：`tools/scx.py contain config/contain5.corpus.json --binary target/release/scx --ratio 0.35 --context 1 --seed contain-rand-v1` 用当前二进制逐位复现全部聚合数字（scx 70/70=100%、头截断 0/70=0%、随机 8/70=11.43%、char 82.01%、token 79.93%），随机种子逐片可重放。
+- 冻结：明细副本入 `config/bench/results/bench_p17_contain5.json`，eval-manifest +frozen（sha256+rows）+present（min_rows=20）；check_bench.sh 全绿。
+- 口径：证据保留率 = ground-truth 证据行（contain5 语料 25 slice × 70 条 evidence）在压缩输出中的整行存活占比；对手基线按**同 kept 字节预算**构造（trunc_budget_chars 逐片对齐 scx 实际输出），截断=保留尾部 N 行、随机=固定种子逐行抽样。

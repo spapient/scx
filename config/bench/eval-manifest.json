@@ -286,6 +286,11 @@
       "sha256": "971a1a3eaa3da33cee47b9bafffbedc263894109a60be1d31ae8c18783a4d584",
       "bytes": 1385,
       "rows": 11
+    },
+    "bench_p17_contain5.json": {
+      "sha256": "7852eeb9796d7607cf7233201d573f776f0d23961d70145782c17a7a08b5672e",
+      "bytes": 26041,
+      "rows": 1181
     }
   },
   "present": [
@@ -384,6 +389,10 @@
     {
       "file": "bench_p18_channels_real.txt",
       "min_rows": 8
+    },
+    {
+      "file": "bench_p17_contain5.json",
+      "min_rows": 20
     }
   ]
 }
