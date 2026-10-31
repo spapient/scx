@@ -11,6 +11,7 @@
 mod annotate;
 mod cache;
 mod classify;
+mod conflict;
 mod edge;
 mod eval;
 mod feedback;

@@ -166,7 +166,7 @@ fn block(df: &[(String, usize)]) -> Vec<String> {
     out
 }
 
-/// `--stats` 盘点：case/桶/状态/分层/fix 覆盖率/质量/磁盘占用。
+/// `--stats` 盘点：case/桶/状态/分层/fix 覆盖率/质量/冲突/磁盘占用。
 pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
     let meta = crate::memory::meta::load(root)?;
     let ids = store::list(root)?;
@@ -175,7 +175,8 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
         sample(root, id, &mut t)?;
     }
     let n = ids.len();
-    let mut lines = Vec::with_capacity(7);
+    let conflicts = conflict_count(root);
+    let mut lines = Vec::with_capacity(8);
     lines.push(format!("stats: cases={} gen={}", n, meta.gen));
     lines.push(format!("  bucket: {}", join(&t.buckets)));
     lines.push(format!("  status: {}", join(&t.statuses)));
@@ -201,8 +202,16 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
             t.quality_sum / n as f64
         }
     ));
+    lines.push(format!("  conflicts: {}", conflicts));
     lines.push(format!("  disk: {:.1} KiB", t.disk as f64 / 1024.0));
     Ok(lines)
+}
+
+/// 冲突仲裁记录数（conflicts.log 非空行）。
+fn conflict_count(root: &str) -> usize {
+    std::fs::read_to_string(std::path::Path::new(root).join(crate::memory::conflict::CONFLICT_LOG))
+        .map(|b| b.lines().filter(|l| !l.trim().is_empty()).count())
+        .unwrap_or(0)
 }
 
 /// 逐 case 累计的盘点聚合（避免 sample 参数膨胀）。

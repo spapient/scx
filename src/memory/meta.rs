@@ -105,6 +105,11 @@ pub(crate) const DEFAULT_PARAMS: &[(&str, f64)] = &[
     ("tier_l2_good", 3.0),
     ("tier_prior_l2", 0.05),
     ("tier_prior_l1", 0.02),
+    // 冲突仲裁（P2）：
+    // conflict_sim  —— 近重复判定阈值：minhash 加权 Jaccard ≥ 该值即触发仲裁。
+    // conflict_max  —— 单次写入的比较候选上限（同桶候选过多时取前 N，防写入 O(n)）。
+    ("conflict_sim", 0.8),
+    ("conflict_max", 512.0),
     ("l1_adapt_min", 0.30),
     ("l1_adapt_max", 0.90),
     ("l1_adapt_min_history", 4.0),

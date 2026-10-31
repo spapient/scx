@@ -2454,3 +2454,29 @@ P13 定稿(0.11.0 目标)
   rate×3 L2 且 tier_at 非空）。CLI 实测：无证据 store 停 L0、rate 写回正常、
   `--stats` 输出分层行。
 - **提交**：见 git log（全中文，未 push）。版本 0.11.0 保持。
+
+### P2 完成记录（2026-10-31）
+
+- **冲突仲裁落地**：新增 `src/memory/conflict.rs`。写入新 case 落盘前（ingest.rs
+  insert 内 `store::save` 之前）执行 `detect → arbitrate`：
+  - 近重复检测：index 快照同桶候选优先 + 不足补全库 + 截断 `conflict_max`（512）；
+    加权 Jaccard `minhash::scores`，`sim ≥ conflict_sim(0.8)` 才构成冲突；
+    空文本/阈值归零直接跳过（CLI 无文本 store 不触发）。
+  - 裁决：证据数（`evidence.len()`）更多者胜 → quality 更高者胜 → 先到先得
+    （已存在 case 胜）；**不删除任何数据**，胜败双方 `related` 双向互链。
+  - `Case` 新增 `related: Vec<String>`（encode 在 tier_at 后、decode 缺键兼容空）。
+  - 互链写盘：库内一侧经 `attach` 加锁读改写（幂等去重），新 case 一侧内存 push
+    随自身写入落盘——避免 insert 持锁期对未落盘 case 二次加锁（曾触发 WouldBlock
+    自锁，已修复并纳入单测）。
+  - 冲突日志：每次仲裁 append 一行 `index/conflicts.log`（TSV 8 列：
+    stamp/winner/loser/w_ev/l_ev/w_q/l_q/sim，`lock::atomic` 原子追加）。
+- **可观测**：`--stats` 新增 `conflicts: <非空行数>` 行（读 conflicts.log）。
+- **参数**：meta DEFAULT_PARAMS 新增 `conflict_sim=0.8`、`conflict_max=512.0`。
+- **门禁**：`cargo test --locked --features memory --lib` = **383 passed**（新增
+  3 测试：近重复检出阈值、端到端双向互链 + log 落盘 + 仲裁幂等、旧 case 缺
+  related 键兼容回读）；clippy（--all-targets）0 警告（Row 聚合 log 参数、
+  candidates 拆 take/take_str 降认知复杂度）；fmt 干净。
+- **CLI 实测**：连续两次近重复文本 store（不同 query）→ 两 case `related` 双向
+  互链、conflicts.log 一行（winner=先到先得方）、`--stats` 显示 `conflicts: 1`。
+- **提交**：见 git log（全中文，未 push）。版本 0.11.0 保持。P3 Revise/Retire 与
+  P4 RRF+类型见上文升级计划。

@@ -246,6 +246,10 @@ fn insert(fields: Payload<'_>, fp: &str) -> std::io::Result<String> {
     // 分层：新 case 默认 L0；evidence+fix 完整则直接晋升 L1（候选层）。
     let meta = crate::memory::meta::load(root)?;
     crate::memory::tier::promote(&meta, &mut c, 0);
+    // 冲突仲裁（P2）：写入前 minhash 近重复检测（sim ≥ conflict_sim），
+    // 命中则按证据/质量裁决并双向互链 related，不删除数据。
+    let peers = crate::memory::conflict::detect(root, &meta, &c)?;
+    crate::memory::conflict::arbitrate(root, &mut c, &peers)?;
     store::save(root, &c)?;
     store::bump(root)?;
     remember(root, fp, &id)?;

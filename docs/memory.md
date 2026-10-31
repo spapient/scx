@@ -213,6 +213,14 @@ cargo run --release --locked --example bench -- memory
   写入/补录/反馈三接入点；召回按 tier 先验加权（`tier_prior_l2/l1`，L0 不加，
   兜底展示不直答）。postings.bin 编码新增单字节 tier（POST_VER 3→4，旧缓存
   自动作废重建）；`--stats` 新增 `tier: l0=l1=l2=` 分布行。
+- **冲突仲裁（P2，#70，2026-10-31）**：新增 `conflict.rs`，写入新 case 落盘前做
+  minhash 近重复检测（加权 Jaccard，同桶候选优先、上限 `conflict_max=512`，
+  `sim ≥ conflict_sim=0.8` 触发仲裁）。裁决：证据更全者胜 → quality 更高者胜 →
+  先到先得（已存在 case 胜）；**不删除数据**，双方 `related` 双向互链
+  （`Case.related` 新增字段，旧 case 缺键兼容为空；库内一侧加锁落盘，新 case 一侧
+  内存 push 随写入落盘，避免对未落盘 case 重复加锁）；每次仲裁 append 一行
+  `index/conflicts.log`（TSV 8 列：stamp/winner/loser/w_ev/l_ev/w_q/l_q/sim，
+  原子追加，确定性无时钟源）。`--stats` 新增 `conflicts=` 计数行（读 log 行数）。
 
 ## L1 直答评测协议（fix 覆盖率 / 命中率口径）
 
