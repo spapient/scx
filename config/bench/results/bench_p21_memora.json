@@ -1,0 +1,1714 @@
+{
+ "schema": "scx-bench-p21-memora-v1",
+ "benchmark": {
+  "name": "Memora",
+  "paper": "From Recall to Forgetting: Benchmarking Long-Term Memory for Personalized Agents",
+  "arxiv": "2604.20006",
+  "venue": "ACL 2026 Findings",
+  "repo": "https://github.com/geniesinc/Memora",
+  "commit": "a6493188efc836d6511ed5e4163fe3ba87da30ff",
+  "commit_date": "2026-06-03",
+  "metric_protocol": "FAMA = max(0, MPA - lambda*(1-FAA)); lambda = N_forget/(N_presence+N_forget); bucket FAMA = mean(per-question FAMA)*100"
+ },
+ "scx": {
+  "version": "0.11.0",
+  "binary": "/Users/fei/code/scx/target/release/scx",
+  "repo_head": "b507343b6372186a640f04cf433b8935e7b8135c"
+ },
+ "generated_at": "2026-10-31T23:19:20+0800",
+ "seed": 21,
+ "commands": {
+  "ingest": "python tools/bench_p21_memora/run_p21.py ingest",
+  "eval": "python tools/bench_p21_memora/run_p21.py eval",
+  "report": "python tools/bench_p21_memora/run_p21.py report"
+ },
+ "inventory": {
+  "weekly": {
+   "questions": 150,
+   "sub_questions": 735
+  },
+  "monthly": {
+   "questions": 150,
+   "sub_questions": 1315
+  },
+  "quarterly": {
+   "questions": 300,
+   "sub_questions": 4365
+  },
+  "all": {
+   "questions": 600,
+   "sub_questions": 6415
+  }
+ },
+ "config": {
+  "recall_k": 20,
+  "temperature": 0.0,
+  "answer_model": "deepseek-flash",
+  "judge_model": "deepseek-chat",
+  "reasoning": false,
+  "answer_max_tokens": 500,
+  "judge_max_tokens": 400,
+  "sample_frac": 1.0,
+  "sample_scope": "full",
+  "judge": "single deepseek-chat 别名→V4.1-Flash 无推理 (official: 3-judge majority via OpenRouter: gpt-4.1 / claude-haiku-4.5 / gemini-2.5-flash)",
+  "answer_model_note": "official Track 2: gpt-4o-mini, temperature 0.7; ours deepseek-flash, temp 0"
+ },
+ "governance_audit": {
+  "nogov": {
+   "actions": {
+    "nogov_append": 1897,
+    "store": 6711,
+    "skipped": 7414,
+    "nogov_keep_active": 1966
+   },
+   "cases": 16488,
+   "sessions": 27614
+  },
+  "gov": {
+   "actions": {
+    "store": 7434,
+    "skipped": 8199,
+    "gov_revise": 1140,
+    "gov_retire": 2084,
+    "revise_miss": 209,
+    "retire_miss": 94,
+    "gov_retire_old_switch": 753
+   },
+   "cases": 13329,
+   "sessions": 27614
+  }
+ },
+ "ingest": {
+  "branches": {
+   "nogov": {
+    "weekly__academic_researcher": {
+     "sessions": 158,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=102 gen=102\n  bucket: network=1 other=101\n  status: open=102\n  tier: l0=94 l1=8 l2=0\n  life: active=102 revised=0 retired=0\n  kind: situation=102\n  fix: 102/102 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 184.8 KiB",
+      "cases": 102,
+      "tier": "tier: l0=94 l1=8 l2=0",
+      "life": "life: active=102 revised=0 retired=0",
+      "kind": "kind: situation=102",
+      "conflicts": "conflicts: 0",
+      "events": 102,
+      "active_keys": 75
+     }
+    },
+    "weekly__business_executive": {
+     "sessions": 145,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=93 gen=93\n  bucket: build=1 other=92\n  status: open=93\n  tier: l0=76 l1=17 l2=0\n  life: active=93 revised=0 retired=0\n  kind: situation=93\n  fix: 93/93 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 192.1 KiB",
+      "cases": 93,
+      "tier": "tier: l0=76 l1=17 l2=0",
+      "life": "life: active=93 revised=0 retired=0",
+      "kind": "kind: situation=93",
+      "conflicts": "conflicts: 0",
+      "events": 93,
+      "active_keys": 65
+     }
+    },
+    "weekly__content_writer": {
+     "sessions": 151,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=102 gen=102\n  bucket: network=1 other=101\n  status: open=102\n  tier: l0=95 l1=7 l2=0\n  life: active=102 revised=0 retired=0\n  kind: situation=102\n  fix: 102/102 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 176.5 KiB",
+      "cases": 102,
+      "tier": "tier: l0=95 l1=7 l2=0",
+      "life": "life: active=102 revised=0 retired=0",
+      "kind": "kind: situation=102",
+      "conflicts": "conflicts: 0",
+      "events": 102,
+      "active_keys": 70
+     }
+    },
+    "weekly__creative_designer": {
+     "sessions": 147,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=103 gen=103\n  bucket: other=103\n  status: open=103\n  tier: l0=93 l1=10 l2=0\n  life: active=103 revised=0 retired=0\n  kind: situation=103\n  fix: 103/103 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 180.2 KiB",
+      "cases": 103,
+      "tier": "tier: l0=93 l1=10 l2=0",
+      "life": "life: active=103 revised=0 retired=0",
+      "kind": "kind: situation=103",
+      "conflicts": "conflicts: 0",
+      "events": 103,
+      "active_keys": 71
+     }
+    },
+    "weekly__financial_analyst": {
+     "sessions": 156,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=101 gen=101\n  bucket: disk=1 network=3 other=97\n  status: open=101\n  tier: l0=89 l1=12 l2=0\n  life: active=101 revised=0 retired=0\n  kind: situation=101\n  fix: 101/101 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 180.8 KiB",
+      "cases": 101,
+      "tier": "tier: l0=89 l1=12 l2=0",
+      "life": "life: active=101 revised=0 retired=0",
+      "kind": "kind: situation=101",
+      "conflicts": "conflicts: 0",
+      "events": 101,
+      "active_keys": 73
+     }
+    },
+    "weekly__management_consultant": {
+     "sessions": 157,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=109 gen=109\n  bucket: other=109\n  status: open=109\n  tier: l0=96 l1=13 l2=0\n  life: active=109 revised=0 retired=0\n  kind: situation=109\n  fix: 109/109 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 205.7 KiB",
+      "cases": 109,
+      "tier": "tier: l0=96 l1=13 l2=0",
+      "life": "life: active=109 revised=0 retired=0",
+      "kind": "kind: situation=109",
+      "conflicts": "conflicts: 0",
+      "events": 109,
+      "active_keys": 76
+     }
+    },
+    "weekly__marketing_manager": {
+     "sessions": 156,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=103 gen=103\n  bucket: other=103\n  status: open=103\n  tier: l0=93 l1=10 l2=0\n  life: active=103 revised=0 retired=0\n  kind: situation=103\n  fix: 103/103 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 185.1 KiB",
+      "cases": 103,
+      "tier": "tier: l0=93 l1=10 l2=0",
+      "life": "life: active=103 revised=0 retired=0",
+      "kind": "kind: situation=103",
+      "conflicts": "conflicts: 0",
+      "events": 103,
+      "active_keys": 75
+     }
+    },
+    "weekly__sales_manager": {
+     "sessions": 163,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=105 gen=105\n  bucket: network=4 other=101\n  status: open=105\n  tier: l0=95 l1=10 l2=0\n  life: active=105 revised=0 retired=0\n  kind: situation=105\n  fix: 105/105 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 187.1 KiB",
+      "cases": 105,
+      "tier": "tier: l0=95 l1=10 l2=0",
+      "life": "life: active=105 revised=0 retired=0",
+      "kind": "kind: situation=105",
+      "conflicts": "conflicts: 0",
+      "events": 105,
+      "active_keys": 69
+     }
+    },
+    "weekly__software_engineer": {
+     "sessions": 163,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=110 gen=110\n  bucket: db=4 network=2 other=103 runtime=1\n  status: open=110\n  tier: l0=98 l1=12 l2=0\n  life: active=110 revised=0 retired=0\n  kind: situation=110\n  fix: 110/110 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 194.7 KiB",
+      "cases": 110,
+      "tier": "tier: l0=98 l1=12 l2=0",
+      "life": "life: active=110 revised=0 retired=0",
+      "kind": "kind: situation=110",
+      "conflicts": "conflicts: 0",
+      "events": 110,
+      "active_keys": 77
+     }
+    },
+    "weekly__startup_founder": {
+     "sessions": 155,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=104 gen=104\n  bucket: other=104\n  status: open=104\n  tier: l0=94 l1=10 l2=0\n  life: active=104 revised=0 retired=0\n  kind: situation=104\n  fix: 104/104 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 190.5 KiB",
+      "cases": 104,
+      "tier": "tier: l0=94 l1=10 l2=0",
+      "life": "life: active=104 revised=0 retired=0",
+      "kind": "kind: situation=104",
+      "conflicts": "conflicts: 0",
+      "events": 104,
+      "active_keys": 75
+     }
+    },
+    "monthly__academic_researcher": {
+     "sessions": 619,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=371 gen=371\n  bucket: disk=8 network=22 other=341\n  status: open=371\n  tier: l0=307 l1=64 l2=0\n  life: active=371 revised=0 retired=0\n  kind: situation=371\n  fix: 371/371 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 832.3 KiB",
+      "cases": 371,
+      "tier": "tier: l0=307 l1=64 l2=0",
+      "life": "life: active=371 revised=0 retired=0",
+      "kind": "kind: situation=371",
+      "conflicts": "conflicts: 0",
+      "events": 371,
+      "active_keys": 213
+     }
+    },
+    "monthly__business_executive": {
+     "sessions": 601,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=380 gen=380\n  bucket: build=2 disk=15 network=15 other=348\n  status: open=380\n  tier: l0=313 l1=67 l2=0\n  life: active=380 revised=0 retired=0\n  kind: situation=380\n  fix: 380/380 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 807.2 KiB",
+      "cases": 380,
+      "tier": "tier: l0=313 l1=67 l2=0",
+      "life": "life: active=380 revised=0 retired=0",
+      "kind": "kind: situation=380",
+      "conflicts": "conflicts: 0",
+      "events": 380,
+      "active_keys": 226
+     }
+    },
+    "monthly__content_writer": {
+     "sessions": 628,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=376 gen=376\n  bucket: other=376\n  status: open=376\n  tier: l0=333 l1=43 l2=0\n  life: active=376 revised=0 retired=0\n  kind: situation=376\n  fix: 376/376 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 713.6 KiB",
+      "cases": 376,
+      "tier": "tier: l0=333 l1=43 l2=0",
+      "life": "life: active=376 revised=0 retired=0",
+      "kind": "kind: situation=376",
+      "conflicts": "conflicts: 0",
+      "events": 376,
+      "active_keys": 228
+     }
+    },
+    "monthly__creative_designer": {
+     "sessions": 614,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=378 gen=378\n  bucket: build=2 network=2 other=374\n  status: open=378\n  tier: l0=326 l1=52 l2=0\n  life: active=378 revised=0 retired=0\n  kind: situation=378\n  fix: 378/378 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 776.6 KiB",
+      "cases": 378,
+      "tier": "tier: l0=326 l1=52 l2=0",
+      "life": "life: active=378 revised=0 retired=0",
+      "kind": "kind: situation=378",
+      "conflicts": "conflicts: 0",
+      "events": 378,
+      "active_keys": 230
+     }
+    },
+    "monthly__financial_analyst": {
+     "sessions": 611,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=363 gen=363\n  bucket: network=5 other=358\n  status: open=363\n  tier: l0=307 l1=56 l2=0\n  life: active=363 revised=0 retired=0\n  kind: situation=363\n  fix: 363/363 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 738.0 KiB",
+      "cases": 363,
+      "tier": "tier: l0=307 l1=56 l2=0",
+      "life": "life: active=363 revised=0 retired=0",
+      "kind": "kind: situation=363",
+      "conflicts": "conflicts: 0",
+      "events": 363,
+      "active_keys": 218
+     }
+    },
+    "monthly__management_consultant": {
+     "sessions": 604,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=373 gen=373\n  bucket: disk=2 network=21 other=350\n  status: open=373\n  tier: l0=313 l1=60 l2=0\n  life: active=373 revised=0 retired=0\n  kind: situation=373\n  fix: 373/373 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 786.7 KiB",
+      "cases": 373,
+      "tier": "tier: l0=313 l1=60 l2=0",
+      "life": "life: active=373 revised=0 retired=0",
+      "kind": "kind: situation=373",
+      "conflicts": "conflicts: 0",
+      "events": 373,
+      "active_keys": 227
+     }
+    },
+    "monthly__marketing_manager": {
+     "sessions": 604,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=366 gen=366\n  bucket: build=10 disk=6 other=350\n  status: open=366\n  tier: l0=305 l1=61 l2=0\n  life: active=366 revised=0 retired=0\n  kind: situation=366\n  fix: 366/366 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 777.7 KiB",
+      "cases": 366,
+      "tier": "tier: l0=305 l1=61 l2=0",
+      "life": "life: active=366 revised=0 retired=0",
+      "kind": "kind: situation=366",
+      "conflicts": "conflicts: 0",
+      "events": 366,
+      "active_keys": 218
+     }
+    },
+    "monthly__sales_manager": {
+     "sessions": 635,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=389 gen=389\n  bucket: build=11 db=3 network=3 other=372\n  status: open=389\n  tier: l0=335 l1=54 l2=0\n  life: active=389 revised=0 retired=0\n  kind: situation=389\n  fix: 389/389 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 784.0 KiB",
+      "cases": 389,
+      "tier": "tier: l0=335 l1=54 l2=0",
+      "life": "life: active=389 revised=0 retired=0",
+      "kind": "kind: situation=389",
+      "conflicts": "conflicts: 0",
+      "events": 389,
+      "active_keys": 224
+     }
+    },
+    "monthly__software_engineer": {
+     "sessions": 628,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=382 gen=382\n  bucket: build=14 db=24 disk=8 network=13 other=320 runtime=3\n  status: open=382\n  tier: l0=329 l1=53 l2=0\n  life: active=382 revised=0 retired=0\n  kind: situation=382\n  fix: 382/382 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 759.1 KiB",
+      "cases": 382,
+      "tier": "tier: l0=329 l1=53 l2=0",
+      "life": "life: active=382 revised=0 retired=0",
+      "kind": "kind: situation=382",
+      "conflicts": "conflicts: 0",
+      "events": 382,
+      "active_keys": 224
+     }
+    },
+    "monthly__startup_founder": {
+     "sessions": 606,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=364 gen=364\n  bucket: build=6 network=6 other=352\n  status: open=364\n  tier: l0=313 l1=51 l2=0\n  life: active=364 revised=0 retired=0\n  kind: situation=364\n  fix: 364/364 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 754.3 KiB",
+      "cases": 364,
+      "tier": "tier: l0=313 l1=51 l2=0",
+      "life": "life: active=364 revised=0 retired=0",
+      "kind": "kind: situation=364",
+      "conflicts": "conflicts: 0",
+      "events": 364,
+      "active_keys": 212
+     }
+    },
+    "quarterly__academic_researcher": {
+     "sessions": 2005,
+     "actions": {
+      "nogov_append": 9,
+      "store": 22,
+      "skipped": 43,
+      "nogov_keep_active": 6
+     },
+     "stats": {
+      "raw": "stats: cases=1177 gen=1178\n  bucket: build=11 db=3 network=38 other=1125\n  status: open=1177\n  tier: l0=1053 l1=124 l2=0\n  life: active=1177 revised=0 retired=0\n  kind: situation=1177\n  fix: 1177/1177 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2238.0 KiB",
+      "cases": 1177,
+      "tier": "tier: l0=1053 l1=124 l2=0",
+      "life": "life: active=1177 revised=0 retired=0",
+      "kind": "kind: situation=1177",
+      "conflicts": "conflicts: 0",
+      "events": 1177,
+      "active_keys": 657
+     }
+    },
+    "quarterly__business_executive": {
+     "sessions": 2000,
+     "actions": {
+      "store": 744,
+      "skipped": 814,
+      "nogov_append": 225,
+      "nogov_keep_active": 217
+     },
+     "stats": {
+      "raw": "stats: cases=1186 gen=1186\n  bucket: build=16 disk=10 network=44 other=1116\n  status: open=1186\n  tier: l0=1055 l1=131 l2=0\n  life: active=1186 revised=0 retired=0\n  kind: situation=1186\n  fix: 1186/1186 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2203.4 KiB",
+      "cases": 1186,
+      "tier": "tier: l0=1055 l1=131 l2=0",
+      "life": "life: active=1186 revised=0 retired=0",
+      "kind": "kind: situation=1186",
+      "conflicts": "conflicts: 0",
+      "events": 1186,
+      "active_keys": 650
+     }
+    },
+    "quarterly__content_writer": {
+     "sessions": 1997,
+     "actions": {
+      "store": 743,
+      "skipped": 836,
+      "nogov_append": 210,
+      "nogov_keep_active": 208
+     },
+     "stats": {
+      "raw": "stats: cases=1161 gen=1161\n  bucket: build=9 disk=1 network=12 other=1139\n  status: open=1161\n  tier: l0=1059 l1=102 l2=0\n  life: active=1161 revised=0 retired=0\n  kind: situation=1161\n  fix: 1161/1161 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 1990.1 KiB",
+      "cases": 1161,
+      "tier": "tier: l0=1059 l1=102 l2=0",
+      "life": "life: active=1161 revised=0 retired=0",
+      "kind": "kind: situation=1161",
+      "conflicts": "conflicts: 0",
+      "events": 1161,
+      "active_keys": 632
+     }
+    },
+    "quarterly__creative_designer": {
+     "sessions": 1991,
+     "actions": {
+      "store": 755,
+      "skipped": 822,
+      "nogov_keep_active": 211,
+      "nogov_append": 203
+     },
+     "stats": {
+      "raw": "stats: cases=1169 gen=1169\n  bucket: build=2 network=18 other=1149\n  status: open=1169\n  tier: l0=1060 l1=109 l2=0\n  life: active=1169 revised=0 retired=0\n  kind: situation=1169\n  fix: 1169/1169 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2063.7 KiB",
+      "cases": 1169,
+      "tier": "tier: l0=1060 l1=109 l2=0",
+      "life": "life: active=1169 revised=0 retired=0",
+      "kind": "kind: situation=1169",
+      "conflicts": "conflicts: 0",
+      "events": 1169,
+      "active_keys": 643
+     }
+    },
+    "quarterly__financial_analyst": {
+     "sessions": 2001,
+     "actions": {
+      "store": 750,
+      "skipped": 813,
+      "nogov_keep_active": 214,
+      "nogov_append": 224
+     },
+     "stats": {
+      "raw": "stats: cases=1188 gen=1188\n  bucket: build=9 disk=1 network=11 other=1166 runtime=1\n  status: open=1188\n  tier: l0=1084 l1=104 l2=0\n  life: active=1188 revised=0 retired=0\n  kind: situation=1188\n  fix: 1188/1188 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2069.6 KiB",
+      "cases": 1188,
+      "tier": "tier: l0=1084 l1=104 l2=0",
+      "life": "life: active=1188 revised=0 retired=0",
+      "kind": "kind: situation=1188",
+      "conflicts": "conflicts: 0",
+      "events": 1188,
+      "active_keys": 644
+     }
+    },
+    "quarterly__management_consultant": {
+     "sessions": 1982,
+     "actions": {
+      "store": 735,
+      "skipped": 824,
+      "nogov_keep_active": 212,
+      "nogov_append": 211
+     },
+     "stats": {
+      "raw": "stats: cases=1158 gen=1158\n  bucket: build=6 disk=5 network=32 other=1115\n  status: open=1158\n  tier: l0=1039 l1=119 l2=0\n  life: active=1158 revised=0 retired=0\n  kind: situation=1158\n  fix: 1158/1158 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2106.4 KiB",
+      "cases": 1158,
+      "tier": "tier: l0=1039 l1=119 l2=0",
+      "life": "life: active=1158 revised=0 retired=0",
+      "kind": "kind: situation=1158",
+      "conflicts": "conflicts: 0",
+      "events": 1158,
+      "active_keys": 641
+     }
+    },
+    "quarterly__marketing_manager": {
+     "sessions": 2011,
+     "actions": {
+      "store": 739,
+      "skipped": 827,
+      "nogov_append": 213,
+      "nogov_keep_active": 232
+     },
+     "stats": {
+      "raw": "stats: cases=1184 gen=1184\n  bucket: build=21 disk=14 network=17 other=1132\n  status: open=1184\n  tier: l0=1066 l1=118 l2=0\n  life: active=1184 revised=0 retired=0\n  kind: situation=1184\n  fix: 1184/1184 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2171.5 KiB",
+      "cases": 1184,
+      "tier": "tier: l0=1066 l1=118 l2=0",
+      "life": "life: active=1184 revised=0 retired=0",
+      "kind": "kind: situation=1184",
+      "conflicts": "conflicts: 0",
+      "events": 1184,
+      "active_keys": 638
+     }
+    },
+    "quarterly__sales_manager": {
+     "sessions": 1989,
+     "actions": {
+      "store": 753,
+      "skipped": 818,
+      "nogov_append": 197,
+      "nogov_keep_active": 221
+     },
+     "stats": {
+      "raw": "stats: cases=1171 gen=1171\n  bucket: build=3 db=6 network=12 other=1150\n  status: open=1171\n  tier: l0=1068 l1=103 l2=0\n  life: active=1171 revised=0 retired=0\n  kind: situation=1171\n  fix: 1171/1171 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2037.7 KiB",
+      "cases": 1171,
+      "tier": "tier: l0=1068 l1=103 l2=0",
+      "life": "life: active=1171 revised=0 retired=0",
+      "kind": "kind: situation=1171",
+      "conflicts": "conflicts: 0",
+      "events": 1171,
+      "active_keys": 667
+     }
+    },
+    "quarterly__software_engineer": {
+     "sessions": 1974,
+     "actions": {
+      "store": 758,
+      "nogov_keep_active": 226,
+      "skipped": 799,
+      "nogov_append": 191
+     },
+     "stats": {
+      "raw": "stats: cases=1175 gen=1175\n  bucket: build=20 db=48 disk=6 network=24 other=1077\n  status: open=1175\n  tier: l0=1060 l1=115 l2=0\n  life: active=1175 revised=0 retired=0\n  kind: situation=1175\n  fix: 1175/1175 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2108.3 KiB",
+      "cases": 1175,
+      "tier": "tier: l0=1060 l1=115 l2=0",
+      "life": "life: active=1175 revised=0 retired=0",
+      "kind": "kind: situation=1175",
+      "conflicts": "conflicts: 0",
+      "events": 1175,
+      "active_keys": 672
+     }
+    },
+    "quarterly__startup_founder": {
+     "sessions": 1963,
+     "actions": {
+      "store": 712,
+      "skipped": 818,
+      "nogov_append": 214,
+      "nogov_keep_active": 219
+     },
+     "stats": {
+      "raw": "stats: cases=1145 gen=1145\n  bucket: disk=7 network=16 other=1122\n  status: open=1145\n  tier: l0=1034 l1=111 l2=0\n  life: active=1145 revised=0 retired=0\n  kind: situation=1145\n  fix: 1145/1145 (100%)\n  quality: mean=0.00\n  conflicts: 0\n  disk: 2069.6 KiB",
+      "cases": 1145,
+      "tier": "tier: l0=1034 l1=111 l2=0",
+      "life": "life: active=1145 revised=0 retired=0",
+      "kind": "kind: situation=1145",
+      "conflicts": "conflicts: 0",
+      "events": 1145,
+      "active_keys": 624
+     }
+    }
+   },
+   "gov": {
+    "weekly__academic_researcher": {
+     "sessions": 158,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=82 gen=114\n  bucket: network=1 other=81\n  status: open=82\n  tier: l0=77 l1=5 l2=0\n  life: active=52 revised=6 retired=24\n  kind: situation=82\n  fix: 82/82 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 144.2 KiB",
+      "cases": 82,
+      "tier": "tier: l0=77 l1=5 l2=0",
+      "life": "life: active=52 revised=6 retired=24",
+      "kind": "kind: situation=82",
+      "conflicts": "conflicts: 1",
+      "events": 106,
+      "active_keys": 52
+     }
+    },
+    "weekly__business_executive": {
+     "sessions": 145,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=79 gen=114\n  bucket: build=1 other=78\n  status: open=79\n  tier: l0=65 l1=14 l2=0\n  life: active=49 revised=12 retired=18\n  kind: situation=79\n  fix: 79/79 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 167.2 KiB",
+      "cases": 79,
+      "tier": "tier: l0=65 l1=14 l2=0",
+      "life": "life: active=49 revised=12 retired=18",
+      "kind": "kind: situation=79",
+      "conflicts": "conflicts: 1",
+      "events": 97,
+      "active_keys": 49
+     }
+    },
+    "weekly__content_writer": {
+     "sessions": 151,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=84 gen=119\n  bucket: network=1 other=83\n  status: open=84\n  tier: l0=77 l1=7 l2=0\n  life: active=55 revised=11 retired=18\n  kind: situation=84\n  fix: 84/84 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 153.4 KiB",
+      "cases": 84,
+      "tier": "tier: l0=77 l1=7 l2=0",
+      "life": "life: active=55 revised=11 retired=18",
+      "kind": "kind: situation=84",
+      "conflicts": "conflicts: 1",
+      "events": 102,
+      "active_keys": 55
+     }
+    },
+    "weekly__creative_designer": {
+     "sessions": 147,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=81 gen=122\n  bucket: other=81\n  status: open=81\n  tier: l0=76 l1=5 l2=0\n  life: active=51 revised=5 retired=25\n  kind: situation=81\n  fix: 81/81 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 136.3 KiB",
+      "cases": 81,
+      "tier": "tier: l0=76 l1=5 l2=0",
+      "life": "life: active=51 revised=5 retired=25",
+      "kind": "kind: situation=81",
+      "conflicts": "conflicts: 1",
+      "events": 106,
+      "active_keys": 50
+     }
+    },
+    "weekly__financial_analyst": {
+     "sessions": 156,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=86 gen=120\n  bucket: disk=1 network=2 other=83\n  status: open=86\n  tier: l0=76 l1=10 l2=0\n  life: active=59 revised=7 retired=20\n  kind: situation=86\n  fix: 86/86 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 157.0 KiB",
+      "cases": 86,
+      "tier": "tier: l0=76 l1=10 l2=0",
+      "life": "life: active=59 revised=7 retired=20",
+      "kind": "kind: situation=86",
+      "conflicts": "conflicts: 1",
+      "events": 106,
+      "active_keys": 59
+     }
+    },
+    "weekly__management_consultant": {
+     "sessions": 157,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=88 gen=137\n  bucket: other=88\n  status: open=88\n  tier: l0=79 l1=9 l2=0\n  life: active=54 revised=10 retired=24\n  kind: situation=88\n  fix: 88/88 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 166.5 KiB",
+      "cases": 88,
+      "tier": "tier: l0=79 l1=9 l2=0",
+      "life": "life: active=54 revised=10 retired=24",
+      "kind": "kind: situation=88",
+      "conflicts": "conflicts: 1",
+      "events": 112,
+      "active_keys": 54
+     }
+    },
+    "weekly__marketing_manager": {
+     "sessions": 156,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=85 gen=124\n  bucket: other=85\n  status: open=85\n  tier: l0=78 l1=7 l2=0\n  life: active=56 revised=6 retired=23\n  kind: situation=85\n  fix: 85/85 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 153.7 KiB",
+      "cases": 85,
+      "tier": "tier: l0=78 l1=7 l2=0",
+      "life": "life: active=56 revised=6 retired=23",
+      "kind": "kind: situation=85",
+      "conflicts": "conflicts: 1",
+      "events": 108,
+      "active_keys": 56
+     }
+    },
+    "weekly__sales_manager": {
+     "sessions": 163,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=82 gen=120\n  bucket: network=3 other=79\n  status: open=82\n  tier: l0=74 l1=8 l2=0\n  life: active=47 revised=9 retired=26\n  kind: situation=82\n  fix: 82/82 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 151.7 KiB",
+      "cases": 82,
+      "tier": "tier: l0=74 l1=8 l2=0",
+      "life": "life: active=47 revised=9 retired=26",
+      "kind": "kind: situation=82",
+      "conflicts": "conflicts: 1",
+      "events": 108,
+      "active_keys": 47
+     }
+    },
+    "weekly__software_engineer": {
+     "sessions": 163,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=89 gen=130\n  bucket: db=3 network=1 other=84 runtime=1\n  status: open=89\n  tier: l0=80 l1=9 l2=0\n  life: active=58 revised=7 retired=24\n  kind: situation=89\n  fix: 89/89 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 160.5 KiB",
+      "cases": 89,
+      "tier": "tier: l0=80 l1=9 l2=0",
+      "life": "life: active=58 revised=7 retired=24",
+      "kind": "kind: situation=89",
+      "conflicts": "conflicts: 1",
+      "events": 113,
+      "active_keys": 58
+     }
+    },
+    "weekly__startup_founder": {
+     "sessions": 155,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=83 gen=126\n  bucket: other=83\n  status: open=83\n  tier: l0=76 l1=7 l2=0\n  life: active=52 revised=7 retired=24\n  kind: situation=83\n  fix: 83/83 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 151.4 KiB",
+      "cases": 83,
+      "tier": "tier: l0=76 l1=7 l2=0",
+      "life": "life: active=52 revised=7 retired=24",
+      "kind": "kind: situation=83",
+      "conflicts": "conflicts: 1",
+      "events": 107,
+      "active_keys": 52
+     }
+    },
+    "monthly__academic_researcher": {
+     "sessions": 619,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=295 gen=532\n  bucket: disk=6 network=17 other=272\n  status: open=295\n  tier: l0=245 l1=50 l2=0\n  life: active=168 revised=45 retired=82\n  kind: situation=295\n  fix: 295/295 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 687.1 KiB",
+      "cases": 295,
+      "tier": "tier: l0=245 l1=50 l2=0",
+      "life": "life: active=168 revised=45 retired=82",
+      "kind": "kind: situation=295",
+      "conflicts": "conflicts: 1",
+      "events": 377,
+      "active_keys": 166
+     }
+    },
+    "monthly__business_executive": {
+     "sessions": 601,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=299 gen=545\n  bucket: build=1 disk=9 network=11 other=278\n  status: open=299\n  tier: l0=249 l1=50 l2=0\n  life: active=181 revised=34 retired=84\n  kind: situation=299\n  fix: 299/299 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 656.3 KiB",
+      "cases": 299,
+      "tier": "tier: l0=249 l1=50 l2=0",
+      "life": "life: active=181 revised=34 retired=84",
+      "kind": "kind: situation=299",
+      "conflicts": "conflicts: 1",
+      "events": 383,
+      "active_keys": 179
+     }
+    },
+    "monthly__content_writer": {
+     "sessions": 628,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=303 gen=587\n  bucket: other=303\n  status: open=303\n  tier: l0=270 l1=33 l2=0\n  life: active=175 revised=35 retired=93\n  kind: situation=303\n  fix: 303/303 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 601.6 KiB",
+      "cases": 303,
+      "tier": "tier: l0=270 l1=33 l2=0",
+      "life": "life: active=175 revised=35 retired=93",
+      "kind": "kind: situation=303",
+      "conflicts": "conflicts: 1",
+      "events": 396,
+      "active_keys": 172
+     }
+    },
+    "monthly__creative_designer": {
+     "sessions": 614,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=293 gen=550\n  bucket: build=2 network=1 other=290\n  status: open=293\n  tier: l0=259 l1=34 l2=0\n  life: active=172 revised=33 retired=88\n  kind: situation=293\n  fix: 293/293 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 609.4 KiB",
+      "cases": 293,
+      "tier": "tier: l0=259 l1=34 l2=0",
+      "life": "life: active=172 revised=33 retired=88",
+      "kind": "kind: situation=293",
+      "conflicts": "conflicts: 1",
+      "events": 381,
+      "active_keys": 169
+     }
+    },
+    "monthly__financial_analyst": {
+     "sessions": 611,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=284 gen=546\n  bucket: network=4 other=280\n  status: open=284\n  tier: l0=242 l1=42 l2=0\n  life: active=174 revised=26 retired=84\n  kind: situation=284\n  fix: 284/284 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 602.8 KiB",
+      "cases": 284,
+      "tier": "tier: l0=242 l1=42 l2=0",
+      "life": "life: active=174 revised=26 retired=84",
+      "kind": "kind: situation=284",
+      "conflicts": "conflicts: 1",
+      "events": 368,
+      "active_keys": 171
+     }
+    },
+    "monthly__management_consultant": {
+     "sessions": 604,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=297 gen=566\n  bucket: disk=2 network=13 other=282\n  status: open=297\n  tier: l0=258 l1=39 l2=0\n  life: active=182 revised=31 retired=84\n  kind: situation=297\n  fix: 297/297 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 619.4 KiB",
+      "cases": 297,
+      "tier": "tier: l0=258 l1=39 l2=0",
+      "life": "life: active=182 revised=31 retired=84",
+      "kind": "kind: situation=297",
+      "conflicts": "conflicts: 1",
+      "events": 381,
+      "active_keys": 181
+     }
+    },
+    "monthly__marketing_manager": {
+     "sessions": 604,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=294 gen=530\n  bucket: build=6 disk=2 other=286\n  status: open=294\n  tier: l0=255 l1=39 l2=0\n  life: active=178 revised=35 retired=81\n  kind: situation=294\n  fix: 294/294 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 612.3 KiB",
+      "cases": 294,
+      "tier": "tier: l0=255 l1=39 l2=0",
+      "life": "life: active=178 revised=35 retired=81",
+      "kind": "kind: situation=294",
+      "conflicts": "conflicts: 1",
+      "events": 375,
+      "active_keys": 178
+     }
+    },
+    "monthly__sales_manager": {
+     "sessions": 635,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=304 gen=542\n  bucket: build=8 db=2 network=3 other=291\n  status: open=304\n  tier: l0=271 l1=33 l2=0\n  life: active=181 revised=34 retired=89\n  kind: situation=304\n  fix: 304/304 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 608.0 KiB",
+      "cases": 304,
+      "tier": "tier: l0=271 l1=33 l2=0",
+      "life": "life: active=181 revised=34 retired=89",
+      "kind": "kind: situation=304",
+      "conflicts": "conflicts: 1",
+      "events": 393,
+      "active_keys": 178
+     }
+    },
+    "monthly__software_engineer": {
+     "sessions": 628,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=298 gen=546\n  bucket: build=8 db=13 disk=7 network=10 other=259 runtime=1\n  status: open=298\n  tier: l0=263 l1=35 l2=0\n  life: active=169 revised=32 retired=97\n  kind: situation=298\n  fix: 298/298 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 600.9 KiB",
+      "cases": 298,
+      "tier": "tier: l0=263 l1=35 l2=0",
+      "life": "life: active=169 revised=32 retired=97",
+      "kind": "kind: situation=298",
+      "conflicts": "conflicts: 1",
+      "events": 395,
+      "active_keys": 168
+     }
+    },
+    "monthly__startup_founder": {
+     "sessions": 606,
+     "actions": {},
+     "stats": {
+      "raw": "stats: cases=287 gen=476\n  bucket: build=5 network=4 other=278\n  status: open=287\n  tier: l0=252 l1=35 l2=0\n  life: active=161 revised=43 retired=83\n  kind: situation=287\n  fix: 287/287 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 601.1 KiB",
+      "cases": 287,
+      "tier": "tier: l0=252 l1=35 l2=0",
+      "life": "life: active=161 revised=43 retired=83",
+      "kind": "kind: situation=287",
+      "conflicts": "conflicts: 1",
+      "events": 370,
+      "active_keys": 157
+     }
+    },
+    "quarterly__academic_researcher": {
+     "sessions": 2005,
+     "actions": {
+      "store": 745,
+      "skipped": 828,
+      "gov_revise": 120,
+      "gov_retire": 215,
+      "revise_miss": 21,
+      "retire_miss": 3,
+      "gov_retire_old_switch": 73
+     },
+     "stats": {
+      "raw": "stats: cases=959 gen=2417\n  bucket: build=8 db=2 network=29 other=920\n  status: open=959\n  tier: l0=860 l1=99 l2=0\n  life: active=551 revised=120 retired=288\n  kind: situation=959\n  fix: 959/959 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1940.4 KiB",
+      "cases": 959,
+      "tier": "tier: l0=860 l1=99 l2=0",
+      "life": "life: active=551 revised=120 retired=288",
+      "kind": "kind: situation=959",
+      "conflicts": "conflicts: 1",
+      "events": 1247,
+      "active_keys": 526
+     }
+    },
+    "quarterly__business_executive": {
+     "sessions": 2000,
+     "actions": {
+      "store": 744,
+      "skipped": 814,
+      "gov_revise": 123,
+      "gov_retire": 204,
+      "retire_miss": 13,
+      "revise_miss": 18,
+      "gov_retire_old_switch": 84
+     },
+     "stats": {
+      "raw": "stats: cases=969 gen=2274\n  bucket: build=12 disk=7 network=34 other=916\n  status: open=969\n  tier: l0=865 l1=104 l2=0\n  life: active=558 revised=123 retired=288\n  kind: situation=969\n  fix: 969/969 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1894.3 KiB",
+      "cases": 969,
+      "tier": "tier: l0=865 l1=104 l2=0",
+      "life": "life: active=558 revised=123 retired=288",
+      "kind": "kind: situation=969",
+      "conflicts": "conflicts: 1",
+      "events": 1257,
+      "active_keys": 530
+     }
+    },
+    "quarterly__content_writer": {
+     "sessions": 1997,
+     "actions": {
+      "store": 743,
+      "skipped": 836,
+      "gov_revise": 105,
+      "gov_retire": 202,
+      "gov_retire_old_switch": 84,
+      "revise_miss": 21,
+      "retire_miss": 6
+     },
+     "stats": {
+      "raw": "stats: cases=953 gen=2200\n  bucket: build=9 disk=1 network=11 other=932\n  status: open=953\n  tier: l0=868 l1=85 l2=0\n  life: active=562 revised=105 retired=286\n  kind: situation=953\n  fix: 953/953 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1749.4 KiB",
+      "cases": 953,
+      "tier": "tier: l0=868 l1=85 l2=0",
+      "life": "life: active=562 revised=105 retired=286",
+      "kind": "kind: situation=953",
+      "conflicts": "conflicts: 1",
+      "events": 1239,
+      "active_keys": 530
+     }
+    },
+    "quarterly__creative_designer": {
+     "sessions": 1991,
+     "actions": {
+      "store": 755,
+      "skipped": 822,
+      "gov_retire": 202,
+      "revise_miss": 25,
+      "gov_revise": 102,
+      "gov_retire_old_switch": 76,
+      "retire_miss": 9
+     },
+     "stats": {
+      "raw": "stats: cases=958 gen=2297\n  bucket: build=2 network=11 other=945\n  status: open=958\n  tier: l0=875 l1=83 l2=0\n  life: active=578 revised=102 retired=278\n  kind: situation=958\n  fix: 958/958 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1786.3 KiB",
+      "cases": 958,
+      "tier": "tier: l0=875 l1=83 l2=0",
+      "life": "life: active=578 revised=102 retired=278",
+      "kind": "kind: situation=958",
+      "conflicts": "conflicts: 1",
+      "events": 1236,
+      "active_keys": 549
+     }
+    },
+    "quarterly__financial_analyst": {
+     "sessions": 2001,
+     "actions": {
+      "store": 750,
+      "skipped": 813,
+      "gov_retire": 208,
+      "gov_revise": 132,
+      "revise_miss": 23,
+      "gov_retire_old_switch": 69,
+      "retire_miss": 6
+     },
+     "stats": {
+      "raw": "stats: cases=974 gen=2358\n  bucket: build=8 disk=1 network=9 other=955 runtime=1\n  status: open=974\n  tier: l0=895 l1=79 l2=0\n  life: active=565 revised=132 retired=277\n  kind: situation=974\n  fix: 974/974 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1786.8 KiB",
+      "cases": 974,
+      "tier": "tier: l0=895 l1=79 l2=0",
+      "life": "life: active=565 revised=132 retired=277",
+      "kind": "kind: situation=974",
+      "conflicts": "conflicts: 1",
+      "events": 1251,
+      "active_keys": 537
+     }
+    },
+    "quarterly__management_consultant": {
+     "sessions": 1982,
+     "actions": {
+      "store": 735,
+      "skipped": 824,
+      "gov_retire": 205,
+      "gov_retire_old_switch": 74,
+      "gov_revise": 116,
+      "revise_miss": 21,
+      "retire_miss": 7
+     },
+     "stats": {
+      "raw": "stats: cases=946 gen=2123\n  bucket: build=6 disk=5 network=20 other=915\n  status: open=946\n  tier: l0=855 l1=91 l2=0\n  life: active=551 revised=116 retired=279\n  kind: situation=946\n  fix: 946/946 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1802.5 KiB",
+      "cases": 946,
+      "tier": "tier: l0=855 l1=91 l2=0",
+      "life": "life: active=551 revised=116 retired=279",
+      "kind": "kind: situation=946",
+      "conflicts": "conflicts: 1",
+      "events": 1225,
+      "active_keys": 521
+     }
+    },
+    "quarterly__marketing_manager": {
+     "sessions": 2011,
+     "actions": {
+      "store": 739,
+      "skipped": 827,
+      "gov_revise": 118,
+      "gov_retire": 221,
+      "retire_miss": 11,
+      "revise_miss": 23,
+      "gov_retire_old_switch": 72
+     },
+     "stats": {
+      "raw": "stats: cases=952 gen=2363\n  bucket: build=14 disk=9 network=15 other=914\n  status: open=952\n  tier: l0=865 l1=87 l2=0\n  life: active=541 revised=118 retired=293\n  kind: situation=952\n  fix: 952/952 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1830.5 KiB",
+      "cases": 952,
+      "tier": "tier: l0=865 l1=87 l2=0",
+      "life": "life: active=541 revised=118 retired=293",
+      "kind": "kind: situation=952",
+      "conflicts": "conflicts: 1",
+      "events": 1245,
+      "active_keys": 518
+     }
+    },
+    "quarterly__sales_manager": {
+     "sessions": 1989,
+     "actions": {
+      "store": 753,
+      "skipped": 818,
+      "gov_revise": 99,
+      "gov_retire_old_switch": 77,
+      "gov_retire": 207,
+      "retire_miss": 14,
+      "revise_miss": 21
+     },
+     "stats": {
+      "raw": "stats: cases=950 gen=2164\n  bucket: build=3 db=3 network=10 other=934\n  status: open=950\n  tier: l0=875 l1=75 l2=0\n  life: active=567 revised=99 retired=284\n  kind: situation=950\n  fix: 950/950 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1732.4 KiB",
+      "cases": 950,
+      "tier": "tier: l0=875 l1=75 l2=0",
+      "life": "life: active=567 revised=99 retired=284",
+      "kind": "kind: situation=950",
+      "conflicts": "conflicts: 1",
+      "events": 1234,
+      "active_keys": 544
+     }
+    },
+    "quarterly__software_engineer": {
+     "sessions": 1974,
+     "actions": {
+      "store": 758,
+      "gov_retire": 215,
+      "skipped": 799,
+      "gov_revise": 101,
+      "revise_miss": 21,
+      "gov_retire_old_switch": 69,
+      "retire_miss": 11
+     },
+     "stats": {
+      "raw": "stats: cases=949 gen=2116\n  bucket: build=13 db=32 disk=5 network=17 other=882\n  status: open=949\n  tier: l0=866 l1=83 l2=0\n  life: active=564 revised=101 retired=284\n  kind: situation=949\n  fix: 949/949 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1772.8 KiB",
+      "cases": 949,
+      "tier": "tier: l0=866 l1=83 l2=0",
+      "life": "life: active=564 revised=101 retired=284",
+      "kind": "kind: situation=949",
+      "conflicts": "conflicts: 1",
+      "events": 1233,
+      "active_keys": 544
+     }
+    },
+    "quarterly__startup_founder": {
+     "sessions": 1963,
+     "actions": {
+      "store": 712,
+      "skipped": 818,
+      "gov_revise": 124,
+      "gov_retire": 205,
+      "retire_miss": 14,
+      "revise_miss": 15,
+      "gov_retire_old_switch": 75
+     },
+     "stats": {
+      "raw": "stats: cases=926 gen=2267\n  bucket: disk=6 network=9 other=911\n  status: open=926\n  tier: l0=849 l1=77 l2=0\n  life: active=522 revised=124 retired=280\n  kind: situation=926\n  fix: 926/926 (100%)\n  quality: mean=0.00\n  conflicts: 1\n  disk: 1742.6 KiB",
+      "cases": 926,
+      "tier": "tier: l0=849 l1=77 l2=0",
+      "life": "life: active=522 revised=124 retired=280",
+      "kind": "kind: situation=926",
+      "conflicts": "conflicts: 1",
+      "events": 1206,
+      "active_keys": 497
+     }
+    }
+   }
+  },
+  "sessions": 55228,
+  "skipped": 0
+ },
+ "results": {
+  "table": {
+   "nogov": {
+    "by_period_task": {
+     "weekly": {
+      "remembering": {
+       "questions": 44,
+       "memory_presence_total": 224,
+       "memory_presence_correct": 76,
+       "mpa": 0.3393,
+       "forgetting_absence_total": 141,
+       "forgetting_absence_correct": 101,
+       "faa": 0.7163,
+       "fama": 31.61,
+       "mean_penalty": 0.1344,
+       "mean_penalty_x100": 13.44
+      },
+      "reasoning": {
+       "questions": 40,
+       "memory_presence_total": 72,
+       "memory_presence_correct": 31,
+       "mpa": 0.4306,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 34.17,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "recommending": {
+       "questions": 41,
+       "memory_presence_total": 108,
+       "memory_presence_correct": 57,
+       "mpa": 0.5278,
+       "forgetting_absence_total": 84,
+       "forgetting_absence_correct": 50,
+       "faa": 0.5952,
+       "fama": 34.85,
+       "mean_penalty": 0.1966,
+       "mean_penalty_x100": 19.66
+      }
+     },
+     "monthly": {
+      "remembering": {
+       "questions": 50,
+       "memory_presence_total": 277,
+       "memory_presence_correct": 33,
+       "mpa": 0.1191,
+       "forgetting_absence_total": 483,
+       "forgetting_absence_correct": 353,
+       "faa": 0.7308,
+       "fama": 14.58,
+       "mean_penalty": 0.1335,
+       "mean_penalty_x100": 13.35
+      },
+      "reasoning": {
+       "questions": 50,
+       "memory_presence_total": 70,
+       "memory_presence_correct": 0,
+       "mpa": 0.0,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 0.0,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "recommending": {
+       "questions": 50,
+       "memory_presence_total": 187,
+       "memory_presence_correct": 82,
+       "mpa": 0.4385,
+       "forgetting_absence_total": 298,
+       "forgetting_absence_correct": 198,
+       "faa": 0.6644,
+       "fama": 27.89,
+       "mean_penalty": 0.2179,
+       "mean_penalty_x100": 21.79
+      }
+     },
+     "quarterly": {
+      "remembering": {
+       "questions": 100,
+       "memory_presence_total": 801,
+       "memory_presence_correct": 25,
+       "mpa": 0.0312,
+       "forgetting_absence_total": 906,
+       "forgetting_absence_correct": 827,
+       "faa": 0.9128,
+       "fama": 4.18,
+       "mean_penalty": 0.0286,
+       "mean_penalty_x100": 2.86
+      },
+      "reasoning": {
+       "questions": 100,
+       "memory_presence_total": 127,
+       "memory_presence_correct": 0,
+       "mpa": 0.0,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 0.0,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "recommending": {
+       "questions": 100,
+       "memory_presence_total": 1006,
+       "memory_presence_correct": 497,
+       "mpa": 0.494,
+       "forgetting_absence_total": 1525,
+       "forgetting_absence_correct": 1288,
+       "faa": 0.8446,
+       "fama": 39.17,
+       "mean_penalty": 0.1392,
+       "mean_penalty_x100": 13.92
+      }
+     }
+    },
+    "overall": {
+     "questions": 575,
+     "memory_presence_total": 2872,
+     "memory_presence_correct": 801,
+     "mpa": 0.2789,
+     "forgetting_absence_total": 3437,
+     "forgetting_absence_correct": 2817,
+     "faa": 0.8196,
+     "fama": 18.51,
+     "mean_penalty": 0.084,
+     "mean_penalty_x100": 8.4
+    }
+   },
+   "gov": {
+    "by_period_task": {
+     "weekly": {
+      "remembering": {
+       "questions": 50,
+       "memory_presence_total": 260,
+       "memory_presence_correct": 56,
+       "mpa": 0.2154,
+       "forgetting_absence_total": 150,
+       "forgetting_absence_correct": 149,
+       "faa": 0.9933,
+       "fama": 26.23,
+       "mean_penalty": 0.01,
+       "mean_penalty_x100": 1.0
+      },
+      "reasoning": {
+       "questions": 50,
+       "memory_presence_total": 90,
+       "memory_presence_correct": 46,
+       "mpa": 0.5111,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 41.33,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "recommending": {
+       "questions": 50,
+       "memory_presence_total": 129,
+       "memory_presence_correct": 87,
+       "mpa": 0.6744,
+       "forgetting_absence_total": 106,
+       "forgetting_absence_correct": 103,
+       "faa": 0.9717,
+       "fama": 69.27,
+       "mean_penalty": 0.0167,
+       "mean_penalty_x100": 1.67
+      }
+     },
+     "monthly": {
+      "remembering": {
+       "questions": 50,
+       "memory_presence_total": 277,
+       "memory_presence_correct": 39,
+       "mpa": 0.1408,
+       "forgetting_absence_total": 483,
+       "forgetting_absence_correct": 469,
+       "faa": 0.971,
+       "fama": 14.63,
+       "mean_penalty": 0.0567,
+       "mean_penalty_x100": 5.67
+      },
+      "reasoning": {
+       "questions": 50,
+       "memory_presence_total": 70,
+       "memory_presence_correct": 0,
+       "mpa": 0.0,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 0.0,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "recommending": {
+       "questions": 50,
+       "memory_presence_total": 187,
+       "memory_presence_correct": 114,
+       "mpa": 0.6096,
+       "forgetting_absence_total": 298,
+       "forgetting_absence_correct": 292,
+       "faa": 0.9799,
+       "fama": 59.93,
+       "mean_penalty": 0.0122,
+       "mean_penalty_x100": 1.22
+      }
+     },
+     "quarterly": {
+      "remembering": {
+       "questions": 100,
+       "memory_presence_total": 801,
+       "memory_presence_correct": 60,
+       "mpa": 0.0749,
+       "forgetting_absence_total": 906,
+       "forgetting_absence_correct": 891,
+       "faa": 0.9834,
+       "fama": 8.27,
+       "mean_penalty": 0.0142,
+       "mean_penalty_x100": 1.42
+      },
+      "reasoning": {
+       "questions": 100,
+       "memory_presence_total": 127,
+       "memory_presence_correct": 0,
+       "mpa": 0.0,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 0.0,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "recommending": {
+       "questions": 100,
+       "memory_presence_total": 1006,
+       "memory_presence_correct": 577,
+       "mpa": 0.5736,
+       "forgetting_absence_total": 1525,
+       "forgetting_absence_correct": 1457,
+       "faa": 0.9554,
+       "fama": 61.16,
+       "mean_penalty": 0.0232,
+       "mean_penalty_x100": 2.32
+      }
+     }
+    },
+    "overall": {
+     "questions": 600,
+     "memory_presence_total": 2947,
+     "memory_presence_correct": 979,
+     "mpa": 0.3322,
+     "forgetting_absence_total": 3468,
+     "forgetting_absence_correct": 3361,
+     "faa": 0.9691,
+     "fama": 29.19,
+     "mean_penalty": 0.0142,
+     "mean_penalty_x100": 1.42
+    }
+   }
+  },
+  "comparison": {
+   "by_period_task": {
+    "weekly": {
+     "remembering": {
+      "delta_fama": -5.38,
+      "delta_mpa": -0.1239,
+      "delta_faa": 0.277,
+      "delta_penalty": -0.1244,
+      "nogov": {
+       "questions": 44,
+       "memory_presence_total": 224,
+       "memory_presence_correct": 76,
+       "mpa": 0.3393,
+       "forgetting_absence_total": 141,
+       "forgetting_absence_correct": 101,
+       "faa": 0.7163,
+       "fama": 31.61,
+       "mean_penalty": 0.1344,
+       "mean_penalty_x100": 13.44
+      },
+      "gov": {
+       "questions": 50,
+       "memory_presence_total": 260,
+       "memory_presence_correct": 56,
+       "mpa": 0.2154,
+       "forgetting_absence_total": 150,
+       "forgetting_absence_correct": 149,
+       "faa": 0.9933,
+       "fama": 26.23,
+       "mean_penalty": 0.01,
+       "mean_penalty_x100": 1.0
+      }
+     },
+     "reasoning": {
+      "delta_fama": 7.16,
+      "delta_mpa": 0.0805,
+      "delta_faa": 0,
+      "delta_penalty": 0.0,
+      "nogov": {
+       "questions": 40,
+       "memory_presence_total": 72,
+       "memory_presence_correct": 31,
+       "mpa": 0.4306,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 34.17,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "gov": {
+       "questions": 50,
+       "memory_presence_total": 90,
+       "memory_presence_correct": 46,
+       "mpa": 0.5111,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 41.33,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      }
+     },
+     "recommending": {
+      "delta_fama": 34.42,
+      "delta_mpa": 0.1466,
+      "delta_faa": 0.3765,
+      "delta_penalty": -0.1799,
+      "nogov": {
+       "questions": 41,
+       "memory_presence_total": 108,
+       "memory_presence_correct": 57,
+       "mpa": 0.5278,
+       "forgetting_absence_total": 84,
+       "forgetting_absence_correct": 50,
+       "faa": 0.5952,
+       "fama": 34.85,
+       "mean_penalty": 0.1966,
+       "mean_penalty_x100": 19.66
+      },
+      "gov": {
+       "questions": 50,
+       "memory_presence_total": 129,
+       "memory_presence_correct": 87,
+       "mpa": 0.6744,
+       "forgetting_absence_total": 106,
+       "forgetting_absence_correct": 103,
+       "faa": 0.9717,
+       "fama": 69.27,
+       "mean_penalty": 0.0167,
+       "mean_penalty_x100": 1.67
+      }
+     }
+    },
+    "monthly": {
+     "remembering": {
+      "delta_fama": 0.05,
+      "delta_mpa": 0.0217,
+      "delta_faa": 0.2402,
+      "delta_penalty": -0.0768,
+      "nogov": {
+       "questions": 50,
+       "memory_presence_total": 277,
+       "memory_presence_correct": 33,
+       "mpa": 0.1191,
+       "forgetting_absence_total": 483,
+       "forgetting_absence_correct": 353,
+       "faa": 0.7308,
+       "fama": 14.58,
+       "mean_penalty": 0.1335,
+       "mean_penalty_x100": 13.35
+      },
+      "gov": {
+       "questions": 50,
+       "memory_presence_total": 277,
+       "memory_presence_correct": 39,
+       "mpa": 0.1408,
+       "forgetting_absence_total": 483,
+       "forgetting_absence_correct": 469,
+       "faa": 0.971,
+       "fama": 14.63,
+       "mean_penalty": 0.0567,
+       "mean_penalty_x100": 5.67
+      }
+     },
+     "reasoning": {
+      "delta_fama": 0.0,
+      "delta_mpa": 0,
+      "delta_faa": 0,
+      "delta_penalty": 0.0,
+      "nogov": {
+       "questions": 50,
+       "memory_presence_total": 70,
+       "memory_presence_correct": 0,
+       "mpa": 0.0,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 0.0,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "gov": {
+       "questions": 50,
+       "memory_presence_total": 70,
+       "memory_presence_correct": 0,
+       "mpa": 0.0,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 0.0,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      }
+     },
+     "recommending": {
+      "delta_fama": 32.04,
+      "delta_mpa": 0.1711,
+      "delta_faa": 0.3155,
+      "delta_penalty": -0.2057,
+      "nogov": {
+       "questions": 50,
+       "memory_presence_total": 187,
+       "memory_presence_correct": 82,
+       "mpa": 0.4385,
+       "forgetting_absence_total": 298,
+       "forgetting_absence_correct": 198,
+       "faa": 0.6644,
+       "fama": 27.89,
+       "mean_penalty": 0.2179,
+       "mean_penalty_x100": 21.79
+      },
+      "gov": {
+       "questions": 50,
+       "memory_presence_total": 187,
+       "memory_presence_correct": 114,
+       "mpa": 0.6096,
+       "forgetting_absence_total": 298,
+       "forgetting_absence_correct": 292,
+       "faa": 0.9799,
+       "fama": 59.93,
+       "mean_penalty": 0.0122,
+       "mean_penalty_x100": 1.22
+      }
+     }
+    },
+    "quarterly": {
+     "remembering": {
+      "delta_fama": 4.09,
+      "delta_mpa": 0.0437,
+      "delta_faa": 0.0706,
+      "delta_penalty": -0.0144,
+      "nogov": {
+       "questions": 100,
+       "memory_presence_total": 801,
+       "memory_presence_correct": 25,
+       "mpa": 0.0312,
+       "forgetting_absence_total": 906,
+       "forgetting_absence_correct": 827,
+       "faa": 0.9128,
+       "fama": 4.18,
+       "mean_penalty": 0.0286,
+       "mean_penalty_x100": 2.86
+      },
+      "gov": {
+       "questions": 100,
+       "memory_presence_total": 801,
+       "memory_presence_correct": 60,
+       "mpa": 0.0749,
+       "forgetting_absence_total": 906,
+       "forgetting_absence_correct": 891,
+       "faa": 0.9834,
+       "fama": 8.27,
+       "mean_penalty": 0.0142,
+       "mean_penalty_x100": 1.42
+      }
+     },
+     "reasoning": {
+      "delta_fama": 0.0,
+      "delta_mpa": 0,
+      "delta_faa": 0,
+      "delta_penalty": 0.0,
+      "nogov": {
+       "questions": 100,
+       "memory_presence_total": 127,
+       "memory_presence_correct": 0,
+       "mpa": 0.0,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 0.0,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      },
+      "gov": {
+       "questions": 100,
+       "memory_presence_total": 127,
+       "memory_presence_correct": 0,
+       "mpa": 0.0,
+       "forgetting_absence_total": 0,
+       "forgetting_absence_correct": 0,
+       "faa": null,
+       "fama": 0.0,
+       "mean_penalty": 0.0,
+       "mean_penalty_x100": 0.0
+      }
+     },
+     "recommending": {
+      "delta_fama": 21.99,
+      "delta_mpa": 0.0796,
+      "delta_faa": 0.1108,
+      "delta_penalty": -0.116,
+      "nogov": {
+       "questions": 100,
+       "memory_presence_total": 1006,
+       "memory_presence_correct": 497,
+       "mpa": 0.494,
+       "forgetting_absence_total": 1525,
+       "forgetting_absence_correct": 1288,
+       "faa": 0.8446,
+       "fama": 39.17,
+       "mean_penalty": 0.1392,
+       "mean_penalty_x100": 13.92
+      },
+      "gov": {
+       "questions": 100,
+       "memory_presence_total": 1006,
+       "memory_presence_correct": 577,
+       "mpa": 0.5736,
+       "forgetting_absence_total": 1525,
+       "forgetting_absence_correct": 1457,
+       "faa": 0.9554,
+       "fama": 61.16,
+       "mean_penalty": 0.0232,
+       "mean_penalty_x100": 2.32
+      }
+     }
+    }
+   },
+   "overall": {
+    "delta_fama": 10.68,
+    "delta_mpa": 0.0533,
+    "delta_faa": 0.1495,
+    "delta_penalty": -0.0698,
+    "nogov": {
+     "questions": 575,
+     "memory_presence_total": 2872,
+     "memory_presence_correct": 801,
+     "mpa": 0.2789,
+     "forgetting_absence_total": 3437,
+     "forgetting_absence_correct": 2817,
+     "faa": 0.8196,
+     "fama": 18.51,
+     "mean_penalty": 0.084,
+     "mean_penalty_x100": 8.4
+    },
+    "gov": {
+     "questions": 600,
+     "memory_presence_total": 2947,
+     "memory_presence_correct": 979,
+     "mpa": 0.3322,
+     "forgetting_absence_total": 3468,
+     "forgetting_absence_correct": 3361,
+     "faa": 0.9691,
+     "fama": 29.19,
+     "mean_penalty": 0.0142,
+     "mean_penalty_x100": 1.42
+    }
+   }
+  },
+  "reports": [
+   "/tmp/scx_bench_memora/results/nogov/monthly__academic_researcher.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__business_executive.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__content_writer.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__creative_designer.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__financial_analyst.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__management_consultant.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__marketing_manager.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__sales_manager.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__software_engineer.json",
+   "/tmp/scx_bench_memora/results/nogov/monthly__startup_founder.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__academic_researcher.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__business_executive.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__content_writer.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__creative_designer.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__financial_analyst.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__management_consultant.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__marketing_manager.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__sales_manager.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__software_engineer.json",
+   "/tmp/scx_bench_memora/results/nogov/quarterly__startup_founder.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__academic_researcher.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__business_executive.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__content_writer.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__creative_designer.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__financial_analyst.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__management_consultant.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__marketing_manager.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__sales_manager.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__software_engineer.json",
+   "/tmp/scx_bench_memora/results/nogov/weekly__startup_founder.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__academic_researcher.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__business_executive.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__content_writer.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__creative_designer.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__financial_analyst.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__management_consultant.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__marketing_manager.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__sales_manager.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__software_engineer.json",
+   "/tmp/scx_bench_memora/results/gov/monthly__startup_founder.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__academic_researcher.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__business_executive.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__content_writer.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__creative_designer.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__financial_analyst.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__management_consultant.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__marketing_manager.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__sales_manager.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__software_engineer.json",
+   "/tmp/scx_bench_memora/results/gov/quarterly__startup_founder.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__academic_researcher.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__business_executive.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__content_writer.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__creative_designer.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__financial_analyst.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__management_consultant.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__marketing_manager.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__sales_manager.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__software_engineer.json",
+   "/tmp/scx_bench_memora/results/gov/weekly__startup_founder.json"
+  ]
+ },
+ "llm": {
+  "calls": 13230,
+  "failures": 376,
+  "retries": 1650,
+  "prompt_tokens": 4640188,
+  "completion_tokens": 1222796,
+  "elapsed_s": 55981.08486676216
+ },
+ "conclusions": {
+  "headline": "gov − nogov: ΔFAMA=10.68 (points), ΔMPA=0.0533, ΔFAA=0.1495, Δmean_penalty=-0.0698.",
+  "governance_helps_forgetting": true,
+  "governance_hurts_presence": false,
+  "notes": [
+   "MPA 反映事实召回/作答覆盖；FAA 反映是否规避援引过时记忆；penalty=λ(1−FAA) 是 FAMA 中由过时记忆污染直接扣掉的部分。",
+   "两分支共用同一作答/裁判模型与同一问题集，Δ 仅来自记忆治理差异；绝对分数受模型/裁判口径影响，不与官方 Table 3 直接可比。"
+  ]
+ }
+}

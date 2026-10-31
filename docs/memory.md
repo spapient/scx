@@ -286,3 +286,12 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
   df/avgdl 口径不变；postings 编码新增单字节 life（POST_VER 4→5 自动重建）；
   `--stats` 新增 `life: active=revised=retired=` 分布行。门禁 387 passed /
   clippy 0 / fmt 干净，CLI 全链路实测通过。
+- **五官方基准冻结（P19–P23，#76，2026-10-31）**：KEEP-Bench（P19，压缩线
+  all_rec 29.47）、LongMemEval（P20，治理线知识更新子集 versioned 旧证据进
+  Top-K 89.74%→1.28%）、Memora（P21，600 题/6,415 子问题 gov−nogov ΔFAMA
+  =10.68）、Compact-Bench（P22，overall 0.747986）、AMA-Bench（P23，real
+  2,496 全量 scx acc 0.512 vs bm25 0.5076）——五冻结 JSON 全部入
+  eval-manifest（sha256+rows），适配器在 `tools/bench_p1X_*/`，评测脚本以
+  `deepseek-chat` 别名（=物理 DeepSeek-V4.1-Flash 无推理）为主 judge，
+  显式 flash/Pro 推理强制不可用于短 judge（实测）；curl `-d @临时文件`
+  修复 ARG_MAX 吞吐约 15×。门禁 397 passed / clippy 0 / fmt 干净。

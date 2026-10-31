@@ -183,6 +183,71 @@
       "bytes": 21429,
       "rows": 344
     },
+    "bench_p17_ablate.csv": {
+      "sha256": "ed6864121b99e9255a4e5a039d03b65f0e1004feece5c1d9fe56f691fe2dd60c",
+      "bytes": 1297,
+      "rows": 19
+    },
+    "bench_p17_contain5.json": {
+      "sha256": "7852eeb9796d7607cf7233201d573f776f0d23961d70145782c17a7a08b5672e",
+      "bytes": 26041,
+      "rows": 1181
+    },
+    "bench_p18_budget.csv": {
+      "sha256": "ca5e8a7fb132284a1051cbec95a5eb80b7d26cb7984ce21a5ffc545fddedbe31",
+      "bytes": 1279,
+      "rows": 14
+    },
+    "bench_p18_channels_gauge.txt": {
+      "sha256": "70c205e8cbb13104c57b3abbdd50c4aed59b3e8f48bf99926a90a0941d06d569",
+      "bytes": 1401,
+      "rows": 11
+    },
+    "bench_p18_channels_real.txt": {
+      "sha256": "971a1a3eaa3da33cee47b9bafffbedc263894109a60be1d31ae8c18783a4d584",
+      "bytes": 1385,
+      "rows": 11
+    },
+    "bench_p18_channels_v2.txt": {
+      "sha256": "5646bab15cf6252b587052007ae24a20015082416c541b392142d13b154f5e4f",
+      "bytes": 1381,
+      "rows": 11
+    },
+    "bench_p18_combo.csv": {
+      "sha256": "6c88202827778cae88cfc554b90e8bdc95a3985d0229a2173fd7828653158beb",
+      "bytes": 2181,
+      "rows": 31
+    },
+    "bench_p19_keepbench.json": {
+      "sha256": "c5253f79f6f3cc88ddd2bf7edfe46ae296eeba590ce995627b6e79187a054160",
+      "bytes": 10672,
+      "rows": 392
+    },
+    "bench_p20_longmemeval.json": {
+      "sha256": "c457d012c1df0cb27f2f8f6644dc5474b239126c9ea47563c6b196793b52ea61",
+      "bytes": 724802,
+      "rows": 15359
+    },
+    "bench_p21_memora.json": {
+      "sha256": "76f2f5897f03b05e54ff122beef24b22d2b4848372fb82b06dc64ef0557f40d2",
+      "bytes": 62182,
+      "rows": 1714
+    },
+    "bench_p22_compact.json": {
+      "sha256": "4d9a9fcabf74d5c22e61e6c4293e9830796a9a15d8a204e1eab120b15e356dc4",
+      "bytes": 2969,
+      "rows": 86
+    },
+    "bench_p22_compactbench.json": {
+      "sha256": "a1b68163e353ef9dc34e1c98d9e6b436c743573006dd065f56ed8eeaf4f51af4",
+      "bytes": 5172,
+      "rows": 81
+    },
+    "bench_p23_amabench.json": {
+      "sha256": "0327de3e8001dfa801353ffefcbfb932131c7e5a2294ee153c1b83c7f4c0df11",
+      "bytes": 40286,
+      "rows": 488
+    },
     "bench_qwen_n100.csv": {
       "sha256": "d467d10d0741e833ead6005bb1b5f9187de75a21b2c56c41892907164a5ebb10",
       "bytes": 3169,
@@ -212,6 +277,21 @@
       "sha256": "9d70f3c9342cf1d60614c248c93f09144028de21488bc20900b5c8d4d77746f2",
       "bytes": 44018,
       "rows": 688
+    },
+    "distill_cache.json": {
+      "sha256": "de7ab737f68c4c2a2866b2d34ea133972bdae37340e1d4c7c4982508df1fbbcf",
+      "bytes": 73909,
+      "rows": 1
+    },
+    "distill_labels.csv": {
+      "sha256": "51cb7e4160e94e4c1b691dafd904bdf93328f064bfa49393d7accff3aa47ded4",
+      "bytes": 844,
+      "rows": 18
+    },
+    "distill_log.csv": {
+      "sha256": "033134cb164d04647a54725fb1f771f01b3d5d4604c26b5dab5c56b9ea526213",
+      "bytes": 514,
+      "rows": 19
     },
     "p11_a_results.json": {
       "sha256": "9fcf7f0c6f106be14b5489a5d7b5853864b7007984aa205eef83d72bcab03aa6",
@@ -267,30 +347,6 @@
       "sha256": "73e89ef1a6b9846855d6a9f0da7acce7d4136bf2ad63b59a2803b8fc301daba5",
       "bytes": 1155,
       "rows": 52
-    },
-    "bench_p18_combo.csv": {
-      "sha256": "6c88202827778cae88cfc554b90e8bdc95a3985d0229a2173fd7828653158beb",
-      "rows": 31
-    },
-    "bench_p18_channels_gauge.txt": {
-      "sha256": "70c205e8cbb13104c57b3abbdd50c4aed59b3e8f48bf99926a90a0941d06d569",
-      "bytes": 1401,
-      "rows": 11
-    },
-    "bench_p18_channels_v2.txt": {
-      "sha256": "5646bab15cf6252b587052007ae24a20015082416c541b392142d13b154f5e4f",
-      "bytes": 1381,
-      "rows": 11
-    },
-    "bench_p18_channels_real.txt": {
-      "sha256": "971a1a3eaa3da33cee47b9bafffbedc263894109a60be1d31ae8c18783a4d584",
-      "bytes": 1385,
-      "rows": 11
-    },
-    "bench_p17_contain5.json": {
-      "sha256": "7852eeb9796d7607cf7233201d573f776f0d23961d70145782c17a7a08b5672e",
-      "bytes": 26041,
-      "rows": 1181
     }
   },
   "present": [

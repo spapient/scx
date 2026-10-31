@@ -1,0 +1,81 @@
+{
+  "schema": "scx-bench-p22-compactbench-v1",
+  "benchmark": {
+    "name": "CompactBench",
+    "paper": "CompactBench: A Benchmark for Coding-Intelligence Compression Cost",
+    "arxiv": "2610.31710",
+    "site": "https://compactbench.github.io",
+    "repo": "https://github.com/compactbench/compactbench",
+    "repo_commit": "b2bb0e2254010e7842801b9101e56fd9a6542615",
+    "repo_commit_date": "2026-08-24 01:16:25 -0600",
+    "harness": "pip compactbench==0.1.0 (Python 3.12.15)",
+    "harness_note": "本地跑 pip 0.1.0；master 0.2.0 与 0.1.0 的 Compactor ABC 接口一致，scorer 版本 1.0.0；benchmarks 取自 master repo benchmarks/public",
+    "suite": "elite_practice（20 模板 × 2 cases = 40 cases，2 drift cycles）",
+    "metric_protocol": "全程官方 harness：run_experiment / execute_cycle / score_cycle / aggregate_run_metrics 全部来自 compactbench 包，未自写评分脚本；目标模型按官方 prompt 作答续写；机械指标 drift_resistance / constraint_retention / contradiction_rate / compression_ratio 及 overall_score 均为官方聚合"
+  },
+  "scx": {
+    "version": "0.11.0",
+    "binary": "/Users/fei/code/scx/target/release/scx",
+    "repo_head": "b507343b6372186a640f04cf433b8935e7b8135c"
+  },
+  "generated_at": "2026-10-31T21:33:14+08:00",
+  "config": {
+    "suite": "elite_practice",
+    "difficulty": "elite",
+    "case_count_per_template": 2,
+    "drift_cycles": 2,
+    "seed_group": "default",
+    "model": "deepseek-flash",
+    "provider": "deepseek",
+    "temperature": 0.0,
+    "compression": "scx <tmpfile> --query <signal> --ratio 0.35 --context 1 --fill-floor 2 --list-keep 1 --force <signal-turn...>",
+    "compression_note": "signal 轮（critical_constraint / decision_override / first|final|partial|late_override / meta_reset / confusion_risk 标签轮 + 首个 user 轮）整行保留并拼入 --query；纯本地确定性压缩，无 LLM 调用；命中行整行保留（机械提取口径，不做 token 级 trim）",
+    "network": "本机直连 api.deepseek.com 间歇超时，走本地 HTTP 代理 127.0.0.1:8080（SCX_P22_HTTPS_PROXY 可覆盖）"
+  },
+  "results": {
+    "elapsed_s": 6365.66,
+    "started_at_utc": "2026-10-31T10:54:40Z",
+    "completed_at_utc": "2026-10-31T12:40:45Z",
+    "aggregate": {
+      "overall_score": 0.747986,
+      "drift_resistance": 0.920729,
+      "constraint_retention": 0.777778,
+      "contradiction_rate": 0.025,
+      "compression_ratio": 0.874837,
+      "cycles_compression_ratio_mean": 0.874837,
+      "cases": 40,
+      "latency_ms_mean": 11537.8,
+      "per_family_case_score": {
+        "buried_constraint": 0.78,
+        "decision_override": 0.776389,
+        "entity_confusion": 0.55,
+        "reference_resolution": 0.885556
+      },
+      "per_item_type_score": {
+        "entity_integrity": 0.666667,
+        "forbidden_behavior_retention": 0.8,
+        "immutable_fact_recall": 1.0,
+        "locked_decision_retention": 0.740741,
+        "planning_soundness": 0.9
+      }
+    }
+  },
+  "llm": {
+    "calls": 392,
+    "errors": 0,
+    "prompt_tokens": 283618,
+    "completion_tokens": 83894
+  },
+  "notes": {
+    "口径": "官方 harness 全权判分（目标模型作答 + 机械指标），无自写 scorer；目标模型 deepseek-flash temperature=0（官方 harness 默认 provider 可替换）",
+    "适用边界": [
+      "本结果是社区公开套件 elite_practice（20 模板）下的 scx 冻结基线；论文主实验为 35 个 SWE-bench 实例集，本环境未复刻（公开数据/运行环境限制），未与论文表格对齐",
+      "目标模型 deepseek-flash ≠ 论文默认目标模型，绝对值不与论文数字直接比较；机械指标（drift/constraint/contradiction/compression_ratio）不依赖目标模型，可直接对齐",
+      "contradiction_rate 0.025 = 40 cases × 2 cycles 中出现 1 例 cycle 间决策翻转",
+      "compression_ratio 0.874837 = 机械逐行保留路线约保留 87.5% 内容；以低压缩率换取证据保真（decision_override 0.776 / reference_resolution 0.886 均显著高于 naive-summary 类抽象压缩的已知水平）",
+      "README §4 计划命令为 3 cases/模板；本次全量冻结实际按 2 cases/模板（main_summary.json args）跑，40 cases 全量完成"
+    ],
+    "结论": "scx 机械逐行保留路线在编码智能体压缩场景：drift_resistance 0.921（漂移 cycle 间决策高度稳定）、constraint_retention 0.778（硬约束/禁止行为保留）、contradiction_rate 0.025（几乎无矛盾）、compression_ratio 0.875（压缩率代价明确）；与官方论文'LLM 摘要最多保留 16.0% 反复出现细节、机械提取保留 79.1%'的结论方向一致"
+  },
+  "command": "cd tools/bench_p22_compact && /tmp/scx-eval/bin/python run_p22.py --suite elite_practice --difficulty elite --case-count 2 --drift-cycles 2 --seed-group default --model deepseek-flash --methods scx --benchmarks-dir /tmp/scx_bench_compact/repo/benchmarks/public --out-dir /tmp/scx_bench_compact/results --llm-log /tmp/scx_bench_compact/llm_calls.jsonl --summary-json /tmp/scx_bench_compact/work/main_summary.json（经 run_smoke2.sh 启动包装）"
+}

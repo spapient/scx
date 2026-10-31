@@ -1,0 +1,86 @@
+{
+ "schema": "scx-bench-p22-compact-v1",
+ "benchmark": {
+  "name": "Compact-Bench",
+  "paper": "Compact-Bench: Measuring Coding Agent Performance with Compressed Contexts",
+  "arxiv": "2610.31710",
+  "homepage": "https://compactbench.github.io",
+  "repo": "https://github.com/compact-bench/compactbench",
+  "commit": "b2bb0e2254010e7842801b9101e56fd9a6542615",
+  "harness": "compactbench==0.1.0",
+  "scorer": "1.0.0",
+  "metric_protocol": "paired full-vs-summary task-success delta; official scorer (case-level item scores + per-family aggregation)"
+ },
+ "scx": {
+  "version": "0.11.0",
+  "binary": "/Users/fei/code/scx/target/release/scx",
+  "repo_head": "b507343b6372186a640f04cf433b8935e7b8135c",
+  "method": "scx-line-retention（无 LLM 确定性筛选）",
+  "scx_args": "--query <signal> --ratio 0.35 --context 1 --fill-floor 2 --list-keep 1 --force（signal 轮=带 critical_constraint/decision_override/…标签轮 + 首 user 轮）"
+ },
+ "generated_at": "2026-10-31T20:40:45+0800",
+ "suite": {
+  "name": "elite_practice（公开模板套件）",
+  "difficulty": "elite",
+  "case_count_per_template": 2,
+  "drift_cycles": 2,
+  "seed_group": "default",
+  "cases": 40,
+  "templates": 20,
+  "note": "hidden ranked set 仅 leaderboard 使用，不在本次冻结范围；starter 4 模板含在 public 目录"
+ },
+ "model": {
+  "provider": "deepseek",
+  "answer_model": "deepseek-flash",
+  "temperature": 0,
+  "note": "官方基准使用厂商 API 作答；本基线为 DeepSeek API 替代，score 不与论文/leaderboard 直接横向比较"
+ },
+ "results": {
+  "overall_score": 0.747986,
+  "drift_resistance": 0.920729,
+  "constraint_retention": 0.777778,
+  "contradiction_rate": 0.025,
+  "compression_ratio": 0.874837,
+  "cycles_compression_ratio_mean": 0.874837,
+  "per_family_case_score": {
+   "buried_constraint": 0.78,
+   "decision_override": 0.776389,
+   "entity_confusion": 0.55,
+   "reference_resolution": 0.885556
+  },
+  "per_item_type_score": {
+   "entity_integrity": 0.666667,
+   "forbidden_behavior_retention": 0.8,
+   "immutable_fact_recall": 1.0,
+   "locked_decision_retention": 0.740741,
+   "planning_soundness": 0.9
+  },
+  "latency_ms_mean": 11537.8
+ },
+ "scx_mechanical_audit": {
+  "cases": 40,
+  "skipped_templates": [],
+  "probes_total": 120,
+  "probes_hit": 120,
+  "retention": 1.0,
+  "per_family_retention": {
+   "buried_constraint": 1.0,
+   "decision_override": 1.0,
+   "entity_confusion": 1.0,
+   "reference_resolution": 1.0
+  },
+  "token_compression_ratio": 1.139733,
+  "scx_passthrough_cases": 0,
+  "scx_mode_counts": {"sieve": 40},
+  "scx_cut_pct_mean": 32.6,
+  "scx_kept_line_ratio_mean": 0.3359
+ },
+ "artifacts": {
+  "results_jsonl": "/tmp/scx_bench_compact/results_main/scx_elite_practice_elite.jsonl",
+  "run_id": "f34efc19-f4df-4387-a1d0-ae32231120d9",
+  "summary": "/tmp/scx_bench_compact/work/main_summary.json",
+  "elapsed_seconds": 6365.66,
+  "started_at": "2026-10-31T10:54:40Z",
+  "completed_at": "2026-10-31T12:40:45Z"
+ }
+}

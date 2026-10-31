@@ -1,0 +1,392 @@
+{
+  "schema": "scx-bench-result/v1",
+  "benchmark": "KEEP-Bench (arXiv:2610.26827)",
+  "generated_at": "2026-10-31T21:43:31+0800",
+  "scx": {
+    "binary": "/Users/fei/code/scx/target/release/scx",
+    "version": "scx 0.11.0",
+    "repo_head": "b507343b6372186a640f04cf433b8935e7b8135c",
+    "cli": "scx <tmpfile> --query <cleaned-question> --ratio 0.35 --context 0",
+    "scx_extra": []
+  },
+  "official": {
+    "repo": "https://github.com/PlusLabNLP/KEEP-Bench",
+    "commit": "119bdaad2a417df24c1a3f1ba02676b1126425de",
+    "hf_dataset": "uclanlp/KEEP-Bench",
+    "hf_snapshot": "91c37d5470f81ab7655b4893e7ba10536d5c952f",
+    "cases": 4102,
+    "judge_paper": "gpt-5.2 reasoning=high (官方；本适配器不可得，见 judge 口径)"
+  },
+  "run": {
+    "seed": 42,
+    "limit_per_subset": null,
+    "sampling": "full",
+    "workers": 4,
+    "df_max_frac": 0.25,
+    "compression_mode": "scx extractive line-level, context=0 needle mode, no line trim"
+  },
+  "judge": {
+    "model": "deepseek-flash",
+    "temperature": 0,
+    "max_tokens": 2048,
+    "concurrency": 4,
+    "max_retries": 5,
+    "protocol": "official prompts/routing/parsing reused from run_entailment_check.py; transport swapped to DeepSeek chat-completions",
+    "note": "官方 judge=gpt-5.2 high reasoning；本结果由 deepseek-flash 判定，与论文分数不可直接横向比较，仅作 scx 自身证据保留基线。"
+  },
+  "metrics": {
+    "setting": {
+      "parallel": {
+        "n": 900,
+        "para_rec": 89.0,
+        "all_rec": 22.88888888888889
+      },
+      "conditional": {
+        "n": 1364,
+        "cond_rec": 76.02639296187684,
+        "all_rec": 36.36363636363637
+      },
+      "science": {
+        "n": 1010,
+        "all_rec": 22.07920792079208
+      },
+      "policy": {
+        "n": 828,
+        "all_rec": 34.29951690821256
+      },
+      "overall": {
+        "n": 4102,
+        "all_rec": 29.473427596294492
+      }
+    },
+    "subset": {
+      "parallel_setting_two_hop": {
+        "n": 400,
+        "all_rec": 29.25
+      },
+      "parallel_setting_three_hop": {
+        "n": 300,
+        "all_rec": 18.333333333333332
+      },
+      "parallel_setting_four_hop": {
+        "n": 200,
+        "all_rec": 17.0
+      },
+      "conditional_setting_two_hop": {
+        "n": 604,
+        "all_rec": 41.05960264900662
+      },
+      "conditional_setting_three_hop": {
+        "n": 493,
+        "all_rec": 32.657200811359026
+      },
+      "conditional_setting_four_hop": {
+        "n": 267,
+        "all_rec": 32.58426966292135
+      },
+      "science_domain_three_perspectives": {
+        "n": 154,
+        "all_rec": 40.90909090909091
+      },
+      "science_domain_four_perspectives": {
+        "n": 856,
+        "all_rec": 18.69158878504673
+      },
+      "policy_domain": {
+        "n": 828,
+        "all_rec": 34.29951690821256
+      }
+    }
+  },
+  "reference_official_1x": [
+    {
+      "method": "EXIT",
+      "type": "extractive",
+      "pr": 41.9,
+      "pa": 3.0,
+      "cr": 25.1,
+      "ca": 4.5,
+      "sci": 10.5,
+      "pol": 7.6,
+      "all": 6.3
+    },
+    {
+      "method": "RECOMP (extractive)",
+      "type": "extractive",
+      "pr": 12.9,
+      "pa": 1.4,
+      "cr": 19.4,
+      "ca": 2.5,
+      "sci": 11.4,
+      "pol": 4.0,
+      "all": 4.8
+    },
+    {
+      "method": "BRIEF-Pro",
+      "type": "extractive",
+      "pr": 0.3,
+      "pa": 0.0,
+      "cr": 61.6,
+      "ca": 19.9,
+      "sci": 0.4,
+      "pol": 0.0,
+      "all": 6.7
+    },
+    {
+      "method": "RECOMP (abstractive)",
+      "type": "abstractive",
+      "pr": 0.0,
+      "pa": 0.0,
+      "cr": 5.6,
+      "ca": 1.4,
+      "sci": 0.2,
+      "pol": 0.0,
+      "all": 0.5
+    },
+    {
+      "method": "Qwen3-32B",
+      "type": "open-llm",
+      "pr": 58.9,
+      "pa": 42.1,
+      "cr": 58.6,
+      "ca": 44.6,
+      "sci": 31.3,
+      "pol": 40.5,
+      "all": 39.9
+    },
+    {
+      "method": "Gemma-4-31B-it",
+      "type": "open-llm (strongest open)",
+      "pr": 71.2,
+      "pa": 57.6,
+      "cr": 85.2,
+      "ca": 71.2,
+      "sci": 69.9,
+      "pol": 65.8,
+      "all": 66.8
+    },
+    {
+      "method": "Claude-Haiku-4.5",
+      "type": "closed-llm (strongest closed)",
+      "pr": 76.1,
+      "pa": 63.8,
+      "cr": 83.5,
+      "ca": 70.0,
+      "sci": 45.5,
+      "pol": 65.0,
+      "all": 61.6
+    }
+  ],
+  "compression": {
+    "per_subset": {
+      "parallel_setting_two_hop": {
+        "n": 400,
+        "orig_chars": 4564000,
+        "comp_chars": 1269799,
+        "char_ratio": 0.2782206397896582,
+        "kept_lines_mean": 9.73,
+        "compressed_cases": 400
+      },
+      "parallel_setting_three_hop": {
+        "n": 300,
+        "orig_chars": 3899150,
+        "comp_chars": 1449005,
+        "char_ratio": 0.37162073785312183,
+        "kept_lines_mean": 13.133333333333333,
+        "compressed_cases": 300
+      },
+      "parallel_setting_four_hop": {
+        "n": 200,
+        "orig_chars": 2755188,
+        "comp_chars": 1386119,
+        "char_ratio": 0.5030941627213823,
+        "kept_lines_mean": 17.16,
+        "compressed_cases": 200
+      },
+      "conditional_setting_two_hop": {
+        "n": 604,
+        "orig_chars": 6610303,
+        "comp_chars": 1772965,
+        "char_ratio": 0.2682123648492361,
+        "kept_lines_mean": 8.776490066225165,
+        "compressed_cases": 604
+      },
+      "conditional_setting_three_hop": {
+        "n": 493,
+        "orig_chars": 5779352,
+        "comp_chars": 2109238,
+        "char_ratio": 0.36496098524540466,
+        "kept_lines_mean": 11.466531440162273,
+        "compressed_cases": 493
+      },
+      "conditional_setting_four_hop": {
+        "n": 267,
+        "orig_chars": 3231697,
+        "comp_chars": 1605302,
+        "char_ratio": 0.49673654429855274,
+        "kept_lines_mean": 14.355805243445692,
+        "compressed_cases": 267
+      },
+      "science_domain_three_perspectives": {
+        "n": 154,
+        "orig_chars": 2608226,
+        "comp_chars": 1149999,
+        "char_ratio": 0.44091232891628257,
+        "kept_lines_mean": 6.62987012987013,
+        "compressed_cases": 154
+      },
+      "science_domain_four_perspectives": {
+        "n": 856,
+        "orig_chars": 14558564,
+        "comp_chars": 6414519,
+        "char_ratio": 0.4406010785129632,
+        "kept_lines_mean": 6.478971962616822,
+        "compressed_cases": 856
+      },
+      "policy_domain": {
+        "n": 828,
+        "orig_chars": 15131357,
+        "comp_chars": 7955406,
+        "char_ratio": 0.5257562821364931,
+        "kept_lines_mean": 7.596618357487923,
+        "compressed_cases": 828
+      }
+    },
+    "total": {
+      "orig_chars": 59137837,
+      "comp_chars": 25112352,
+      "char_ratio": 0.42464102973532836,
+      "compressed_cases": 4102
+    }
+  },
+  "verdict_audit": {
+    "verdicts": 15953,
+    "valid": 15953,
+    "shortcut_empty_context": 0,
+    "error_rows": 0,
+    "per_group": {
+      "conditional_setting_four_hop_key_proposition": {
+        "n": 267,
+        "valid": 267,
+        "shortcut": 0,
+        "error": 0
+      },
+      "conditional_setting_four_hop_proposition_only": {
+        "n": 801,
+        "valid": 801,
+        "shortcut": 0,
+        "error": 0
+      },
+      "conditional_setting_three_hop_key_proposition": {
+        "n": 493,
+        "valid": 493,
+        "shortcut": 0,
+        "error": 0
+      },
+      "conditional_setting_three_hop_proposition_only": {
+        "n": 986,
+        "valid": 986,
+        "shortcut": 0,
+        "error": 0
+      },
+      "conditional_setting_two_hop_key_proposition": {
+        "n": 604,
+        "valid": 604,
+        "shortcut": 0,
+        "error": 0
+      },
+      "conditional_setting_two_hop_proposition_only": {
+        "n": 604,
+        "valid": 604,
+        "shortcut": 0,
+        "error": 0
+      },
+      "parallel_setting_four_hop": {
+        "n": 1600,
+        "valid": 1600,
+        "shortcut": 0,
+        "error": 0
+      },
+      "parallel_setting_three_hop": {
+        "n": 1800,
+        "valid": 1800,
+        "shortcut": 0,
+        "error": 0
+      },
+      "parallel_setting_two_hop": {
+        "n": 1600,
+        "valid": 1600,
+        "shortcut": 0,
+        "error": 0
+      },
+      "policy_domain": {
+        "n": 3312,
+        "valid": 3312,
+        "shortcut": 0,
+        "error": 0
+      },
+      "science_domain_four_perspectives": {
+        "n": 3424,
+        "valid": 3424,
+        "shortcut": 0,
+        "error": 0
+      },
+      "science_domain_three_perspectives": {
+        "n": 462,
+        "valid": 462,
+        "shortcut": 0,
+        "error": 0
+      }
+    }
+  },
+  "findings": {
+    "overall_all_rec": 29.473427596294492,
+    "strongest_setting": [
+      "conditional",
+      36.36363636363637
+    ],
+    "weakest_setting": [
+      "science",
+      22.07920792079208
+    ],
+    "strengths": [
+      "scx 行级抽取在问句实体直接出现的证据文档上可命中（parallel/conditional 首跳锚点命题）。",
+      "针尖模式 context=0 主动剔除多数干扰文档，压缩字符比见 compression.total。"
+    ],
+    "weaknesses": [
+      "多跳证据链短板：二/三/四跳下游实体（机构、地名、后继事实）不出现在问句中，scx 词面种子无法桥接，对应命题文档被裁掉，All-Rec 随 hop 数下降。",
+      "scx 是抽取式整行保留，无官方 ICL 摘要的句子级融合；条件限定词/少数派视角若所在行被裁即丢失。",
+      "本基线 judge 为 deepseek-flash（非官方 gpt-5.2 high），判定严格度与论文不可直接对齐。"
+    ],
+    "epr": "n/a —— 官方 EPR 依赖压缩器推理 FLOPs；scx 为本地抽取式、无 LLM 压缩推理，不计算 EPR。"
+  },
+  "cost": {
+    "calls_with_usage": 19240,
+    "audit_records": 22145,
+    "input_tokens": 37583256,
+    "output_tokens": 4075970,
+    "reasoning_tokens": 3925931,
+    "price_usd_per_m": {
+      "input": 0.15,
+      "output": 0.6
+    },
+    "estimated_cost_usd": 8.0831
+  },
+  "cases_evaluated": {
+    "parallel_setting_two_hop": 400,
+    "parallel_setting_three_hop": 300,
+    "parallel_setting_four_hop": 200,
+    "conditional_setting_two_hop": 604,
+    "conditional_setting_three_hop": 493,
+    "conditional_setting_four_hop": 267,
+    "science_domain_three_perspectives": 154,
+    "science_domain_four_perspectives": 856,
+    "policy_domain": 828
+  },
+  "judge_entries": 15953,
+  "reproduce": {
+    "python": "/tmp/scx-eval/bin/python",
+    "command": "/tmp/scx-eval/bin/python tools/bench_p19_keep/keepbench.py --results-json config/bench/results/bench_p19_keepbench.json",
+    "full_command": "/tmp/scx-eval/bin/python tools/bench_p19_keep/keepbench.py --results-json config/bench/results/bench_p19_keepbench.json"
+  }
+}

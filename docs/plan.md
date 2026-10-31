@@ -2610,3 +2610,35 @@ eval-manifest 冻结（sha256+rows，check_bench 校验）。
 - 复现：`tools/scx.py contain config/contain5.corpus.json --binary target/release/scx --ratio 0.35 --context 1 --seed contain-rand-v1` 用当前二进制逐位复现全部聚合数字（scx 70/70=100%、头截断 0/70=0%、随机 8/70=11.43%、char 82.01%、token 79.93%），随机种子逐片可重放。
 - 冻结：明细副本入 `config/bench/results/bench_p17_contain5.json`，eval-manifest +frozen（sha256+rows）+present（min_rows=20）；check_bench.sh 全绿。
 - 口径：证据保留率 = ground-truth 证据行（contain5 语料 25 slice × 70 条 evidence）在压缩输出中的整行存活占比；对手基线按**同 kept 字节预算**构造（trunc_budget_chars 逐片对齐 scx 实际输出），截断=保留尾部 N 行、随机=固定种子逐行抽样。
+
+## P19–P23 官方基准全量冻结完成记录（2026-10-31，版本 0.11.0）——五业界官方基准接入与冻结
+
+五基准全部接入 scx 评测体系并生成冻结 JSON（eval-manifest frozen=69，sha256+rows 入册），压缩线 3 项验证「逐行机械保留」，治理线 2 项验证「记忆治理层 P1–P4 真生效」。
+
+### 压缩线（证据保真 / 编码压缩代价）
+- **P19 KEEP-Bench**（HF `uclanlp/KEEP-Bench`，4,102 cases / 15,953 判分 0 error，`bench_p19_keepbench.json`）：
+  overall all_rec=**29.47**；parallel 89.0（n=900）/conditional 76.03（n=1364）/science 22.08（n=1010）/policy 34.30（n=828）；
+  压缩 59,137,837→25,112,352 chars（char_ratio 0.4246）；成本 $8.08。官方 1x 参考：EXIT 6.3 / RECOMP-ext 4.8 / BRIEF-Pro 6.7 / Gemma 66.8 / Claude-Haiku-4.5 61.6。
+- **P22 Compact-Bench**（pip `compactbench==0.1.0` 官方 Compactor ABC，2 cases×20 模板×2 cycles，`bench_p22_compactbench.json`）：
+  overall_score **0.747986**、drift_resistance **0.920729**、constraint_retention 0.777778、contradiction_rate 0.025（1/40 翻转）、compression_ratio 0.874837；392 calls 0 错误。
+  建议命令 3 cases 与实跑 2 cases 差异已标注；走本机代理 127.0.0.1:8080（`SCX_P22_HTTPS_PROXY` 可覆盖）。
+
+### 治理线（LongMemEval 知识更新 / Memora FAMA / AMA-Bench 轨迹记忆）
+- **P20 LongMemEval**（500 问，`bench_p20_longmemeval.json`）：baseline task-averaged **88.35**、overall 87.23（n=470）；knowledge-update 87.5、abstention 76.67；
+  知识更新子集（78 对）：versioned 旧证据进 Top-K **89.74%→1.28%**、新证据 91.03%（版本化驱逐失效记忆实证）；protocol recall_k=10、每问 fresh mem-dir、temp 0、判分 prompt 逐字复用官方。
+- **P21 Memora**（600 题 / 6,415 子问题，`bench_p21_memora.json`）：gov−nogov **ΔFAMA=10.68**、ΔMPA=0.0533、ΔFAA=0.1495、Δmean_penalty=−0.0698；
+  MPA 反映事实召回/作答覆盖，FAA 反映规避援引过时记忆——治理开启后过时记忆污染下降，遗忘规避显著改善。
+- **P23 AMA-Bench**（real 208×12=2,496 全量，`bench_p23_amabench.json`）：scx accuracy **0.512**/F1 0.661 vs bm25 0.5076/0.656；A/B/C/D 通道与 retrieval_diagnostics 全记录；repair 151 行全部修复（0 残留）。
+  synthetic 1,200 条官方未公开（已如实记录）。
+
+### 模型口径（API 实测，勿重测）
+`deepseek-chat` 别名→物理 **DeepSeek-V4.1-Flash 无推理**（temp 0）；显式 `deepseek-flash`/`deepseek-v4-pro` 推理强制（`reasoning.enabled=false` 无效、judge max_tokens=16 时 content 必空，已实测）。
+P19/P23 answer+judge 与 P21 judge 走无推理别名；P21 answer 显式 flash（推理、max_tokens=2048）。全部为非官方 judge（GPT-5.2 / Qwen3-32B / 3 模型投票），绝对值仅内部纵向可比，已在各冻结 JSON 口径节如实标注。
+
+### 性能与费用
+- curl `-d @临时文件` 修复 ARG_MAX（`OSError: Errno 7` 指数退避清零），吞吐约 **15×**（3 分钟 250 条 vs 30 分钟约 200 条）。
+- DeepSeek 自动前缀缓存命中 **26.1%**（18.03M hit / 50.92M miss，约省 17 元）；P21+P23 本次合计约 52 元、五基准全量总账约 75–80 元（P19 判分 15,953 次约 58 元占大头）。
+- 门禁：cargo test --locked --features memory --lib **397 passed** / clippy 0 / fmt 干净；eval-manifest frozen=69；蒸馏产物 weights.json（schema scx-sem-2）已完成。
+
+### 诚实边界
+- P23 synthetic 1,200 条官方未公开（real 2,496 全量已跑）；Compact-Bench 建议 3 cases 实跑 2 cases；五基准 judge 均非官方模型，绝对值不可与官方表直接等比。
