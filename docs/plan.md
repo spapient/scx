@@ -2660,7 +2660,7 @@ P19/P23 answer+judge 与 P21 judge 走无推理别名；P21 answer 显式 flash�
 - 费用：全量判分约 15,953 次在线 deepseek 约 55–60 元；先以本机 8bit 探索通道（0.26s/条）扫档位趋势，锁档后在线冻结一次。
 
 ### P24-B 官方基准补齐
-- **P22 Compact-Bench 第 3 case 补齐**（官方建议 3 cases，实跑 2；检查 pip 包第 3 数据集可用性，可用即补，不可用记边界）——门禁：overall_score 复现 ≥ 0.74 且 0 error。
+- **P22 Compact-Bench 第 3 case 补齐**（官方建议 3 cases，实跑 2；检查 pip 包第 3 数据集可用性，可用即补，不可用记边界）——门禁：overall_score 复现 ≥ 0.74 且 0 error。**【2026-11-01 完成】**：60 cases 全量（20 模板 × 3 × 2 cycles）overall **0.750774**（≥0.74 ✓）、drift 0.9333、contradiction 0.0083（1/60）、retention 1.0（180/180 probes）、620 calls 0 error；期间修 provider 空 content 瞬态（completion 打满正文空）——换通道重试 2 次兜底；产物 `bench_p22_compactbench.json` 更新至 3 cases 口径。
 - **P23 AMA-Bench 提升**（accuracy 0.512 → 0.55+）：基于 retrieval_diagnostics 定位弱通道（A/B/C/D），改进检索/记忆召回后重跑 real 2,496 全量——门禁：accuracy ≥ 0.55 且 F1 ≥ 0.68（超 bm25 基线 ≥ 5 点）。
 - **P19 science 继续提**（minority 视角命中 three 65.71/four 65.93 → 70+）：在 df40 基础上调 minority 证据保留（词频下限、机制词 KEEP 词表）——门禁：science all_rec ≥ 31.0 且 ratio ≤ 0.55。
 

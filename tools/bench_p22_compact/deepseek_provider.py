@@ -158,6 +158,19 @@ class DeepSeekProvider(Provider):
         usage = data.get("usage") or {}
         model_out = data.get("model", request.model)
 
+        # 瞬态空 content（completion_tokens 打满但正文为空，flash 长 continuation
+        # 偶发）：判空后换代理通道重试至多 2 次，仍空才视为失败。
+        if not text.strip():
+            for r_ in (0, 1):
+                await asyncio.sleep(1 + r_ * 2)
+                data = await asyncio.to_thread(self._curl, body, 1)
+                message = (data.get("choices") or [{}])[0].get("message") or {}
+                text = message.get("content") or ""
+                usage = data.get("usage") or {}
+                attempt_errors.append(f"empty content, retry {r_ + 1}")
+                if text.strip():
+                    break
+
         latency = int((time.perf_counter() - started) * 1000)
         get_logger().record(
             model=model_out,
@@ -179,7 +192,7 @@ class DeepSeekProvider(Provider):
         )
 
         if not text.strip():
-            raise ProviderResponseError("DeepSeek 空 content（reasoning 吃光 max_tokens？）")
+            raise ProviderResponseError("DeepSeek 空 content（重试 2 次仍空）")
 
         return CompletionResponse(
             text=text,
