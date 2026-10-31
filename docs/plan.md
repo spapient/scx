@@ -2480,3 +2480,37 @@ P13 定稿(0.11.0 目标)
   互链、conflicts.log 一行（winner=先到先得方）、`--stats` 显示 `conflicts: 1`。
 - **提交**：见 git log（全中文，未 push）。版本 0.11.0 保持。P3 Revise/Retire 与
   P4 RRF+类型见上文升级计划。
+
+### P3 完成记录（2026-10-31）
+
+- **版本化落地**：`Case` 新增 `version: u32`（默认 1）、`life`（active/revised/
+  retired）、`supersedes`、`superseded_by`、`retire_reason`（encode 在 related
+  后固定键序；decode 缺键兼容：version 回退 1、life 回退 active、其余空串）。
+  命名微调：计划稿的 `status` 与反馈状态机 `status`（open/solved/regressed）
+  撞名，实施为 **`life`** + `life_u8()`（active=0/revised=1/retired=2，未知回退 0）。
+- **revise = --store 修饰符（实现口径，修正独立 Op 稿）**：CLI 校验
+  `--revise requires --store 1`；`--revise <case-id>` 复用 store 的
+  query/fix/evidence 参数写入新内容。ingest 先写替换者：`version = 旧.version+1`、
+  `supersedes = 旧 id`；成功后再原子标记旧 case `life="revised"` +
+  `superseded_by = 新 id`（`mod.rs::mark_revised` 持旧 case 锁、幂等；
+  同指纹 update 命中替换者自身时 guard `old==new` 跳过自指标记）。
+  旧 case 为 retired 时拒绝 revise（InvalidInput）。
+- **retire = 独立动作**：`--retire <case-id> --retire-reason <text>` 仅 tombstone：
+  `life="retired"` + `retire_reason`（sanitize 后）+ `updated_at`，幂等（重复 retire
+  不报错、不改写 reason）。与 delete/gc 等互斥。
+- **召回过滤**：索引路径（桶过滤后）与线性路径（case 加载后）均跳过
+  revised/retired；df/avgdl 全库统计口径不变。
+- **索引**：postings.bin 编码新增单字节 life（tier 后），`POST_VER 4→5`，
+  旧缓存自动作废重建；edge Bridge 同步跳过非 active。
+- **可观测**：`--stats` 新增 `life: active=n revised=n retired=n` 分布行
+  （Tally.lives 聚合，`life_u8` 计数）。
+- **门禁**：`cargo test --locked --features memory --lib` = **387 passed**（新增 4
+  测试：老库缺 version/life 键兼容回读、revise 端到端含召回过滤与幂等、retire
+  tombstone + 过滤 + 幂等、同指纹 revise 不自指）；clippy（--all-targets）0 警告；
+  fmt 干净。
+- **CLI 实测**：store → revise（旧 case life=revised + superseded_by、新 case
+  version=2 + supersedes）；retire（life=retired + reason，二次 retire 幂等）；
+  recall 过滤 revised/retired、active 命中；`--stats` 显示
+  `life: active=1 revised=1 retired=1`。
+- **提交**：见 git log（全中文，未 push）。版本 0.11.0 保持。P4 RRF+类型见上文
+  升级计划。

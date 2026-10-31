@@ -117,6 +117,9 @@ pub(crate) fn bridge(
             continue;
         }
         let c = store::load(root, &id)?;
+        if c.life != "active" {
+            continue;
+        }
         let (query_terms, terms) = crate::terms::document(&c.query, &c.text);
         let shared = shared(&ents, &c.fields);
         out.push(Bridge {

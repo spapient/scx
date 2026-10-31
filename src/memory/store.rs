@@ -89,6 +89,18 @@ pub struct Case {
     /// 冲突互链：近重复 case id 列表（P2 仲裁不删除数据，双向挂链）。
     /// 旧 case 缺键兼容为空。
     pub related: Vec<String>,
+    /// 生命周期版本：普通摄取=1；revise 继承旧 case 版本 +1。
+    pub version: u32,
+    /// 生命周期状态：`active | revised | retired`。命名与反馈状态机
+    /// `status`（open/solved/regressed）区分，plan 稿的 status 实施为 life。
+    /// 旧 case 缺键兼容为 active。
+    pub life: String,
+    /// revise 时被替换的旧 case id；普通摄取为空。
+    pub supersedes: String,
+    /// 被新版替换时的替换者 id；active 时为空。
+    pub superseded_by: String,
+    /// retire 原因（tombstone 保留审计）；仅 retired 非空。
+    pub retire_reason: String,
 }
 
 impl Case {
@@ -130,6 +142,11 @@ impl Case {
             tier: 0,
             tier_at: String::new(),
             related: Vec::new(),
+            version: 1,
+            life: "active".to_string(),
+            supersedes: String::new(),
+            superseded_by: String::new(),
+            retire_reason: String::new(),
         }
     }
 }
@@ -224,6 +241,11 @@ pub(crate) fn encode(c: &Case) -> Val {
             "related".into(),
             Val::Arr(c.related.iter().map(|r| Val::Str(r.clone())).collect()),
         ),
+        ("version".into(), Val::Num(c.version as f64)),
+        ("life".into(), Val::Str(c.life.clone())),
+        ("supersedes".into(), Val::Str(c.supersedes.clone())),
+        ("superseded_by".into(), Val::Str(c.superseded_by.clone())),
+        ("retire_reason".into(), Val::Str(c.retire_reason.clone())),
         (
             "stats".into(),
             Val::Obj(vec![
@@ -285,6 +307,18 @@ fn tier(v: Option<&Val>) -> u8 {
     }
 }
 
+/// 生命周期状态 → 单字节编码（0=active,1=revised,2=retired；未知回退 0）。
+/// 供 postings.bin 快照使用，与 decode 的缺键兼容语义同源。
+pub(crate) fn life_u8(s: &str) -> u8 {
+    if s == "revised" {
+        1
+    } else if s == "retired" {
+        2
+    } else {
+        0
+    }
+}
+
 /// 从 Val 反解 Case（未知/缺失键容错为默认值；schema 版本不符仍尽力读取）。
 pub(crate) fn decode(v: &Val) -> Case {
     let obj = match v {
@@ -317,6 +351,13 @@ pub(crate) fn decode(v: &Val) -> Case {
     c.tier = tier(get(obj, "tier"));
     c.tier_at = get(obj, "tier_at").map(string).unwrap_or_default();
     c.related = get(obj, "related").map(strings).unwrap_or_default();
+    c.version = number(get(obj, "version").unwrap_or(&Val::Num(1.0))) as u32;
+    c.life = get(obj, "life")
+        .map(string)
+        .unwrap_or_else(|| "active".to_string());
+    c.supersedes = get(obj, "supersedes").map(string).unwrap_or_default();
+    c.superseded_by = get(obj, "superseded_by").map(string).unwrap_or_default();
+    c.retire_reason = get(obj, "retire_reason").map(string).unwrap_or_default();
     c.forces = get(obj, "forces").map(strings).unwrap_or_default();
     if let Some(Val::Obj(f)) = get(obj, "fields") {
         c.fields.error_code = get(f, "error_code").map(strings).unwrap_or_default();
@@ -559,6 +600,56 @@ mod tests {
         let ids = list(root).unwrap();
         assert_eq!(ids, vec![id]);
         let _ = fs::remove_dir_all(root);
+    }
+
+    /// P3 兼容：老库 case.json 缺 version/life 键 → 解码为 version=1/life=active。
+    #[test]
+    fn decode_missing_version_and_life_keys_fall_back() {
+        let root = std::env::temp_dir().join(format!(
+            "scx-mem-legacy-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let root = root.to_str().unwrap().to_string();
+        ensure(&root).unwrap();
+        let id = "2026-10-22_legacy01";
+        let mut c = Case::new(id.into(), "q".into(), vec![], "t".into());
+        c.stats = Stats {
+            kept: 1,
+            total: 1,
+            cut: 0.0,
+            risk: "LOW".to_string(),
+        };
+        let mut obj = match crate::memory::store::encode(&c) {
+            crate::memory::json::Val::Obj(kvs) => kvs,
+            _ => unreachable!("encode 必产出 Obj"),
+        };
+        obj.retain(|(k, _)| {
+            ![
+                "version",
+                "life",
+                "supersedes",
+                "superseded_by",
+                "retire_reason",
+            ]
+            .contains(&k.as_str())
+        });
+        let case_path = path(&root, id);
+        fs::create_dir_all(case_path.parent().unwrap()).unwrap();
+        fs::write(
+            case_path,
+            crate::memory::json::write(&crate::memory::json::Val::Obj(obj)),
+        )
+        .unwrap();
+        let loaded = load(&root, id).unwrap();
+        assert_eq!(loaded.version, 1, "缺 version 键回退 1");
+        assert_eq!(loaded.life, "active", "缺 life 键回退 active");
+        assert!(loaded.supersedes.is_empty());
+        assert!(loaded.superseded_by.is_empty());
+        assert!(loaded.retire_reason.is_empty());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

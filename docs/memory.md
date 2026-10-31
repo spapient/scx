@@ -264,3 +264,13 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
 > 口径声明：本协议为**作者侧自测**（语料为合成/半合成事故集，标签为作者
 > 冻结），非第三方独立评测；不用于对外发布级对比。ext_hit 在 CLI 门面恒为
 > 1.0（`hits` 调用处固定），评测不模拟外部扩展命中。
+- **版本化 Revise/Retire（P3，#71，2026-10-31）**：`Case` 新增 `version: u32`、
+  `life`（active/revised/retired，计划稿 `status` 与反馈状态机撞名故改
+  `life`+`life_u8()`）、`supersedes`/`superseded_by`、`retire_reason`（缺键兼容）。
+  `--revise <case-id>`（须配 `--store 1`）先写替换者（version 继承 +1、
+  supersedes=旧 id）再原子标记旧 case revised+superseded_by（幂等、同指纹
+  不自指、retired 拒改）；`--retire <case-id> --retire-reason <text>` 仅 tombstone
+  （幂等、reason sanitize）。召回（索引与线性路径）过滤 revised/retired，
+  df/avgdl 口径不变；postings 编码新增单字节 life（POST_VER 4→5 自动重建）；
+  `--stats` 新增 `life: active=revised=retired=` 分布行。门禁 387 passed /
+  clippy 0 / fmt 干净，CLI 全链路实测通过。

@@ -263,6 +263,7 @@ mod tests {
             risk: "LOW".to_string(),
         };
         let (_, id_b) = crate::memory::save(Input {
+            revise: None,
             root: &root,
             query: "disk is full",
             text: "disk full errno=28\nfix: clean up tmp",

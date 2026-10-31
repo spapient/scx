@@ -50,6 +50,8 @@ pub struct Compress {
     pub fix: String,
     pub fix_file: Option<String>,
     pub store: bool,
+    /// 版本化（P3）：`--revise <case-id>` 时 store 写入新替换者并标记旧 case。
+    pub revise: Option<String>,
     pub recall: usize,
     pub recall_detail: bool,
     pub stat: bool,
@@ -124,6 +126,13 @@ pub enum Op {
     Delete {
         mem_dir: String,
         id: String,
+    },
+    #[cfg(feature = "memory")]
+    /// 版本化（P3）：仅 tombstone（life=retired + reason），不删除数据。
+    Retire {
+        mem_dir: String,
+        id: String,
+        reason: String,
     },
     #[cfg(feature = "memory")]
     Annotate(Annotate),
@@ -232,6 +241,14 @@ fn maintain(
         });
     }
     #[cfg(feature = "memory")]
+    if let Some(id) = &opts.retire {
+        return Some(Op::Retire {
+            mem_dir: opts.mem_dir.clone(),
+            id: id.clone(),
+            reason: opts.retire_reason.clone(),
+        });
+    }
+    #[cfg(feature = "memory")]
     if opts.annotate || opts.annotate_raw {
         return Some(Op::Annotate(Annotate {
             mem_dir: opts.mem_dir.clone(),
@@ -263,6 +280,7 @@ fn job(opts: &Opts) -> Compress {
         fix: opts.fix.clone(),
         fix_file: opts.fix_file.clone(),
         store: opts.store,
+        revise: opts.revise.clone(),
         recall: opts.recall,
         recall_detail: opts.recall_detail,
         stat: opts.stat,
@@ -293,6 +311,7 @@ pub fn run(op: Op) -> Reply {
         Op::Rebuild { .. }
         | Op::Gc { .. }
         | Op::Delete { .. }
+        | Op::Retire { .. }
         | Op::Annotate(_)
         | Op::Judge { .. } => apply(op),
     }
@@ -332,6 +351,7 @@ fn dispatch(op: Op) -> Reply {
         | Op::Rebuild { .. }
         | Op::Gc { .. }
         | Op::Delete { .. }
+        | Op::Retire { .. }
         | Op::Annotate(_)
         | Op::Judge { .. } => {
             unreachable!("inspect called with non-special-a op")
@@ -392,6 +412,11 @@ fn apply(op: Op) -> Reply {
             say(format!("gc: removed={removed}"))
         }
         Op::Delete { mem_dir, id } => delete(&mem_dir, &id),
+        Op::Retire {
+            mem_dir,
+            id,
+            reason,
+        } => retire(&mem_dir, &id, &reason),
         Op::Annotate(job) => annotate(&job),
         Op::Judge {
             mem_dir: _,
@@ -407,6 +432,15 @@ fn apply(op: Op) -> Reply {
     }
 }
 #[cfg(feature = "memory")]
+fn retire(mem_dir: &str, id: &str, reason: &str) -> Reply {
+    let case = crate::memory::retire(mem_dir, id, reason)
+        .map_err(|e| Failure::message(format!("retire failed: {e}")))?;
+    say(format!(
+        "retire: life={} reason={} case={}",
+        case.life, case.retire_reason, id
+    ))
+}
+
 fn delete(mem_dir: &str, id: &str) -> Reply {
     match crate::memory::delete(mem_dir, id) {
         Ok(true) => say(format!("delete: removed case={id}")),
@@ -1130,6 +1164,7 @@ pass --fix \"...\" after a verified fix (HARD discipline)"
         store_input.evidence_lno = &evidence_lno;
         store_input.evidence = &evidence;
         store_input.max_bytes = job.max_bytes;
+        store_input.revise = job.revise.as_deref();
         report(crate::memory::save(store_input))?;
         return Ok(None);
     }
@@ -1141,6 +1176,7 @@ pass --fix \"...\" after a verified fix (HARD discipline)"
     let files = job.files.clone();
     let forces = job.config.forces.clone();
     let max_bytes = job.max_bytes;
+    let revise = job.revise.clone();
     std::thread::spawn(move || {
         let mut store_input = Input::new(&mem_dir, &query, &text, &stats);
         store_input.source = &files;
@@ -1149,6 +1185,7 @@ pass --fix \"...\" after a verified fix (HARD discipline)"
         store_input.evidence_lno = &evidence_lno;
         store_input.evidence = &evidence;
         store_input.max_bytes = max_bytes;
+        store_input.revise = revise.as_deref();
         let _ = tx.send(crate::memory::save(store_input));
     });
     Ok(Some(rx))

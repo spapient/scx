@@ -42,6 +42,13 @@ pub struct Opts {
     pub rebuild: bool,
     pub gc: bool,
     pub delete: Option<String>,
+    /// 版本化（P3）：`--revise <case-id>` 与 --store 同用时，先写替换者再
+    /// 标记旧 case revised + superseded_by 新 id。
+    pub revise: Option<String>,
+    /// 版本化（P3）：`--retire <case-id>` 仅 tombstone（不删除数据）。
+    pub retire: Option<String>,
+    /// `--retire-reason <text>`：retired case 的审计原因。
+    pub retire_reason: String,
     /// 重放冻结的 baseline.json（豁免 `--query`）。
     pub eval: Option<String>,
     /// `--eval-verbose` 输出逐 case 的 A/B top-10 诊断。
@@ -586,6 +593,33 @@ pub(crate) static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
+        name: "--revise",
+        once: true,
+        kind: Kind::Value,
+        what: "",
+        err_empty: "requires a case-id",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--retire",
+        once: true,
+        kind: Kind::Value,
+        what: "",
+        err_empty: "requires a case-id",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--retire-reason",
+        once: true,
+        kind: Kind::Value,
+        what: "",
+        err_empty: "requires non-empty text",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
         name: "--eval",
         once: true,
         kind: Kind::Value,
@@ -796,6 +830,9 @@ pub(crate) struct ParseState {
     pub(crate) rebuild: bool,
     pub(crate) gc: bool,
     pub(crate) delete: Option<String>,
+    pub(crate) revise: Option<String>,
+    pub(crate) retire: Option<String>,
+    pub(crate) retire_reason: String,
     pub(crate) eval: Option<String>,
     pub(crate) eval_verbose: bool,
     pub(crate) eval_gate: bool,
@@ -844,6 +881,9 @@ impl ParseState {
             rebuild: false,
             gc: false,
             delete: None,
+            revise: None,
+            retire: None,
+            retire_reason: String::new(),
             eval: None,
             eval_verbose: false,
             eval_gate: false,

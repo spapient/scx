@@ -161,6 +161,8 @@ pub(crate) struct Payload<'a> {
     pub evidence_lno: &'a [usize],
     pub evidence: &'a [String],
     pub max_bytes: Option<u64>,
+    /// 版本化（P3）：revise 时被替换的旧 case id；普通摄取为 None。
+    pub revise: Option<&'a str>,
 }
 
 pub(crate) fn persist(input: Payload<'_>) -> std::io::Result<(bool, String)> {
@@ -224,6 +226,7 @@ fn insert(fields: Payload<'_>, fp: &str) -> std::io::Result<String> {
         evidence_lno,
         evidence,
         max_bytes: _,
+        revise,
     } = fields;
     let now = store::stamp();
     let id = store::id(&now, query, text);
@@ -243,6 +246,18 @@ fn insert(fields: Payload<'_>, fp: &str) -> std::io::Result<String> {
     let fvec = c.fields.error_code.clone();
     let qterms = crate::terms::memory(&c.query);
     c.bucket = crate::memory::classify::query(&fvec, &qterms, text);
+    // 版本化（P3）：revise 继承旧 case 版本 +1 并记录被替换者（不删除旧 case）。
+    if let Some(old_id) = revise {
+        let old = store::load(root, old_id)?;
+        if old.life == "retired" {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("cannot revise retired case: {old_id}"),
+            ));
+        }
+        c.version = old.version.saturating_add(1);
+        c.supersedes = old_id.to_string();
+    }
     // 分层：新 case 默认 L0；evidence+fix 完整则直接晋升 L1（候选层）。
     let meta = crate::memory::meta::load(root)?;
     crate::memory::tier::promote(&meta, &mut c, 0);
@@ -370,6 +385,7 @@ pub(crate) fn evidence(
     evidence: &[String],
 ) -> std::io::Result<(bool, String)> {
     persist(Payload {
+        revise: None,
         root,
         query,
         terms,

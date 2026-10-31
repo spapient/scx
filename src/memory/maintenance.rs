@@ -185,6 +185,10 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
         t.tiers[0], t.tiers[1], t.tiers[2]
     ));
     lines.push(format!(
+        "  life: active={} revised={} retired={}",
+        t.lives[0], t.lives[1], t.lives[2]
+    ));
+    lines.push(format!(
         "  fix: {}/{} ({:.0}%)",
         t.fixes,
         n,
@@ -219,6 +223,7 @@ struct Tally {
     buckets: HashMap<String, usize>,
     statuses: HashMap<String, usize>,
     tiers: [usize; 3],
+    lives: [usize; 3],
     fixes: usize,
     quality_sum: f64,
     disk: u64,
@@ -230,6 +235,7 @@ impl Tally {
             buckets: HashMap::new(),
             statuses: HashMap::new(),
             tiers: [0; 3],
+            lives: [0; 3],
             fixes: 0,
             quality_sum: 0.0,
             disk: 0,
@@ -243,6 +249,10 @@ fn sample(root: &str, id: &str, t: &mut Tally) -> io::Result<()> {
     *t.statuses.entry(c.status.clone()).or_insert(0) += 1;
     if c.tier < 3 {
         t.tiers[c.tier as usize] += 1;
+    }
+    let li = crate::memory::store::life_u8(&c.life) as usize;
+    if li < 3 {
+        t.lives[li] += 1;
     }
     if !c.fix.is_empty() {
         t.fixes += 1;

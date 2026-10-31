@@ -5,7 +5,7 @@ use super::*;
 
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--budget F] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--sem-weight F] [--sem-gate F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--fold 0|1] [--entropy 0|1] [--auto-anchor 0|1] [--cluster 0|1] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--budget F] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--sem-weight F] [--sem-gate F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--revise <case-id>] [--retire <case-id> --retire-reason <text>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--fold 0|1] [--entropy 0|1] [--auto-anchor 0|1] [--cluster 0|1] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -186,6 +186,9 @@ pub(crate) fn free(s: &mut ParseState, f: &Flag, v: String) {
         "--query" => s.query = Some(v),
         "--fix" => s.fix = v,
         "--embed-cmd" => s.embed_cmd = Some(v),
+        "--revise" => s.revise = Some(v),
+        "--retire" => s.retire = Some(v),
+        "--retire-reason" => s.retire_reason = v,
         _ => s.mem_dir = v,
     }
 }
@@ -333,7 +336,8 @@ pub(crate) fn word(
         return Err(format!("{} {}", f.name, f.err_empty));
     }
     match f.name {
-        "--query" | "--fix" | "--mem-dir" | "--embed-cmd" => free(s, f, v),
+        "--query" | "--fix" | "--mem-dir" | "--embed-cmd" | "--revise" | "--retire"
+        | "--retire-reason" => free(s, f, v),
         _ => path(s, f, v),
     }
     Ok(())
@@ -996,6 +1000,7 @@ pub(crate) fn idle(s: &ParseState) -> bool {
         && !s.rebuild
         && !s.gc
         && s.delete.is_none()
+        && s.retire.is_none()
         && s.eval.is_none()
         && !s.l1_hist
         && !s.stats
@@ -1057,6 +1062,7 @@ pub(crate) fn actions(s: &ParseState) -> Result<(), String> {
         s.rebuild,
         s.gc,
         s.delete.is_some(),
+        s.retire.is_some(),
         s.eval.is_some(),
         s.l1_hist,
         s.stats,
@@ -1097,7 +1103,14 @@ pub(crate) fn store(s: &ParseState) -> Result<(), String> {
     if clash(s) {
         return Err("--fix and --fix-file are mutually exclusive".to_string());
     }
+    if revise(s) {
+        return Err("--revise requires --store 1".to_string());
+    }
     Ok(())
+}
+
+pub(crate) fn revise(s: &ParseState) -> bool {
+    s.revise.is_some() && !s.store
 }
 
 pub(crate) fn fix(s: &ParseState) -> bool {
@@ -1171,6 +1184,9 @@ pub(crate) fn finish(s: ParseState) -> Opts {
         rebuild: s.rebuild,
         gc: s.gc,
         delete: s.delete,
+        revise: s.revise,
+        retire: s.retire,
+        retire_reason: s.retire_reason,
         eval: s.eval,
         eval_verbose: s.eval_verbose,
         eval_gate: s.eval_gate,

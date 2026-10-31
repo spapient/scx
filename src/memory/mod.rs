@@ -52,6 +52,8 @@ pub struct Input<'a> {
     pub evidence: &'a [String],
     /// 写入前允许的库总字节数上限；`None` 表示不限制。
     pub max_bytes: Option<u64>,
+    /// 版本化（P3）：revise 时被替换的旧 case id；普通摄取为 None。
+    pub revise: Option<&'a str>,
 }
 
 impl<'a> Input<'a> {
@@ -68,6 +70,7 @@ impl<'a> Input<'a> {
             evidence_lno: &[],
             evidence: &[],
             max_bytes: None,
+            revise: None,
         }
     }
 }
@@ -86,7 +89,7 @@ pub fn save(input: Input<'_>) -> std::io::Result<(bool, String)> {
         .map(|e| crate::memory::util::sanitize(e))
         .collect();
     let terms = crate::terms::memory(&query);
-    ingest::persist(ingest::Payload {
+    let (added, id) = ingest::persist(ingest::Payload {
         root: input.root,
         query: &query,
         terms,
@@ -98,7 +101,52 @@ pub fn save(input: Input<'_>) -> std::io::Result<(bool, String)> {
         evidence_lno: input.evidence_lno,
         evidence: &evidence,
         max_bytes: input.max_bytes,
-    })
+        revise: input.revise,
+    })?;
+    // 版本化（P3）：先写替换者成功，再原子标记旧 case（幂等；失败如实报错，
+    // 新 case 已落盘，重试同指纹走 update 后再次标记可收敛）。
+    if let Some(old) = input.revise {
+        mark_revised(input.root, old, &id)?;
+    }
+    Ok((added, id))
+}
+
+/// 原子标记旧 case 为 revised + superseded_by 新 id（P3）。
+/// 幂等：已指向同一替换者时跳过；retired 的 case 不允许再被 revise。
+fn mark_revised(root: &str, old: &str, new: &str) -> std::io::Result<()> {
+    if old == new {
+        return Ok(()); // 同指纹 update 命中旧 case 自身，无需自指标记
+    }
+    let _lock = store::lock(root, old)?;
+    let mut c = store::load(root, old)?;
+    if c.life == "retired" {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("cannot revise retired case: {old}"),
+        ));
+    }
+    if c.life == "revised" && c.superseded_by == new {
+        return Ok(());
+    }
+    c.life = "revised".to_string();
+    c.superseded_by = new.to_string();
+    c.updated_at = store::stamp();
+    store::save(root, &c)?;
+    Ok(())
+}
+
+/// 版本化（P3）：仅 tombstone（status=retired + reason），不删除数据。
+/// 幂等：已 retired 时直接返回。召回管线过滤 retired/revised。
+pub fn retire(root: &str, id: &str, reason: &str) -> std::io::Result<Case> {
+    let _lock = store::lock(root, id)?;
+    let mut c = store::load(root, id)?;
+    if c.life != "retired" {
+        c.life = "retired".to_string();
+        c.retire_reason = crate::memory::util::sanitize(reason).to_string();
+        c.updated_at = store::stamp();
+        store::save(root, &c)?;
+    }
+    Ok(c)
 }
 
 /// 门面：读取完整 case，包括可回放的原始证据行。
@@ -541,6 +589,7 @@ mod tests {
         // 2) 补全 fix + evidence（同指纹路径走 update → backfill）：升 L1。
         let ev = vec!["line 12: pool exhausted".to_string()];
         let (_, id1) = save(Input {
+            revise: None,
             root: &root,
             query: "db timeout",
             text: "db timeout conn pool",
@@ -563,6 +612,113 @@ mod tests {
         assert_eq!(c.tier, 2, "good 达线且 quality 达标应晋升 L2 可信层");
         assert!(!c.tier_at.is_empty(), "晋升必须记录 tier_at");
         // 4) 新 case 复用同 id（幂等 update）不降级。
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// P3 端到端：revise 先写替换者（version+1、supersedes=旧 id），再原子标记
+    /// 旧 case revised + superseded_by；召回只返回新版；同指纹重试幂等。
+    #[test]
+    fn revise_marks_old_keeps_history_and_filters_recall() {
+        let root = tmp("rev3");
+        let old = seed(&root, "db timeout", "db timeout conn pool");
+        let stats = Stats {
+            kept: 1,
+            total: 1,
+            cut: 0.0,
+            risk: "LOW".to_string(),
+        };
+        let mut input = Input::new(
+            &root,
+            "db timeout",
+            "db timeout conn pool
+fix: enlarge pool",
+            &stats,
+        );
+        input.revise = Some(&old);
+        let (added, new) = save(input).unwrap();
+        assert!(added, "revise 必须先新增替换者");
+        assert_ne!(new, old, "替换者必须新 id");
+
+        let old_c = crate::memory::store::load(&root, &old).unwrap();
+        assert_eq!(old_c.life, "revised", "旧 case 标记 revised");
+        assert_eq!(old_c.superseded_by, new, "旧 case 指向替换者");
+        assert_eq!(old_c.version, 1, "旧 case 版本保持 1");
+        let new_c = crate::memory::store::load(&root, &new).unwrap();
+        assert_eq!(new_c.version, 2, "替换者版本继承 +1");
+        assert_eq!(new_c.supersedes, old, "替换者记录被替换者");
+
+        // 召回过滤：旧 case 不再出现，新版命中。
+        let hits = search(&root, "db timeout", 4, true).unwrap();
+        let ids: Vec<String> = hits.iter().map(|h| h.id.clone()).collect();
+        assert!(ids.contains(&new), "新版必须可召回: {ids:?}");
+        assert!(!ids.contains(&old), "revised 旧 case 必须被过滤: {ids:?}");
+
+        // 幂等：同指纹再次 revise 走 update 命中原 id，旧 case 标记不变。
+        let mut again = Input::new(
+            &root,
+            "db timeout",
+            "db timeout conn pool
+fix: enlarge pool",
+            &stats,
+        );
+        again.revise = Some(&old);
+        let (added2, id2) = save(again).unwrap();
+        assert!(!added2, "同指纹更新");
+        assert_eq!(id2, new, "同指纹命中替换者自身");
+        let old_c2 = crate::memory::store::load(&root, &old).unwrap();
+        assert_eq!(old_c2.superseded_by, new, "幂等：标记不被改写");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// P3 端到端：retire 仅 tombstone（life=retired + reason），幂等；
+    /// 召回过滤 retired；retire_reason 经 sanitize。
+    #[test]
+    fn retire_tombstones_and_filters_recall() {
+        let root = tmp("ret3");
+        let a = seed(&root, "disk full", "disk full errno=28");
+        let b = seed(
+            &root,
+            "disk full",
+            "disk full errno=28
+fix: clean tmp",
+        );
+        let c = retire(&root, &a, "superseded by disk_full_v2").unwrap();
+        assert_eq!(c.life, "retired", "retire 必须置 retired");
+        assert_eq!(c.retire_reason, "superseded by disk_full_v2");
+        let loaded = crate::memory::store::load(&root, &a).unwrap();
+        assert_eq!(loaded.life, "retired");
+        assert!(!loaded.retire_reason.is_empty());
+
+        // 幂等：重复 retire 不报错、不改写 reason。
+        let again = retire(&root, &a, "other").unwrap();
+        assert_eq!(again.retire_reason, "superseded by disk_full_v2");
+
+        // 召回过滤 retired；另一 active case 仍可召回。
+        let hits = search(&root, "disk full", 4, true).unwrap();
+        let ids: Vec<String> = hits.iter().map(|h| h.id.clone()).collect();
+        assert!(!ids.contains(&a), "retired case 必须被过滤: {ids:?}");
+        assert!(ids.contains(&b), "active case 仍可召回: {ids:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// P3 防自指：revise 同指纹命中旧 case 自身时不得自指标记。
+    #[test]
+    fn revise_same_fingerprint_does_not_self_mark() {
+        let root = tmp("rself");
+        let id = seed(&root, "cache miss", "cache miss cold start");
+        let stats = Stats {
+            kept: 1,
+            total: 1,
+            cut: 0.0,
+            risk: "LOW".to_string(),
+        };
+        let mut input = Input::new(&root, "cache miss", "cache miss cold start", &stats);
+        input.revise = Some(&id);
+        let (added, same) = save(input).unwrap();
+        assert!(!added, "同指纹走 update");
+        assert_eq!(same, id);
+        let c = crate::memory::store::load(&root, &id).unwrap();
+        assert_eq!(c.life, "active", "同指纹不得自指标记 revised");
         let _ = std::fs::remove_dir_all(&root);
     }
 }

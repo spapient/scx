@@ -38,7 +38,7 @@ use std::time::SystemTime;
 pub(crate) const INDEX_MIN_DOCS: usize = 10_000;
 
 const POST_MAGIC: u32 = 0x5453_4f50; // "POST"
-const POST_VER: u16 = 4;
+const POST_VER: u16 = 5;
 
 pub(crate) fn postings(root: &str) -> PathBuf {
     Path::new(root).join("index").join("postings.bin")
@@ -119,6 +119,8 @@ pub(crate) struct Record {
     pub quality: f64,
     /// 记忆分层（0/1/2），随 case 快照；召回按 tier 先验加权。
     pub tier: u8,
+    /// 生命周期（0=active,1=revised,2=retired）；召回过滤非 0 候选。
+    pub life: u8,
     pub updated_at: Arc<str>,
     /// `updated_at` 的 Unix 秒快照；召回热循环不再逐候选解析日期。
     pub updated_s: u64,
@@ -222,6 +224,7 @@ fn records(root: &str, ids: &[String]) -> std::io::Result<(Vec<(String, Record)>
                 status: c.status.into(),
                 quality: c.quality,
                 tier: c.tier,
+                life: crate::memory::store::life_u8(&c.life),
                 updated_at: c.updated_at.into(),
                 updated_s,
             },
@@ -282,6 +285,7 @@ fn table(body: &mut Vec<u8>, docs: &[(String, Record)]) {
         body.extend_from_slice(rec.status.as_bytes());
         body.extend_from_slice(&(rec.quality as f32).to_le_bytes());
         body.push(rec.tier); // 记忆分层（0/1/2），单字节
+        body.push(rec.life); // 生命周期（0=active,1=revised,2=retired），单字节
         body.push(rec.updated_at.len() as u8);
         body.extend_from_slice(rec.updated_at.as_bytes());
     }
@@ -507,7 +511,7 @@ fn scan(
 fn doc(body: &[u8], i: &mut usize) -> std::io::Result<(Arc<str>, Record)> {
     let (id, terms, query_terms, buckets) = split(body, i)?;
     let fields = values(body, i)?;
-    let (bucket, status, quality, tier, updated_at) = tail(body, i)?;
+    let (bucket, status, quality, tier, life, updated_at) = tail(body, i)?;
     let updated_s = crate::memory::util::parse(&updated_at);
     Ok((
         id.into(),
@@ -520,6 +524,7 @@ fn doc(body: &[u8], i: &mut usize) -> std::io::Result<(Arc<str>, Record)> {
             status: status.into(),
             quality,
             tier,
+            life,
             updated_at: updated_at.into(),
             updated_s,
         },
@@ -548,13 +553,14 @@ fn values(body: &[u8], i: &mut usize) -> std::io::Result<crate::memory::store::F
     })
 }
 
-fn tail(body: &[u8], i: &mut usize) -> std::io::Result<(String, String, f64, u8, String)> {
+fn tail(body: &[u8], i: &mut usize) -> std::io::Result<(String, String, f64, u8, u8, String)> {
     let bucket = text(body, i)?;
     let status = text(body, i)?;
     let quality = float(body, i, "no quality")? as f64;
     let tier = byte(body, i)?;
+    let life = byte(body, i)?;
     let updated_at = text(body, i)?;
-    Ok((bucket, status, quality, tier, updated_at))
+    Ok((bucket, status, quality, tier, life, updated_at))
 }
 
 /// 解析 term 表（n_terms 条倒排），返回 term → (df, doc_idx 升序列表)。

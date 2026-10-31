@@ -657,6 +657,10 @@ fn candidates(
         if use_buckets && !allowed(&rec.buckets, cand, allow_other) {
             continue;
         }
+        // P3 生命周期过滤：revised/retired（life≠0）不进入候选。
+        if rec.life != 0 {
+            continue;
+        }
         chosen.push((di, 0));
     }
     // 实体边一跳：实体倒排由 postings 的 doc 快照派生，桥入无需重读全库 case.json。
@@ -778,6 +782,10 @@ fn case(root: &str, id: &str, cfg: &Scan<'_>, acc: &mut Acc) -> std::io::Result<
         }
     }
     if cfg.use_buckets && !allowed(&buckets, cfg.cand, cfg.allow_other) {
+        return Ok(());
+    }
+    // P3 生命周期过滤：revised/retired 不进入候选（df/avgdl 统计口径不变）。
+    if c.life != "active" {
         return Ok(());
     }
     acc.docs.push((
