@@ -1,6 +1,10 @@
 stats: cases=2 gen=2
   bucket: db=1 disk=1
   status: open=2
+  tier: l0=2 l1=0 l2=0
+  life: active=2 revised=0 retired=0
+  kind: experience=1 situation=1
   fix: 1/2 (50%)
   quality: mean=0.00
-  disk: 1.5 KiB
+  conflicts: 0
+  disk: 1.7 KiB

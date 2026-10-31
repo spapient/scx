@@ -1,0 +1,11 @@
+# P18 retrieval channels baseline (real.labels, mem=real corpus)
+# cmd: scx --eval config/real.labels.json --mem-dir <real-seeded-lib>
+eval: cases=40 layers=literal,paraphrase,semantic multi-rel=34 single-rel=6 (NDCG strength)
+layer literal: n=14 A r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.961 ci95=[0.932,0.985] | B r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.922 ci95=[0.851,0.975]
+layer_cd literal: n=14 C r@5=0.500 mrr=0.273 ci95=[0.146,0.423] ndcg@10=0.574 ci95=[0.392,0.755] | D r@5=1.000 mrr=0.661 ci95=[0.506,0.810] ndcg@10=0.857 ci95=[0.758,0.943]
+layer paraphrase: n=13 A r@5=1.000 mrr=0.744 ci95=[0.577,0.885] ndcg@10=0.941 ci95=[0.903,0.973] | B r@5=1.000 mrr=0.744 ci95=[0.577,0.885] ndcg@10=0.864 ci95=[0.804,0.917]
+layer_cd paraphrase: n=13 C r@5=0.462 mrr=0.288 ci95=[0.119,0.497] ndcg@10=0.431 ci95=[0.265,0.605] | D r@5=0.923 mrr=0.576 ci95=[0.394,0.776] ndcg@10=0.819 ci95=[0.745,0.885]
+layer semantic: n=13 A r@10=1.000 mrr=0.962 ci95=[0.885,1.000] ndcg@10=0.905 ci95=[0.871,0.937] | B r@10=1.000 mrr=0.962 ci95=[0.885,1.000] ndcg@10=0.886 ci95=[0.848,0.925]
+layer_cd semantic: n=13 C r@10=1.000 mrr=0.949 ci95=[0.846,1.000] ndcg@10=0.879 ci95=[0.823,0.927] | D r@10=1.000 mrr=0.923 ci95=[0.808,1.000] ndcg@10=0.902 ci95=[0.865,0.934]
+eval: channels A=full-pipeline B=bm25 C=minhash-only D=rrf(k=60) BM25+fields+minhash
+l1: hits=18 total=40 rate=0.450

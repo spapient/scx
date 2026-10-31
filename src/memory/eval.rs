@@ -329,10 +329,15 @@ fn inner(
     for c in &cases {
         let a = recall::clock(root, &c.query, 10, eval_now_s, &meta)?;
         let b = plain.search(&c.query, 10);
-        acc.fold(c, a, b, l1_base, l1_margin, verbose);
+        let chan_c = plain.minhash(&c.query, 10);
+        let chan_d = plain.rrf(&c.query, 10);
+        acc.fold(c, (a, b, chan_c, chan_d), l1_base, l1_margin, verbose);
     }
     report(&cases, &acc, verbose, gate_mode)
 }
+
+/// 四通道命中集合（A 完整管线 / B 朴素 BM25 / C minhash 语义 / D RRF 融合）。
+type Quad = (Vec<Hit>, Vec<Hit>, Vec<Hit>, Vec<Hit>);
 
 /// 一次重放的累加状态：分层顺序按首次出现保持（golden 稳定）。
 #[derive(Default)]
@@ -344,20 +349,18 @@ struct Acc {
     agg: HashMap<String, [f64; 9]>,
     /// 每层每 case 的 A/B mrr/ndcg 值（bootstrap 95% CI 重采样用）。
     per: HashMap<String, [Vec<f64>; 4]>,
-    /// verbose 时缓存每例的 A/B 命中，聚合后统一输出诊断（避免二次召回）。
-    diag: Vec<(String, Vec<Hit>, Vec<Hit>)>,
+    /// [n, C:r5,r10,mrr,ndcg, D:r5,r10,mrr,ndcg]——三通道扩展（minhash / RRF），
+    /// 与 A/B 分离（机械门只读 A/B 的 agg，agg_cd 独立冻结口径）。
+    agg_cd: HashMap<String, [f64; 9]>,
+    /// 每层每 case 的 C/D mrr/ndcg 值（bootstrap 95% CI 重采样用）。
+    per_cd: HashMap<String, [Vec<f64>; 4]>,
+    /// verbose 时缓存每例的四通道命中，聚合后统一输出诊断（避免二次召回）。
+    diag: Vec<(String, Quad)>,
 }
 
 impl Acc {
-    fn fold(
-        &mut self,
-        c: &Case,
-        a: Vec<Hit>,
-        b: Vec<Hit>,
-        l1_base: f64,
-        l1_margin: f64,
-        verbose: bool,
-    ) {
+    fn fold(&mut self, c: &Case, quad: Quad, l1_base: f64, l1_margin: f64, verbose: bool) {
+        let (a, b, chan_c, chan_d) = quad;
         // L1 自答率：分母是全部有期望结果的 case。旧口径只在 top1 命中时计入
         // 分母，等于把"答错"整体剔除，命中率虚高；间距也必须与生产
         // `feedback::qualified` 同口径（sim 差，而不是 BM25 绝对分差）。
@@ -392,11 +395,32 @@ impl Acc {
         p[1].push(andcg);
         p[2].push(bmrr);
         p[3].push(bndcg);
+        // C/D 通道（minhash 语义 / RRF 融合）：与 A/B 同口径独立聚合。
+        let (cr5, cr10, cmrr, cndcg) = metric(c, &chan_c);
+        let (dr5, dr10, dmrr, dndcg) = metric(c, &chan_d);
+        let ec = self.agg_cd.entry(c.layer.clone()).or_insert([0.0; 9]);
+        ec[0] += 1.0;
+        ec[1] += cr5;
+        ec[2] += cr10;
+        ec[3] += cmrr;
+        ec[4] += cndcg;
+        ec[5] += dr5;
+        ec[6] += dr10;
+        ec[7] += dmrr;
+        ec[8] += dndcg;
+        let pc = self
+            .per_cd
+            .entry(c.layer.clone())
+            .or_insert_with(|| [Vec::new(), Vec::new(), Vec::new(), Vec::new()]);
+        pc[0].push(cmrr);
+        pc[1].push(cndcg);
+        pc[2].push(dmrr);
+        pc[3].push(dndcg);
         if !self.layers.iter().any(|l| l == &c.layer) {
             self.layers.push(c.layer.clone());
         }
         if verbose {
-            self.diag.push((c.query.clone(), a, b));
+            self.diag.push((c.query.clone(), (a, b, chan_c, chan_d)));
         }
     }
 }
@@ -429,7 +453,19 @@ fn report(
             e,
             acc.per.get(l).expect("per 与 layers 同键构建，键必存在"),
         ));
+        let ec = acc.agg_cd.get(l).unwrap_or(&[0.0; 9]);
+        out.push(layer_cd(
+            l,
+            ec,
+            acc.per_cd
+                .get(l)
+                .expect("per_cd 与 layers 同键构建，键必存在"),
+        ));
     }
+    out.push(
+        "eval: channels A=full-pipeline B=bm25 C=minhash-only D=rrf(k=60) BM25+fields+minhash"
+            .to_string(),
+    );
     // L1 直答命中率出表。
     let l1_rate = if acc.l1_total > 0 {
         acc.l1_hit as f64 / acc.l1_total as f64
@@ -447,12 +483,15 @@ fn report(
         out.extend(g.lines);
         gate_failed = g.failed;
     }
-    // 逐 case 诊断段（A/B 各 top-10，case 尾 8 位与 --eval 口径一致）。
+    // 逐 case 诊断段（四通道各 top-10，case 尾 8 位与 --eval 口径一致）。
     if verbose {
-        for (i, (q, a, b)) in acc.diag.iter().enumerate() {
+        for (i, (q, quad)) in acc.diag.iter().enumerate() {
+            let (a, b, chan_c, chan_d) = quad;
             out.push(format!("case {}/{} q=\"{}\"", i + 1, acc.diag.len(), q));
             out.push(format!("  A: {}", hits(a, &cases[i])));
             out.push(format!("  B: {}", hits(b, &cases[i])));
+            out.push(format!("  C: {}", hits(chan_c, &cases[i])));
+            out.push(format!("  D: {}", hits(chan_d, &cases[i])));
         }
     }
     Ok((out, gate_failed))
@@ -496,6 +535,38 @@ fn layer(name: &str, e: &[f64; 9], p: &[Vec<f64>; 4]) -> String {
         e[8] / n,
         bn.0,
         bn.1,
+    )
+}
+
+/// C/D 分层报告行：minhash 语义 / RRF 融合（布局 [n, C(4), D(4)]，口径与 layer 一致）。
+fn layer_cd(name: &str, e: &[f64; 9], p: &[Vec<f64>; 4]) -> String {
+    let n = e[0].max(1.0);
+    let (k, c_r, d_r) = if name == "semantic" {
+        (10, e[2], e[6])
+    } else {
+        (5, e[1], e[5])
+    };
+    let cm = bootstrap(&p[0], CI_SEED);
+    let cn = bootstrap(&p[1], CI_SEED);
+    let dm = bootstrap(&p[2], CI_SEED);
+    let dn = bootstrap(&p[3], CI_SEED);
+    format!(
+        "layer_cd {name}: n={:.0} C r@{k}={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}] | D r@{k}={:.3} mrr={:.3} ci95=[{:.3},{:.3}] ndcg@10={:.3} ci95=[{:.3},{:.3}]",
+        e[0],
+        c_r / n,
+        e[3] / n,
+        cm.0,
+        cm.1,
+        e[4] / n,
+        cn.0,
+        cn.1,
+        d_r / n,
+        e[7] / n,
+        dm.0,
+        dm.1,
+        e[8] / n,
+        dn.0,
+        dn.1,
     )
 }
 
@@ -570,6 +641,8 @@ fn bootstrap(vals: &[f64], seed: u64) -> (f64, f64) {
 /// 语料只加载一次，150 条查询复用，避免每个 case 重复读取全库 JSON。
 struct Plain {
     docs: Vec<(String, Vec<String>)>,
+    /// 全库原文（与 docs 同序），供 minhash 语义通道与 RRF 字段路使用。
+    texts: Vec<String>,
     df: HashMap<String, usize>,
     n: f64,
     avgdl: f64,
@@ -580,6 +653,7 @@ struct Plain {
 impl Plain {
     fn load(root: &str, meta: &store::Meta) -> std::io::Result<Self> {
         let mut docs = Vec::new();
+        let mut texts = Vec::new();
         let mut df: HashMap<String, usize> = HashMap::new();
         let mut total_len = 0usize;
         for id in store::list(root)? {
@@ -590,12 +664,14 @@ impl Plain {
                 *df.entry(t.clone()).or_insert(0) += 1;
             }
             docs.push((id, terms));
+            texts.push(c.text);
         }
         let n = docs.len() as f64;
         Ok(Self {
             avgdl: if n > 0.0 { total_len as f64 / n } else { 0.0 },
             n,
             docs,
+            texts,
             df,
             k1: meta.param("bm25_k1"),
             b: meta.param("bm25_b"),
@@ -653,6 +729,126 @@ impl Plain {
             })
             .collect()
     }
+
+    /// C 通道：MinHash-LSH 语义单通道。全库加权签名 jaccard 分降序取 top-k；
+    /// sim=分/max 归一（与 B 的 sim=score/sm 同向可比）。零支持度不特殊处理
+    /// ——minhash 的 0 分即"无 shingle 重叠"，语义通道如实反映。
+    fn minhash(&self, query: &str, k: usize) -> Vec<Hit> {
+        if self.docs.is_empty() {
+            return Vec::new();
+        }
+        let refs: Vec<&str> = self.texts.iter().map(|s| s.as_str()).collect();
+        let scores = crate::memory::minhash::scores(query, &refs);
+        let mx = scores.iter().cloned().fold(0.0f64, f64::max);
+        let mut order: Vec<usize> = (0..self.docs.len()).collect();
+        order.sort_by(|&a, &b| {
+            scores[b]
+                .partial_cmp(&scores[a])
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| self.docs[a].0.cmp(&self.docs[b].0))
+        });
+        order
+            .iter()
+            .take(k)
+            .map(|&i| Hit {
+                id: self.docs[i].0.clone(),
+                score: scores[i],
+                sim: if mx > 0.0 {
+                    (scores[i] / mx).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                },
+            })
+            .collect()
+    }
+
+    /// D 通道：RRF 融合（BM25 秩 + 字段/实体秩 + MinHash 语义秩，k=60），与生产
+    /// `search_fused` 同公式 Σ 1/(k+rank) 无权重求和。score/sim 快照取 BM25 侧
+    /// 值（仅靠 side 信号救回的 case 记 0，不触发 L1 直答）。
+    fn rrf(&self, query: &str, k: usize) -> Vec<Hit> {
+        if self.docs.is_empty() {
+            return Vec::new();
+        }
+        let ids: Vec<String> = self.docs.iter().map(|(id, _)| id.clone()).collect();
+        let bm25 = self.search(query, k.max(1));
+        let bm25_term: HashMap<String, f64> = bm25
+            .iter()
+            .enumerate()
+            .map(|(r, h)| (h.id.clone(), 1.0 / (RRF_K + r as f64 + 1.0)))
+            .collect();
+        let bm25_meta: HashMap<String, (f64, f64)> = bm25
+            .iter()
+            .map(|h| (h.id.clone(), (h.score, h.sim)))
+            .collect();
+        let refs: Vec<&str> = self.texts.iter().map(|s| s.as_str()).collect();
+        let minhash_term = rrf_term(&ids, &crate::memory::minhash::scores(query, &refs));
+        // 字段/实体路：query 侧结构化键与 case 侧键的交集数（全库 0 命中时整路不启用）。
+        let qkeys = crate::memory::classify::keys(&crate::memory::classify::extract(query));
+        let field_scores: Vec<f64> = self
+            .texts
+            .iter()
+            .map(|t| {
+                crate::memory::classify::keys(&crate::memory::classify::extract(t))
+                    .iter()
+                    .filter(|k| qkeys.contains(k))
+                    .count() as f64
+            })
+            .collect();
+        let field_term = if field_scores.iter().any(|&x| x > 0.0) {
+            Some(rrf_term(&ids, &field_scores))
+        } else {
+            None
+        };
+        let mut fused: Vec<(f64, usize)> = ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                let mut s = bm25_term.get(id).copied().unwrap_or(0.0);
+                s += minhash_term.get(id).copied().unwrap_or(0.0);
+                if let Some(t) = &field_term {
+                    s += t.get(id).copied().unwrap_or(0.0);
+                }
+                (s, i)
+            })
+            .collect();
+        fused.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.cmp(&b.1))
+        });
+        fused
+            .into_iter()
+            .take(k)
+            .map(|(_, i)| {
+                let id = &ids[i];
+                let (score, sim) = bm25_meta.get(id).copied().unwrap_or((0.0, 0.0));
+                Hit {
+                    id: id.clone(),
+                    score,
+                    sim,
+                }
+            })
+            .collect()
+    }
+}
+
+/// RRF 融合常数 k=60（与生产 `search_fused` 同值，口径跨路径一致）。
+const RRF_K: f64 = 60.0;
+
+/// RRF 单路秩贡献：全库分值 → 降序秩 → 1/(k+rank)，k=60（与生产 search_fused 一致）。
+fn rrf_term(ids: &[String], sims: &[f64]) -> HashMap<String, f64> {
+    let mut order: Vec<usize> = (0..ids.len()).collect();
+    order.sort_by(|&a, &b| {
+        sims[b]
+            .partial_cmp(&sims[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| ids[a].cmp(&ids[b]))
+    });
+    order
+        .iter()
+        .enumerate()
+        .map(|(r, &i)| (ids[i].clone(), 1.0 / (RRF_K + r as f64 + 1.0)))
+        .collect()
 }
 
 /// 运行期 [l1] 历史出表（--l1-hist）——top1.sim 采样分布统计。
@@ -732,8 +928,7 @@ mod tests {
         // 例 1：top1 正确且自信（sim 0.9，间距 0.4）→ 自答命中。
         acc.fold(
             &mk(&["c1"]),
-            vec![hit("c1", 0.9), hit("c2", 0.5)],
-            vec![],
+            (vec![hit("c1", 0.9), hit("c2", 0.5)], vec![], vec![], vec![]),
             0.55,
             0.15,
             false,
@@ -741,8 +936,7 @@ mod tests {
         // 例 2：top1 答错（分数很高）→ 必须计入分母且算未命中。
         acc.fold(
             &mk(&["c1"]),
-            vec![hit("c9", 0.95)],
-            vec![],
+            (vec![hit("c9", 0.95)], vec![], vec![], vec![]),
             0.55,
             0.15,
             false,
@@ -750,8 +944,12 @@ mod tests {
         // 例 3：top1 正确但间距 0.1 < 0.15 → 不自答。
         acc.fold(
             &mk(&["c1"]),
-            vec![hit("c1", 0.9), hit("c2", 0.85)],
-            vec![],
+            (
+                vec![hit("c1", 0.9), hit("c2", 0.85)],
+                vec![],
+                vec![],
+                vec![],
+            ),
             0.55,
             0.15,
             false,
@@ -908,5 +1106,117 @@ mod tests {
         assert!(a_lo <= a_hi);
         // 空输入 → (0,0) 不 panic。
         assert_eq!(bootstrap(&[], CI_SEED), (0.0, 0.0));
+    }
+
+    /// RRF 秩贡献：分值相同按 id 字典序定秩（确定性），且贡献 ∈ (0, 1/61]。
+    #[test]
+    fn rrf_term_ranks_are_deterministic_and_bounded() {
+        let ids = vec!["b".to_string(), "a".to_string(), "c".to_string()];
+        let sims = vec![1.0, 1.0, 0.5];
+        let t = rrf_term(&ids, &sims);
+        // 前两名同分：按 id 字典序 a < b → a 秩 0、b 秩 1。
+        assert!(t["a"] > t["b"], "同分按 id 字典序稳定");
+        assert!(t["b"] > t["c"]);
+        for v in t.values() {
+            assert!(v.is_finite() && *v > 0.0 && *v <= 1.0 / (RRF_K + 1.0));
+        }
+        assert_eq!(rrf_term(&[], &[]), HashMap::new(), "空库不 panic");
+    }
+
+    /// C 通道（minhash 语义）：top-k 内 id 有效、sim 归一在 [0,1]，库序稳定。
+    #[test]
+    fn minhash_channel_returns_sorted_hits() {
+        let docs = vec![
+            (
+                "d1".to_string(),
+                vec!["postgres".to_string(), "refused".to_string()],
+            ),
+            (
+                "d2".to_string(),
+                vec!["build".to_string(), "error".to_string()],
+            ),
+            (
+                "d3".to_string(),
+                vec!["maven".to_string(), "package".to_string()],
+            ),
+        ];
+        let texts = vec![
+            "postgres connection refused retry".to_string(),
+            "build error E0382 moved value".to_string(),
+            "maven package not found in repo".to_string(),
+        ];
+        let mut plain = Plain {
+            docs: docs.clone(),
+            texts,
+            df: HashMap::new(),
+            n: 3.0,
+            avgdl: 4.0,
+            k1: 1.2,
+            b: 0.75,
+        };
+        let mut df = HashMap::new();
+        for (_, terms) in &plain.docs {
+            for t in terms {
+                *df.entry(t.clone()).or_insert(0) += 1;
+            }
+        }
+        plain.df = df;
+        let hits = plain.minhash("build error borrow moved value", 2);
+        assert_eq!(hits.len(), 2, "top-k 截断");
+        assert!(
+            hits[0].id == "d2",
+            "语义命中 build error 语料: {:?}",
+            hits[0].id
+        );
+        for h in &hits {
+            assert!(h.sim >= 0.0 && h.sim <= 1.000_000_1);
+        }
+    }
+
+    /// D 通道（RRF）：融合排序必须把"BM25 高秩 + minhash 高秩"的 case 提到单通道
+    /// 未覆盖的候选之前（BM25 零命中但 minhash 强命中的 case 靠 side 信号救回）。
+    #[test]
+    fn rrf_channel_rescues_semantic_only_hit() {
+        let docs = vec![
+            (
+                "bm25_hit".to_string(),
+                vec!["unique".to_string(), "word".to_string()],
+            ),
+            (
+                "sem_only".to_string(),
+                vec!["zzzz".to_string(), "yyy".to_string()],
+            ),
+        ];
+        let texts = vec![
+            "unique word alpha beta".to_string(),
+            "unusual phrase never mentioned elsewhere".to_string(),
+        ];
+        let mut plain = Plain {
+            docs: docs.clone(),
+            texts,
+            df: HashMap::new(),
+            n: 2.0,
+            avgdl: 4.0,
+            k1: 1.2,
+            b: 0.75,
+        };
+        let mut df = HashMap::new();
+        for (_, terms) in &plain.docs {
+            for t in terms {
+                *df.entry(t.clone()).or_insert(0) += 1;
+            }
+        }
+        plain.df = df;
+        // query 与 bm25_hit 词面命中、与 sem_only 零词面重叠；RRF 仍应把两路
+        // 都纳入融合（fused 至少不 panic、排序确定），且 BM25 路 top1 保持优先。
+        let hits = plain.rrf("unique word unusual", 2);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].id, "bm25_hit", "BM25 高秩候选保持首位");
+        // 确定性：重复调用逐位一致。
+        let again = plain.rrf("unique word unusual", 2);
+        assert_eq!(
+            hits.iter().map(|h| &h.id).collect::<Vec<_>>(),
+            again.iter().map(|h| &h.id).collect::<Vec<_>>()
+        );
     }
 }

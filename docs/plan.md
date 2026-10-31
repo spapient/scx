@@ -2553,3 +2553,53 @@ P13 定稿(0.11.0 目标)
   experience"、与 --recall-only 互斥）——修复为白名单追加 `--recall-kind`，
   并新增回归测试 `p4_recall_kind_parses_into_recall_kind`。
 - **提交**：见 git log（全中文，未 push）。版本 0.11.0 保持。
+
+## P18 完成记录（2026-10-31，版本 0.11.0）——检索三通道 Recall@K/NDCG@K 基线
+
+### 目标与口径
+- 对标 LongMemEval 检索维度（Recall@K / NDCG@K）的 scx 自有基线：`--eval` 从 A/B 双通道
+  扩展为 A/B/C/D 四通道，给出「完整管线 vs 朴素 BM25 vs MinHash 语义 vs RRF 融合」的
+  同库同标注对比。
+- C 通道 = 全库加权 MinHash-LSH jaccard 降序（sim=分/max 归一）；D 通道 = RRF 融合
+  （BM25 秩 + 字段/实体秩 + MinHash 秩，k=60，无权重求和），与生产 `search_fused`
+  同公式；score/sim 快照取 BM25 侧，仅靠 side 信号救回的 case 记 0（不触发 L1 直答）。
+
+### 落地（src/memory/eval.rs）
+- `Acc` 增 `agg_cd`/`per_cd`（[f64;9]：n + C/D 各 r5/r10/mrr/ndcg），与 A/B 的 agg 分离，
+  机械门只读 A/B 不受影响；`fold` 收 `Quad`（四通道命中元组，clippy 参数门收敛）。
+- `Plain` 增 `texts`（原文缓存）；新增 `minhash()`、`rrf()` 方法与模块级 `rrf_term()`
+  + `const RRF_K = 60.0`（与生产同值）。
+- `report` 每层追加 `layer_cd` 行 + 总览行 `eval: channels A=full-pipeline B=bm25
+  C=minhash-only D=rrf(k=60)...`；verbose 诊断扩展为 A/B/C/D 四行。
+- 新测试 +3：`rrf_term_ranks_are_deterministic_and_bounded`（同分按 id 字典序稳定、
+  贡献 ∈ (0,1/61]）、`minhash_channel_returns_sorted_hits`、`rrf_channel_rescues_semantic_only_hit`；
+  修 `l1_accuracy_denominator_covers_all_expected_cases` 的 3 处 fold 调用。lib 397 passed。
+
+### 冻结基线（config/bench/results/bench_p18_channels_{gauge,v2,real}.txt）
+三数据集（gauge 40 例 / v2 150 例 / real 40 例，各自语料库播种）全部逐位可重放，已入
+eval-manifest 冻结（sha256+rows，check_bench 校验）。
+
+| 数据集·层 | 指标 | A full | B bm25 | C minhash | D rrf |
+|---|---|---|---|---|---|
+| gauge·paraphrase (n=13) | r@5 / mrr / ndcg@10 | .692/.338/.766 | .692/.338/.772 | .769/.332/.583 | .769/.349/.770 |
+| gauge·semantic (n=13) | r@10 / mrr / ndcg@10 | 1.0/.962/.811 | 1.0/.715/.817 | 1.0/.872/.663 | 1.0/.750/.820 |
+| v2·paraphrase (n=60) | r@5 / mrr / ndcg@10 | .867/.556/.884 | .867/.554/.861 | .783/.571/.740 | .867/.600/.870 |
+| v2·semantic (n=30) | r@10 / mrr / ndcg@10 | 1.0/.700/.945 | 1.0/.510/.917 | 1.0/.822/.902 | 1.0/.622/.940 |
+| real·semantic (n=13) | r@10 / mrr / ndcg@10 | 1.0/.962/.905 | 1.0/.962/.886 | 1.0/.949/.879 | 1.0/.923/.902 |
+
+### 结论（数据驱动，诚实呈现双面）
+- **RRF 融合优于 BM25 单通道**：D 的 semantic 层 ndcg 三数据集全部 ≥ B（0.820/0.940/0.902
+  vs 0.817/0.917/0.886）；paraphrase 层 mrr 在 gauge/v2 均高于 B（0.349/0.600 vs
+  0.338/0.554）。
+- **minhash 语义单通道的独立增益与短板**：semantic 层 mrr 普遍高于 B（v2 0.822 vs
+  0.510），但 ndcg 全面低于 B——纯 jaccard 无词面区分度，召回强、排序弱；融合正是
+  把语义召回与词面排序结合（v2·paraphrase D ndcg=0.870 vs C 0.740）。
+- **例外不隐藏**：real·paraphrase（n=13）D r@5/mrr/ndcg（.923/.576/.819）低于 B
+  （1.0/.744/.864）——样本小 + real 语料字段键与 query 偶合引入噪声，融合非免费午餐。
+- **A（完整管线）仍在多数层保持 ndcg 最优或并列**——生产增强（PRF/MMR/反馈）在
+  融合之上仍有增益，三通道基线把「管线增强的价值」显式化。
+
+### 门禁
+- check_bench.sh 全绿：lib 397 + semantic 418 + golden 重新冻结（memory_eval 增
+  layer_cd/channels 行；memory_stats 补 P1–P3 tier/life/kind/conflicts 行；日期快照随
+  当天刷新）+ clippy 0 + fmt + eval-manifest（+3 frozen）+ A2 fidelity + 四 flag 冒烟。

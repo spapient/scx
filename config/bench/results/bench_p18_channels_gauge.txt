@@ -1,0 +1,11 @@
+# P18 retrieval channels baseline (gauge.human.labels, mem=gauge corpus)
+# cmd: scx --eval config/gauge.human.labels.json --mem-dir <gauge-seeded-lib>
+eval: cases=40 layers=literal,paraphrase,semantic multi-rel=38 single-rel=2 (NDCG strength)
+layer literal: n=14 A r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.906 ci95=[0.887,0.923] | B r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.898 ci95=[0.876,0.918]
+layer_cd literal: n=14 C r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.813 ci95=[0.754,0.864] | D r@5=1.000 mrr=1.000 ci95=[1.000,1.000] ndcg@10=0.905 ci95=[0.887,0.922]
+layer paraphrase: n=13 A r@5=0.692 mrr=0.338 ci95=[0.184,0.513] ndcg@10=0.766 ci95=[0.691,0.845] | B r@5=0.692 mrr=0.338 ci95=[0.184,0.513] ndcg@10=0.772 ci95=[0.695,0.851]
+layer_cd paraphrase: n=13 C r@5=0.769 mrr=0.332 ci95=[0.185,0.506] ndcg@10=0.583 ci95=[0.468,0.699] | D r@5=0.769 mrr=0.349 ci95=[0.197,0.522] ndcg@10=0.770 ci95=[0.701,0.842]
+layer semantic: n=13 A r@10=1.000 mrr=0.962 ci95=[0.885,1.000] ndcg@10=0.811 ci95=[0.755,0.864] | B r@10=1.000 mrr=0.715 ci95=[0.515,0.900] ndcg@10=0.817 ci95=[0.762,0.866]
+layer_cd semantic: n=13 C r@10=1.000 mrr=0.872 ci95=[0.731,1.000] ndcg@10=0.663 ci95=[0.556,0.764] | D r@10=1.000 mrr=0.750 ci95=[0.577,0.910] ndcg@10=0.820 ci95=[0.760,0.876]
+eval: channels A=full-pipeline B=bm25 C=minhash-only D=rrf(k=60) BM25+fields+minhash
+l1: hits=12 total=40 rate=0.300
