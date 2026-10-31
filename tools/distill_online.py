@@ -21,6 +21,7 @@ import json
 import math
 import os
 import re
+import socket
 import struct
 import subprocess
 import sys
@@ -28,18 +29,88 @@ import time
 import urllib.request
 from pathlib import Path
 
+# IPv6 连接冻结防护：macOS 下 urllib 偶发 IPv6 happy-eyeballs 卡死且
+# socket 超时不兜底（进程进入不可中断睡眠）。全局劫持 getaddrinfo，
+# 强制优先 IPv4（fallback 保留 IPv6），根治 API 调用挂死。
+_orig_gai = socket.getaddrinfo
+
+
+def _ipv4_first(host, port, family=0, *args, **kw):
+    try:
+        res = _orig_gai(host, port, socket.AF_INET, *args, **kw)
+        if res:
+            return res
+    except Exception:
+        pass
+    return _orig_gai(host, port, family, *args, **kw)
+
+
+socket.getaddrinfo = _ipv4_first
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import bench_ablate as ba  # 确定性语料 / compress / fidelity 口径
 
 FEATURES = ["overlap", "hit", "ln_len", "cap_ratio", "dig_ratio", "structure",
             "word_hit", "cjk_ratio", "errcode", "uniq", "sym", "pos_norm",
-            "edge", "long", "code", "bias", "cjk_bigram", "term_prox"]
+            "edge", "long", "code", "bias", "cjk_bigram", "term_prox",
+            "stop_hit", "sym_noise", "q_density", "head_hit", "rep_ratio",
+            "cap_tok"]
 DIM = len(FEATURES)
+
+# 停用词表（与 src/semantic.rs 的 STOP_WORDS 逐词一致，蒸馏特征对齐）。
+STOP = frozenset([
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
+    "with", "this", "that", "is", "are", "was", "were", "it", "as", "at",
+    "by", "from", "we", "you", "they", "he", "she", "i", "not", "no", "do",
+    "does", "did", "be", "been", "have", "has", "had", "will", "would", "can",
+    "could", "should", "then", "than", "so", "if", "else", "when", "while",
+    "up", "down", "out", "over", "under", "here", "there", "all", "any",
+    "both", "each", "few", "more", "most", "other", "some", "such", "only",
+    "own", "now",
+])
 OUT = ROOT / "config" / "semantic" / "weights.json"
-CORPORA = [("code", ba.corpus_code(42), "build"),
-           ("log", ba.corpus_log(42), "timeout"),
-           ("zh", ba.corpus_zh(42), "超时")]
+# ---- 语料（确定性；每语料可配多个 query 场景，样本按 query 独立标注） ----
+def _p1m_seg(lo: int, hi: int) -> str:
+    """corpus_p1m.txt 固定行区间（真实 scx 源码，确定性抽取）。"""
+    p = ROOT / "config" / "bench" / "perf" / "corpus_p1m.txt"
+    lines = p.read_text(encoding="utf-8").splitlines()
+    return "\n".join(lines[lo:hi])
+
+
+def _code_fence(rows: list, lang: str) -> str:
+    """从题目 CSV 提取 ```<lang> 代码围栏内的真实代码（确定性）。"""
+    out: list[str] = []
+    for r in rows:
+        for m in re.finditer(r"```(?:c|python|java|javascript|cpp)?\n(.*?)```", r["question"], re.S):
+            out.extend(m.group(1).splitlines())
+    return "\n".join(out)
+
+
+def build_corpora() -> list:
+    """语料矩阵：[(cname, text, [query1, query2]), ...]。含原 3 合成语料 + 真实源码/代码语料。"""
+    corpora = [("code", ba.corpus_code(42), ["build"]),
+               ("log", ba.corpus_log(42), ["timeout"]),
+               ("zh", ba.corpus_zh(42), ["超时"]),
+               ("real_src_a", _p1m_seg(0, 2000), ["drop", "error"]),
+               ("real_src_b", _p1m_seg(12000, 14000), ["memory", "compress"]),
+               ("real_src_c", _p1m_seg(24000, 26000), ["stdin", "mcp"])]
+    langs = [("c", "bench_c60.csv"), ("cpp", "bench_cpp60.csv"), ("cuda", "bench_cuda60.csv"),
+             ("java", "bench_java60.csv"), ("js", "bench_js60.csv"), ("py", "bench_py60.csv")]
+    ds = ROOT / "config" / "bench" / "datasets"
+    for lang, fname in langs:
+        p = ds / fname
+        if not p.exists():
+            continue
+        import csv as _csv
+        rows = list(_csv.DictReader(p.open(encoding="utf-8")))
+        text = _code_fence(rows, lang)
+        if text.strip():
+            corpora.append((f"code_{lang}", text, ["return", "function"]))
+    return corpora
+
+
+CORPORA = build_corpora()
 
 TEACHERS = [
     {"name": "deepseek", "url": "https://api.deepseek.com/chat/completions",
@@ -54,19 +125,27 @@ TEACHERS = [
 
 
 def call_teacher(t: dict, prompt: str, max_new: int = 1500) -> str:
-    """OpenAI 兼容调用，重试 2 次，返回 content 文本。"""
+    """OpenAI 兼容调用，重试 2 次，返回 content 文本。
+
+    传输走 curl -4 --max-time 60（硬超时，urllib 在 macOS 下曾现
+    TLS/连接阶段卡死 30 分钟不返回的 bug；curl 6s 即失败重试）。
+    """
     key = t["key"]()
     if not key:
         raise RuntimeError(f"{t['name']}: key 缺失")
-    body = {"model": t["model"], "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_new, "temperature": 0.1}
+    body = json.dumps({"model": t["model"], "messages": [{"role": "user", "content": prompt}],
+                       "max_tokens": max_new, "temperature": 0.1})
     for attempt in (1, 2, 3):
         try:
-            req = urllib.request.Request(
-                t["url"],
-                data=json.dumps(body).encode(),
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
-            r = json.load(urllib.request.urlopen(req, timeout=120))
+            out = subprocess.run(
+                ["curl", "-4", "-sS", "--max-time", "60", "-X", "POST", t["url"],
+                 "-H", f"Authorization: Bearer {key}",
+                 "-H", "Content-Type: application/json",
+                 "-d", body],
+                capture_output=True, text=True, timeout=90)
+            if out.returncode != 0:
+                raise RuntimeError(f"curl rc={out.returncode}: {out.stderr.strip()[:200]}")
+            r = json.loads(out.stdout)
             return r["choices"][0]["message"]["content"] or ""
         except Exception as e:
             if attempt == 3:
@@ -138,54 +217,59 @@ CACHE = ROOT / "config" / "bench" / "results" / "distill_cache.json"
 
 
 def label_corpus(cname: str, query: str, text: str) -> tuple[list[int], list[dict]]:
-    """分块 + 双教师并行标注（带缓存）；并集（任一教师认为必要即保留）。"""
+    """分块 + 双教师并行标注（带缓存）；并集（任一教师认为必要即保留）。
+    缓存键 = cname|query（多 query 语料各场景独立标注；旧单键缓存不再命中）。"""
     lines = text.splitlines()
     n = len(lines)
+    cache_key = f"{cname}|{query}"
     cache: dict = {}
     if CACHE.exists():
         cache = json.loads(CACHE.read_text(encoding="utf-8"))
-    if cname in cache:
-        keep = [int(x) for x in cache[cname]]
-        print(f"[{cname}] {n} 行: 命中缓存 {len(keep)} 行")
-        return keep, [{"teacher": "cache", "corpus": cname, "chunk": -1, "ok": len(keep), "rows": ""}]
+    if cache_key in cache:
+        keep = [int(x) for x in cache[cache_key]]
+        print(f"[{cache_key}] {n} 行: 命中缓存 {len(keep)} 行")
+        return keep, [{"teacher": "cache", "corpus": cache_key, "chunk": -1, "ok": len(keep), "rows": ""}]
     log: list[dict] = []
     keep_sets = {t["name"]: set() for t in TEACHERS}
     chunks = [lines[i:i + CHUNK] for i in range(0, n, CHUNK)]
     from concurrent.futures import ThreadPoolExecutor
     for t in TEACHERS:
-        with ThreadPoolExecutor(max_workers=8) as ex:
+        with ThreadPoolExecutor(max_workers=12) as ex:
             futs = [ex.submit(label_chunk, cname, query, ch, i * CHUNK, t, log)
                     for i, ch in enumerate(chunks) if ch]
         for f in futs:
             keep_sets[t["name"]] |= f.result()
     union = set.union(*keep_sets.values())
-    print(f"[{cname}] {n} 行: deepseek={len(keep_sets['deepseek'])} "
+    print(f"[{cache_key}] {n} 行: deepseek={len(keep_sets['deepseek'])} "
           f"qwen={len(keep_sets['qwen'])} 并集={len(union)}")
-    cache[cname] = sorted(union)
+    cache[cache_key] = sorted(union)
     CACHE.parent.mkdir(parents=True, exist_ok=True)
     CACHE.write_text(json.dumps(cache), encoding="utf-8")
     return sorted(union), log
 
 
 # ---- 18 维特征复刻（与 src/semantic.rs feats 逐维一致） ----
-def tokens(lower: str) -> list[str]:
+def tokens(text: str) -> list[str]:
+    """与 src/semantic.rs tokens() 逐字符一致：ASCII 词内字符连续段 + CJK 连续段。
+    词内字符含 `_ . / : @ \\ -`（代码标识符/path/错误码语义）；其余为分隔。
+    按 UTF-8 字节推进与切片（CJK 三字节一字符），与 Rust 字节语义一致。"""
+    b = text.encode("utf-8")
     out: list[str] = []
-    cur: list[str] = []
+    cur: list[bytes] = []
     i = 0
-    b = lower.encode()
     n = len(b)
     while i < n:
         c = b[i]
-        is_word = chr(c).isalnum() if c < 128 else False
+        is_word = c < 128 and (chr(c).isalnum() or chr(c) in "_./:@\\-")
         is_cjk = 0xE4 <= c <= 0xE9 and i + 2 < n
         if is_word or is_cjk:
-            cur.append(lower[i:i + (3 if is_cjk else 1)])
+            cur.append(bytes([c]) if not is_cjk else bytes(b[i:i + 3]))
         elif cur:
-            out.append("".join(cur))
+            out.append(b"".join(cur).decode("utf-8"))
             cur = []
         i += 3 if is_cjk else 1
     if cur:
-        out.append("".join(cur))
+        out.append(b"".join(cur).decode("utf-8"))
     return out
 
 
@@ -235,7 +319,7 @@ def feats(line: str, terms: list[str], i: int, total: int) -> list[float]:
                                      "fn ", "pub ", "impl ", "struct ", "error:",
                                      "panic!", "->", "=>", "at ", "caused by:")) else 0.0
     toks = tokens(lower)
-    w_hit = hit / len(terms) if terms else 0.0
+    w_hit = word_hit_ratio(terms, lower, toks)
     cjk = sum(1 for c in line if 0x4E00 <= ord(c) <= 0x9FFF) / chars if chars else 0.0
     err = sum(1 for t in toks if any(c.isalpha() for c in t) and any(c.isdigit() for c in t))
     err_r = err / len(toks) if toks else 0.0
@@ -249,8 +333,127 @@ def feats(line: str, terms: list[str], i: int, total: int) -> list[float]:
         or "->" in line or "=>" in line or "::" in line else 0.0
     bigram = cjk_bigram(line, terms)
     prox = term_prox(lower, terms)
+    stop_hit = stop_ratio(toks)
+    sym_noise = noise_line(line)
+    q_density = query_density(lower, terms, len(toks))
+    head_hit = head_hit_ratio(lower, terms)
+    rep_ratio = rep_char_ratio(line)
+    cap_tok = cap_token_ratio(line)
     return [overlap, min(hit, 1), math.log1p(chars), cap_ratio, dig_ratio, structure,
-            w_hit, cjk, err_r, uniq, sym_r, pos, edge, long_f, code, 1.0, bigram, prox]
+            w_hit, cjk, err_r, uniq, sym_r, pos, edge, long_f, code, 1.0, bigram, prox,
+            stop_hit, sym_noise, q_density, head_hit, rep_ratio, cap_tok]
+
+
+# ---- 新增 6 维特征（与 src/semantic.rs 逐特征一致） ----
+def word_hit_ratio(terms: list[str], lower: str, toks: list[str]) -> float:
+    """词边界整词命中比例（含屈折词根），与 src/semantic.rs word_hit_ratio 一致。"""
+    if not terms:
+        return 0.0
+    n = 0
+    for t in terms:
+        if not t:
+            continue
+        plain = all(c.isascii() and c.isalnum() for c in t)
+        if any(root_match(tok, t) for tok in toks) or ((not plain) and t in lower):
+            n += 1
+    return n / len(terms)
+
+
+def stem(w: str) -> str | None:
+    """规则词干（与 src/semantic.rs stem 一致）：全小写 ASCII 且 ≥4，去后缀后 ≥3。"""
+    if len(w) < 4 or not w.isascii() or not w.islower():
+        return None
+    s = strip_affix(w)
+    return s if s is not None and len(s) >= 3 else None
+
+
+def strip_affix(w: str) -> str | None:
+    """最长后缀优先：ing→去 ing（≥4）；ed→去 ed（≥4）；ies→y；咝音 es；尾 s。"""
+    if w.endswith("ing"):
+        r = w[:-3]
+        return r if len(r) >= 4 else None
+    if w.endswith("ed"):
+        r = w[:-2]
+        return r if len(r) >= 4 else None
+    if w.endswith("ies"):
+        return w[:-3] + "y"
+    if w.endswith("es") and sibilant(w[:-2]):
+        return w[:-2]
+    if w.endswith("s") and not w.endswith("ss"):
+        r = w[:-1]
+        return r if len(r) >= 3 else None
+    return None
+
+
+def sibilant(s: str) -> bool:
+    return s.endswith(("ch", "sh", "s", "x", "z"))
+
+
+def root_match(a: str, b: str) -> bool:
+    """词根判定（与 src/semantic.rs root_match 一致）。"""
+    if a == b:
+        return True
+    sa, sb = stem(a), stem(b)
+    if sa is not None and sb is not None:
+        return sa == sb
+    if sa is not None:
+        return sa == b
+    if sb is not None:
+        return a == sb
+    return False
+
+
+def stop_ratio(toks: list[str]) -> float:
+    if not toks:
+        return 0.0
+    return sum(1 for t in toks if t in STOP) / len(toks)
+
+
+def noise_line(line: str) -> float:
+    t = line.strip()
+    if len(t) < 8:
+        return 0.0
+    alpha = sum(1 for c in t if c.isalnum())
+    if alpha == 0:
+        return 1.0
+    sym = len(t) - alpha
+    return 1.0 if sym / len(t) >= 0.6 else 0.0
+
+
+def query_density(lower: str, terms: list[str], n_toks: int) -> float:
+    if n_toks == 0:
+        return 0.0
+    cnt = sum(lower.count(t) for t in terms if t)
+    return cnt / n_toks
+
+
+def head_hit_ratio(lower: str, terms: list[str]) -> float:
+    if not terms:
+        return 0.0
+    head = lower[:60]
+    return sum(1 for t in terms if t and t in head) / len(terms)
+
+
+def rep_char_ratio(line: str) -> float:
+    cnt: dict[str, int] = {}
+    total = 0
+    for c in line:
+        if c.isspace():
+            continue
+        total += 1
+        cnt[c] = cnt.get(c, 0) + 1
+    if not total:
+        return 0.0
+    return max(cnt.values()) / total
+
+
+def cap_token_ratio(line: str) -> float:
+    """大写开头 token 密度（基于原行大小写；token 级与 cap_ratio 字符级互补）。"""
+    toks = tokens(line)
+    if not toks:
+        return 0.0
+    n = sum(1 for t in toks if t and t[0].isupper())
+    return n / len(toks)
 
 
 # ---- 逻辑回归（纯 Python，固定 seed 确定性） ----
@@ -294,18 +497,19 @@ def main() -> int:
     labels: list[dict] = []
     total_keep = 0
     total_lines = 0
-    for cname, text, query in CORPORA:
-        keep, log = label_corpus(cname, query, text)
+    for cname, text, queries in CORPORA:
         lines = text.splitlines()
         total = len(lines)
-        total_lines += total
-        total_keep += len(keep)
-        keep_set = set(keep)
-        for i, ln in enumerate(lines):
-            all_x.append(feats(ln, [query], i, total))
-            all_y.append(1 if (i + 1) in keep_set else 0)
-        for e in log:
-            labels.append({**e, "n": total, "keep": len(keep)})
+        for query in queries:
+            keep, log = label_corpus(cname, query, text)
+            total_lines += total
+            total_keep += len(keep)
+            keep_set = set(keep)
+            for i, ln in enumerate(lines):
+                all_x.append(feats(ln, [query], i, total))
+                all_y.append(1 if (i + 1) in keep_set else 0)
+            for e in log:
+                labels.append({**e, "n": total, "keep": len(keep), "query": query})
     pos = sum(all_y)
     print(f"标注汇总: {total_lines} 行, 教师保留 {total_keep} ({total_keep / total_lines:.1%}), "
           f"正样本 {pos}")
@@ -329,12 +533,36 @@ def main() -> int:
     # 标注日志
     with open(ROOT / "config" / "bench" / "results" / "distill_labels.csv", "w",
               encoding="utf-8", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=["teacher", "corpus", "chunk", "ok", "rows", "n", "keep"])
+        w = csv.DictWriter(fh, fieldnames=["teacher", "corpus", "chunk", "ok", "rows", "n", "keep", "query"])
         w.writeheader()
         w.writerows(labels)
     print("标注日志写入 config/bench/results/distill_labels.csv")
     return 0
 
 
+def selfcheck() -> int:
+    """输出固定样本行的 24 维特征（精确值），供 src/semantic.rs 一致性测试断言。"""
+    rows = [
+        ("db connection lost: conn 9f2a timeout", ["db"], 0, 10),
+        ("db db db db db retry", ["db"], 1, 10),
+        ("this is a test of the system and it works", ["db"], 2, 10),
+        ("------------------------------------------------------------", ["db"], 3, 10),
+        ("fn main() -> i32 { 0 }", ["db"], 4, 10),
+        ("Server Name CONNECT Error", ["db"], 5, 10),
+        ("aaaaaaa", ["db"], 6, 10),
+        ("数据库超时重试", ["超时"], 7, 10),
+        ("conn ... lots of filler ... broken", ["conn", "broken"], 8, 10),
+        ("  ", [], 9, 10),
+    ]
+    out = []
+    for line, terms, i, total in rows:
+        out.append({"line": line, "terms": terms, "i": i, "total": total,
+                    "feats": [float(f"{v:.12g}") for v in feats(line, terms, i, total)]})
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    return 0
+
+
 if __name__ == "__main__":
+    if "--selfcheck" in sys.argv:
+        sys.exit(selfcheck())
     sys.exit(main())
