@@ -424,6 +424,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 高于可选填充。默认空 kinds 时为空操作，与现状逐字节一致。
     mark_structure_anchors(cfg, &lines, &mut keep, &mut kept, &mut reason);
 
+    // 语义锚（#65 --sem-gate，默认 0 = 关）：语义居中分数 ≥ 阈值的非重复行
+    // 直接整行保留（独立于 optional 预算裁剪的语义高价值通道）。默认关 = 空操作。
+    #[cfg(feature = "semantic")]
+    sem_anchors(&lines, &uniq_terms, &dup, &mut keep, &mut kept, total, cfg);
+
     // 行保护策略（--code-keep / --num-line-keep / --sym-line-keep / --zh-keep /
     // --list-keep / --evidence）：整行保留并标记 raw（render 跳过行内 trim）。
     // 默认全 0 且无证据时为空操作，与现状逐字节一致。
@@ -565,6 +570,35 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     prof.finish("compress");
     o
 }
+/// 语义锚（#65 --sem-gate，默认 0 = 关）：feature=semantic 且已加载权重时，
+/// 语义居中分数 ≥ 阈值的非重复行直接整行保留（独立于 optional 预算裁剪的
+/// 语义高价值通道）。默认关 = 空操作，与现状逐字节一致。
+#[cfg(feature = "semantic")]
+fn sem_anchors(
+    lines: &[&str],
+    uniq_terms: &[String],
+    dup: &[bool],
+    keep: &mut [bool],
+    kept: &mut usize,
+    total: usize,
+    cfg: &Config,
+) {
+    if cfg.sem_gate <= 0.0 {
+        return;
+    }
+    if let Some(w) = &cfg.semantic {
+        for i in 0..total {
+            if !dup[i]
+                && !keep[i]
+                && w.centered_line(lines[i], uniq_terms, i, total) >= cfg.sem_gate
+            {
+                keep[i] = true;
+                *kept += 1;
+            }
+        }
+    }
+}
+
 pub fn compress_bucketed(
     parts: &[(crate::ContentType, &str)],
     query: &str,
@@ -1568,5 +1602,54 @@ mod tests {
         assert!(o35.cut > 0.5, "35% 硬预算下 cut 应显著: {}", o35.cut);
         let o35b = compress(&big, "timeout", &cfg35);
         assert_eq!(o35.text, o35b.text, "硬预算路径确定性");
+    }
+
+    #[test]
+    #[cfg(feature = "semantic")]
+    fn sem_gate_zero_without_weights_is_noop() {
+        // 语义权重未加载（semantic=None）时，无论 sem_gate 取值都不改变输出
+        // （零漂移铁律：默认路径逐字节一致）。
+        let text = "alpha\nbeta\nerror: build failed\ngamma\n";
+        let base = compress(text, "build", &Config::default());
+        let cfg = Config {
+            sem_gate: 5.0,
+            ..Default::default()
+        }; // 未加载权重 → 语义锚通道不触发
+        assert_eq!(compress(text, "build", &cfg).text, base.text);
+    }
+
+    #[test]
+    #[cfg(feature = "semantic")]
+    fn sem_gate_keeps_high_semantic_lines() {
+        // --sem-gate 语义锚：命中 query 的 error 行语义分数高 → 无条件保留；
+        // 纯噪声行（无 query 词形）不触发，预算约束下被大量裁剪。
+        // 注意 fill 预算下限 BUDGET_MIN=200 tokens：文本必须显著大于 200 token
+        // 才能让 ratio 预算真正约束保留量。
+        let w =
+            crate::semantic::Weights::load("config/semantic/weights.json").expect("随仓权重可加载");
+        let mut text = String::from("error: build failed at crate compile\n");
+        for k in 0..20 {
+            text.push_str(&format!(
+                "zzz noise filler line number {k} with some more unrelated padding words here\n"
+            ));
+        }
+        let cfg = Config {
+            semantic: Some(w),
+            sem_gate: 0.4,
+            ratio: 0.5, // 20 行噪声下预算必裁（>200 token 文本）
+            ..Default::default()
+        };
+        let o = compress(&text, "build", &cfg);
+        assert!(
+            o.text.contains("error: build failed at crate compile"),
+            "语义锚行应保留: {}",
+            o.text
+        );
+        assert!(
+            o.text.lines().count() < 14,
+            "预算约束下噪声行应被大量裁剪（保留 {} 行）: {}",
+            o.text.lines().count(),
+            o.text
+        );
     }
 }

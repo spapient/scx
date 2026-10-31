@@ -307,6 +307,15 @@ pub(crate) static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
+        name: "--sem-gate",
+        once: true,
+        kind: Kind::F64,
+        what: "a number (>=0; 0 disables)",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
         name: "--minhash-weight",
         once: true,
         kind: Kind::F64,
@@ -1043,6 +1052,16 @@ mod tests {
         assert_eq!(o.config.sim_weight, 2.5);
         assert_eq!(o.config.sem_weight, 3.5);
         assert_eq!(o.config.sims, None, "sims 由 ops 层填充，arg 解析不设置");
+    }
+
+    #[test]
+    fn sem_gate_parses_and_validates() {
+        let o = all(argv(&["--query", "q", "--sem-gate", "2.5"])).unwrap();
+        assert_eq!(o.config.sem_gate, 2.5);
+        let o = all(argv(&["--query", "q"])).unwrap();
+        assert_eq!(o.config.sem_gate, 0.0, "默认关");
+        assert!(all(argv(&["--query", "q", "--sem-gate", "-0.1"])).is_err());
+        assert!(all(argv(&["--query", "q", "--sem-gate", "abc"])).is_err());
     }
 
     #[test]
