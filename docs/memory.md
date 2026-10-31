@@ -311,3 +311,10 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
   swap 不再高位堆积）、校准两阶段化（3B 3 并发 + deepseek 12 并发）、单实例 mlx server
   并发 >3 连接重置、`--kv-bits 4` 生成截断 19 chars 已否决。校准产物
   `tools/bench_p19_keep/calib/calib_3b_vs_deepseek.json`（8bit 74% 最后写入）。
+- **本机 8bit 探索通道端到端验证（#79，2026-11-01）**：`explore_mlx_8bit.py [n]`
+  纯本机判分（不依赖 deepseek）：30 case/120 条 **31.6s（0.26s/条）**、0 unparseable、
+  all_rec **10.0%（3 hits）与在线 deepseek 同批完全一致**。口径要点：`judge.parse`
+  返回 `{'judgement':...}` dict，取 `["judgement"]` 字段再比较（否则全 False 假象）；
+  case 级 all_rec=该 case 全部视角判 yes。产物
+  `tools/bench_p19_keep/calib/explore_mlx_8bit.json`。日常探索：`mlx_server.sh start`
+  + `explore_mlx_8bit.py 30`；冻结/全量仍走在线 deepseek。
