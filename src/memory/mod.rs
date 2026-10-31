@@ -1,12 +1,18 @@
 //! memory 模块门面：记忆知识库的公开接口与顶层封装。
 //!
+//! 该模块同时是 **记忆治理（Memory Governance）框架**：在存取之外管理记忆
+//! 之间的关系——冲突仲裁（`conflict`/`minhash`）、版本化取代与逻辑退役
+//! （`store` 的 `supersedes`/`life`/`retire_reason`，墓碑语义）、分层晋升
+//! （`tier`）与召回融合（`recall`/`ranking` 的 RRF + 记忆类型过滤）。
+//! 机制总览与术语对照见 `docs/memory.md` §0。
+//!
 //! 与 `compress` 完全隔离：compress 是纯函数（零 I/O），memory 是 I/O 侧模块，
 //! 只做旁路召回与评分先验，绝不注入压缩正文。
 //!
 //! 子模块按职责分为存储（`store`/`meta`/`index`/`lock`）、摄取与分类
-//! （`ingest`/`classify`）、召回排序（`recall`/`ranking`/`edge`/`cache`）、
-//! 反馈维护（`feedback`/`maintenance`）以及评估（`eval`/`gate`/`annotate`）；
-//! 具体文件职责见 `docs/memory.md`。
+//! （`ingest`/`tier`/`classify`）、关系治理（`conflict`/`minhash`）、召回排序
+//! （`recall`/`ranking`/`edge`/`cache`）、反馈维护（`feedback`/`maintenance`）
+//! 以及评估（`eval`/`gate`/`annotate`）；具体文件职责见 `docs/memory.md`。
 
 mod annotate;
 mod cache;

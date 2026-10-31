@@ -12,7 +12,7 @@
 >
 > Keep the lines that matter; leave the rest behind. Verbatim output, offline by default, zero dependencies.
 
-[快速开始](#快速开始) · [工作原理](#工作原理) · [CLI 参考](#cli-参考) · [本地记忆库](#本地记忆库) · [质量与证据](#质量与证据) · [贡献与安全](#贡献与安全)
+[快速开始](#快速开始) · [工作原理](#工作原理) · [CLI 参考](#cli-参考) · [本地记忆库](#本地记忆库) · [记忆治理](#记忆治理memory-governance) · [质量与证据](#质量与证据) · [贡献与安全](#贡献与安全)
 
 ## 为什么选择 scx
 
@@ -429,6 +429,24 @@ scx --query "..." [OPTIONS] [file...]
 （`cases/{id} → index → meta → qmap → fingerprints`）一次取多锁，避免死锁；
 持锁后的写路径使用 `*_locked` 变体，不自相争锁。并发压力测试覆盖
 store/rate/delete/rebuild 组合。契约全文见 [锁序契约](docs/locking.md)。
+
+## 记忆治理（Memory Governance）
+
+记忆库内建一套**关系型治理框架**，管理记忆与记忆之间（语义冲突、版本谱系、
+生命周期）以及记忆与查询之间（分层、召回）的关系，实现全部位于
+`src/memory/`，与压缩引擎完全隔离：
+
+| 机制 | 说明 |
+|---|---|
+| **写入治理与分层晋升** | 脱敏、指纹去重；新 case 默认 L0，证据完整晋升 L1（`tier.rs`） |
+| **冲突仲裁** | 写入时 minhash 近重复检测 + 证据/质量裁决 + related 互链，审计日志 `index/conflicts.log`（`conflict.rs`） |
+| **版本化取代** | `supersedes` 双向链：先写替换者，再标记旧事实（`store.rs`） |
+| **逻辑退役（墓碑）** | `life = active/revised/retired` + `retire_reason`，等价 tombstone 语义，召回过滤非 active（`store.rs` + `maintenance.rs`） |
+| **召回融合** | 词面 BM25 × 字段/实体加权 × PRF × RRF 融合 + 记忆类型过滤（`--recall-kind`） |
+
+治理有效性经官方基准冻结实证：LongMemEval 旧证据进 Top-K **89.74%→1.28%**、
+Memora **ΔFAMA=10.68**、AMA-Bench accuracy **0.512**（> bm25 0.5076）。
+机制详述、术语对照与生命周期见 [docs/memory.md](docs/memory.md) §0。
 
 设计、存储格式、运维与实现记录统一见 [本地记忆库](docs/memory.md)。
 

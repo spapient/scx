@@ -6,6 +6,45 @@
 记忆库是压缩引擎的旁路能力：`scx::compress` 仍是零 I/O 纯函数；记忆只影响
 `--recall` 输出或召回排序，绝不改写当前输入的筛选正文。
 
+## 0. 治理框架总览（Memory Governance）
+
+记忆库在存取之外内建一套**关系型治理框架**：管理记忆与记忆之间（语义冲突、
+版本谱系、生命周期）以及记忆与查询之间（分层、召回融合）的关系。全部治理
+逻辑位于 `src/memory/`，与 `compress` 纯函数引擎完全隔离（见 §1 不变量）。
+
+### 0.1 治理机制一览
+
+| 机制 | 职责 | 实现 | 触发点 |
+|---|---|---|---|
+| 写入治理与分层晋升 | 脱敏、指纹去重、新 case 默认 L0，证据完整晋升 L1 | `ingest.rs` + `tier.rs` | `--store 1` |
+| 冲突仲裁 | minhash 近重复检测 + 证据/质量裁决 + related 互链 + `index/conflicts.log` 审计 | `conflict.rs` + `minhash.rs` | 写入时 |
+| 版本化取代 | `supersedes` 双向链：先写替换者，再标记旧事实 | `store.rs` | 修订写入 |
+| 逻辑退役 | `life` 状态机（active / revised / retired）+ `retire_reason`，等价墓碑（tombstone）语义；召回过滤非 active | `store.rs` + `maintenance.rs` | 修订 / GC |
+| 召回融合 | 词面 BM25 × 字段/实体加权 × PRF × RRF 融合、记忆类型过滤（`--recall-kind`） | `recall.rs` + `ranking.rs` | `--recall` |
+
+### 0.2 术语对照（外部常用叫法 ↔ 本实现）
+
+| 外部叫法 | scx 实现 | 位置 |
+|---|---|---|
+| tombstone（墓碑标记） | `life = retired` + `retire_reason` | `store.rs:103` |
+| supersede（版本取代） | `supersedes` 字段 + 双向链 | `store.rs:99` |
+| conflict arbitration | `conflict::detect` / `arbitrate` + `index/conflicts.log` | `conflict.rs` |
+| governance（治理框架） | memory 模块门面 + 本总览 | `mod.rs` / 本文档 / `context-governance-plan.md` |
+
+### 0.3 生命周期
+
+```
+写入 → 脱敏/去重 → 冲突仲裁（近重复 → 裁决/互链）→ 分层 L0 →（证据完整）→ L1
+   → active →（修订）→ revised，supersedes 指向替换者
+   →（过时/回归）→ retired + retire_reason（墓碑等价；召回过滤非 active）
+```
+
+### 0.4 治理有效性实证（P20/P21/P23 冻结值）
+
+- **LongMemEval**：versioned 旧证据进 Top-K **89.74%→1.28%**、新证据 91.03%（版本化驱逐失效记忆）。
+- **Memora**：gov−nogov **ΔFAMA=10.68**、ΔMPA=0.0533（遗忘规避显著改善）。
+- **AMA-Bench**：scx accuracy **0.512** vs bm25 0.5076（记忆轨迹召回优于基线）。
+
 ## 1. 不变量
 
 | 约束 | 含义 |
@@ -22,17 +61,20 @@
 ```
 src/memory/
 ├── mod.rs          # 唯一公开门面；内部模块不对外暴露
-├── store.rs        # Case 模型、case.json 读写、目录枚举
+├── store.rs        # Case 模型（life/supersedes/retire_reason）、case.json 读写、目录枚举
 ├── meta.rs         # meta.toml、参数默认值、库代际与 L1 历史
 ├── ingest.rs       # 脱敏、指纹去重、摄取
+├── tier.rs         # 分层晋升门控（L0 原始 → L1 候选 → L2 可信）
 ├── classify.rs     # 判别字段抽取 + db/network/disk/build/runtime 场景桶
-├── recall.rs       # BM25 + 字段/实体加权 + 桶过滤 + PRF + 重排
+├── conflict.rs     # 冲突仲裁：minhash 近重复检测 + 证据/质量裁决 + related 互链 + conflicts.log
+├── minhash.rs      # 加权 minhash 签名与 Jaccard 近似（冲突检测/近重复判定基础）
+├── recall.rs       # BM25 + 字段/实体加权 + 桶过滤 + PRF + RRF 融合 + 记忆类型过滤
 ├── ranking.rs      # BM25、PRF 扩展词选择与 MMR 多样性
 ├── index.rs        # 倒排/实体索引、校验、候选提取与 postings 编解码
 ├── cache.rs        # 进程内会话快照 + 持久化 query 记忆图
 ├── edge.rs         # 小库线性路径的结构化实体一跳扩展
 ├── feedback.rs     # 状态机、质量分、词权与 L1 自适应
-├── maintenance.rs  # rebuild / gc / delete / --stats 盘点
+├── maintenance.rs  # rebuild / gc / delete / --stats 盘点（含过期退役清理）
 ├── eval.rs         # 冻结 baseline 重放与指标
 ├── gate.rs         # 机械、逐项、人工证据门
 ├── annotate.rs     # 回归标注、盲测材料生成与逐候选裁决

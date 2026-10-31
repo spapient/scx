@@ -91,7 +91,8 @@ pub struct Case {
     pub related: Vec<String>,
     /// 生命周期版本：普通摄取=1；revise 继承旧 case 版本 +1。
     pub version: u32,
-    /// 生命周期状态：`active | revised | retired`。命名与反馈状态机
+    /// 生命周期状态：`active | revised | retired`（等价墓碑 tombstone 语义：
+    /// `retired` 即逻辑删除标记，召回过滤非 active）。命名与反馈状态机
     /// `status`（open/solved/regressed）区分，plan 稿的 status 实施为 life。
     /// 旧 case 缺键兼容为 active。
     pub life: String,
