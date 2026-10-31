@@ -7,7 +7,7 @@ MODEL="${MLX_MODEL:-/Users/fei/model/qwen2.5-3b-instruct-mlx-8bit}"
 case "${1:-}" in
   start)
     if lsof -ti :"$PORT" >/dev/null 2>&1; then echo "server 已在 $PORT 运行"; exit 0; fi
-    nohup ~/scx-eval-mlx/bin/python -m mlx_lm.server --model "$MODEL" --port "$PORT" \
+    nohup ~/scx-eval-mlx/bin/python -m mlx_lm.server --model "$MODEL" --kv-bits 8 --port "$PORT" \
       > /tmp/mlx_server_8bit.log 2>&1 &
     echo "启动中 pid=$!（模型 $MODEL，端口 $PORT）"
     for i in 1 2 3 4; do
