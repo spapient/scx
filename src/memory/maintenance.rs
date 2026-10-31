@@ -166,70 +166,84 @@ fn block(df: &[(String, usize)]) -> Vec<String> {
     out
 }
 
-/// `--stats` 盘点：case/桶/状态/fix 覆盖率/质量/磁盘占用。
+/// `--stats` 盘点：case/桶/状态/分层/fix 覆盖率/质量/磁盘占用。
 pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
     let meta = crate::memory::meta::load(root)?;
     let ids = store::list(root)?;
-    let mut buckets: HashMap<String, usize> = HashMap::new();
-    let mut statuses: HashMap<String, usize> = HashMap::new();
-    let mut fixes = 0usize;
-    let mut quality_sum = 0.0f64;
-    let mut disk = 0u64;
+    let mut t = Tally::new();
     for id in &ids {
-        sample(
-            root,
-            id,
-            &mut buckets,
-            &mut statuses,
-            &mut fixes,
-            &mut quality_sum,
-            &mut disk,
-        )?;
+        sample(root, id, &mut t)?;
     }
     let n = ids.len();
-    let mut lines = Vec::with_capacity(6);
+    let mut lines = Vec::with_capacity(7);
     lines.push(format!("stats: cases={} gen={}", n, meta.gen));
-    lines.push(format!("  bucket: {}", join(&buckets)));
-    lines.push(format!("  status: {}", join(&statuses)));
+    lines.push(format!("  bucket: {}", join(&t.buckets)));
+    lines.push(format!("  status: {}", join(&t.statuses)));
+    lines.push(format!(
+        "  tier: l0={} l1={} l2={}",
+        t.tiers[0], t.tiers[1], t.tiers[2]
+    ));
     lines.push(format!(
         "  fix: {}/{} ({:.0}%)",
-        fixes,
+        t.fixes,
         n,
         if n == 0 {
             0.0
         } else {
-            100.0 * fixes as f64 / n as f64
+            100.0 * t.fixes as f64 / n as f64
         }
     ));
     lines.push(format!(
         "  quality: mean={:.2}",
-        if n == 0 { 0.0 } else { quality_sum / n as f64 }
+        if n == 0 {
+            0.0
+        } else {
+            t.quality_sum / n as f64
+        }
     ));
-    lines.push(format!("  disk: {:.1} KiB", disk as f64 / 1024.0));
+    lines.push(format!("  disk: {:.1} KiB", t.disk as f64 / 1024.0));
     Ok(lines)
 }
 
-fn sample(
-    root: &str,
-    id: &str,
-    buckets: &mut HashMap<String, usize>,
-    statuses: &mut HashMap<String, usize>,
-    fixes: &mut usize,
-    quality_sum: &mut f64,
-    disk: &mut u64,
-) -> io::Result<()> {
-    let c = store::load(root, id)?;
-    *buckets.entry(c.bucket.clone()).or_insert(0) += 1;
-    *statuses.entry(c.status.clone()).or_insert(0) += 1;
-    if !c.fix.is_empty() {
-        *fixes += 1;
+/// 逐 case 累计的盘点聚合（避免 sample 参数膨胀）。
+struct Tally {
+    buckets: HashMap<String, usize>,
+    statuses: HashMap<String, usize>,
+    tiers: [usize; 3],
+    fixes: usize,
+    quality_sum: f64,
+    disk: u64,
+}
+
+impl Tally {
+    fn new() -> Self {
+        Self {
+            buckets: HashMap::new(),
+            statuses: HashMap::new(),
+            tiers: [0; 3],
+            fixes: 0,
+            quality_sum: 0.0,
+            disk: 0,
+        }
     }
-    *quality_sum += c.quality;
+}
+
+fn sample(root: &str, id: &str, t: &mut Tally) -> io::Result<()> {
+    let c = store::load(root, id)?;
+    *t.buckets.entry(c.bucket.clone()).or_insert(0) += 1;
+    *t.statuses.entry(c.status.clone()).or_insert(0) += 1;
+    if c.tier < 3 {
+        t.tiers[c.tier as usize] += 1;
+    }
+    if !c.fix.is_empty() {
+        t.fixes += 1;
+    }
+    t.quality_sum += c.quality;
     let dir = store::path(root, id)
         .parent()
         .expect("path 必含 cases/<id>/case.json")
         .to_path_buf();
-    *disk += store::size(&dir)?;
+    t.disk += store::size(&dir)?;
     Ok(())
 }
 

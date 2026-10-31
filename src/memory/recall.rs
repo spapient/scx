@@ -31,6 +31,8 @@ struct Doc {
     fields: Arc<super::store::Fields>,
     status: Arc<str>,
     quality: f64,
+    /// 记忆分层（0/1/2）；score 按 tier 先验加权（L2/L1 加分，L0 不加）。
+    tier: u8,
     updated_s: u64,
     /// 实体边：与 query 共享的实体键数（0 = 词面候选，>0 = 桥入兄弟 case）。
     edge_shared: usize,
@@ -512,6 +514,9 @@ fn scores(root: &str, plan: &Plan, ctx: &Ctx<'_>) -> std::io::Result<Vec<Hit>> {
         .collect();
     // quality 排序先验：solved 且质量高的 case 提分。
     let q_prior = meta.param("quality_prior");
+    // tier 排序先验：L2 可信 / L1 候选提分，L0 原始不加（兜底展示不直答）。
+    let tier_prior_l2 = meta.param("tier_prior_l2");
+    let tier_prior_l1 = meta.param("tier_prior_l1");
     let qf_min_sim = meta.param("query_field_min_sim");
     // score_max：原始 query 词 idf 加字段全命中，作 sim 归一化分母。
     // 同义扩展只增加命中机会，不得抬高分母把原始 query 的 sim 稀释。
@@ -535,6 +540,8 @@ fn scores(root: &str, plan: &Plan, ctx: &Ctx<'_>) -> std::io::Result<Vec<Hit>> {
         tau_regressed,
         tau,
         q_prior,
+        tier_prior_l2,
+        tier_prior_l1,
         sm,
         qf_min_sim,
         k1,
@@ -565,6 +572,8 @@ struct Score<'a> {
     tau_regressed: f64,
     tau: f64,
     q_prior: f64,
+    tier_prior_l2: f64,
+    tier_prior_l1: f64,
     sm: f64,
     qf_min_sim: f64,
     k1: f64,
@@ -596,6 +605,15 @@ fn score(doc: usize, dctx: &Doc, p: &Score<'_>) -> Option<Rank> {
     let (decay, qsign) = decay(dctx, p.now_s, p.tau_solved, p.tau_regressed, p.tau);
     // quality 排序先验：solved/质量高的 case 提分，regressed 压分。
     fb += dctx.quality * p.q_prior * qsign;
+    // tier 排序先验：可信/候选层提分，原始层不加（兜底展示不直答）。
+    let t_prior = if dctx.tier >= 2 {
+        p.tier_prior_l2
+    } else if dctx.tier == 1 {
+        p.tier_prior_l1
+    } else {
+        0.0
+    };
+    fb += t_prior;
     if support <= 0.0 {
         return None;
     }
@@ -657,6 +675,7 @@ fn candidates(
                     fields: rec.fields.clone(),
                     status: rec.status.clone(),
                     quality: rec.quality,
+                    tier: rec.tier,
                     updated_s: rec.updated_s,
                     edge_shared,
                 },
@@ -769,6 +788,7 @@ fn case(root: &str, id: &str, cfg: &Scan<'_>, acc: &mut Acc) -> std::io::Result<
             fields: Arc::new(c.fields),
             status: c.status.into(),
             quality: c.quality,
+            tier: c.tier,
             updated_s: crate::memory::util::parse(&c.updated_at),
             edge_shared: 0,
         },
@@ -786,6 +806,7 @@ fn bridge(docs: &mut Docs, b: crate::memory::edge::Bridge) {
             fields: b.fields,
             status: b.status,
             quality: b.quality,
+            tier: b.tier,
             updated_s: crate::memory::util::parse(&b.updated_at),
             edge_shared: b.edge_shared,
         },
@@ -1030,6 +1051,7 @@ mod tests {
                 fields: Arc::new(Default::default()),
                 status: "open".into(),
                 quality: 0.0,
+                tier: 0,
                 updated_s: 0,
                 edge_shared: 0,
             },

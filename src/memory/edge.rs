@@ -85,6 +85,8 @@ pub(crate) struct Bridge {
     pub fields: std::sync::Arc<store::Fields>,
     pub status: std::sync::Arc<str>,
     pub quality: f64,
+    /// 记忆分层（0/1/2），随 case 快照；召回按 tier 先验加权。
+    pub tier: u8,
     pub updated_at: std::sync::Arc<str>,
     pub edge_shared: usize,
 }
@@ -124,6 +126,7 @@ pub(crate) fn bridge(
             fields: std::sync::Arc::new(c.fields),
             status: c.status.into(),
             quality: c.quality,
+            tier: c.tier,
             updated_at: c.updated_at.into(),
             edge_shared: shared,
         });

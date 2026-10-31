@@ -25,6 +25,7 @@ mod minhash;
 pub(crate) mod ranking;
 mod recall;
 mod store;
+mod tier;
 mod util;
 pub(crate) use util::sanitize;
 
@@ -512,6 +513,55 @@ mod tests {
         assert_eq!(a, b, "窗口内二次融合召回必须逐字段一致（快照命中）");
         let c = search_fused(&root, "db timeout", 2, true, None, 0.0, 1.0).unwrap();
         assert_eq!(a, c, "read_only 路径结果必须与可写路径一致");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 记忆分层全链路：无证据 case 停 L0；补全证据升 L1；反馈累积双达线升 L2。
+    #[test]
+    fn tier_promotes_through_feedback_chain() {
+        let root = tmp("tier");
+        let stats = Stats {
+            kept: 1,
+            total: 1,
+            cut: 0.0,
+            risk: "LOW".to_string(),
+        };
+        // 1) 仅正文无证据：L0。
+        let id0 = save(Input::new(
+            &root,
+            "db timeout",
+            "db timeout conn pool",
+            &stats,
+        ))
+        .unwrap()
+        .1;
+        let c = load(&root, &id0).unwrap();
+        assert_eq!(c.tier, 0, "无证据 case 必须留在 L0 原始层");
+        // 2) 补全 fix + evidence（同指纹路径走 update → backfill）：升 L1。
+        let ev = vec!["line 12: pool exhausted".to_string()];
+        let (_, id1) = save(Input {
+            root: &root,
+            query: "db timeout",
+            text: "db timeout conn pool",
+            source: &[],
+            stats: &stats,
+            forces: &[],
+            fix: "raise pool size",
+            evidence_lno: &[12],
+            evidence: &ev,
+            max_bytes: None,
+        })
+        .unwrap();
+        let c = load(&root, &id1).unwrap();
+        assert_eq!(c.tier, 1, "证据完整 case 应晋升 L1 候选层");
+        // 3) 三次 good 反馈（quality=1.0 ≥ 0.4）：升 L2。
+        for _ in 0..3 {
+            rate(&root, &id1, true).unwrap();
+        }
+        let c = load(&root, &id1).unwrap();
+        assert_eq!(c.tier, 2, "good 达线且 quality 达标应晋升 L2 可信层");
+        assert!(!c.tier_at.is_empty(), "晋升必须记录 tier_at");
+        // 4) 新 case 复用同 id（幂等 update）不降级。
         let _ = std::fs::remove_dir_all(&root);
     }
 }

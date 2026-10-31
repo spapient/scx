@@ -203,6 +203,10 @@ fn update(
     let now = store::stamp();
     c.updated_at = now;
     backfill(&mut c, fix, evidence_lno, evidence);
+    // 去重补录可能刚补齐 evidence/fix：达到证据完整性即晋升 L0→L1。
+    let meta = crate::memory::meta::load(root)?;
+    let good = c.feedback.good;
+    crate::memory::tier::promote(&meta, &mut c, good);
     store::save(root, &c)?;
     Ok((false, existing.to_string()))
 }
@@ -239,6 +243,9 @@ fn insert(fields: Payload<'_>, fp: &str) -> std::io::Result<String> {
     let fvec = c.fields.error_code.clone();
     let qterms = crate::terms::memory(&c.query);
     c.bucket = crate::memory::classify::query(&fvec, &qterms, text);
+    // 分层：新 case 默认 L0；evidence+fix 完整则直接晋升 L1（候选层）。
+    let meta = crate::memory::meta::load(root)?;
+    crate::memory::tier::promote(&meta, &mut c, 0);
     store::save(root, &c)?;
     store::bump(root)?;
     remember(root, fp, &id)?;

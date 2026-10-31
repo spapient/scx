@@ -96,6 +96,15 @@ pub(crate) const DEFAULT_PARAMS: &[(&str, f64)] = &[
     ("session_cache_minutes", 30.0),
     ("l1_base", 0.55),
     ("l1_margin_min", 0.15),
+    // 记忆分层晋升门控（P1）：
+    // tier_l1_q    —— L1→L2 的前置质量门槛（quality 达线才可晋升可信层）。
+    // tier_l2_good —— L1→L2 所需 good 反馈累计数；人工 --rate good 达标即升。
+    // tier_prior_l2 / tier_prior_l1 —— 召回排序先验：可信/候选层加分，
+    //   原始层不加（L0 兜底展示不直答）。tier_prior_l0 缺省 0（无加分）。
+    ("tier_l1_q", 0.4),
+    ("tier_l2_good", 3.0),
+    ("tier_prior_l2", 0.05),
+    ("tier_prior_l1", 0.02),
     ("l1_adapt_min", 0.30),
     ("l1_adapt_max", 0.90),
     ("l1_adapt_min_history", 4.0),

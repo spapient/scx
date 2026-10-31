@@ -53,6 +53,9 @@ pub(crate) fn rate(root: &str, id: &str, good: bool) -> std::io::Result<Case> {
         meta::learn(root, &terms, good);
     }
     // 写回 case（原子写；save 内部 bump gen，qmap/缓存随之失效）。
+    // 分层晋升：good 累计达线且 quality 达标 → L1 候选晋升 L2 可信。
+    let m = crate::memory::meta::load(root)?;
+    crate::memory::tier::promote(&m, &mut c, fb.good);
     store::save(root, &c)?;
     // L1 自适应：基于 [l1] 历史重算 l1_base。
     adapt(root);

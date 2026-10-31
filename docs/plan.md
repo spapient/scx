@@ -2393,3 +2393,64 @@ P13 定稿(0.11.0 目标)
 - 冻结基线 bench_p18_combo.csv 不变（默认路径逐字节一致，语义默认关）。
 - **版本状态图**：0.10.0（P17 全线 + 消融闭环）→ 0.11.0（P0/P1 顶尖级收尾）→
   **0.11.0（语义蒸馏 #61–#67 完成：24 维权默认关 + 端到端保真评测闭环 + MLP 对照证伪）**。
+
+---
+
+## 记忆治理升级计划（2026-10-31，#69 起，版本 0.11.0 保持）
+
+**来源**：用户经验评审（6 项差距）。核查结论：①③②属实；④⑤⑥部分属实
+（有基础但未达顶级）。零依赖红线不变。
+
+### P1 记忆分层 + 晋升门控（L0 原始 → L1 候选 → L2 可信）
+- `Case` 增加 `tier: u8`（0/1/2）+ `tier_at`；默认写入 L0。
+- 晋升门控（复用现有 minhash 相似度 + feedback quality）：
+  - L0→L1：evidence 非空 + quality ≥ l1_q（缺省 0.4）+ minhash 冲突检查通过；
+  - L1→L2：good ≥ l2_good（缺省 3）+ 成功召回命中 ≥ l2_hits（缺省 2）或人工 --rate good；
+- 召回按 tier 加权（L2 最高，L0 兜底展示不直答）。
+
+### P2 冲突仲裁
+- 写入时 minhash 近重复检测（sim ≥ 0.8）；仲裁：证据更全/质量更高者胜，
+  败者互链 `related`，仲裁记录入 meta conflict log；不删除数据。
+
+### P3 版本化更新（Revise/Retire）
+- `Case` 增加 `version: u32`、`status: active|revised|retired`、
+  `supersedes`、`superseded_by`、`retire_reason`。
+- `revise <id> <new…>`：先写新 case（supersedes=旧 id），再原子标记旧
+  case status=revised + superseded_by=new（"先写替换者再标记旧事实"）。
+- `retire <id> <reason>`：只 tombstone（status=retired + reason），不删除。
+- 召回过滤 retired/revised（superseded_by 指向活跃者）。
+
+### P4 RRF 融合召回 + 记忆类型体系
+- `search_fused` 从线性加权改为 **RRF**（Reciprocal Rank Fusion，纯算法
+  零依赖）：BM25 秩 + 字段/实体秩 + minhash 语义秩 + 外部 embed 秩
+  （插拔）→ Σ 1/(k+rank) 融合，k=60。
+- `Case` 增加 `kind`（situation/experience/procedure/semantic），写入时
+  自动分类（复用 classify 判别字段 + 规则：procedure=含多步命令；
+  experience=错误码+fix；situation=纯上下文；semantic=术语/定义）；
+  `--recall-kind <k>` 过滤。
+
+### P1 完成记录（2026-10-31）
+
+- **分层落地**：`Case` 增加 `tier: u8` + `tier_at`（store.rs encode/decode 配对；
+  旧 case 缺键兼容回退 L0）。新增 `src/memory/tier.rs`：`promote(meta,&mut Case,good)`
+  只升不降。
+- **晋升门控（实现口径，微调计划稿）**：
+  - L0→L1：`evidence` 非空 且 `fix` 非空（"证据完整 + 可执行结论"双条件；
+    计划稿的 minhash 冲突检查归 P2 冲突仲裁承担）；
+  - L1→L2：`good ≥ tier_l2_good(3)` 且 `quality ≥ tier_l1_q(0.4)`（计划稿的
+    "召回命中 ≥ 2"不可机械自证，以 feedback quality 替代，语义等价）。
+- **接入点**：ingest insert 落盘前（证据完整直升 L1）；update 同指纹补录
+  backfill 后；feedback rate() 写回前（L1→L2）。
+- **召回加权**：Doc/Score 增加 `tier` + `tier_prior_l2/l1` 先验
+  （meta DEFAULT_PARAMS：`tier_l1_q=0.4`、`tier_l2_good=3.0`、
+  `tier_prior_l2=0.05`、`tier_prior_l1=0.02`）；L0 兜底展示不直答。
+- **索引/桥贯通**：index.rs Record 与 postings.bin 编码新增单字节 tier
+  （`POST_VER 3→4`，旧缓存版本不符自动作废重建）；edge.rs Bridge 同步。
+- **可观测**：`--stats` 新增 `tier: l0=n l1=n l2=n` 分布行
+  （maintenance.rs Tally 聚合，避免 sample 参数膨胀）。
+- **门禁**：`cargo test --locked --features memory --lib` = **380 passed**；
+  clippy（--all-targets）0 警告；fmt 干净。新增端到端测试
+  `tier_promotes_through_feedback_chain`（无证据 L0 → 补全证据 L1 →
+  rate×3 L2 且 tier_at 非空）。CLI 实测：无证据 store 停 L0、rate 写回正常、
+  `--stats` 输出分层行。
+- **提交**：见 git log（全中文，未 push）。版本 0.11.0 保持。

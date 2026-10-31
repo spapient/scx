@@ -38,7 +38,7 @@ use std::time::SystemTime;
 pub(crate) const INDEX_MIN_DOCS: usize = 10_000;
 
 const POST_MAGIC: u32 = 0x5453_4f50; // "POST"
-const POST_VER: u16 = 3;
+const POST_VER: u16 = 4;
 
 pub(crate) fn postings(root: &str) -> PathBuf {
     Path::new(root).join("index").join("postings.bin")
@@ -117,6 +117,8 @@ pub(crate) struct Record {
     pub fields: Arc<crate::memory::store::Fields>,
     pub status: Arc<str>,
     pub quality: f64,
+    /// 记忆分层（0/1/2），随 case 快照；召回按 tier 先验加权。
+    pub tier: u8,
     pub updated_at: Arc<str>,
     /// `updated_at` 的 Unix 秒快照；召回热循环不再逐候选解析日期。
     pub updated_s: u64,
@@ -219,6 +221,7 @@ fn records(root: &str, ids: &[String]) -> std::io::Result<(Vec<(String, Record)>
                 fields: Arc::new(c.fields),
                 status: c.status.into(),
                 quality: c.quality,
+                tier: c.tier,
                 updated_at: c.updated_at.into(),
                 updated_s,
             },
@@ -278,6 +281,7 @@ fn table(body: &mut Vec<u8>, docs: &[(String, Record)]) {
         body.push(rec.status.len() as u8);
         body.extend_from_slice(rec.status.as_bytes());
         body.extend_from_slice(&(rec.quality as f32).to_le_bytes());
+        body.push(rec.tier); // 记忆分层（0/1/2），单字节
         body.push(rec.updated_at.len() as u8);
         body.extend_from_slice(rec.updated_at.as_bytes());
     }
@@ -424,6 +428,16 @@ fn float(body: &[u8], i: &mut usize, what: &str) -> std::io::Result<f32> {
     Ok(v)
 }
 
+/// 从游标语境取单字节（分层 tier）。
+fn byte(body: &[u8], i: &mut usize) -> std::io::Result<u8> {
+    if *i >= body.len() {
+        return Err(corrupt("byte truncated"));
+    }
+    let v = body[*i];
+    *i += 1;
+    Ok(v)
+}
+
 /// 定长 N 字节数组拷贝：调用方已验边界（切片长度 >= N），copy_from_slice 不越界，
 /// 把「try_into + unwrap」的隐含 panic 语义替换为显式定长解释（const 泛型静态保证）。
 fn arr<const N: usize>(s: &[u8]) -> [u8; N] {
@@ -493,7 +507,7 @@ fn scan(
 fn doc(body: &[u8], i: &mut usize) -> std::io::Result<(Arc<str>, Record)> {
     let (id, terms, query_terms, buckets) = split(body, i)?;
     let fields = values(body, i)?;
-    let (bucket, status, quality, updated_at) = tail(body, i)?;
+    let (bucket, status, quality, tier, updated_at) = tail(body, i)?;
     let updated_s = crate::memory::util::parse(&updated_at);
     Ok((
         id.into(),
@@ -505,6 +519,7 @@ fn doc(body: &[u8], i: &mut usize) -> std::io::Result<(Arc<str>, Record)> {
             fields: Arc::new(fields),
             status: status.into(),
             quality,
+            tier,
             updated_at: updated_at.into(),
             updated_s,
         },
@@ -533,12 +548,13 @@ fn values(body: &[u8], i: &mut usize) -> std::io::Result<crate::memory::store::F
     })
 }
 
-fn tail(body: &[u8], i: &mut usize) -> std::io::Result<(String, String, f64, String)> {
+fn tail(body: &[u8], i: &mut usize) -> std::io::Result<(String, String, f64, u8, String)> {
     let bucket = text(body, i)?;
     let status = text(body, i)?;
     let quality = float(body, i, "no quality")? as f64;
+    let tier = byte(body, i)?;
     let updated_at = text(body, i)?;
-    Ok((bucket, status, quality, updated_at))
+    Ok((bucket, status, quality, tier, updated_at))
 }
 
 /// 解析 term 表（n_terms 条倒排），返回 term → (df, doc_idx 升序列表)。

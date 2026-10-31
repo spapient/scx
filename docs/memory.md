@@ -207,6 +207,12 @@ cargo run --release --locked --example bench -- memory
 - 移除历史 `eval-real/` 中间产物；可重建语料与冻结标签迁入 `config/`。
 - `scx.py seed` 改为 stdin 字节输入 + 可配置并行 store，消除逐 case 临时文件；
   CI 对比串行/并行 CSV，语料与 `--eval-verbose` 解析增加单行、重复与覆盖校验。
+- **记忆分层 + 晋升门控（P1，#69，2026-10-31）**：`Case` 新增 `tier: u8`（0/1/2，
+  缺键兼容回退 L0）+ `tier_at`；新增 `tier.rs::promote` 只升不降门控
+  （L0→L1：evidence 非空且 fix 非空；L1→L2：good ≥ 3 且 quality ≥ 0.4）。
+  写入/补录/反馈三接入点；召回按 tier 先验加权（`tier_prior_l2/l1`，L0 不加，
+  兜底展示不直答）。postings.bin 编码新增单字节 tier（POST_VER 3→4，旧缓存
+  自动作废重建）；`--stats` 新增 `tier: l0=l1=l2=` 分布行。
 
 ## L1 直答评测协议（fix 覆盖率 / 命中率口径）
 

@@ -81,6 +81,11 @@ pub struct Case {
     pub forces: Vec<String>,
     pub feedback: Feedback,
     pub quality: f64,
+    /// 记忆分层：0=原始（L0，仅摄取）、1=候选（L1，证据完整）、
+    /// 2=可信（L2，反馈累积证明）。旧 case 缺键兼容为 0。
+    pub tier: u8,
+    /// 最近一次晋升时间（UTC Unix 秒，字符串）。L0 或未晋升时为空。
+    pub tier_at: String,
 }
 
 impl Case {
@@ -119,6 +124,8 @@ impl Case {
             forces: Vec::new(),
             feedback: Feedback { good: 0, bad: 0 },
             quality: 0.0,
+            tier: 0,
+            tier_at: String::new(),
         }
     }
 }
@@ -207,6 +214,8 @@ pub(crate) fn encode(c: &Case) -> Val {
             ]),
         ),
         ("status".into(), Val::Str(c.status.clone())),
+        ("tier".into(), Val::Num(c.tier as f64)),
+        ("tier_at".into(), Val::Str(c.tier_at.clone())),
         (
             "stats".into(),
             Val::Obj(vec![
@@ -253,6 +262,21 @@ fn strings(v: &Val) -> Vec<String> {
     }
 }
 
+/// tier 字段容错解析：缺失/越界一律回退 L0（旧 case 兼容），只接受 0/1/2。
+fn tier(v: Option<&Val>) -> u8 {
+    match v {
+        Some(Val::Num(n)) => {
+            let t = n.round();
+            if (0.0..=2.0).contains(&t) {
+                t as u8
+            } else {
+                0
+            }
+        }
+        _ => 0,
+    }
+}
+
 /// 从 Val 反解 Case（未知/缺失键容错为默认值；schema 版本不符仍尽力读取）。
 pub(crate) fn decode(v: &Val) -> Case {
     let obj = match v {
@@ -282,6 +306,8 @@ pub(crate) fn decode(v: &Val) -> Case {
     c.status = get(obj, "status")
         .map(string)
         .unwrap_or_else(|| "open".to_string());
+    c.tier = tier(get(obj, "tier"));
+    c.tier_at = get(obj, "tier_at").map(string).unwrap_or_default();
     c.forces = get(obj, "forces").map(strings).unwrap_or_default();
     if let Some(Val::Obj(f)) = get(obj, "fields") {
         c.fields.error_code = get(f, "error_code").map(strings).unwrap_or_default();
