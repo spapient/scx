@@ -54,6 +54,8 @@ pub struct Compress {
     pub revise: Option<String>,
     pub recall: usize,
     pub recall_detail: bool,
+    /// `--recall-kind`：按记忆类型过滤召回结果。
+    pub recall_kind: Option<String>,
     pub stat: bool,
     pub no_stats: bool,
     pub json: bool,
@@ -92,6 +94,7 @@ pub enum Op {
         embed_cmd: Option<String>,
         sim_weight: f64,
         minhash_weight: f64,
+        kind: Option<String>,
     },
     #[cfg(feature = "memory")]
     Eval {
@@ -170,6 +173,7 @@ fn select(#[cfg_attr(not(feature = "memory"), allow(unused_variables))] opts: &O
             embed_cmd: opts.embed_cmd.clone(),
             sim_weight: opts.config.sim_weight,
             minhash_weight: opts.minhash_weight,
+            kind: opts.recall_kind.clone(),
         });
     }
     #[cfg(feature = "memory")]
@@ -283,6 +287,7 @@ fn job(opts: &Opts) -> Compress {
         revise: opts.revise.clone(),
         recall: opts.recall,
         recall_detail: opts.recall_detail,
+        recall_kind: opts.recall_kind.clone(),
         stat: opts.stat,
         no_stats: opts.no_stats,
         json: opts.json,
@@ -329,6 +334,7 @@ fn dispatch(op: Op) -> Reply {
             embed_cmd,
             sim_weight,
             minhash_weight,
+            kind,
         } => result(
             &mem_dir,
             &query,
@@ -337,6 +343,7 @@ fn dispatch(op: Op) -> Reply {
             embed_cmd,
             sim_weight,
             minhash_weight,
+            kind,
         ),
         Op::Eval {
             mem_dir,
@@ -359,6 +366,7 @@ fn dispatch(op: Op) -> Reply {
     }
 }
 #[cfg(feature = "memory")]
+#[allow(clippy::too_many_arguments)] // 与 recall 对称直传：embed/minhash/kind 为独立召回配置。
 fn result(
     mem_dir: &str,
     query: &str,
@@ -367,6 +375,7 @@ fn result(
     embed_cmd: Option<String>,
     sim_weight: f64,
     minhash_weight: f64,
+    kind: Option<String>,
 ) -> Reply {
     match recall(
         mem_dir,
@@ -376,6 +385,7 @@ fn result(
         embed_cmd,
         sim_weight,
         minhash_weight,
+        kind,
     ) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
@@ -450,6 +460,7 @@ fn delete(mem_dir: &str, id: &str) -> Reply {
 }
 
 #[cfg(feature = "memory")]
+#[allow(clippy::too_many_arguments)] // 与 result 对称直传：embed/minhash/kind 为独立召回配置。
 /// `--recall-only` 查看模式：只读召回、零库状态写入，库缺失时不创建目录。
 fn recall(
     mem_dir: &str,
@@ -459,15 +470,20 @@ fn recall(
     embed_cmd: Option<String>,
     sim_weight: f64,
     minhash_weight: f64,
+    kind: Option<String>,
 ) -> io::Result<()> {
-    let hits = crate::memory::search_fused(
+    let hits = crate::memory::filter_kind(
         mem_dir,
-        query,
-        k,
-        true,
-        embed_cmd.as_deref(),
-        sim_weight,
-        minhash_weight,
+        &crate::memory::search_fused(
+            mem_dir,
+            query,
+            k,
+            true,
+            embed_cmd.as_deref(),
+            sim_weight,
+            minhash_weight,
+        )?,
+        kind.as_deref(),
     )?;
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -1099,7 +1115,7 @@ fn memory(out: &mut dyn Write, job: &Compress) -> Reply {
     if job.recall == 0 {
         return Ok(());
     }
-    match crate::memory::search_fused(
+    let fused = match crate::memory::search_fused(
         &job.mem_dir,
         &job.query,
         job.recall,
@@ -1108,21 +1124,27 @@ fn memory(out: &mut dyn Write, job: &Compress) -> Reply {
         job.config.sim_weight,
         job.minhash_weight,
     ) {
-        Ok(hits) => {
-            let qualified = crate::memory::hits(&job.mem_dir, hits);
-            write(lines(
-                out,
-                &qualified,
-                &job.mem_dir,
-                job.recall_detail,
-                true,
-            ))
-        }
+        Ok(hits) => hits,
         Err(e) => {
             eprintln!("scx: warning: --recall skipped: {e}");
-            Ok(())
+            return Ok(());
         }
-    }
+    };
+    let hits = match crate::memory::filter_kind(&job.mem_dir, &fused, job.recall_kind.as_deref()) {
+        Ok(hits) => hits,
+        Err(e) => {
+            eprintln!("scx: warning: --recall skipped: {e}");
+            return Ok(());
+        }
+    };
+    let qualified = crate::memory::hits(&job.mem_dir, hits);
+    write(lines(
+        out,
+        &qualified,
+        &job.mem_dir,
+        job.recall_detail,
+        true,
+    ))
 }
 #[cfg(feature = "memory")]
 fn prepare(job: &Compress, input: &str, outcome: &Outcome) -> Reply<Option<Receiver>> {

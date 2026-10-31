@@ -191,16 +191,37 @@ pub fn search(root: &str, query: &str, k: usize, read_only: bool) -> std::io::Re
     Ok(hits)
 }
 
+/// 按记忆类型过滤召回结果（`--recall-kind`）。kind 为 None 时原样返回；
+/// 非 active 的 case（revised/retired）恒被剔除；case 缺失（并发删除）跳过。
+/// 保留过滤前的顺序（搜索已截断到 k，过滤只减不增）。
+pub fn filter_kind(root: &str, hits: &[Hit], kind: Option<&str>) -> std::io::Result<Vec<Hit>> {
+    let Some(want) = kind else {
+        return Ok(hits.to_vec());
+    };
+    let mut out = Vec::with_capacity(hits.len());
+    for h in hits {
+        let Ok(c) = store::load(root, &h.id) else {
+            continue;
+        };
+        if c.life != "active" || c.kind != want {
+            continue;
+        }
+        out.push(h.clone());
+    }
+    Ok(out)
+}
+
 /// RRF 融合常数（k=60）。
 const RRF_K: f64 = 60.0;
 
-/// 融合召回：BM25 top-k 与 embedding 余弦排名、MinHash-LSH Jaccard 的 RRF 融合。
+/// 融合召回：BM25 秩 + 字段/实体秩 + MinHash-LSH 语义秩 + embedding 余弦秩的
+/// RRF（Reciprocal Rank Fusion）无权重融合（各路 Σ 1/(k+rank)，k=60）。
 ///
 /// `embed_cmd: None`/`embed_weight <= 0.0` 且 `minhash_weight <= 0.0` 时直接返回
-/// `search` 结果，行为不变。否则枚举全库 case 文本，计算 query×文本相似度排名，
-/// 与 BM25 排名做 RRF 融合后取 top-k。BM25 命中保留原 `score`/`sim`；仅靠 side
-/// 信号救回的 case（不在 BM25 top-k）`score`/`sim` 记 0——不触发 L1 直答，符合
-/// 低词面置信语义。本函数不触碰评测路径（`--eval` 走 `recall::clock`/`read`）。
+/// `search` 结果，行为不变；两权重参数在融合态只作"路开关"（>0 启用对应路），
+/// 融合分值本身不乘权重。BM25 命中保留原 `score`/`sim`；仅靠 side 信号救回的
+/// case（不在 BM25 top-k）`score`/`sim` 记 0——不触发 L1 直答，符合低词面置信
+/// 语义。本函数不触碰评测路径（`--eval` 走 `recall::clock`/`read`）。
 pub fn search_fused(
     root: &str,
     query: &str,
@@ -229,10 +250,11 @@ pub fn search_fused(
     if ids.is_empty() {
         return Ok(bm25);
     }
-    let texts: Vec<String> = ids
+    let cases: Vec<store::Case> = ids
         .iter()
-        .map(|id| store::load(root, id).map(|c| c.text))
+        .map(|id| store::load(root, id))
         .collect::<std::io::Result<_>>()?;
+    let texts: Vec<String> = cases.iter().map(|c| c.text.clone()).collect();
     let refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
 
     // BM25 排名项与 score/sim 快照。
@@ -258,15 +280,39 @@ pub fn search_fused(
         None
     };
 
+    // 字段/实体秩（P4）：query 侧结构化字段（错误码/位置/符号/数字指纹）与
+    // case 侧字段键的交集数构成一路秩；全库零命中时整路不启用，避免 0 分
+    // 伪秩污染融合。
+    let qkeys = crate::memory::classify::keys(&crate::memory::classify::extract(query));
+    let field_scores: Vec<f64> = cases
+        .iter()
+        .map(|c| {
+            crate::memory::classify::keys(&c.fields)
+                .iter()
+                .filter(|k| qkeys.contains(k))
+                .count() as f64
+        })
+        .collect();
+    let field_term = if field_scores.iter().any(|&x| x > 0.0) {
+        Some(full_rank_term(&ids, &field_scores))
+    } else {
+        None
+    };
+
+    // RRF 纯秩和：BM25 + 字段/实体 + minhash 语义 + 外部 embed（插拔）四路
+    // 各 Σ 1/(k+rank) 无权重求和；embed/minhash 权重参数仅作路开关（>0 启用）。
     let mut fused: Vec<(f64, String)> = ids
         .iter()
         .map(|id| {
             let mut s = bm25_term.get(id).copied().unwrap_or(0.0);
             if let Some(t) = &embed_term {
-                s += embed_weight * t.get(id).copied().unwrap_or(0.0);
+                s += t.get(id).copied().unwrap_or(0.0);
             }
             if let Some(t) = &minhash_term {
-                s += minhash_weight * t.get(id).copied().unwrap_or(0.0);
+                s += t.get(id).copied().unwrap_or(0.0);
+            }
+            if let Some(t) = &field_term {
+                s += t.get(id).copied().unwrap_or(0.0);
             }
             (s, id.clone())
         })
@@ -496,6 +542,21 @@ mod tests {
         id
     }
 
+    /// 带修复结论的 seed：fix 非空才走 experience 记忆类型。
+    fn seed_fix(root: &str, query: &str, text: &str, fix: &str) -> String {
+        let stats = Stats {
+            kept: 1,
+            total: 1,
+            cut: 0.0,
+            risk: "LOW".to_string(),
+        };
+        let mut input = Input::new(root, query, text, &stats);
+        input.fix = fix;
+        let (added, id) = save(input).unwrap();
+        assert!(added, "seed_fix must add a case");
+        id
+    }
+
     #[test]
     fn search_fused_none_equals_search() {
         let root = tmp("none");
@@ -548,6 +609,75 @@ mod tests {
 
     /// 融合会话快照：窗口内二次调用逐字段一致；read_only 路径结果一致
     /// （只读不写缓存，重算但产出相同）。
+    /// P4：--recall-kind 过滤（类型 + 生命周期），顺序保持、只减不增。
+    #[test]
+    fn filter_kind_filters_by_kind_and_life() {
+        let root = tmp("kind");
+        let exp = seed_fix(
+            &root,
+            "disk full",
+            "ERROR: disk full errno=28",
+            "clean up disk",
+        );
+        let sit = seed(
+            &root,
+            "db timeout",
+            "db timeout conn pool\nroot cause: pool exhausted",
+        );
+        let hits = vec![
+            Hit {
+                id: sit.clone(),
+                score: 1.0,
+                sim: 0.0,
+            },
+            Hit {
+                id: exp.clone(),
+                score: 0.5,
+                sim: 0.0,
+            },
+        ];
+        // 无 kind 要求：原样返回。
+        let all = filter_kind(&root, &hits, None).unwrap();
+        assert_eq!(all.len(), 2);
+        // 只留 experience（disk full errno=28 + fix）。
+        let exp_only = filter_kind(&root, &hits, Some("experience")).unwrap();
+        assert_eq!(
+            exp_only,
+            vec![Hit {
+                id: exp.clone(),
+                score: 0.5,
+                sim: 0.0
+            }]
+        );
+        // retire 后非 active 恒剔除。
+        let mut c = crate::memory::store::load(&root, &exp).unwrap();
+        c.life = "retired".to_string();
+        crate::memory::store::save(&root, &c).unwrap();
+        let after = filter_kind(&root, &hits, Some("experience")).unwrap();
+        assert!(after.is_empty(), "retired case 不得再被 kind 召回");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// P4：RRF 四路并入后（minhash 开启、embed 关闭）字段实体键命中者
+    /// 仍居首且结果确定（两路信号并存不破坏排序）。
+    #[test]
+    fn search_fused_field_rank_keeps_entity_case_first() {
+        let root = tmp("field");
+        let a = seed_fix(
+            &root,
+            "disk full",
+            "ERROR: disk full errno=28",
+            "clean up disk",
+        );
+        let _ = seed(&root, "disk full", "disk full\nroot cause: pool exhausted");
+        let fused = search_fused(&root, "disk full errno=28", 2, true, None, 0.0, 1.0).unwrap();
+        assert_eq!(fused.len(), 2, "两 case 均应有信号");
+        assert_eq!(fused[0].id, a, "实体键全命中者（errno=28）应居首");
+        let again = search_fused(&root, "disk full errno=28", 2, true, None, 0.0, 1.0).unwrap();
+        assert_eq!(fused, again, "同配置融合必须确定");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn search_fused_session_cache_returns_identical_hits() {
         let root = tmp("fuse");

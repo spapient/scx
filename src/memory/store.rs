@@ -101,6 +101,9 @@ pub struct Case {
     pub superseded_by: String,
     /// retire 原因（tombstone 保留审计）；仅 retired 非空。
     pub retire_reason: String,
+    /// 记忆类型：`situation | experience | procedure | semantic`。写入时由
+    /// classify::kind 自动分类（P4）；旧 case 缺键兼容回退 situation。
+    pub kind: String,
 }
 
 impl Case {
@@ -147,6 +150,7 @@ impl Case {
             supersedes: String::new(),
             superseded_by: String::new(),
             retire_reason: String::new(),
+            kind: String::new(),
         }
     }
 }
@@ -246,6 +250,7 @@ pub(crate) fn encode(c: &Case) -> Val {
         ("supersedes".into(), Val::Str(c.supersedes.clone())),
         ("superseded_by".into(), Val::Str(c.superseded_by.clone())),
         ("retire_reason".into(), Val::Str(c.retire_reason.clone())),
+        ("kind".into(), Val::Str(c.kind.clone())),
         (
             "stats".into(),
             Val::Obj(vec![
@@ -358,6 +363,9 @@ pub(crate) fn decode(v: &Val) -> Case {
     c.supersedes = get(obj, "supersedes").map(string).unwrap_or_default();
     c.superseded_by = get(obj, "superseded_by").map(string).unwrap_or_default();
     c.retire_reason = get(obj, "retire_reason").map(string).unwrap_or_default();
+    c.kind = get(obj, "kind")
+        .map(string)
+        .unwrap_or_else(|| "situation".to_string());
     c.forces = get(obj, "forces").map(strings).unwrap_or_default();
     if let Some(Val::Obj(f)) = get(obj, "fields") {
         c.fields.error_code = get(f, "error_code").map(strings).unwrap_or_default();
@@ -633,6 +641,7 @@ mod tests {
                 "supersedes",
                 "superseded_by",
                 "retire_reason",
+                "kind",
             ]
             .contains(&k.as_str())
         });
@@ -649,6 +658,7 @@ mod tests {
         assert!(loaded.supersedes.is_empty());
         assert!(loaded.superseded_by.is_empty());
         assert!(loaded.retire_reason.is_empty());
+        assert_eq!(loaded.kind, "situation", "缺 kind 键回退 situation");
         let _ = fs::remove_dir_all(&root);
     }
 

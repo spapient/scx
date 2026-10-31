@@ -36,6 +36,9 @@ pub struct Opts {
     pub recall_only: bool,
     /// `--recall-detail` 时在召回段追加摘要与证据行。
     pub recall_detail: bool,
+    /// `--recall-kind`：按记忆类型（situation/experience/procedure/semantic）
+    /// 过滤召回结果。
+    pub recall_kind: Option<String>,
     /// 反馈标注：`Some((good, case_id))`。
     pub rate: Option<(bool, String)>,
     /// 库维护：重建索引、过期清理或删除 case。
@@ -557,6 +560,15 @@ pub(crate) static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
+        name: "--recall-kind",
+        once: true,
+        kind: Kind::Value,
+        what: "situation|experience|procedure|semantic",
+        err_empty: "requires a kind",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
         name: "--rate",
         once: true,
         kind: Kind::RatePair,
@@ -826,6 +838,7 @@ pub(crate) struct ParseState {
     pub(crate) recall: usize,
     pub(crate) recall_only: bool,
     pub(crate) recall_detail: bool,
+    pub(crate) recall_kind: Option<String>,
     pub(crate) rate: Option<(bool, String)>,
     pub(crate) rebuild: bool,
     pub(crate) gc: bool,
@@ -877,6 +890,7 @@ impl ParseState {
             recall: 0,
             recall_only: false,
             recall_detail: false,
+            recall_kind: None,
             rate: None,
             rebuild: false,
             gc: false,
@@ -922,6 +936,25 @@ mod tests {
     #[allow(dead_code)] // clippy 对 test 辅助函数误报（调用真实存在）
     fn argv(values: &[&str]) -> Vec<String> {
         values.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// P4 回归：--recall-kind 必须落入 recall_kind（word() free 白名单），
+    /// 不得被 path() 误判为 --delete。
+    #[test]
+    fn p4_recall_kind_parses_into_recall_kind() {
+        let opts = super::parse(&[
+            "--query".to_string(),
+            "q".to_string(),
+            "--recall".to_string(),
+            "4".to_string(),
+            "--recall-kind".to_string(),
+            "experience".to_string(),
+            "--mem-dir".to_string(),
+            "/tmp/x".to_string(),
+        ])
+        .expect("parse");
+        assert_eq!(opts.recall_kind.as_deref(), Some("experience"));
+        assert!(opts.delete.is_none(), "delete 不得被污染");
     }
 
     #[test]

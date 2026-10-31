@@ -264,6 +264,18 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
 > 口径声明：本协议为**作者侧自测**（语料为合成/半合成事故集，标签为作者
 > 冻结），非第三方独立评测；不用于对外发布级对比。ext_hit 在 CLI 门面恒为
 > 1.0（`hits` 调用处固定），评测不模拟外部扩展命中。
+
+- **RRF 融合召回 + 记忆类型（P4，#72，2026-10-31）**：`search_fused` 由线性加权
+  改为**纯 RRF 秩融合**（k=60，零依赖）：BM25 秩 + 字段/实体秩（query 与 case
+  侧 `classify::keys` 交集计数，全库零命中该路 None 不参与）+ minhash 语义秩 +
+  外部 embed 秩（插拔），融合分值为四路秩和无权重乘积，`embed_weight/
+  minhash_weight` 降级为路开关。`Case` 新增 `kind: String`（缺键回退
+  "situation"），写入自动分类（procedure=≥2 行命令状行 / experience=error_code
+  非空且 fix 非空 / semantic=定义标记 / situation 兜底；命令状行=行首空白 +
+  22 词白名单）。新增 `filter_kind()`（剔除非 active 与 kind 不匹配、保序只减
+  不增）；CLI `--recall-kind <k>` 全链路接入（word() free 白名单曾遗漏致值误
+  判 --delete，已修复+回归测试）。`--stats` 新增 `kind:` 分布行。门禁 394 passed
+  / clippy 0 / fmt 干净，CLI 四类摄取、kind 过滤双向、--recall-only 组合实测通过。
 - **版本化 Revise/Retire（P3，#71，2026-10-31）**：`Case` 新增 `version: u32`、
   `life`（active/revised/retired，计划稿 `status` 与反馈状态机撞名故改
   `life`+`life_u8()`）、`supersedes`/`superseded_by`、`retire_reason`（缺键兼容）。

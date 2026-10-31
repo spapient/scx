@@ -5,7 +5,7 @@ use super::*;
 
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--budget F] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--sem-weight F] [--sem-gate F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--revise <case-id>] [--retire <case-id> --retire-reason <text>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--fold 0|1] [--entropy 0|1] [--auto-anchor 0|1] [--cluster 0|1] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--budget F] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--sem-weight F] [--sem-gate F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--recall-kind <kind>] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--revise <case-id>] [--retire <case-id> --retire-reason <text>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--fold 0|1] [--entropy 0|1] [--auto-anchor 0|1] [--cluster 0|1] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -189,6 +189,7 @@ pub(crate) fn free(s: &mut ParseState, f: &Flag, v: String) {
         "--revise" => s.revise = Some(v),
         "--retire" => s.retire = Some(v),
         "--retire-reason" => s.retire_reason = v,
+        "--recall-kind" => s.recall_kind = Some(v),
         _ => s.mem_dir = v,
     }
 }
@@ -337,7 +338,7 @@ pub(crate) fn word(
     }
     match f.name {
         "--query" | "--fix" | "--mem-dir" | "--embed-cmd" | "--revise" | "--retire"
-        | "--retire-reason" => free(s, f, v),
+        | "--retire-reason" | "--recall-kind" => free(s, f, v),
         _ => path(s, f, v),
     }
     Ok(())
@@ -1180,6 +1181,7 @@ pub(crate) fn finish(s: ParseState) -> Opts {
         recall,
         recall_only: s.recall_only,
         recall_detail: s.recall_detail,
+        recall_kind: s.recall_kind.clone(),
         rate: s.rate,
         rebuild: s.rebuild,
         gc: s.gc,

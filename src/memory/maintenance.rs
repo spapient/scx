@@ -188,6 +188,7 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
         "  life: active={} revised={} retired={}",
         t.lives[0], t.lives[1], t.lives[2]
     ));
+    lines.push(format!("  kind: {}", join(&t.kinds)));
     lines.push(format!(
         "  fix: {}/{} ({:.0}%)",
         t.fixes,
@@ -224,6 +225,7 @@ struct Tally {
     statuses: HashMap<String, usize>,
     tiers: [usize; 3],
     lives: [usize; 3],
+    kinds: HashMap<String, usize>,
     fixes: usize,
     quality_sum: f64,
     disk: u64,
@@ -236,6 +238,7 @@ impl Tally {
             statuses: HashMap::new(),
             tiers: [0; 3],
             lives: [0; 3],
+            kinds: HashMap::new(),
             fixes: 0,
             quality_sum: 0.0,
             disk: 0,
@@ -254,6 +257,7 @@ fn sample(root: &str, id: &str, t: &mut Tally) -> io::Result<()> {
     if li < 3 {
         t.lives[li] += 1;
     }
+    *t.kinds.entry(c.kind.clone()).or_insert(0) += 1;
     if !c.fix.is_empty() {
         t.fixes += 1;
     }

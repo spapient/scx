@@ -246,6 +246,8 @@ fn insert(fields: Payload<'_>, fp: &str) -> std::io::Result<String> {
     let fvec = c.fields.error_code.clone();
     let qterms = crate::terms::memory(&c.query);
     c.bucket = crate::memory::classify::query(&fvec, &qterms, text);
+    // 记忆类型（P4）：写入时自动分类，`--recall-kind` 过滤的依据。
+    c.kind = crate::memory::classify::kind(&c.fields, fix, text).to_string();
     // 版本化（P3）：revise 继承旧 case 版本 +1 并记录被替换者（不删除旧 case）。
     if let Some(old_id) = revise {
         let old = store::load(root, old_id)?;

@@ -2514,3 +2514,42 @@ P13 定稿(0.11.0 目标)
   `life: active=1 revised=1 retired=1`。
 - **提交**：见 git log（全中文，未 push）。版本 0.11.0 保持。P4 RRF+类型见上文
   升级计划。
+
+
+### P4 完成记录（2026-10-31）
+
+- **RRF 纯秩融合（search_fused 重构）**：由「线性加权和」改为**纯 RRF 秩融合**
+  ——`Σ 1/(k+rank)`，k=60，零新依赖。文本加载由单文本改为全 `Vec<store::Case>`；
+  四路秩并列：BM25 秩（bm25_term）+ 字段/实体秩（field_term，query 侧
+  `classify::keys(extract(query))` 与 case 侧 `classify::keys(&c.fields)` 交集计数，
+  全库零命中该路 None 不参与）+ minhash 语义秩（minhash_term）+ 外部 embed 秩
+  （embed_term，插拔）。融合分值为四路**秩和无权重乘积**；
+  `embed_weight/minhash_weight` 语义降级为「路开关」（>0 启用该路）。
+- **记忆类型（kind）体系**：`Case` 新增 `kind: String`（encode 键序 retire_reason
+  后、decode 缺键回退 "situation"、empty() 初始化）；写入时自动分类
+  `classify::kind()`——判定序：procedure=正文 ≥2 行命令状行 → experience=
+  error_code 非空且 fix 非空 → semantic=定义标记（"==/定义/即/指 "）→ situation
+  兜底；命令状行 = 行首空白 + `is_cmd()`（22 词白名单：sudo/cargo/docker/kubectl/
+  git/curl/apt/brew/pip/npm/make/go/rustc/gcc/ssh/cp/mv/rm/cd/export/echo/sed）。
+- **过滤**：新增 `pub fn filter_kind(root, hits, kind: Option<&str>)`——kind=None
+  原样返回；否则剔除 `life != "active"` 与 kind 不匹配项，缺 case 跳过，保序
+  只减不增。`--recall-kind <k>`（situation|experience|procedure|semantic，Value、
+  once、err_empty "requires a kind"）经 args Opts/FLAGS/ParseState/free()/usage
+  全链路接入，ops.rs `Op::RecallOnly` 与 `Compress` 增 kind 字段，recall_only()
+  与 memory() 旁路均先 `search_fused` 再 `filter_kind`。
+- **stats 扩展**：`--stats` 新增 `kind: experience=n procedure=n semantic=n
+  situation=n` 分布行（Tally.kinds HashMap）。
+- **门禁**：`cargo test --locked --features memory --lib` = **394 passed**（P3 387
+  基线 + 6 新增 P4 测试 + 1 回归测试）；clippy（--all-targets）0 警告；fmt 干净。
+- **CLI 实测**（`/tmp/scx-p4-mem`，4 case）：四类摄取后 `--stats` 输出
+  `kind: experience=1 procedure=1 semantic=1 situation=1`、`life: active=4`；
+  无条件 recall 正常返回（sim/score/case）；`--recall-kind` 过滤双向验证
+  （query "errno" + experience → 命中 experience case；query "RRF" + semantic →
+  命中 semantic case，+ experience → 空；procedure 同理；非法 kind → 空）；
+  `--recall-only` 与 `--recall-kind` 可组合（不再互斥）；缺值报
+  "requires a value"。
+- **修复要点**：`--recall-kind` 初版解析被 `word()` 的 free() 白名单遗漏、
+  误落 `path()` 被判为 `--delete`（值进 opts.delete → "no such case:
+  experience"、与 --recall-only 互斥）——修复为白名单追加 `--recall-kind`，
+  并新增回归测试 `p4_recall_kind_parses_into_recall_kind`。
+- **提交**：见 git log（全中文，未 push）。版本 0.11.0 保持。

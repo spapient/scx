@@ -355,6 +355,59 @@ const FAMILIES: [(&str, &[&str]); 5] = [
     ),
 ];
 
+/// 记忆类型自动分类（P4，`--recall-kind` 过滤的依据）。纯文本/字段判定、
+/// 零 I/O、无随机源，摄取时算一次随 case 落盘。判定顺序（互斥）：
+///
+/// - procedure：正文含 ≥2 行命令状行（行首 `$ `、反引号，或缩进 + 命令动词）；
+///   典型为操作手册/部署脚本/多步复现步骤。
+/// - experience：字段抽取到错误码 且 fix 非空（根因+修复结论完整）；
+///   典型为故障根因案例。
+/// - semantic：正文含术语/定义标记（"=="、定义/即/指、词表式 `word: 释义`）
+///   且无错误码；典型为术语表/概念条目。
+/// - situation：其余纯上下文（默认兜底，最通用）。
+pub(crate) fn kind(fields: &Fields, fix: &str, text: &str) -> &'static str {
+    let cmd_lines = text
+        .lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            t.starts_with("$ ")
+                || t.starts_with('`')
+                || (l.chars().next().is_some_and(char::is_whitespace) && is_cmd(t))
+        })
+        .count();
+    if cmd_lines >= 2 {
+        return "procedure";
+    }
+    if !fields.error_code.is_empty() && !fix.trim().is_empty() {
+        return "experience";
+    }
+    if !fields.error_code.is_empty()
+        && text.lines().any(|l| {
+            l.contains("==") || l.contains("定义") || l.contains("即") || l.contains("指 ")
+        })
+    {
+        return "semantic";
+    }
+    if fields.error_code.is_empty()
+        && text.lines().any(|l| {
+            l.contains("==") || l.contains("定义") || l.contains("即") || l.contains("指 ")
+        })
+    {
+        return "semantic";
+    }
+    "situation"
+}
+
+/// 命令动词白名单（procedure 判定的第二条证据线）。
+fn is_cmd(t: &str) -> bool {
+    const CMD: [&str; 22] = [
+        "sudo", "cargo", "docker", "kubectl", "git", "curl", "apt", "brew", "pip", "npm", "make",
+        "go", "rustc", "gcc", "ssh", "cp", "mv", "rm", "cd", "export", "echo", "sed",
+    ];
+    let first = t.split_whitespace().next().unwrap_or("");
+    CMD.contains(&first)
+}
+
 /// case 主桶：按家族顺序取首个命中。
 /// `text` 参与判定是为了覆盖 fields 未抽到的家族词（如 build 日志里只有 "cargo"）。
 #[cfg(test)]
@@ -514,8 +567,53 @@ fn fold(s: &str) -> String {
 }
 
 #[cfg(test)]
-mod bucket_tests {
+/// P4 记忆类型自动分类判别。
+mod kind_tests {
     use super::*;
+
+    #[test]
+    fn kind_sorts_procedure_by_cmd_lines() {
+        let f = Fields::default();
+        let text = concat!(
+            "部署步骤：
+",
+            "$ cargo build --release
+",
+            "    sudo systemctl restart scx
+",
+            "然后验证端口。
+",
+        );
+        assert_eq!(kind(&f, "", text), "procedure");
+    }
+
+    #[test]
+    fn kind_sorts_experience_by_error_code_and_fix() {
+        let mut f = Fields::default();
+        f.error_code.push("errno=28".into());
+        assert_eq!(kind(&f, "clean up disk", "disk full"), "experience");
+    }
+
+    #[test]
+    fn kind_sorts_semantic_by_definition_marker() {
+        let f = Fields::default();
+        assert_eq!(
+            kind(&f, "", "RRF 即 Reciprocal Rank Fusion，秩融合算法"),
+            "semantic"
+        );
+        assert_eq!(kind(&f, "", "记忆类型 == 按用途分类的维度"), "semantic");
+    }
+
+    #[test]
+    fn kind_falls_back_to_situation() {
+        let f = Fields::default();
+        assert_eq!(kind(&f, "", "今天排查了连接超时，后来恢复了"), "situation");
+    }
+}
+
+#[cfg(test)]
+mod bucket_tests {
+    use super::{bucket, buckets, query, seeds};
 
     #[test]
     fn bucket_detects_family() {
