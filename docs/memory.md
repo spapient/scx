@@ -295,3 +295,10 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
   `deepseek-chat` 别名（=物理 DeepSeek-V4.1-Flash 无推理）为主 judge，
   显式 flash/Pro 推理强制不可用于短 judge（实测）；curl `-d @临时文件`
   修复 ARG_MAX 吞吐约 15×。门禁 397 passed / clippy 0 / fmt 干净。
+- **P19 science 短板改进定稿（#77，2026-11-01）**：`SCIENCE_DF_OVERRIDE=0.40`
+  （query 词频 df_max_frac 0.25→0.40），全量 1010 例重判（重启丢失后重跑；
+  three 462 / four 3,424 判分逐条落盘 `tools/bench_p19_keep/exp_df40/verdicts_*.jsonl`）。
+  science all_rec 22.08→**29.41**（three 40.91→48.05 / four 18.69→26.05，
+  minority 视角 three 65.71 / four 65.93）、overall 29.47→31.28、weakest_setting
+  转移至 parallel 22.89；science 压缩代价 0.44→0.52。重判 31 条 error（DeepSeek
+  402/429 重试后仍失败）已如实记录于 verdict_audit；freeze_manifest frozen=69 updated=1。

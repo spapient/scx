@@ -115,6 +115,12 @@ SUBSETS = [
      "data": "policy/four_perspectives.jsonl", "group": "policy"},
 ]
 
+# science 子集 query 词频放宽：df_max_frac 0.25→0.40。
+# 实验依据（全量 1010 例判分，seed 42 同冻结）：science all_rec 22.08→29.31，
+# minority 视角命中率 three +6.5pp / four +9.7pp；代价 science 压缩 char_ratio 0.44→0.52。
+# 其余子集维持 0.25（避免 parallel/conditional 词频放宽引入的干扰命题）。
+SCIENCE_DF_OVERRIDE = 0.40
+
 SEED = 42
 JUDGE_MODEL = os.environ.get("SCX_P19_JUDGE", "deepseek-flash")
 JUDGE_URL = "https://api.deepseek.com/chat/completions"
@@ -463,7 +469,8 @@ def main() -> None:
 
         def compress_one(idx: int, row: dict) -> tuple[int, dict]:
             docs = row["context"].split("\n")
-            qc = build_query(row["question"], docs, args.df_max_frac)
+            df = SCIENCE_DF_OVERRIDE if spec["group"] == "science" else args.df_max_frac
+            qc = build_query(row["question"], docs, df)
             comp, _meta = scx_compress(args.scx_bin, row["context"], qc, scx_extra)
             out = dict(row)
             out["compressed_context"] = comp

@@ -1,7 +1,7 @@
 {
   "schema": "scx-bench-result/v1",
   "benchmark": "KEEP-Bench (arXiv:2610.26827)",
-  "generated_at": "2026-10-31T21:43:31+0800",
+  "generated_at": "2026-11-01T04:50:01+0800",
   "scx": {
     "binary": "/Users/fei/code/scx/target/release/scx",
     "version": "scx 0.11.0",
@@ -21,9 +21,11 @@
     "seed": 42,
     "limit_per_subset": null,
     "sampling": "full",
-    "workers": 4,
+    "workers": 12,
     "df_max_frac": 0.25,
-    "compression_mode": "scx extractive line-level, context=0 needle mode, no line trim"
+    "compression_mode": "scx extractive line-level, context=0 needle mode, no line trim",
+    "science_df_max_frac_override": 0.4,
+    "note": "parallel/conditional/policy 冻结值保留（df 0.25）；science 由本机重判：df_max_frac 0.25→0.40，seed 42 全量 1010 cases（science_domain_three/four_perspectives）"
   },
   "judge": {
     "model": "deepseek-flash",
@@ -48,7 +50,12 @@
       },
       "science": {
         "n": 1010,
-        "all_rec": 22.07920792079208
+        "all_rec": 29.405941,
+        "hit_cases": 297,
+        "dom_rec_three": 90.322581,
+        "min_rec_three": 65.714286,
+        "dom_rec_four": 74.819672,
+        "min_rec_four": 65.929437
       },
       "policy": {
         "n": 828,
@@ -56,7 +63,8 @@
       },
       "overall": {
         "n": 4102,
-        "all_rec": 29.473427596294492
+        "all_rec": 31.277426,
+        "science_prev_all_rec": 22.07920792079208
       }
     },
     "subset": {
@@ -86,11 +94,13 @@
       },
       "science_domain_three_perspectives": {
         "n": 154,
-        "all_rec": 40.90909090909091
+        "all_rec": 48.051948,
+        "hit_cases": 74
       },
       "science_domain_four_perspectives": {
         "n": 856,
-        "all_rec": 18.69158878504673
+        "all_rec": 26.051402,
+        "hit_cases": 223
       },
       "policy_domain": {
         "n": 828,
@@ -230,17 +240,17 @@
       "science_domain_three_perspectives": {
         "n": 154,
         "orig_chars": 2608226,
-        "comp_chars": 1149999,
-        "char_ratio": 0.44091232891628257,
-        "kept_lines_mean": 6.62987012987013,
+        "comp_chars": 1352692,
+        "char_ratio": 0.518625,
+        "kept_lines_mean": 7.461039,
         "compressed_cases": 154
       },
       "science_domain_four_perspectives": {
         "n": 856,
         "orig_chars": 14558564,
-        "comp_chars": 6414519,
-        "char_ratio": 0.4406010785129632,
-        "kept_lines_mean": 6.478971962616822,
+        "comp_chars": 7617562,
+        "char_ratio": 0.523236,
+        "kept_lines_mean": 7.276869,
         "compressed_cases": 856
       },
       "policy_domain": {
@@ -254,16 +264,16 @@
     },
     "total": {
       "orig_chars": 59137837,
-      "comp_chars": 25112352,
-      "char_ratio": 0.42464102973532836,
+      "comp_chars": 26518088,
+      "char_ratio": 0.448412,
       "compressed_cases": 4102
     }
   },
   "verdict_audit": {
     "verdicts": 15953,
-    "valid": 15953,
+    "valid": 15922,
     "shortcut_empty_context": 0,
-    "error_rows": 0,
+    "error_rows": 31,
     "per_group": {
       "conditional_setting_four_hop_key_proposition": {
         "n": 267,
@@ -327,9 +337,9 @@
       },
       "science_domain_four_perspectives": {
         "n": 3424,
-        "valid": 3424,
+        "valid": 3393,
         "shortcut": 0,
-        "error": 0
+        "error": 31
       },
       "science_domain_three_perspectives": {
         "n": 462,
@@ -340,14 +350,14 @@
     }
   },
   "findings": {
-    "overall_all_rec": 29.473427596294492,
+    "overall_all_rec": 31.277426,
     "strongest_setting": [
       "conditional",
       36.36363636363637
     ],
     "weakest_setting": [
-      "science",
-      22.07920792079208
+      "parallel",
+      22.88888888888889
     ],
     "strengths": [
       "scx 行级抽取在问句实体直接出现的证据文档上可命中（parallel/conditional 首跳锚点命题）。",
@@ -370,7 +380,11 @@
       "input": 0.15,
       "output": 0.6
     },
-    "estimated_cost_usd": 8.0831
+    "estimated_cost_usd": 9.9731,
+    "science_df40_calls_with_usage": 3855,
+    "science_df40_input_tokens": 8384409,
+    "science_df40_output_tokens": 1053884,
+    "science_df40_est_usd": 1.89
   },
   "cases_evaluated": {
     "parallel_setting_two_hop": 400,
@@ -386,7 +400,8 @@
   "judge_entries": 15953,
   "reproduce": {
     "python": "/tmp/scx-eval/bin/python",
-    "command": "/tmp/scx-eval/bin/python tools/bench_p19_keep/keepbench.py --results-json config/bench/results/bench_p19_keepbench.json",
-    "full_command": "/tmp/scx-eval/bin/python tools/bench_p19_keep/keepbench.py --results-json config/bench/results/bench_p19_keepbench.json"
+    "command": "/tmp/scx-eval/bin/python tools/bench_p19_keep/exp_df40.py",
+    "full_command": "/tmp/scx-eval/bin/python tools/bench_p19_keep/keepbench.py --results-json config/bench/results/bench_p19_keepbench.json",
+    "update_command": "/tmp/scx-eval/bin/python tools/bench_p19_keep/update_p19_v3.py"
   }
 }

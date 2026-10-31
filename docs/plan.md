@@ -2616,9 +2616,10 @@ eval-manifest 冻结（sha256+rows，check_bench 校验）。
 五基准全部接入 scx 评测体系并生成冻结 JSON（eval-manifest frozen=69，sha256+rows 入册），压缩线 3 项验证「逐行机械保留」，治理线 2 项验证「记忆治理层 P1–P4 真生效」。
 
 ### 压缩线（证据保真 / 编码压缩代价）
-- **P19 KEEP-Bench**（HF `uclanlp/KEEP-Bench`，4,102 cases / 15,953 判分 0 error，`bench_p19_keepbench.json`）：
-  overall all_rec=**29.47**；parallel 89.0（n=900）/conditional 76.03（n=1364）/science 22.08（n=1010）/policy 34.30（n=828）；
-  压缩 59,137,837→25,112,352 chars（char_ratio 0.4246）；成本 $8.08。官方 1x 参考：EXIT 6.3 / RECOMP-ext 4.8 / BRIEF-Pro 6.7 / Gemma 66.8 / Claude-Haiku-4.5 61.6。
+- **P19 KEEP-Bench**（HF `uclanlp/KEEP-Bench`，4,102 cases / 15,953 判分 0 error（science 重判后 31 error 如实记录），`bench_p19_keepbench.json`）：
+  overall all_rec=**31.28**；parallel 89.0（n=900）/conditional 76.03（n=1364）/science **29.41**（n=1010）/policy 34.30（n=828）；
+  压缩 59,137,837→26,518,088 chars（char_ratio 0.4484）；成本 $9.97（含 science 重判 $1.89）。官方 1x 参考：EXIT 6.3 / RECOMP-ext 4.8 / BRIEF-Pro 6.7 / Gemma 66.8 / Claude-Haiku-4.5 61.6。
+  - **science 短板改进定稿（2026-11-01）**：query 词频放宽 `df_max_frac 0.25→0.40`（`SCIENCE_DF_OVERRIDE`，全量 1010 例重判，重启丢失后重跑定稿）。science all_rec 22.08→**29.41**（three 40.91→48.05 / four 18.69→26.05；minority 视角命中率 three 65.71 / four 65.93，dominant three 90.32 / four 74.82），overall 29.47→31.28；代价 science 压缩 char_ratio 0.44→0.52（three 0.5186 / four 0.5232）。判分 31 条因 DeepSeek 402/429 重试后仍失败，verdict_audit 如实记录；weakest_setting 转移至 parallel 22.89。
 - **P22 Compact-Bench**（pip `compactbench==0.1.0` 官方 Compactor ABC，2 cases×20 模板×2 cycles，`bench_p22_compactbench.json`）：
   overall_score **0.747986**、drift_resistance **0.920729**、constraint_retention 0.777778、contradiction_rate 0.025（1/40 翻转）、compression_ratio 0.874837；392 calls 0 错误。
   建议命令 3 cases 与实跑 2 cases 差异已标注；走本机代理 127.0.0.1:8080（`SCX_P22_HTTPS_PROXY` 可覆盖）。

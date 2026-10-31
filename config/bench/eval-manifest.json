@@ -219,9 +219,9 @@
       "rows": 31
     },
     "bench_p19_keepbench.json": {
-      "sha256": "c5253f79f6f3cc88ddd2bf7edfe46ae296eeba590ce995627b6e79187a054160",
-      "bytes": 10672,
-      "rows": 392
+      "sha256": "d7608ed7aee43989b64087639df43b79f3d261a9e12443ec01c337dbafdf7f76",
+      "bytes": 11281,
+      "rows": 407
     },
     "bench_p20_longmemeval.json": {
       "sha256": "c457d012c1df0cb27f2f8f6644dc5474b239126c9ea47563c6b196793b52ea61",
