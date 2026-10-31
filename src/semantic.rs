@@ -42,6 +42,12 @@ pub const FEATURE_NAMES: &[&str] = &[
     "bias",       // 15 常数 1.0（可学习偏置）
     "cjk_bigram", // 16 CJK 查询 bigram 与行重叠比例（中文转述/词序信号）
     "term_prox",  // 17 query 词共现紧密度（短语级语义）
+    "stop_hit",   // 18 行内停用词 token 密度（填充/噪声行识别）
+    "sym_noise",  // 19 纯符号/分隔线行标志（---- / ==== 噪声）
+    "q_density",  // 20 query 词行内出现密度（词频加权重复强调）
+    "head_hit",   // 21 行首 60 字符内 query 命中比例（头部位置重要性）
+    "rep_ratio",  // 22 行内最频繁字符占比（重复字符噪声检测）
+    "cap_tok",    // 23 大写开头 token 密度（标识符/常量/标题信号）
 ];
 
 fn feat_index(name: &str) -> Option<usize> {
@@ -275,6 +281,12 @@ pub fn feats(line: &str, query_terms: &[String], i: usize, total: usize, dim: us
     let code = code_signal(line);
     let bigram = cjk_bigram(line, query_terms);
     let prox = term_prox(&lower, query_terms);
+    let stop_hit = stop_ratio(&toks);
+    let sym_noise = noise_line(line);
+    let q_density = query_density(&lower, query_terms, toks.len());
+    let head_hit = head_hit_ratio(&lower, query_terms);
+    let rep_ratio = rep_char_ratio(line);
+    let cap_tok = cap_token_ratio(line);
     let mut out = vec![
         overlap,
         hit.min(1) as f64,
@@ -294,6 +306,12 @@ pub fn feats(line: &str, query_terms: &[String], i: usize, total: usize, dim: us
         1.0,
         bigram,
         prox,
+        stop_hit,
+        sym_noise,
+        q_density,
+        head_hit,
+        rep_ratio,
+        cap_tok,
     ];
     out.resize(dim, 0.0);
     out
@@ -323,19 +341,27 @@ fn ratio(num: f64, den: f64) -> f64 {
 }
 
 fn shape(line: &str) -> f64 {
+    let lower = line.to_lowercase();
     let t = line.trim_start();
-    if t.starts_with("```")
-        || t.starts_with("~~~")
-        || t.starts_with("import ")
-        || t.starts_with("use ")
-        || t.starts_with("#include")
-        || t.starts_with("at ")
-        || t.to_lowercase().starts_with("caused by:")
-        || t.starts_with("->")
-        || t.starts_with("=>")
-        || t.starts_with("panic! ")
-        || t.starts_with("error:")
-    {
+    let tl = t.to_lowercase();
+    const P: &[&str] = &[
+        "```",
+        "~~~",
+        "import ",
+        "use ",
+        "#include",
+        "fn ",
+        "pub ",
+        "impl ",
+        "struct ",
+        "error:",
+        "panic!",
+        "->",
+        "=>",
+        "at ",
+        "caused by:",
+    ];
+    if P.iter().any(|x| lower.starts_with(x) || tl.starts_with(x)) {
         1.0
     } else {
         0.0
@@ -492,6 +518,111 @@ fn term_prox(lower: &str, terms: &[String]) -> f64 {
     }
 }
 
+/// 停用词表（与 tools/distill_online.py 的 STOP 常量逐词一致，蒸馏特征对齐）。
+const STOP_WORDS: &[&str] = &[
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for", "with", "this", "that",
+    "is", "are", "was", "were", "it", "as", "at", "by", "from", "we", "you", "they", "he", "she",
+    "i", "not", "no", "do", "does", "did", "be", "been", "have", "has", "had", "will", "would",
+    "can", "could", "should", "then", "than", "so", "if", "else", "when", "while", "up", "down",
+    "out", "over", "under", "here", "there", "all", "any", "both", "each", "few", "more", "most",
+    "other", "some", "such", "only", "own", "now",
+];
+
+/// 行内停用词 token 密度：命中停用词表的 token 数 / 行 token 数。
+fn stop_ratio(toks: &[&str]) -> f64 {
+    if toks.is_empty() {
+        return 0.0;
+    }
+    let n = toks.iter().filter(|t| STOP_WORDS.contains(t)).count();
+    n as f64 / toks.len() as f64
+}
+
+/// 纯符号/分隔线行标志：trim 后长度 ≥ 8 且无非字母数字字符，或符号占比 ≥ 0.6。
+fn noise_line(line: &str) -> f64 {
+    let t = line.trim();
+    let len = t.chars().count();
+    if len < 8 {
+        return 0.0;
+    }
+    let mut alpha = 0usize;
+    for c in t.chars() {
+        if c.is_alphanumeric() {
+            alpha += 1;
+        }
+    }
+    if alpha == 0 {
+        1.0
+    } else {
+        let sym = len - alpha;
+        if sym as f64 / len as f64 >= 0.6 {
+            1.0
+        } else {
+            0.0
+        }
+    }
+}
+
+/// query 词行内出现总次数（非重叠计数） / 行 token 数（词频加权重复强调）。
+fn query_density(lower: &str, terms: &[String], n_toks: usize) -> f64 {
+    if n_toks == 0 {
+        return 0.0;
+    }
+    let mut cnt = 0usize;
+    for t in terms {
+        if !t.is_empty() {
+            cnt += lower.matches(t.as_str()).count();
+        }
+    }
+    cnt as f64 / n_toks as f64
+}
+
+/// 行首 60 字符内 query term 命中比例（头部位置重要性）。
+fn head_hit_ratio(lower: &str, terms: &[String]) -> f64 {
+    if terms.is_empty() {
+        return 0.0;
+    }
+    let head: String = lower.chars().take(60).collect();
+    let n = terms
+        .iter()
+        .filter(|t| !t.is_empty() && head.contains(t.as_str()))
+        .count();
+    n as f64 / terms.len() as f64
+}
+
+/// 行内最频繁非空白字符占比（重复字符噪声：==== / aaaa）。
+fn rep_char_ratio(line: &str) -> f64 {
+    let mut cnt: Vec<(char, usize)> = Vec::new();
+    let mut total = 0usize;
+    for c in line.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        total += 1;
+        match cnt.iter_mut().find(|(ch, _)| *ch == c) {
+            Some(e) => e.1 += 1,
+            None => cnt.push((c, 1)),
+        }
+    }
+    if total == 0 {
+        0.0
+    } else {
+        cnt.iter().map(|(_, n)| *n).max().unwrap_or(0) as f64 / total as f64
+    }
+}
+
+/// 大写开头 token 密度（基于原行大小写；token 级与 cap_ratio 字符级互补）。
+fn cap_token_ratio(line: &str) -> f64 {
+    let toks = tokens(line);
+    if toks.is_empty() {
+        return 0.0;
+    }
+    let n = toks
+        .iter()
+        .filter(|t| t.chars().next().map(|c| c.is_uppercase()).unwrap_or(false))
+        .count();
+    n as f64 / toks.len() as f64
+}
+
 /// 错误码 token：含字母且含数字（404 / 0x1f / ERR123 / conn_id）。
 fn err_code_tokens(toks: &[&str]) -> usize {
     toks.iter()
@@ -524,7 +655,7 @@ fn sym_ratio(line: &str) -> f64 {
             continue;
         }
         tot += 1;
-        if !c.is_ascii_alphanumeric() {
+        if !c.is_alphanumeric() {
             sym += 1;
         }
     }
@@ -830,6 +961,403 @@ mod tests {
             FEATURE_NAMES.len(),
         );
         assert_eq!(g[6], 0.0, "error 非整词命中");
+    }
+
+    #[test]
+    fn new_feats_distill_signals() {
+        // stop_hit：填充行停用词密度高（噪声/散文行识别）。
+        let stop = feats(
+            "this is a test of the system and it works",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        assert!(stop[18] > 0.3, "停用词密度: {}", stop[18]);
+        // sym_noise：纯分隔线 = 1，代码行 = 0。
+        let sep = feats(
+            "------------------------------------------------------------",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        assert_eq!(sep[19], 1.0);
+        let code = feats(
+            "fn main() -> i32 { 0 }",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        assert_eq!(code[19], 0.0);
+        // q_density：query 词重复强调 > 稀疏出现。
+        let dense = feats(
+            "db db db db db retry",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        let sparse = feats(
+            "db retry once",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        assert!(
+            dense[20] > sparse[20],
+            "密度: {} vs {}",
+            dense[20],
+            sparse[20]
+        );
+        // head_hit：行首 60 字符内命中 > 仅尾部命中。
+        let head = feats(
+            "db xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        let tail = feats(
+            "xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx db",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        assert!(head[21] > tail[21], "头命中: {} vs {}", head[21], tail[21]);
+        // rep_ratio：重复字符噪声行占比高。
+        let rep = feats("aaaaaaa", &["db".to_string()], 0, 5, FEATURE_NAMES.len());
+        let norm = feats(
+            "abc def ghi",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        assert!(rep[22] > 0.8, "重复: {}", rep[22]);
+        assert!(norm[22] < 0.5, "正常: {}", norm[22]);
+        // cap_tok：大写开头 token 密度。
+        let cap = feats(
+            "Server Name CONNECT Error",
+            &["db".to_string()],
+            0,
+            5,
+            FEATURE_NAMES.len(),
+        );
+        assert!(cap[23] > 0.3, "大写 token: {}", cap[23]);
+    }
+
+    #[test]
+    fn feats_match_python_selfcheck() {
+        // 与 tools/distill_online.py --selfcheck 输出逐位一致（双向同步验证）。
+        type Row = (&'static str, &'static [&'static str], usize, usize);
+        let rows: &[Row] = &[
+            (r"db connection lost: conn 9f2a timeout", &["db"], 0, 10),
+            (r"db db db db db retry", &["db"], 1, 10),
+            (r"this is a test of the system and it works", &["db"], 2, 10),
+            (
+                r"------------------------------------------------------------",
+                &["db"],
+                3,
+                10,
+            ),
+            (r"fn main() -> i32 { 0 }", &["db"], 4, 10),
+            (r"Server Name CONNECT Error", &["db"], 5, 10),
+            (r"aaaaaaa", &["db"], 6, 10),
+            (r"数据库超时重试", &["超时"], 7, 10),
+            (
+                r"conn ... lots of filler ... broken",
+                &["conn", "broken"],
+                8,
+                10,
+            ),
+            (r"  ", &[], 9, 10),
+        ];
+        let exp: &[&[f64]] = &[
+            &[
+                1.0,
+                1.0,
+                3.63758615973,
+                0.0,
+                0.0540540540541,
+                0.0,
+                1.0,
+                0.0,
+                0.166666666667,
+                1.0,
+                0.03125,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.166666666667,
+                1.0,
+                0.15625,
+                0.0,
+            ],
+            &[
+                1.0,
+                1.0,
+                3.04452243772,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.333333333333,
+                0.0,
+                0.111111111111,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.833333333333,
+                1.0,
+                0.333333333333,
+                0.0,
+            ],
+            &[
+                0.0,
+                0.0,
+                3.73766961828,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.222222222222,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.7,
+                0.0,
+                0.0,
+                0.0,
+                0.1875,
+                0.0,
+            ],
+            &[
+                0.0,
+                0.0,
+                4.11087386417,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.333333333333,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+            ],
+            &[
+                0.0,
+                0.0,
+                3.13549421593,
+                0.0,
+                0.136363636364,
+                1.0,
+                0.0,
+                0.0,
+                0.2,
+                1.0,
+                0.375,
+                0.444444444444,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.125,
+                0.0,
+            ],
+            &[
+                0.0,
+                0.0,
+                3.25809653802,
+                0.4,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.555555555556,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.227272727273,
+                1.0,
+            ],
+            &[
+                0.0,
+                0.0,
+                2.07944154168,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.666666666667,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+            ],
+            &[
+                1.0,
+                1.0,
+                2.07944154168,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.0,
+                1.0,
+                0.0,
+                0.777777777778,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.142857142857,
+                0.0,
+            ],
+            &[
+                1.0,
+                1.0,
+                3.55534806149,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.857142857143,
+                0.214285714286,
+                0.888888888889,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0344827586207,
+                0.142857142857,
+                0.0,
+                0.285714285714,
+                1.0,
+                0.214285714286,
+                0.0,
+            ],
+            &[
+                0.0,
+                0.0,
+                1.09861228867,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ],
+        ];
+        for (row, e) in rows.iter().zip(exp) {
+            let f = feats(
+                row.0,
+                &row.1.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+                row.2,
+                row.3,
+                FEATURE_NAMES.len(),
+            );
+            assert_eq!(f.len(), e.len(), "{}: 维度不一致", row.0);
+            for (k, (a, b)) in f.iter().zip(e.iter()).enumerate() {
+                assert!(
+                    (a - b).abs() < 1e-9,
+                    "{}: 特征[{}] Rust={} Python={}",
+                    row.0,
+                    k,
+                    a,
+                    b
+                );
+            }
+        }
     }
 
     #[test]

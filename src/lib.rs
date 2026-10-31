@@ -288,6 +288,11 @@ pub struct Config {
     /// semantic 加分缩放（`--sem-weight`，默认 1.0；feature=semantic 且
     /// `--semantic` 启用时生效）。放大可增强语义信号对保留决策的影响。
     pub sem_weight: f64,
+    /// 语义门控保留阈值（`--sem-gate`，默认 0.0 = 关；feature=semantic 且
+    /// `--semantic` 启用时生效）。开启后，语义居中分数 ≥ 阈值的非重复行
+    /// 直接整行保留（独立于预算裁剪的语义锚通道）。默认关 = 空操作，
+    /// 与现状逐字节一致。
+    pub sem_gate: f64,
     /// 预计算的「query 与每行」相似度（`--embed-cmd` 时由 `ops` 层填充；
     /// 长度须 == 输入行数）。`None` = 不注入，默认路径逐字节不变。
     pub sims: Option<Vec<f64>>,
@@ -378,6 +383,7 @@ impl Default for Config {
             semantic: None,
             sim_weight: 1.0,
             sem_weight: 1.0,
+            sem_gate: 0.0,
             sims: None,
             evidence: Vec::new(),
             structure_anchors: Vec::new(),
