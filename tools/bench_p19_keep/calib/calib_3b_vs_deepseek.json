@@ -1,0 +1,115 @@
+{
+  "model_mlx": "/Users/fei/model/qwen2.5-3b-instruct-mlx-8bit",
+  "model_ds": "deepseek-flash",
+  "sampled": 100,
+  "valid_both": 100,
+  "agree": 74,
+  "agree_rate_pct": 74.0,
+  "by_stem": {
+    "science_domain_three_perspectives": {
+      "n": 13,
+      "agree": 11,
+      "rate": 84.62
+    },
+    "science_domain_four_perspectives": {
+      "n": 87,
+      "agree": 63,
+      "rate": 72.41
+    }
+  },
+  "divergence_examples": [
+    {
+      "case": "science_1major_2minor_0026",
+      "position": 1,
+      "stem": "science_domain_three_perspectives",
+      "mlx": "no",
+      "mlx_note": null,
+      "deepseek": "yes",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_2minor_0090",
+      "position": 2,
+      "stem": "science_domain_three_perspectives",
+      "mlx": "no",
+      "mlx_note": null,
+      "deepseek": "yes",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_3minor_0077",
+      "position": 2,
+      "stem": "science_domain_four_perspectives",
+      "mlx": "no",
+      "mlx_note": null,
+      "deepseek": "yes",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_3minor_0097",
+      "position": 2,
+      "stem": "science_domain_four_perspectives",
+      "mlx": "no",
+      "mlx_note": null,
+      "deepseek": "yes",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_3minor_0135",
+      "position": 2,
+      "stem": "science_domain_four_perspectives",
+      "mlx": "no",
+      "mlx_note": null,
+      "deepseek": "yes",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_3minor_0249",
+      "position": 2,
+      "stem": "science_domain_four_perspectives",
+      "mlx": "yes",
+      "mlx_note": null,
+      "deepseek": "no",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_3minor_0268",
+      "position": 2,
+      "stem": "science_domain_four_perspectives",
+      "mlx": "no",
+      "mlx_note": null,
+      "deepseek": "yes",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_3minor_0287",
+      "position": 2,
+      "stem": "science_domain_four_perspectives",
+      "mlx": "no",
+      "mlx_note": null,
+      "deepseek": "yes",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_3minor_0363",
+      "position": 2,
+      "stem": "science_domain_four_perspectives",
+      "mlx": "yes",
+      "mlx_note": null,
+      "deepseek": "no",
+      "ds_note": null
+    },
+    {
+      "case": "science_1major_3minor_0382",
+      "position": 2,
+      "stem": "science_domain_four_perspectives",
+      "mlx": "no",
+      "mlx_note": null,
+      "deepseek": "yes",
+      "ds_note": null
+    }
+  ],
+  "mlx_unparseable": 0,
+  "ds_errors": 0,
+  "mlx_fail_details": []
+}

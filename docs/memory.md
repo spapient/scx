@@ -302,3 +302,12 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
   minority 视角 three 65.71 / four 65.93）、overall 29.47→31.28、weakest_setting
   转移至 parallel 22.89；science 压缩代价 0.44→0.52。重判 31 条 error（DeepSeek
   402/429 重试后仍失败）已如实记录于 verdict_audit；freeze_manifest frozen=69 updated=1。
+- **本机 3B 校准定档（#78，2026-11-01）**：混合路线落地——本机 qwen2.5-3b-instruct
+  三档量化与 deepseek-flash 双判 100 条（science three 13/four 87，stride=38）：
+  bf16 **73.0%**（5.8GB）/ 4bit **63.0%**（four 59.8 降 11 点，1.6GB）/ 8bit **74.0%**
+  （four 72.4 反超 bf16，3.1GB）。**日常探索默认 8bit**（一致率 ≥ bf16 + 内存省 47% +
+  单条 judge 1-2s）；4bit 仅冒烟禁用于科学判分；冻结口径仍以在线 deepseek 为准。
+  性能优化：权重量化 5.8→3.1GB、`mlx_server.sh start|stop|status` 一键起停（按需常驻，
+  swap 不再高位堆积）、校准两阶段化（3B 3 并发 + deepseek 12 并发）、单实例 mlx server
+  并发 >3 连接重置、`--kv-bits 4` 生成截断 19 chars 已否决。校准产物
+  `tools/bench_p19_keep/calib/calib_3b_vs_deepseek.json`（8bit 74% 最后写入）。
