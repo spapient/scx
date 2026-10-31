@@ -2351,3 +2351,45 @@ P13 定稿(0.11.0 目标)
 - **未决（如实标注）**：eval-manifest 冻结集（config/bench/datasets/*.csv）question 列为
   问答式短输入、无长文本 full 列 → 压缩率类全组合评测以确定性合成三形态语料
   （code/log/zh）为载体；冻结集 judge 语义保真评测（在线双模型）已在 P8-D 闭环。
+
+---
+
+## 语义蒸馏升级完成记录（2026-10-31，#61–#67，版本 0.11.0 保持）
+
+**用户锁定口径**（verbatim）：双旗舰在线模型蒸馏、能力提升几倍即可、体积不要大。
+教师 = deepseek-chat + qwen3.8-flash（temperature=0.1、150 行分块 ×12 并发、双教师并集标注）；
+学生 = 纯 stdlib 批量逻辑回归（24 维，lr=0.05/epochs=150/l2=1e-3）——**零依赖、体积不变**。
+
+### 子项状态
+| 编号 | 范围 | 结果 |
+| --- | --- | --- |
+| #62 | 蒸馏语料扩容 + 多 query | 10 语料矩阵 17785 样本；缓存键升级 `cname\|query`；17 场景标注全部完成（并集口径） |
+| #63 | 特征 18→24 维双向同步 | 追加 stop_hit/sym_noise/q_density/head_hit/rep_ratio/cap_tok；STOP_WORDS 扩为 72 词（Rust const 与 Python frozenset 唯一权威源）；对拍 7 处不一致全修 |
+| #64 | 重蒸馏：新维权 + CV 复测 | 24 维权（scx-sem-2）生效；3 折 CV（17785 样本）：全量 AP 0.7678 持平，**code 0.2992→0.5082（1.70×）**；keep 率整体 0.7564、判别场景 code=0.249/log=0.161/zh=0.318；剔除 4 全保留场景收益微小 → 维持 17 场景全量口径 |
+| #65 | 语义深接入管线 | `--sem-gate F`（默认 0=off）：语义锚通道叠加 cfg.sem_weight×centered_line；负值/非有限拒绝；BUDGET_MIN 陷阱文档化（<200 token 预算不生效） |
+| #66 | 端到端问答保真评测（对标 LLMLingua-2） | 60 题真实工程长代码拼接（主文件+2 干扰文件，>571 token 触发压缩）；query=问题+高频标识符；ratio 0.5+fill-floor 2；**压缩触发 60/60，token 压缩率 26.46%（76687→20289）**；orig 天花板 ds/qw=1.000；comp 保真 ds=0.733/qw=0.717；comp_sem 补跑 ds/qw=0.733（首跑全 0 为 API 限流假象，已复核） |
+| #67 | MLP 对照（非默认档位） | linear 批量 GD auc≈427-438/AP 0.7642-0.7717；mlp1(24→16→1) auc≈584-606/AP 0.8743-0.8826；**两模型 keep 率均 1.000 → AP 全量虚高（受天然 keep 率 0.756 钳制）**；非线性破坏零依赖/体积约束 → **维持线性学生为线上默认** |
+
+### 关键机制修复（诚实记录）
+- **#66 压缩轨根因**：`tools/bench.py:99 scx_compress` 包装命令内置 `--ratio 0.35`，
+  eval_fidelity 的 EXTRA 重复传 `--ratio` → 子进程 rc=2（`--ratio specified more than once`）
+  → 包装 fail-open 返回原文 → comp==orig 恒 True。修复：EXTRA 去重 + 直连 CLI
+  （ratio 0.5 温和档）；**#66 评测改由 `tools/eval_fidelity.py` 直连 `_compress`（独立临时文件，6 worker 并发安全）**。
+- **bench_c60 题长 106–240 字符 <BUDGET_MIN → 压缩不触发**；改用 bench_long 拼接协议
+  （单题 1229–1435 tokens >571 门槛）。
+- **qa 字段映射**：nl30/ck30/q30 用 `gold`/`scx` 列非 `answer` → 过滤掉 60 题；
+  修复 `answer or gold or scx` 后 31→91 题（取 60）。
+
+### 对标定位（诚实）
+- **同档压缩率**（~50%）下 scx 保真可对标 LLMLingua-2 中档（本评测 26.5% 激进档保真 0.72–0.73，
+  压缩率更激进而保真略低于 LLMLingua-2 论文 SQuAD 0.8+）；语义深度（24 维线性学生 vs
+  LLMLingua-2 的 400M 参数模型）与数据规模（17 场景 vs 其大规模语料）是主要差距。
+- **com_sem 轨与 comp 无显著差异**（0.733 vs 0.717）：当前维权在代码事实问答场景
+  与词面证据保护接近——语义深接入的增益在通用文本场景（#64 CV：code 1.70×、log 近天花板）。
+
+### 门禁与冻结
+- Rust：semantic 轨 397 passed / 0 failed（含 24 维权 sha256 加载校验 + sem_gate 三测试 +
+  feats_match_python_selfcheck）；clippy --all-targets 零告警；fmt --check 通过。
+- 冻结基线 bench_p18_combo.csv 不变（默认路径逐字节一致，语义默认关）。
+- **版本状态图**：0.10.0（P17 全线 + 消融闭环）→ 0.11.0（P0/P1 顶尖级收尾）→
+  **0.11.0（语义蒸馏 #61–#67 完成：24 维权默认关 + 端到端保真评测闭环 + MLP 对照证伪）**。
