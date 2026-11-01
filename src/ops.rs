@@ -469,6 +469,7 @@ fn retire(mem_dir: &str, id: &str, reason: &str) -> Reply {
     ))
 }
 
+#[cfg(feature = "memory")]
 fn delete(mem_dir: &str, id: &str) -> Reply {
     match crate::memory::delete(mem_dir, id) {
         Ok(true) => say(format!("delete: removed case={id}")),
