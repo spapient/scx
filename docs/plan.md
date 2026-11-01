@@ -2677,3 +2677,21 @@ P19/P23 answer+judge 与 P21 judge 走无推理别名；P21 answer 显式 flash�
 ### 执行顺序与门禁（阶段化，门不过不进）
 P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固，随各线产物同步）→ P24-A（压缩率深水区，费用敏感，最后）
 每线独立门禁全绿 → 版本 bump 0.12.0 → 状态图交付。
+
+## P24-B 落地记录（2026-11-01，B 线向量持久化缓存，commit b4af5d8）
+
+用户拍板"借鉴 Usearch 算法并优化"→ 分析：usearch 核心 = HNSW 近似 ANN（配 mmap/量化/SIMD），解决百万级快速近似检索；AMA-Bench 每 episode 仅几十到几百 turn（全库 14,930 turns），暴力精确余弦毫秒级，HNSW 近似改用反而可能降分——**检索算法不是分数变量**。真正可借鉴的是 **mmap/持久化**：旧路每次 recall 都重 spawn python + 重载模型 + 全量重编码该 episode 全部 turns（全量 2h 大头）。
+
+**落地**（scx 零依赖，仿 usearch 持久化思路，不引第三方）：
+- `--embed-vec CMD` / `--embed-cache DIR`：候选向量按内容 sha256（前 16 hex）落盘 `<dir>/<key16>.vec`（u32 LE dim + f32 LE×dim，`.tmp`→rename 原子写）；query 每次在线编码，候选命中缓存直接读盘，最后 scx 内 **f64 归一化 + 点积**得余弦（替换旧 python f32 全链路 provider）。
+- 接入：`src/sim.rs`（compute_vec/spawn_vec/read_vec/write_vec/normalize/dot）、`search_fused` 9 参（embed_vec/embed_cache）、`src/ops.rs`（RecallOnly 透传）、`src/args.rs` + `word()` 白名单修复（漏 `--embed-vec`/`--embed-cache` 致值误入 `--delete` 触发 action 互斥）。
+- p23 工具链透传：`p23_scx.py recall()` + `run_p23.py --embed-vec/--embed-cache`；新向量 provider `tools/bench_p23_ama/embed_vec_provider.py`（同 Q/L 协议、stdout 原始向量）。
+
+**验证（不改分数）**：
+- 排序一致性：3 query × 100 texts，old embed-cmd / new embed-vec / 缓存首次 / 缓存二次 top-6 case 序列完全逐字一致。
+- 数值等价：新旧余弦 max|diff| = 1.19e-06 / 1.36e-06（f32 python 全链路 vs scx f64，f64 归一化+点积更稳）。
+- **30 真实 QA 召回对拍**（5 episode × 6 题）：新旧后端 case_id 序列 **100% 一致**（mismatch=0），sim 数值差 <1e-3——召回等价 ⇒ 判分输入不变 ⇒ **0.5349 冻结分数不受影响**。
+- 缓存冷热：ep_0 100 cases 冷（全量编码）10.49s → 热（仅 query）4.46s/4.68s，**-57%**；模型加载 ~1.2–4.5s 仍残留（下一步可选：provider 常驻守护进程消除重载）。
+- 测试：lib 397 + bin 4 全过；`concurrent_store_processes_keep_all_cases_and_meta_updates` FAILED 为 pre-existing（HEAD 复现，gen 竞争，与 B 线无关）。
+
+**结论**：B 线工程闭环（持久化缓存 + scx 内 f64 余弦，等价且提速）；P24-B-2 门禁（acc ≥ 0.55 / F1 ≥ 0.68 / 超 bm25 ≥ 5 点）终态仍待用户拍板：per-type（D 走 raw）/ 升级 embedding 模型（bge 系列）/ 接受 0.5349 作融合正式基线转 P24-C。
