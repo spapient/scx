@@ -1,7 +1,7 @@
 {
   "schema": "bench_p23_amabench_v1",
   "benchmark": "AMA-Bench (arXiv:2602.22769v4)",
-  "generated_at": "2026-10-31T22:56:30+0800",
+  "generated_at": "2026-11-01T08:16:46+0800",
   "scx_version": "scx 0.11.0",
   "scx_binary": "/Users/fei/code/scx/target/release/scx",
   "official": {
@@ -38,7 +38,7 @@
       "D": 414
     }
   },
-  "command": "tools/bench_p23_ama/run_p23.py --work /tmp/scx_bench_ama --results config/bench/results/bench_p23_amabench.json",
+  "command": "run_p23.py --data /tmp/scx_bench_ama/open_end_qa_set.jsonl --work /tmp/scx_bench_ama --results /Users/fei/code/scx/config/bench/results/bench_p23_amabench.json",
   "scope": "full",
   "seed": 42,
   "temperature": 0.0,
@@ -54,88 +54,52 @@
     "official_judge": "Qwen3-32B binary yes/no (paper Appendix C.1)"
   },
   "timings_s": {
-    "ingest": 2.29,
-    "evaluate": 3574.92
+    "ingest": 223.99,
+    "evaluate": 2080.67
   },
   "llm_calls": {
     "path": "/tmp/scx_bench_ama/llm_calls.jsonl",
     "totals": {
       "answer": {
-        "calls": 3031,
-        "prompt_tokens": 76572799,
-        "completion_tokens": 493727,
+        "calls": 4992,
+        "prompt_tokens": 102508267,
+        "completion_tokens": 722939,
         "reasoning_tokens": 0,
-        "failures": 35,
-        "retries": 217,
-        "elapsed_s": 12830.185019731522
+        "failures": 0,
+        "retries": 2,
+        "elapsed_s": 11211.859257936478
       },
       "judge": {
-        "calls": 2945,
-        "prompt_tokens": 2564216,
-        "completion_tokens": 2901,
+        "calls": 4992,
+        "prompt_tokens": 3288150,
+        "completion_tokens": 4992,
         "reasoning_tokens": 0,
-        "failures": 44,
-        "retries": 235,
-        "elapsed_s": 8566.919606685638
+        "failures": 0,
+        "retries": 0,
+        "elapsed_s": 5307.61273598671
       }
     }
   },
   "ingestion": {
-    "turns_stored": 14437,
+    "turns_stored": 14930,
     "turns_dedup": 0,
     "turns_truncated_over_1MiB": 2,
-    "turns_failed": 507,
+    "turns_failed": 14,
     "errors": [
-      "ep 12 turn 1: no stored match 1 action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      42 行 · 2,172 字符 · 约 544 token\n📤 压缩后    7 行 · 175 字符 · 约 45 token\n💾 省下      35 行 · 1,997 字符 · 约 499 token（-91.7%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_d888263ee1832131 added=dedup\n",
-      "ep 12 turn 2: no stored match 2 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,203 字符 · 约 551 token\n📤 压缩后    10 行 · 274 字符 · 约 69 token\n💾 省下      33 行 · 1,929 字符 · 约 482 token（-87.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      3 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_00ad6e7dc1d6b1e5 added=dedup\n",
-      "ep 12 turn 3: no stored match 3 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      42 行 · 2,173 字符 · 约 544 token\n📤 压缩后    10 行 · 269 字符 · 约 68 token\n💾 省下      32 行 · 1,904 字符 · 约 475 token（-87.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_da8b85ded5c83d93 added=dedup\n",
-      "ep 12 turn 4: no stored match 4 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      42 行 · 2,168 字符 · 约 543 token\n📤 压缩后    10 行 · 264 字符 · 约 67 token\n💾 省下      32 行 · 1,904 字符 · 约 475 token（-87.6%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_16e470e6cde7960f added=dedup\n",
-      "ep 12 turn 5: no stored match 5 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      42 行 · 2,168 字符 · 约 543 token\n📤 压缩后    10 行 · 264 字符 · 约 67 token\n💾 省下      32 行 · 1,904 字符 · 约 475 token（-87.6%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_7873844c9dbfef05 added=dedup\n",
-      "ep 12 turn 6: no stored match  6 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      42 行 · 2,168 字符 · 约 543 token\n📤 压缩后    8 行 · 219 字符 · 约 56 token\n💾 省下      34 行 · 1,949 字符 · 约 487 token（-89.7%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_67c9b8b3588c4109 added=dedup\n",
-      "ep 12 turn 7: no stored match  7 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      42 行 · 2,167 字符 · 约 542 token\n📤 压缩后    8 行 · 213 字符 · 约 54 token\n💾 省下      34 行 · 1,954 字符 · 约 488 token（-90.0%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_1fd72f8e7e93655d added=dedup\n",
-      "ep 12 turn 8: no stored match  8 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      42 行 · 2,167 字符 · 约 542 token\n📤 压缩后    8 行 · 213 字符 · 约 54 token\n💾 省下      34 行 · 1,954 字符 · 约 488 token（-90.0%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_879c441ef6dea1d7 added=dedup\n",
-      "ep 12 turn 9: no stored match  9 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,202 字符 · 约 551 token\n📤 压缩后    8 行 · 225 字符 · 约 57 token\n💾 省下      35 行 · 1,977 字符 · 约 494 token（-89.6%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_3cedbf72eae518df added=dedup\n",
-      "ep 12 turn 10: no stored match tion northwest\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      44 行 · 2,214 字符 · 约 554 token\n📤 压缩后    6 行 · 120 字符 · 约 31 token\n💾 省下      38 行 · 2,094 字符 · 约 523 token（-94.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_f84fd28f76b2400e added=dedup\n",
-      "ep 12 turn 11: no stored match  action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,184 字符 · 约 547 token\n📤 压缩后    13 行 · 487 字符 · 约 123 token\n💾 省下      30 行 · 1,697 字符 · 约 424 token（-77.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      3 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_c74607b936976123 added=dedup\n",
-      "ep 12 turn 12: no stored match  action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,201 字符 · 约 551 token\n📤 压缩后    13 行 · 403 字符 · 约 102 token\n💾 省下      30 行 · 1,798 字符 · 约 449 token（-81.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_a2e212af835694d7 added=dedup\n",
-      "ep 12 turn 13: no stored match action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,197 字符 · 约 550 token\n📤 压缩后    15 行 · 504 字符 · 约 127 token\n💾 省下      28 行 · 1,693 字符 · 约 423 token（-76.9%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_581d513d932c3260 added=dedup\n",
-      "ep 12 turn 14: no stored match action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,197 字符 · 约 550 token\n📤 压缩后    14 行 · 507 字符 · 约 128 token\n💾 省下      29 行 · 1,690 字符 · 约 422 token（-76.7%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      3 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_38aa949c8885f754 added=dedup\n",
-      "ep 12 turn 15: no stored match 15 action east\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      44 行 · 2,209 字符 · 约 553 token\n📤 压缩后    9 行 · 241 字符 · 约 61 token\n💾 省下      35 行 · 1,968 字符 · 约 491 token（-88.9%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_14ebb64a3cb416fb added=dedup\n",
-      "ep 12 turn 16: no stored match 16 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,184 字符 · 约 547 token\n📤 压缩后    9 行 · 239 字符 · 约 61 token\n💾 省下      34 行 · 1,945 字符 · 约 486 token（-88.8%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_2f09e327f7cc0c5d added=dedup\n",
-      "ep 12 turn 17: no stored match action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,197 字符 · 约 550 token\n📤 压缩后    14 行 · 507 字符 · 约 128 token\n💾 省下      29 行 · 1,690 字符 · 约 422 token（-76.7%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      3 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_c140cf0dcaf215de added=dedup\n",
-      "ep 12 turn 18: no stored match 8 action search\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      44 行 · 2,230 字符 · 约 558 token\n📤 压缩后    3 行 · 49 字符 · 约 13 token\n💾 省下      41 行 · 2,181 字符 · 约 545 token（-97.6%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      1 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_5bdec0921307dabe added=dedup\n",
-      "ep 12 turn 19: no stored match 19 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,176 字符 · 约 545 token\n📤 压缩后    8 行 · 216 字符 · 约 55 token\n💾 省下      35 行 · 1,960 字符 · 约 489 token（-89.9%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_c238fdbf84ef16d7 added=dedup\n",
-      "ep 12 turn 20: no stored match 20 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,125 字符 · 约 532 token\n📤 压缩后    7 行 · 180 字符 · 约 46 token\n💾 省下      34 行 · 1,945 字符 · 约 486 token（-91.3%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_78c9f1c2400606a0 added=dedup\n",
-      "ep 12 turn 21: no stored match 21 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,120 字符 · 约 531 token\n📤 压缩后    7 行 · 175 字符 · 约 45 token\n💾 省下      34 行 · 1,945 字符 · 约 486 token（-91.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_1629c96b2ae8e4d2 added=dedup\n",
-      "ep 12 turn 22: no stored match 22 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,120 字符 · 约 531 token\n📤 压缩后    7 行 · 175 字符 · 约 45 token\n💾 省下      34 行 · 1,945 字符 · 约 486 token（-91.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_be761261ea25b8de added=dedup\n",
-      "ep 12 turn 23: no stored match 23 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,123 字符 · 约 531 token\n📤 压缩后    7 行 · 178 字符 · 约 45 token\n💾 省下      34 行 · 1,945 字符 · 约 486 token（-91.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_d1eb138b680d1105 added=dedup\n",
-      "ep 12 turn 24: no stored match 24 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,123 字符 · 约 531 token\n📤 压缩后    7 行 · 178 字符 · 约 45 token\n💾 省下      34 行 · 1,945 字符 · 约 486 token（-91.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_b539549337be4e52 added=dedup\n",
-      "ep 12 turn 25: no stored match 25 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,123 字符 · 约 531 token\n📤 压缩后    7 行 · 178 字符 · 约 45 token\n💾 省下      34 行 · 1,945 字符 · 约 486 token（-91.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_7cc2d9a1861b5ca4 added=dedup\n",
-      "ep 12 turn 26: no stored match 6 action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      40 行 · 2,118 字符 · 约 530 token\n📤 压缩后    7 行 · 192 字符 · 约 49 token\n💾 省下      33 行 · 1,926 字符 · 约 481 token（-90.7%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_0534804d6fb9013a added=dedup\n",
-      "ep 12 turn 27: no stored match 7 action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,138 字符 · 约 535 token\n📤 压缩后    6 行 · 149 字符 · 约 38 token\n💾 省下      35 行 · 1,989 字符 · 约 497 token（-92.8%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_8d2db022f9601503 added=dedup\n",
-      "ep 12 turn 28: no stored match 8 action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,155 字符 · 约 539 token\n📤 压缩后    6 行 · 149 字符 · 约 38 token\n💾 省下      35 行 · 2,006 字符 · 约 501 token（-92.9%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_f1dd882e6e0c2435 added=dedup\n",
-      "ep 12 turn 29: no stored match 29 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,137 字符 · 约 535 token\n📤 压缩后    7 行 · 183 字符 · 约 47 token\n💾 省下      34 行 · 1,954 字符 · 约 488 token（-91.2%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_833f0ecbf88b1ef6 added=dedup\n",
-      "ep 12 turn 30: no stored match 0 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,134 字符 · 约 534 token\n📤 压缩后    11 行 · 344 字符 · 约 87 token\n💾 省下      30 行 · 1,790 字符 · 约 447 token（-83.7%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_75e89a742e09a9fd added=dedup\n",
-      "ep 12 turn 31: no stored match 31 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,136 字符 · 约 535 token\n📤 压缩后    7 行 · 177 字符 · 约 45 token\n💾 省下      34 行 · 1,959 字符 · 约 489 token（-91.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_acbea41fa6146c70 added=dedup\n",
-      "ep 12 turn 32: no stored match 32 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,136 字符 · 约 535 token\n📤 压缩后    7 行 · 177 字符 · 约 45 token\n💾 省下      34 行 · 1,959 字符 · 约 489 token（-91.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_8c023024957d0334 added=dedup\n",
-      "ep 12 turn 33: no stored match 33 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      42 行 · 2,156 字符 · 约 540 token\n📤 压缩后    8 行 · 197 字符 · 约 50 token\n💾 省下      34 行 · 1,959 字符 · 约 489 token（-90.6%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_8bf8904099c2d205 added=dedup\n",
-      "ep 12 turn 34: no stored match 34 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,185 字符 · 约 547 token\n📤 压缩后    9 行 · 226 字符 · 约 57 token\n💾 省下      34 行 · 1,959 字符 · 约 489 token（-89.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_1c5301daf87d15a3 added=dedup\n",
-      "ep 12 turn 35: no stored match tion southwest\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      43 行 · 2,202 字符 · 约 551 token\n📤 压缩后    8 行 · 230 字符 · 约 58 token\n💾 省下      35 行 · 1,972 字符 · 约 492 token（-89.3%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_eee52f8d6085ba23 added=dedup\n",
-      "ep 12 turn 36: no stored match 36 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      44 行 · 2,211 字符 · 约 553 token\n📤 压缩后    8 行 · 208 字符 · 约 53 token\n💾 省下      36 行 · 2,003 字符 · 约 500 token（-90.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_2a8b2f78bd01aeac added=dedup\n",
-      "ep 12 turn 37: no stored match tion southwest\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      45 行 · 2,275 字符 · 约 569 token\n📤 压缩后    7 行 · 200 字符 · 约 51 token\n💾 省下      38 行 · 2,075 字符 · 约 518 token（-91.0%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_da648c45fa8d4547 added=dedup\n",
-      "ep 12 turn 38: no stored match 8 action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      45 行 · 2,256 字符 · 约 565 token\n📤 压缩后    9 行 · 233 字符 · 约 59 token\n💾 省下      36 行 · 2,023 字符 · 约 505 token（-89.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_6bb3666860c0e2da added=dedup\n",
-      "ep 12 turn 39: no stored match  39 action open\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      45 行 · 2,256 字符 · 约 565 token\n📤 压缩后    3 行 · 47 字符 · 约 13 token\n💾 省下      42 行 · 2,209 字符 · 约 552 token（-97.7%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      1 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_f6e4aec62a9418da added=dedup\n",
-      "ep 12 turn 40: no stored match tion southeast\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      45 行 · 2,273 字符 · 约 569 token\n📤 压缩后    9 行 · 235 字符 · 约 60 token\n💾 省下      36 行 · 2,038 字符 · 约 509 token（-89.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_15d2de157b1ac7e2 added=dedup\n",
-      "ep 12 turn 41: no stored match 1 action south\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      48 行 · 2,314 字符 · 约 579 token\n📤 压缩后    7 行 · 167 字符 · 约 43 token\n💾 省下      41 行 · 2,147 字符 · 约 536 token（-92.6%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_54864c3155f44512 added=dedup\n",
-      "ep 12 turn 42: no stored match 2 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      47 行 · 2,280 字符 · 约 571 token\n📤 压缩后    13 行 · 320 字符 · 约 81 token\n💾 省下      34 行 · 1,960 字符 · 约 489 token（-85.8%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_6d10724ea4015b23 added=dedup\n",
-      "ep 12 turn 43: no stored match 3 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      45 行 · 2,262 字符 · 约 566 token\n📤 压缩后    11 行 · 302 字符 · 约 76 token\n💾 省下      34 行 · 1,960 字符 · 约 489 token（-86.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_df6cceba27c454e5 added=dedup\n",
-      "ep 12 turn 44: no stored match tion northwest\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      44 行 · 2,220 字符 · 约 556 token\n📤 压缩后    6 行 · 184 字符 · 约 47 token\n💾 省下      38 行 · 2,036 字符 · 约 508 token（-91.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_6a3c9018043306cc added=dedup\n",
-      "ep 13 turn 1: no stored match 1 action north\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,132 字符 · 约 534 token\n📤 压缩后    8 行 · 227 字符 · 约 58 token\n💾 省下      33 行 · 1,905 字符 · 约 476 token（-89.1%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_4f4bda3749eceba9 added=dedup\n",
-      "ep 13 turn 2: no stored match 2 action north\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      40 行 · 2,113 字符 · 约 529 token\n📤 压缩后    6 行 · 157 字符 · 约 40 token\n💾 省下      34 行 · 1,956 字符 · 约 488 token（-92.3%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_c98f322d1017fe66 added=dedup\n",
-      "ep 13 turn 3: no stored match  3 action west\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      40 行 · 2,129 字符 · 约 533 token\n📤 压缩后    6 行 · 156 字符 · 约 40 token\n💾 省下      34 行 · 1,973 字符 · 约 493 token（-92.5%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_b7816d49b48b57fa added=dedup\n",
-      "ep 13 turn 4: no stored match  4 action east\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,143 字符 · 约 536 token\n📤 压缩后    9 行 · 239 字符 · 约 61 token\n💾 省下      32 行 · 1,904 字符 · 约 475 token（-88.6%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_387cc3b6e14ff990 added=dedup\n",
-      "ep 13 turn 5: no stored match  5 action east\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      40 行 · 2,116 字符 · 约 530 token\n📤 压缩后    6 行 · 160 字符 · 约 41 token\n💾 省下      34 行 · 1,956 字符 · 约 488 token（-92.2%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_a0cf09460dc0ca65 added=dedup\n",
-      "ep 13 turn 6: no stored match 6 action north\n⚙️ 模式      sieve 智能筛选 · 按问题逐行召回证据\n📥 原始      41 行 · 2,137 字符 · 约 535 token\n📤 压缩后    6 行 · 180 字符 · 约 46 token\n💾 省下      35 行 · 1,957 字符 · 约 489 token（-91.4%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      低\n\nscx: stored case=2026-10-31_1c34f51067638ac3 added=dedup\n"
+      "ep 82 turn 12: rc=2 后    53 行 · 3,434 字符 · 约 864 token\n💾 省下      706 行 · 22,076 字符 · 约 5,556 token（-86.5%）\n🎯 证据召回  未声明证据\n🔁 去重      73 行重复内容已折叠\n✂️ 裁剪      105 段无关内容已移除\n🛡️ 风险      低\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 13: rc=2 2 step 13 action …\n⚙️ 模式      小输入透传 · 无需压缩\n📥 原始      35 行 · 1,007 字符\n📤 压缩后    原样保留，一字未动\n💾 省下      0 —— 内容本就很少\n💡 说明      内容很少（<40 行且不足 400 token），压缩反而可能丢信息，自动跳过\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 14: rc=2 2 step 14 action …\n⚙️ 模式      小输入透传 · 无需压缩\n📥 原始      35 行 · 1,013 字符\n📤 压缩后    原样保留，一字未动\n💾 省下      0 —— 内容本就很少\n💡 说明      内容很少（<40 行且不足 400 token），压缩反而可能丢信息，自动跳过\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 15: rc=2 缩后    37 行 · 1,736 字符 · 约 435 token\n💾 省下      210 行 · 9,104 字符 · 约 2,275 token（-83.9%）\n🎯 证据召回  未声明证据\n🔁 去重      179 行重复内容已折叠\n✂️ 裁剪      29 段无关内容已移除\n🛡️ 风险      低\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 16: rc=2 \n📤 压缩后    6 行 · 529 字符 · 约 133 token\n💾 省下      637 行 · 55,189 字符 · 约 13,797 token（-99.0%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      2 段无关内容已移除\n🛡️ 风险      高\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 17: rc=2 vel2 step 17 action …\n⚙️ 模式      小输入透传 · 无需压缩\n📥 原始      4 行 · 246 字符\n📤 压缩后    原样保留，一字未动\n💾 省下      0 —— 内容本就很少\n💡 说明      内容很少（<40 行且不足 400 token），压缩反而可能丢信息，自动跳过\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 18: rc=2 vel2 step 18 action …\n⚙️ 模式      小输入透传 · 无需压缩\n📥 原始      4 行 · 245 字符\n📤 压缩后    原样保留，一字未动\n💾 省下      0 —— 内容本就很少\n💡 说明      内容很少（<40 行且不足 400 token），压缩反而可能丢信息，自动跳过\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 19: rc=2 约 566 token\n📤 压缩后    3 行 · 2,261 字符 · 约 566 token\n💾 省下      0 行 · 1 字符 · 约 0 token（-0.0%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      0 段无关内容已移除\n🛡️ 风险      低\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 20: rc=2 约 452 token\n📤 压缩后    8 行 · 1,801 字符 · 约 452 token\n💾 省下      0 行 · 1 字符 · 约 0 token（-0.0%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      0 段无关内容已移除\n🛡️ 风险      低\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 21: rc=2 oken\n📤 压缩后    10 行 · 607 字符 · 约 153 token\n💾 省下      31 行 · 1,380 字符 · 约 344 token（-69.3%）\n🎯 证据召回  未声明证据\n🔁 去重      2 行重复内容已折叠\n✂️ 裁剪      7 段无关内容已移除\n🛡️ 风险      低\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 22: rc=2 约 722 token\n📤 压缩后    3 行 · 2,872 字符 · 约 722 token\n💾 省下      0 行 · 1 字符 · 约 0 token（-0.0%）\n🎯 证据召回  未声明证据\n🔁 去重      0 行重复内容已折叠\n✂️ 裁剪      0 段无关内容已移除\n🛡️ 风险      低\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 23: rc=2 l2 step 23 action …\n⚙️ 模式      小输入透传 · 无需压缩\n📥 原始      3 行 · 1,389 字符\n📤 压缩后    原样保留，一字未动\n💾 省下      0 —— 内容本就很少\n💡 说明      内容很少（<40 行且不足 400 token），压缩反而可能丢信息，自动跳过\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 82 turn 24: rc=2 evel2 step 24 action …\n⚙️ 模式      小输入透传 · 无需压缩\n📥 原始      3 行 · 59 字符\n📤 压缩后    原样保留，一字未动\n💾 省下      0 —— 内容本就很少\n💡 说明      内容很少（<40 行且不足 400 token），压缩反而可能丢信息，自动跳过\n\nscx: memory store failed: parse case /tmp/scx_bench_ama/mem/ep_82/cases/2026-10-31_59cdc58f00e99b74/case.json: unescaped control byte 0x7f\n",
+      "ep 88 turn 54: rc=2 31\n✦ SCX 压缩召回 ✦\n\n📌 查询      OPENWORLD_QA gaia_level3 step 54 action …\n⚙️ 模式      超长行透传 · 单行过长，原样保留\n📥 原始      715 行 · 983,100 字符\n📤 压缩后    原样保留，一字未动\n💾 省下      0 —— 无损失保留原文\n💡 说明      单行过长无法安全压缩，原样返回，不冒险删减\n\nscx: memory store failed: case text too large: 1890180 bytes > 1048576 (scx-memory MAX_CASE_TEXT)\n"
     ],
     "mem_root": "/tmp/scx_bench_ama/mem"
   },
@@ -160,12 +124,12 @@
     "decision": "judge 收到 (task_type, episode_id, task, question, reference, predicted)，仅输出 yes/no；取末个 yes/no；无法解析记 incorrect。",
     "fallback": "judge 不可用/空响应 → 记 incorrect（repair 轮重试后仍失败列入 residual_failures）。",
     "official_judge": "Qwen3-32B（paper Appendix C.1；300 例人工标注一致率 92.67%）",
-    "this_run_judge": "deepseek-chat，temperature 0，max_tokens=16；口径差异已在 models 节记录。",
+    "this_run_judge": "deepseek-chat 别名→DeepSeek-V4.1-Flash 无推理，temperature 0，max_tokens=16；口径差异已在 models 节记录。",
     "f1_metric": "官方第二指标 F1：离线机械计算（分类别 token P/R 调和平均），不经 LLM；移植自 evaluation_metrics.py compute_f1_score。"
   },
   "official_reference": {
     "source": "AMA-Bench arXiv:2602.22769v4 Table 5 (real-world subset, Qwen3-32B backbone)",
-    "note": "本运行答案/judge 均为 deepseek-chat；backbone、judge、上下文构造均不同，下列数字只用于定位量级，不构成同条件对比。",
+    "note": "本运行答案/judge 均经 deepseek-chat 别名调用（API 实测路由到 deepseek-flash=官方 DeepSeek-V4.1-Flash，无推理模式，temp 0）；backbone、judge、上下文构造均不同，下列数字只用于定位量级，不构成同条件对比。",
     "columns": {
       "A": "Recall",
       "B": "Causal Inference",
@@ -255,123 +219,123 @@
   "dual_sided_conclusion": {
     "scx_overall": {
       "n": 2496,
-      "accuracy": 0.512,
-      "f1": 0.661,
-      "correct": 1278
+      "accuracy": 0.5244,
+      "f1": 0.6597,
+      "correct": 1309
     },
     "bm25_overall": {
       "n": 2496,
-      "accuracy": 0.5076,
-      "f1": 0.656,
-      "correct": 1267
+      "accuracy": 0.5176,
+      "f1": 0.658,
+      "correct": 1292
     },
-    "scx_minus_bm25_acc": 0.0044,
-    "scx_minus_bm25_f1": 0.005,
+    "scx_minus_bm25_acc": 0.0068,
+    "scx_minus_bm25_f1": 0.0017,
     "by_type_scx_vs_bm25": {
       "A": {
-        "scx": 0.4589,
-        "bm25": 0.4672
+        "scx": 0.4779,
+        "bm25": 0.4648
       },
       "B": {
-        "scx": 0.7164,
-        "bm25": 0.7164
+        "scx": 0.7131,
+        "bm25": 0.7315
       },
       "C": {
-        "scx": 0.4189,
-        "bm25": 0.391
+        "scx": 0.4312,
+        "bm25": 0.4049
       },
       "D": {
-        "scx": 0.471,
-        "bm25": 0.471
+        "scx": 0.4928,
+        "bm25": 0.4928
       }
     }
   },
   "limitations": [
-    "答案模型与 judge 均为 deepseek-chat，非官方 Qwen3-32B；绝对值不可与 Table 4/5 直接比较。",
+    "答案模型与 judge 均经 deepseek-chat 别名调用（物理模型=DeepSeek-V4.1-Flash，无推理），非官方 Qwen3-32B；绝对值不可与 Table 4/5 直接比较。",
     "synthetic 1,200 QA 未取得（见 synthetic_subset），长轨迹 8K–128K 尺度压力测试未覆盖。",
     "未跑长上下文（full trajectory）对照通道：多数 episode 超出本地模型上下文预算，官方 long-context 基线仅作参考数字。"
   ],
-  "cost_note": "仅记录 prompt/completion token 与调用次数，不折算金额；reasoning_tokens=0（deepseek-chat 无推理）。",
+  "cost_note": "仅记录 prompt/completion token 与调用次数，不折算金额；reasoning_tokens 不产生（deepseek-chat 别名=无推理模式）。",
   "metrics": {
     "bm25": {
       "ALL": {
         "A": {
           "n": 839,
-          "accuracy": 0.4672,
-          "f1": 0.6554,
-          "correct": 392
+          "accuracy": 0.4648,
+          "f1": 0.66,
+          "correct": 390
         },
         "ALL": {
           "n": 2496,
-          "accuracy": 0.5076,
-          "f1": 0.656,
-          "correct": 1267
+          "accuracy": 0.5176,
+          "f1": 0.658,
+          "correct": 1292
         },
         "B": {
           "n": 596,
-          "accuracy": 0.7164,
-          "f1": 0.6596,
-          "correct": 427
+          "accuracy": 0.7315,
+          "f1": 0.6622,
+          "correct": 436
         },
         "C": {
           "n": 647,
-          "accuracy": 0.391,
-          "f1": 0.6564,
-          "correct": 253
+          "accuracy": 0.4049,
+          "f1": 0.6568,
+          "correct": 262
         },
         "D": {
           "n": 414,
-          "accuracy": 0.471,
-          "f1": 0.6515,
-          "correct": 195
+          "accuracy": 0.4928,
+          "f1": 0.6497,
+          "correct": 204
         }
       },
       "EMBODIED_AI": {
         "ALL": {
           "n": 360,
-          "accuracy": 0.1556,
-          "f1": 0.6906,
-          "correct": 56
+          "accuracy": 0.1444,
+          "f1": 0.6911,
+          "correct": 52
         }
       },
       "Game": {
         "ALL": {
           "n": 360,
-          "accuracy": 0.5139,
-          "f1": 0.6248,
-          "correct": 185
+          "accuracy": 0.5278,
+          "f1": 0.6293,
+          "correct": 190
         }
       },
       "OPENWORLD_QA": {
         "ALL": {
           "n": 360,
-          "accuracy": 0.475,
-          "f1": 0.7089,
-          "correct": 171
+          "accuracy": 0.5444,
+          "f1": 0.7067,
+          "correct": 196
         }
       },
       "SOFTWARE": {
         "ALL": {
           "n": 432,
-          "accuracy": 0.5764,
-          "f1": 0.6396,
-          "correct": 249
+          "accuracy": 0.5926,
+          "f1": 0.642,
+          "correct": 256
         }
       },
       "TEXT2SQL": {
         "ALL": {
           "n": 612,
-          "accuracy": 0.6487,
-          "f1": 0.6091,
-          "correct": 397
+          "accuracy": 0.6552,
+          "f1": 0.6105,
+          "correct": 401
         }
       },
       "WEB": {
         "ALL": {
           "n": 372,
-          "accuracy": 0.5618,
-          "f1": 0.6978,
-          "correct": 209
+          "accuracy": 0.5296,
+          "f1": 0.7033,
+          "correct": 197
         }
       }
     },
@@ -379,81 +343,81 @@
       "ALL": {
         "A": {
           "n": 839,
-          "accuracy": 0.4589,
-          "f1": 0.6663,
-          "correct": 385
+          "accuracy": 0.4779,
+          "f1": 0.6664,
+          "correct": 401
         },
         "ALL": {
           "n": 2496,
-          "accuracy": 0.512,
-          "f1": 0.661,
-          "correct": 1278
+          "accuracy": 0.5244,
+          "f1": 0.6597,
+          "correct": 1309
         },
         "B": {
           "n": 596,
-          "accuracy": 0.7164,
-          "f1": 0.6691,
-          "correct": 427
+          "accuracy": 0.7131,
+          "f1": 0.6609,
+          "correct": 425
         },
         "C": {
           "n": 647,
-          "accuracy": 0.4189,
-          "f1": 0.6499,
-          "correct": 271
+          "accuracy": 0.4312,
+          "f1": 0.6529,
+          "correct": 279
         },
         "D": {
           "n": 414,
-          "accuracy": 0.471,
-          "f1": 0.656,
-          "correct": 195
+          "accuracy": 0.4928,
+          "f1": 0.6552,
+          "correct": 204
         }
       },
       "EMBODIED_AI": {
         "ALL": {
           "n": 360,
-          "accuracy": 0.1472,
-          "f1": 0.6963,
-          "correct": 53
+          "accuracy": 0.1556,
+          "f1": 0.6997,
+          "correct": 56
         }
       },
       "Game": {
         "ALL": {
           "n": 360,
-          "accuracy": 0.5167,
-          "f1": 0.6301,
-          "correct": 186
+          "accuracy": 0.5306,
+          "f1": 0.6228,
+          "correct": 191
         }
       },
       "OPENWORLD_QA": {
         "ALL": {
           "n": 360,
-          "accuracy": 0.5306,
-          "f1": 0.7111,
-          "correct": 191
+          "accuracy": 0.5917,
+          "f1": 0.7078,
+          "correct": 213
         }
       },
       "SOFTWARE": {
         "ALL": {
           "n": 432,
-          "accuracy": 0.5602,
-          "f1": 0.6425,
-          "correct": 242
+          "accuracy": 0.5509,
+          "f1": 0.6435,
+          "correct": 238
         }
       },
       "TEXT2SQL": {
         "ALL": {
           "n": 612,
-          "accuracy": 0.6683,
-          "f1": 0.6177,
-          "correct": 409
+          "accuracy": 0.6748,
+          "f1": 0.6136,
+          "correct": 413
         }
       },
       "WEB": {
         "ALL": {
           "n": 372,
-          "accuracy": 0.5296,
-          "f1": 0.7011,
-          "correct": 197
+          "accuracy": 0.5323,
+          "f1": 0.7051,
+          "correct": 198
         }
       }
     }
@@ -469,15 +433,15 @@
     },
     "scx": {
       "n": 2496,
-      "zero_hit_rate": 0.0441,
-      "mean_hits": 9.335,
-      "mean_context_chars": 50977.6,
-      "mean_score": 6.8865,
-      "mean_sim": 0.1291
+      "zero_hit_rate": 0.018,
+      "mean_hits": 9.647,
+      "mean_context_chars": 51766.1,
+      "mean_score": 6.8793,
+      "mean_sim": 0.1273
     }
   },
   "repair": {
-    "repaired": 151,
+    "repaired": 0,
     "residual_failures": []
   },
   "rows": 4992,

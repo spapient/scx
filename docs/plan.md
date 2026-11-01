@@ -2661,7 +2661,7 @@ P19/P23 answer+judge 与 P21 judge 走无推理别名；P21 answer 显式 flash�
 
 ### P24-B 官方基准补齐
 - **P22 Compact-Bench 第 3 case 补齐**（官方建议 3 cases，实跑 2；检查 pip 包第 3 数据集可用性，可用即补，不可用记边界）——门禁：overall_score 复现 ≥ 0.74 且 0 error。**【2026-11-01 完成】**：60 cases 全量（20 模板 × 3 × 2 cycles）overall **0.750774**（≥0.74 ✓）、drift 0.9333、contradiction 0.0083（1/60）、retention 1.0（180/180 probes）、620 calls 0 error；期间修 provider 空 content 瞬态（completion 打满正文空）——换通道重试 2 次兜底；产物 `bench_p22_compactbench.json` 更新至 3 cases 口径。
-- **P23 AMA-Bench 提升**（accuracy 0.512 → 0.55+）：基于 retrieval_diagnostics 定位弱通道（A/B/C/D），改进检索/记忆召回后重跑 real 2,496 全量——门禁：accuracy ≥ 0.55 且 F1 ≥ 0.68（超 bm25 基线 ≥ 5 点）。
+- **P23 AMA-Bench 提升**（accuracy 0.512 → 0.55+）：基于 retrieval_diagnostics 定位弱通道（A/B/C/D），改进检索/记忆召回后重跑 real 2,496 全量——门禁：accuracy ≥ 0.55 且 F1 ≥ 0.68（超 bm25 基线 ≥ 5 点）。**【2026-11-01 尽力未达，转待定】**：数据重下（sha256 验证）+ 208 episodes 重摄取（zero-hit 4.4%→1.8%）后全量重跑（9,984 calls/0 failure）：**scx 0.5244/0.6597**（旧冻结 0.512/0.661，+1.2 点）；bm25 同步升至 0.5176/0.658，超 bm25 仅 +0.68 点。检索侧改进矩阵全部验证完毕：K=15 消融（0.45<0.5）、query 词面增强（0→1 例）、摄取 observation 增强（+0.2~0.6 噪声级）、rerank K=30→top10（覆盖 +2~3 点但 LLM 判分 +0.0125 噪声内，B 类 -10 点）、step 锚注入（引用 step 已在召回内，injected=1）、相邻窗口 ±1（稀释精度更差）。结论：scx turn 级 RRF 召回在 AMA-Bench 词面证据型任务上与 bm25 相当、无 ≥5 点优势空间（架构本质：turn 级证据 vs 轨迹整体；同模型同 prompt 冻结协议下答案/judge 侧不可动）。达门禁需引入向量检索或换答案模型（均超 scx 零依赖/冻结协议边界），**待用户拍板**。
 - **P19 science 继续提**（minority 视角命中 three 65.71/four 65.93 → 70+）：在 df40 基础上调 minority 证据保留（词频下限、机制词 KEEP 词表）——门禁：science all_rec ≥ 31.0 且 ratio ≤ 0.55。
 
 ### P24-C 治理线复跑确认
