@@ -2695,3 +2695,20 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 - 测试：lib 397 + bin 4 全过；`concurrent_store_processes_keep_all_cases_and_meta_updates` FAILED 为 pre-existing（HEAD 复现，gen 竞争，与 B 线无关）。
 
 **结论**：B 线工程闭环（持久化缓存 + scx 内 f64 余弦，等价且提速）；P24-B-2 门禁（acc ≥ 0.55 / F1 ≥ 0.68 / 超 bm25 ≥ 5 点）终态仍待用户拍板：per-type（D 走 raw）/ 升级 embedding 模型（bge 系列）/ 接受 0.5349 作融合正式基线转 P24-C。
+
+## P24-B 收尾记录（2026-11-01 夜，用户拍板：不换模型、接受现状）
+
+用户拍板"按建议先实测"→ L1 换 **bge-small-en-v1.5**（133MB/384 维，snapshot `5c38ec7c…`）全量实测；随后澄清要 **BGE-M3 ~500MB 轻量档**（GGUF Q8 量化，`ggml-org/bge-m3-Q8_0-GGUF` ~570MB，568M 参数，需 llama.cpp 系第三方推理框架）；最终拍板"不装模型、保成这样子、把验证全部收掉"→ **P24-B-2 以现状收尾**。
+
+**L1 bge-small-en-v1.5 实测**：
+- provider：`/tmp/bge_vec_provider.py`（同 embed_vec Q/L 协议，query 加官方前缀 `Represent this sentence; searching for the relevant passages:`，doc 不加）；独立向量缓存 `/tmp/vec_cache_bge`（与 MiniLM 缓存隔离）。
+- 冒烟通过：101×384 输出正确、缓存落盘正常；16 真实 QA 中 top1 不同 7 例（44%）、top10 平均交集 6.9/10 → **排序差异显著**；单 episode 端到端摄取+召回正常；与 fuse 冻结批次同 QA sim/score 模式一致（sim=0 为该数据常态，非 bug）。
+- 全量启动（208 eps / 2,496 QA / k=10，唯一变量=嵌入模型）：摄取完成、向量缓存 2,554 个；中途卡死——在线 judge 调用 22:03 后 11 分钟无新调用、进程 0% CPU（网络通，`api.deepseek.com` 401=未带 key 正常，疑 API 慢/限流）；**抽样 314/2496（12.6%）粗估 acc≈0.49**（A 0.453/B 0.462/C 0.59/D 0.462）低于 fuse 0.5349，样本不足不作数 → 未出最终分数，按用户要求终止并清理（孤儿 worker 全清）。
+
+**BGE-M3 轻量档查证**：用户所指 ~500MB = BGE-M3 GGUF Q8 量化（官方 fp32 2.2GB）。GGUF 不能直接用 sentence-transformers，需装 **llama-cpp-python**（第三方推理框架，纯 CPU 可跑）；全量成本（摄取编码 1.5–2h + 在线 answer/judge ~5,000 次）为 bge-small 2–3 倍，而 L0 诊断显示换模型期望增益仅 +0.5~1.0 点、超 bm25 +5 点为结构性缺口。用户放弃此路线。
+
+**收尾状态（P24-B-2 终态）**：
+- 融合正式基线：**acc 0.5349 / F1 0.6623**（correct 1,335/2,496；by_type A 0.4923/B 0.7299/C 0.4420/D 0.4855；zero_hit 1.6%），超 bm25 +1.73 点。
+- 门禁三项全未达（差 acc 1.51 点 / F1 1.77 点 / 超 bm25 需 +5 点）——**P24-B-2 未过门，如实记录**；超 bm25 ≥5 点为结构性缺口（turn 级证据 vs 轨迹整体，词面任务上 embedding 增益有限）。
+- B 线基础设施（`--embed-vec/--embed-cache` 持久化缓存）保留在 `b4af5d8`（代码）+ `1bc83a1`（docs），**未 push**；功能复验：cargo test 16 passed / 1 pre-existing FAILED（`concurrent_store_processes_…`，HEAD 复现，与 B 线无关）无回归。
+- 转 **P24-C 治理线复跑确认**（费用低，先动）。
