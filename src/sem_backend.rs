@@ -76,13 +76,22 @@ pub fn centered_batch(
 const PER_LINE_BYTES: usize = 24 * 8 + 8 + 256;
 /// 块内最小/最大行数（防空块与极端分块开销）。
 const CHUNK_MIN: usize = 64;
+/// 低预算硬顶（64MB 折算 171k 行时 clamp 到此；64MB 档行为即历史 CHUNK_MAX）。
 const CHUNK_MAX: usize = 65536;
+/// 高于 64MB 时按「每 MB 1024 行」放大的块上限（预算驱动：128MB → 131072、256MB → 262144）。
+const CHUNK_LINES_PER_MB: usize = 1024;
 
-/// 按内存预算折算每块行数（`max_mem` MB → 字节 → 行数，clamp 到安全区间）。
+/// 按内存预算折算每块行数（`max_mem` MB → 字节 → 行数）。
+/// ≤64MB 与历史分块计划逐位一致；>64MB 块上限随预算放大（大内存少切块）。
 fn chunk_lines(total: usize, max_mem_mb: usize) -> usize {
-    let budget = max_mem_mb.max(1).saturating_mul(1024 * 1024);
-    (budget / PER_LINE_BYTES)
+    let mb = max_mem_mb.max(1);
+    let budget = mb.saturating_mul(1024 * 1024);
+    let budget_lines = budget / PER_LINE_BYTES;
+    let max_chunk = budget_lines
         .clamp(CHUNK_MIN, CHUNK_MAX)
+        .max(mb.saturating_mul(CHUNK_LINES_PER_MB));
+    budget_lines
+        .clamp(CHUNK_MIN, max_chunk)
         .min(total.max(CHUNK_MIN))
 }
 
@@ -427,5 +436,10 @@ mod tests {
         assert!(chunk_lines(100_000_000, 64) <= CHUNK_MAX);
         // total 小于 CHUNK_MIN 时回退到 CHUNK_MIN（一次整块处理，语义等价）。
         assert_eq!(chunk_lines(10, 1), CHUNK_MIN);
+        // 预算驱动：>64MB 块上限随预算放大（1MB 低档保持历史折算值 2299）。
+        assert_eq!(chunk_lines(1_000_000, 1), 2299);
+        assert_eq!(chunk_lines(100_000_000, 128), 128 * CHUNK_LINES_PER_MB);
+        assert_eq!(chunk_lines(100_000_000, 256), 256 * CHUNK_LINES_PER_MB);
+        assert!(chunk_lines(100_000_000, 256) > chunk_lines(100_000_000, 128));
     }
 }
