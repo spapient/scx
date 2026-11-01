@@ -394,7 +394,7 @@ impl Default for Config {
             semantic: None,
             #[cfg(feature = "semantic")]
             sem_backend: crate::sem_backend::Backend::Cpu,
-            max_mem: 128,
+            max_mem: 256,
             sim_weight: 1.0,
             sem_weight: 1.0,
             sem_gate: 0.0,

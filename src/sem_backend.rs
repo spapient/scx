@@ -74,24 +74,18 @@ pub fn centered_batch(
 
 /// 每行峰值工作内存（保守）：24 维特征 24×8B + 分数槽 8B + 辅助 ~256B。
 const PER_LINE_BYTES: usize = 24 * 8 + 8 + 256;
-/// 块内最小/最大行数（防空块与极端分块开销）。
+/// 块内最小行数（防空块；预算折算值恒 ≥2299，仅 total 极小时生效）。
 const CHUNK_MIN: usize = 64;
-/// 低预算硬顶（64MB 折算 171k 行时 clamp 到此；64MB 档行为即历史 CHUNK_MAX）。
-const CHUNK_MAX: usize = 65536;
-/// 高于 64MB 时按「每 MB 1024 行」放大的块上限（预算驱动：128MB → 131072、256MB → 262144）。
-const CHUNK_LINES_PER_MB: usize = 1024;
+/// 单块并行线程上限（可用核数之上的安全顶，防 spawn 爆炸）。
+const N_THREADS_CAP: usize = 32;
 
-/// 按内存预算折算每块行数（`max_mem` MB → 字节 → 行数）。
-/// ≤64MB 与历史分块计划逐位一致；>64MB 块上限随预算放大（大内存少切块）。
+/// 按内存预算折算每块行数：`max_mem` MB → 字节 → 行数，直接作为块上限。
+/// 预算即块大小（64MB → 147168 行、128MB → 294337、256MB → 588674），
+/// 无额外拍脑袋系数；total 不足预算时整块处理。
 fn chunk_lines(total: usize, max_mem_mb: usize) -> usize {
-    let mb = max_mem_mb.max(1);
-    let budget = mb.saturating_mul(1024 * 1024);
-    let budget_lines = budget / PER_LINE_BYTES;
-    let max_chunk = budget_lines
-        .clamp(CHUNK_MIN, CHUNK_MAX)
-        .max(mb.saturating_mul(CHUNK_LINES_PER_MB));
-    budget_lines
-        .clamp(CHUNK_MIN, max_chunk)
+    let budget = max_mem_mb.max(1).saturating_mul(1024 * 1024);
+    (budget / PER_LINE_BYTES)
+        .max(CHUNK_MIN)
         .min(total.max(CHUNK_MIN))
 }
 
@@ -111,7 +105,7 @@ fn cpu_batch(
     let n_threads = std::thread::available_parallelism()
         .map(|v| v.get())
         .unwrap_or(1)
-        .min(16);
+        .min(N_THREADS_CAP);
     for base in (0..total).step_by(chunk) {
         let end = (base + chunk).min(total);
         let seg = (end - base).div_ceil(n_threads);
@@ -431,15 +425,18 @@ mod tests {
 
     #[test]
     fn chunk_lines_respects_budget_bounds() {
-        assert!(chunk_lines(1_000_000, 1) >= CHUNK_MIN);
-        assert_eq!(chunk_lines(100, 64), 100);
-        assert!(chunk_lines(100_000_000, 64) <= CHUNK_MAX);
-        // total 小于 CHUNK_MIN 时回退到 CHUNK_MIN（一次整块处理，语义等价）。
-        assert_eq!(chunk_lines(10, 1), CHUNK_MIN);
-        // 预算驱动：>64MB 块上限随预算放大（1MB 低档保持历史折算值 2299）。
-        assert_eq!(chunk_lines(1_000_000, 1), 2299);
-        assert_eq!(chunk_lines(100_000_000, 128), 128 * CHUNK_LINES_PER_MB);
-        assert_eq!(chunk_lines(100_000_000, 256), 256 * CHUNK_LINES_PER_MB);
-        assert!(chunk_lines(100_000_000, 256) > chunk_lines(100_000_000, 128));
+        assert_eq!(chunk_lines(1_000_000, 1), 2299); // 1MB 折算 1MiB/456B
+        assert_eq!(chunk_lines(100, 64), 100); // total 小于预算 → 整块
+        assert_eq!(chunk_lines(10, 1), CHUNK_MIN); // total < CHUNK_MIN 回退（一次整块）
+                                                   // 预算即块上限：64MB → 147168、128MB → 294337、256MB → 588674，单调递增。
+        let b64 = chunk_lines(100_000_000, 64);
+        let b128 = chunk_lines(100_000_000, 128);
+        let b256 = chunk_lines(100_000_000, 256);
+        assert_eq!(b64, 64 * 1024 * 1024 / PER_LINE_BYTES);
+        assert_eq!(b128, 128 * 1024 * 1024 / PER_LINE_BYTES);
+        assert_eq!(b256, 256 * 1024 * 1024 / PER_LINE_BYTES);
+        assert!(b64 < b128 && b128 < b256);
+        // 极端预算不恐慌（saturating 保护）。
+        assert!(chunk_lines(1_000_000_000, usize::MAX / (1024 * 1024)) >= CHUNK_MIN);
     }
 }
