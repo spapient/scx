@@ -12,8 +12,15 @@ Commands:
   blind      make/import/check/progress/review a frozen per-candidate packet
   verify     check a packet hash and its row count
   selftest   dependency-free assertions over the shared helpers
+  check      A2 保真断言（a2）+ C2 可压缩子集口径（subset）
+  audit      Rust 生产路径 unwrap/panic 审计门禁
+  freeze     冻结 results/ 结果资产入 eval-manifest.json
+  extract    提取 Claude Code 会话转储为压缩语料
 """
 
+import collections
+import glob
+import io
 import argparse
 import csv
 import hashlib
@@ -2336,7 +2343,297 @@ def build_parser():
 
     test = sub.add_parser("selftest")
     test.set_defaults(func=lambda _args: selftest())
+    check = sub.add_parser("check", help="A2 保真断言 + C2 可压缩子集口径")
+    check_sub = check.add_subparsers(dest="check_cmd", required=True)
+    a2 = check_sub.add_parser("a2", help="A2 round-trip 保真断言（原 check.py fidelity）")
+    a2.set_defaults(func=lambda _a: CK_cmd_fidelity())
+    subset = check_sub.add_parser("subset", help="C2 可压缩子集口径重算（剔除 fail-open）")
+    subset.add_argument("csvs", nargs="*")
+    subset.set_defaults(func=lambda a: CK_cmd_subset(a.csvs or CK_DEFAULT_SUBSET))
+
+    audit = sub.add_parser("audit", help="Rust 生产路径 unwrap/panic 审计门禁")
+    audit.set_defaults(func=lambda _a: AU_audit())
+
+    freeze = sub.add_parser("freeze", help="冻结 results/ 全部结果资产入 eval-manifest.json")
+    freeze.add_argument("--results", default=FM_RESULTS)
+    freeze.add_argument("--manifest", default=FM_MANIFEST)
+    freeze.set_defaults(func=cmd_freeze)
+
+    extract = sub.add_parser("extract", help="提取 Claude Code 会话转储为压缩语料")
+    extract.add_argument("--dir",
+                         default=os.path.expanduser("~/.claude/projects/-Users-fei-code-scx"))
+    extract.add_argument("--scan", action="store_true")
+    extract.add_argument("--extract", metavar="N", type=int)
+    extract.add_argument("--out", default=os.environ.get("TMPDIR", "/tmp"))
+    extract.set_defaults(func=cmd_extract)
+
     return parser
+
+
+
+CK_RES = ROOT / "config" / "bench" / "results"
+
+
+def CK_cmd_fidelity() -> int:
+    a2 = ROOT / "config" / "bench" / "results" / "p11_a_results.json"
+    thresh = ROOT / "config" / "bench" / "fidelity_thresholds.json"
+    res = json.load(open(a2, encoding="utf-8"))
+    cfg = json.load(open(thresh, encoding="utf-8"))
+    table = {r["set"]: r for r in res["a2_roundtrip"]}
+    ok = True
+    for band, spec in cfg["bands"].items():
+        metrics = [(k, v) for k, v in spec.items() if k in ("num_cov", "token_cov", "bleu4_prec")]
+        for s in spec["sets"]:
+            row = table.get(s)
+            if row is None:
+                print(f"  [fidelity:{band}] {s}: MISSING in a2_roundtrip"); ok = False; continue
+            for m, thr in metrics:
+                got = row.get(m, -1.0)
+                if got < thr:
+                    print(f"  [fidelity:{band}] {s} {m}={got:.3f} < {thr}  FAIL"); ok = False
+                else:
+                    print(f"  [fidelity:{band}] {s} {m}={got:.3f} >= {thr}  ok")
+    print("  " + ("OK: A2 保真断言全部通过" if ok else "FAIL: A2 保真断言未通过"))
+    return 0 if ok else 1
+
+
+def CK_stat_one(name: str) -> dict:
+    rows = list(csv.DictReader(open(CK_RES / name, encoding="utf-8")))
+    bym = collections.defaultdict(list)
+    for r in rows:
+        bym[r["model"]].append(r)
+    out = {"file": name, "n": len(rows), "models": {}}
+    for m, rs in sorted(bym.items()):
+        fo = [r for r in rs if r["compressed"].strip() != "True"]
+        cp = [r for r in rs if r["compressed"].strip() == "True"]
+        p_all = sum(1 for r in rs if r["scx"].strip() == "True")
+        p_cp = sum(1 for r in cp if r["scx"].strip() == "True")
+        out["models"][m] = {
+            "all": {"pass": p_all, "n": len(rs), "rate": round(p_all / len(rs), 4)},
+            "subset": {"pass": p_cp, "n": len(cp), "rate": round(p_cp / len(cp), 4)},
+            "fail_open": {"n": len(fo), "pass_in_fo": sum(1 for r in fo if r["scx"].strip() == "True")},
+        }
+        print(f"  {name} {m}: 全量 {p_all}/{len(rs)} ({p_all/len(rs):.1%}) "
+              f"| 剔除fail-open {p_cp}/{len(cp)} ({p_cp/len(cp):.1%}) | fail-open {len(fo)}")
+    return out
+
+
+def CK_cmd_subset(names: list[str]) -> int:
+    print("== C2 可压缩子集口径重算（剔除 fail-open）==")
+    rows = [CK_stat_one(n) for n in names]
+    out = ROOT / "config" / "bench" / "results" / "p12_6_c2_subset.json"
+    json.dump({
+        "pipeline": "P12.6 C2 可压缩子集口径重算（剔除 fail-open 未压缩题）",
+        "method": "fail-open = compressed!=True；口径列示 全量 vs 剔除后 两套",
+        "files": rows,
+    }, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print("WROTE", out)
+    return 0
+
+
+CK_DEFAULT_SUBSET = ["bench_code_shape50_v4pro.csv", "bench_code_layers50_v4pro.csv"]
+
+
+def CK_main() -> int:
+    if len(sys.argv) < 2:
+        sys.exit("usage: python tools/scx.py check subset [csv...]")
+    cmd = sys.argv[1]
+    if cmd == "fidelity":
+        return CK_cmd_fidelity()
+    if cmd == "subset":
+        return CK_cmd_subset(sys.argv[2:] or CK_DEFAULT_SUBSET)
+    sys.exit(f"unknown subcommand: {cmd}")
+
+AU_SRC = os.path.join(ROOT, "src")
+
+# 合法保留模式：scope join 惯用
+AU_ALLOWED = re.compile(r"\.join\(\)\.unwrap\(\)")
+
+AU_UNWRAP = re.compile(r"\.unwrap\(\)")
+AU_EXPECT = re.compile(r"\.expect\((\s*\))")
+AU_PANIC = re.compile(r"panic!\(\s*\)|unreachable!\(\s*\)")
+AU_EXPECT_EMPTY = re.compile(r"\.expect\(\)")
+# 测试段起点
+AU_TEST_START = re.compile(r"#\[cfg\(test\)\]|#\[test\]|mod tests \{")
+
+
+def AU_prod_part(src: str) -> str:
+    """截取第一个测试段之前的代码作为生产路径。"""
+    cut = len(src)
+    for m in AU_TEST_START.finditer(src):
+        cut = min(cut, m.start())
+    return src[:cut]
+
+
+def AU_audit() -> int:
+    fails = 0
+    total_unwrap = 0
+    total_expect = 0
+    total_panic = 0
+    for root, _, files in os.walk(AU_SRC):
+        for f in sorted(files):
+            if not f.endswith(".rs"):
+                continue
+            p = os.path.join(root, f)
+            s = io.open(p, encoding="utf-8").read()
+            prod = AU_prod_part(s)
+            rel = os.path.relpath(p, ROOT)
+            for m in AU_UNWRAP.finditer(prod):
+                line = prod.count("\n", 0, m.start()) + 1
+                snippet = prod[max(0, m.start() - 40): m.end()].strip()
+                if AU_ALLOWED.search(snippet):
+                    continue
+                fails += 1
+                print(f"裸 unwrap（需 expect 语义消息）: {rel}:{line}  {snippet!r}")
+            # 空消息 expect / panic
+            for m in AU_EXPECT_EMPTY.finditer(prod):
+                fails += 1
+                print(f"空 expect 消息: {rel}:{prod.count(chr(10), 0, m.start()) + 1}")
+            for m in AU_PANIC.finditer(prod):
+                fails += 1
+                print(f"空 panic!/unreachable! 消息: {rel}:{prod.count(chr(10), 0, m.start()) + 1}")
+            total_unwrap += len(AU_UNWRAP.findall(prod))
+            total_expect += len(AU_EXPECT.findall(prod))
+            total_panic += len(AU_PANIC.findall(prod))
+    print(f"生产路径统计: unwrap={total_unwrap} expect={total_expect} panic/unreachable={total_panic}")
+    if fails:
+        print(f"audit_unwrap: {fails} 处未达标")
+    else:
+        print("audit_unwrap: OK（生产裸 unwrap=0，expect/panic 消息非空）")
+    return fails
+
+FM_RESULTS = os.path.join(ROOT, "config", "bench", "results")
+FM_MANIFEST = os.path.join(ROOT, "config", "bench", "eval-manifest.json")
+FM_EXTS = (".csv", ".json")
+
+
+def FM_main(results_dir: str = FM_RESULTS,
+             manifest_path: str = FM_MANIFEST) -> int:
+
+    m = json.load(open(manifest_path, encoding="utf-8"))
+    frozen = m.setdefault("frozen", {})
+
+    names = sorted(
+        n for n in os.listdir(results_dir)
+        if n.endswith(FM_EXTS) and os.path.isfile(os.path.join(results_dir, n))
+    )
+    if not names:
+        print(f"no result files under {results_dir}")
+        return 1
+
+    added, updated = 0, 0
+    for n in names:
+        p = os.path.join(results_dir, n)
+        data = open(p, "rb").read()
+        h = hashlib.sha256(data).hexdigest()
+        rows = data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
+        entry = {"sha256": h, "bytes": len(data), "rows": rows}
+        if n not in frozen:
+            added += 1
+        elif frozen[n] != entry:
+            updated += 1
+        frozen[n] = entry
+
+    m["frozen"] = dict(sorted(frozen.items()))
+    m["schema"] = 1
+    m["frozen_at"] = "2026-10-29"
+    m["note"] = (
+        "定稿评测结果冻结（不可变基线）。修改/重跑后必须重新冻结并提交；"
+        "check_bench.sh 校验 sha256+行数。"
+    )
+    json.dump(m, open(manifest_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print(f"frozen={len(frozen)}  added={added}  updated={updated}  ({results_dir})")
+    return 0
+
+
+def ED_tool_blocks(path):
+    """Yield (kind, text) for every tool_use / tool_result content block."""
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                obj = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            # tool_use lives in assistant messages, tool_result in user messages;
+            # skip api-request-blob (a duplicate copy of both) to avoid doubling.
+            if obj.get("type") not in ("user", "assistant"):
+                continue
+            content = (obj.get("message") or {}).get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                kind = block.get("type")
+                if kind == "tool_use":
+                    name = block.get("name", "")
+                    inp = block.get("input")
+                    if isinstance(inp, dict):
+                        if isinstance(inp.get("command"), str):
+                            yield ("use", "command: " + inp["command"])
+                        elif isinstance(inp.get("content"), str):
+                            yield ("use", inp["content"])
+                        else:
+                            yield ("use", json.dumps(inp, ensure_ascii=False))
+                    elif isinstance(inp, str):
+                        yield ("use", inp)
+                elif kind == "tool_result":
+                    inner = block.get("content")
+                    if isinstance(inner, list):
+                        parts = []
+                        for sub in inner:
+                            if isinstance(sub, dict) and sub.get("type") == "text":
+                                parts.append(sub.get("text", ""))
+                            elif isinstance(sub, str):
+                                parts.append(sub)
+                        yield ("result", "\n".join(parts))
+                    elif isinstance(inner, str):
+                        yield ("result", inner)
+
+
+def ED_main(args) -> None:
+
+    files = sorted(glob.glob(os.path.join(args.dir, "*.jsonl")))
+    stats = []
+    for path in files:
+        use_n = res_n = use_c = res_c = 0
+        for kind, text in ED_tool_blocks(path):
+            if kind == "use":
+                use_n += 1
+                use_c += len(text)
+            else:
+                res_n += 1
+                res_c += len(text)
+        stats.append((path, use_n, res_n, use_c, res_c))
+    stats.sort(key=lambda row: -row[4])
+
+    for path, use_n, res_n, use_c, res_c in stats:
+        print(
+            f"{os.path.basename(path)[:12]:14s} tool_use={use_n:4d} "
+            f"tool_result={res_n:4d} use_chars={use_c:9d} result_chars={res_c:9d}"
+        )
+
+    if args.extract:
+        os.makedirs(args.out, exist_ok=True)
+        for path, _, _, _, _ in stats[: args.extract]:
+            base = os.path.splitext(os.path.basename(path))[0]
+            out = os.path.join(args.out, base + ".dump.txt")
+            with open(out, "w", encoding="utf-8") as writer:
+                for _, text in ED_tool_blocks(path):
+                    writer.write(text)
+                    if text and not text.endswith("\n"):
+                        writer.write("\n")
+            n_lines = sum(1 for _ in open(out, encoding="utf-8"))
+            print(f"  -> {out} ({n_lines} lines)")
+
+
+# ==================== check / audit / freeze / extract 收拢入口 ====================
+
+
+def cmd_freeze(args) -> int:
+    return FM_main(args.results, args.manifest)
+
+
+def cmd_extract(args) -> None:
+    return ED_main(args)
 
 
 def main():

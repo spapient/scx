@@ -2767,3 +2767,15 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
   - CI 显式化：`.github/workflows/ci.yml` `sh tools/scx --version` → `bash tools/scx --version`（消除 sh/dash 与 bash 语义歧义）。
 - **验证**：bash -n 过；`scx --version`（run 路径自举构建）出 0.11.0；`scx check` 全门禁——cargo test×3（lib/semantic/golden）、clippy/fmt 零告警、A2 保真断言、四新开关冒烟（rc+stats+双跑确定性）、unwrap 审计**全部通过**；`scx perf` 三档基准输出（1.5MB/41k 行语料，lossless cut=58.6% / r0.3 74.0% / r0.2 76.7%）。
 - **既有漂移如实记录（非本次引入）**：check 的 eval-manifest 冻结校验报 bench_p22_compactbench.json（sha256/rows 81 vs 82）与 bench_p23_amabench.json（rows 488 vs 452）不匹配；工作区与 HEAD 一致、校验算法与 HEAD 版 check_bench.sh 逐字一致 → 该失败在干净 HEAD 上同样发生，属仓库冻结值与已提交结果文件的历史漂移，待用户决策（更新冻结或重生成），本轮未触碰冻结产物。
+
+
+## tools/ 五文件收拢轮（2026-11-02，commit 本轮）
+
+用户点名"只留五个文件，不要搞那么多文件和目录；必须配置化、整个项目要工业级顶级优秀，包括文档和代码；减少代码文件减少代码"。交付：
+
+- **tools/ 收敛为 5 个文件**：`scx`（bash 六子命令）+ `scx.cmd`（Windows 包装）+ `scx.py`（corpus 回放/盲审/统计 + check/audit/freeze/extract）+ `bench.py`（评测 14 子命令）+ `common.py`（共享封装）。删除 14 个收拢脚本与 5 个 bench_p* 实验目录（P19-P23 冻结产物已在 config/bench/results/，eval-manifest 69 条不引用中间目录）。
+- **scx.py 追加 4 子命令**：`check a2|subset`（原 check.py fidelity/subset）、`audit`（原 audit_unwrap.py）、`freeze`（原 freeze_manifest.py，参数化 results/manifest）、`extract`（原 extract_dumps.py，argparse 改宿主透传 args）。build_parser 注册 + main() `args.func(args) or 0` 统一分发。
+- **bench.py 追加 5 子命令**：`gen bench|fid|p8-cuda|p8-js|p8-layers|p8-shape`（6 个生成器）、`distill online|weights`（蒸馏）、`fit`（权重拟合）、`mlp`（MLP 对照）。跨文件符号统一前缀化（GB/GF/GC/GJ/GL/GS/DO/DW/FW/MC），mlp_cv 跨文件 `from distill_online import feats,F...` → DO_* 前缀；distill_online 的 socket IPv4 劫持收拢为函数内 try/finally 恢复，不污染宿主进程。
+- **shell 改引**：`scx check` 门禁链 `check.py fidelity` → `scx.py check a2`、`audit_unwrap.py` → `scx.py audit`。
+- **命名遵循**：单单词 + Unix 共识缩写（check/audit/freeze/extract/gen/distill/fit/mlp），禁自造缩写。
+- **验证**：py_compile 全过；scx.py 14 子命令、bench.py 14 子命令 + gen/distill 二级 `--help` 全 0；`scx check` 全门禁绿（eval-manifest 69 冻结全匹配 + A2 保真 + 四新开关冒烟 + unwrap 审计）；scx.py selftest/check a2/audit 实跑 PASS。全程未触发评测/蒸馏/拟合重跑，冻结产物（eval-manifest、蒸馏产物、weights.json）零触碰。

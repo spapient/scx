@@ -152,7 +152,7 @@ sys.exit(0 if ok else 1)
 PY
 
   step "A2 保真断言（fidelity_thresholds 分档）"
-  "$PY" "$ROOT/tools/check.py" fidelity || fail "A2 fidelity"
+  "$PY" "$ROOT/tools/scx.py" check a2 || fail "A2 fidelity"
 
   step "新开关冒烟（P1/P0 新增 flag：budget/fold/auto-anchor/cluster）"
   require_scx
@@ -169,7 +169,7 @@ PY
   [ "$FAIL" = "0" ] && echo "  OK: 四新开关冒烟全过（rc + stats + 双跑确定性）"
 
   step "unwrap/panic 审计（生产裸 unwrap=0，消息非空）"
-  "$PY" "$ROOT/tools/audit_unwrap.py" || fail "audit_unwrap"
+  "$PY" "$ROOT/tools/scx.py" audit || fail "audit_unwrap"
 
   if [ "$FAIL" = "0" ]; then
     echo; echo "scx check: 全部通过 ✓"

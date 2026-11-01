@@ -29,7 +29,7 @@ log / test 开发域 + db / network / hardware 第二故障域，各 5）。每 
 4 个**大 slice**（45–59 行，触发 sieve 压缩路径）+ 1 个**小 slice**
 （3–14 行，走 passthrough:small 透传路径，对照组）。
 
-- 确定性生成：`python3 tools/gen_fidelity.py`（seed=20261026，重跑逐字节
+- 确定性生成：`python3 tools/bench.py gen fid`（seed=20261026，重跑逐字节
   复现）；每 slice 含 `query` / `full_text` / `evidence`（逐字在原文中）/
   `note`；provenance 与生成说明写入 corpus JSON。
 - SHA256：`32194397471d91fff574123b44b857be8981eab68099793e606755773d09f997`。

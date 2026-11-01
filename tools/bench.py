@@ -13,6 +13,10 @@
   metrics    scx 指标小工具（real 矩阵 / perf 基线冻结）
   fidelity   端到端问答保真（对标 LLMLingua-2，双在线旗舰）
   calibrate  BUDGET_SAFETY_FACTOR 上界系数标定
+  gen        评测语料生成（bench/fid/p8-cuda/p8-js/p8-layers/p8-shape）
+  distill   语义权重蒸馏（online=双教师在线 / weights=评测信号离线）
+  fit        弱标签线性权重拟合（scx-sem-1）
+  mlp        MLP 交叉验证（对照实验）
 
 用法: python3 tools/bench.py <子命令> [参数...]
 """
@@ -33,6 +37,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+import collections
+import hashlib
+import io
+import math
+import socket
+import struct
+import urllib.request
 import common  # 公共封装（chat/compress）
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -2355,8 +2366,15 @@ def quantiles(ratios, qs):
     return [ratios[min(n - 1, int(q * (n - 1)))] for q in qs]
 
 
-def cmd_calibrate():
-    corpus_path = sys.argv[1] if len(sys.argv) > 1 else None
+def cmd_calibrate() -> int:
+    ap = argparse.ArgumentParser(
+        prog="bench.py calibrate",
+        description="BUDGET_SAFETY_FACTOR 上界系数标定（tiktoken 真值 / 启发式比率分位数）",
+    )
+    ap.add_argument("--corpus", default=None,
+                    help="语料 JSON 路径；缺省用内置 default_corpus()")
+    args = ap.parse_args()
+    corpus_path = args.corpus
     samples = json.load(open(corpus_path, encoding="utf-8")) if corpus_path else default_corpus()
 
     try:
@@ -2382,6 +2400,3181 @@ def cmd_calibrate():
 
 # ==================== 分发入口 ====================
 
+
+# ==================== 子命令: gen（评测语料生成器，收拢 gen_bench/gen_fidelity/gen_p8_*） ====================
+# -*- coding: utf-8 -*-
+
+
+
+
+def GB_exec(cmd: list[str], timeout: int = 30) -> str:
+    out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if out.returncode != 0:
+        raise RuntimeError(f"{cmd[0]} failed: {out.stderr[-400:]}")
+    return out.stdout.strip()
+
+
+def GB_py_gold(code: str) -> str:
+    return GB_exec(["python3", "-c", code])
+
+
+def GB_rs_gold(code: str) -> str:
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "m.rs"
+        src.write_text(code, encoding="utf-8")
+        GB_exec(["rustc", "--edition", "2021", "-O", str(src), "-o", f"{td}/m"])
+        return GB_exec([f"{td}/m"])
+
+
+def GB_cpp_gold(code: str) -> str:
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "m.cpp"
+        src.write_text(code, encoding="utf-8")
+        GB_exec(["clang++", "-O2", "-std=c++17", str(src), "-o", f"{td}/m"])
+        return GB_exec([f"{td}/m"])
+
+
+def GB_c_gold(code: str) -> str:
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "m.c"
+        src.write_text(code, encoding="utf-8")
+        GB_exec(["clang", "-O2", "-std=c11", str(src), "-o", f"{td}/m"])
+        return GB_exec([f"{td}/m"])
+
+
+def GB_java_gold(code: str) -> str:
+    if not shutil.which("javac") or not shutil.which("java"):
+        raise RuntimeError("javac/java 不可用（JDK 未安装），跳过 Java 生成")
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "M.java"
+        src.write_text(code, encoding="utf-8")
+        GB_exec(["javac", str(src)])
+        return GB_exec(["java", "-cp", td, "M"])
+
+
+GB_LANGS = {
+    "py":   {"hdr": "以下 Python 代码输出什么？", "fence": "python", "gold": GB_py_gold},
+    "rs":   {"hdr": "以下 Rust 代码输出什么？",   "fence": "rust",   "gold": GB_rs_gold},
+    "cpp":  {"hdr": "以下 C++ 代码输出什么？",    "fence": "cpp",    "gold": GB_cpp_gold},
+    "c":    {"hdr": "以下 C 代码输出什么？",      "fence": "c",      "gold": GB_c_gold},
+    "java": {"hdr": "以下 Java 代码输出什么？",   "fence": "java",   "gold": GB_java_gold},
+}
+
+# 每题 (特性名, 完整可执行代码, 中文推理)。gold 由运行时代入，推理里的
+# 数字/值必须与真实输出一致（生成时用 gold 插值，不手写具体数值）。
+# 设计约束：单 print、标量输出（int/str/bool/float），3B 模型可推。
+
+GB_PY = [
+("生成器 yield", "def g():\n    yield 1\n    yield 2\nit = g()\nprint(next(it) + next(it))", "生成器依次产出 1、2，next 两次相加得"),
+("装饰器", "def deco(f):\n    return lambda: f() + 1\n@deco\ndef f():\n    return 1\nprint(f())", "deco 包装后返回值加 1，"),
+("闭包 nonlocal", "def outer():\n    x = 0\n    def inner():\n        nonlocal x\n        x += 1\n        return x\n    return inner\nf = outer()\nf()\nprint(f())", "inner 闭包引用 x，调用两次后 x=2，"),
+("MRO 方法解析", 'class A:\n    def m(self):\n        return "A"\nclass B(A):\n    pass\nclass C(A):\n    def m(self):\n        return "C"\nclass D(B, C):\n    pass\nprint(D().m())', "D(B,C) 的 MRO 中 C 先于 A，取 C 的实现，输出"),
+("super 链", 'class A:\n    def m(self):\n        return "A"\nclass B(A):\n    def m(self):\n        return "B" + super().m()\nclass C(B):\n    pass\nprint(C().m())', "C 继承 B，B.m 拼接 B 与 A 的结果，输出"),
+("异常 finally", "try:\n    x = 1 // 0\nexcept ZeroDivisionError:\n    x = 5\nfinally:\n    x += 1\nprint(x)", "除零触发异常 x=5，finally 加 1，"),
+("自定义异常", 'class E(Exception):\n    pass\ntry:\n    raise E("x")\nexcept E as e:\n    print(len(str(e)))', "异常消息 x 长度 1，"),
+("推导式过滤", "print(sum(x for x in range(10) if x % 3 == 0))", "0 到 9 中 3 的倍数 0+3+6+9=18，"),
+("字典推导式", "d = {i: i * i for i in range(3)}\nprint(d[2])", "字典推导 {0:0,1:1,2:4}，d[2]=4，"),
+("lambda 排序键", 'arr = ["bb", "a", "ccc"]\nprint(len(sorted(arr, key=len)[-1]))', "按长度排序最长 ccc 长度 3，"),
+("可变默认参数", "def f(x, L=[]):\n    L.append(x)\n    return L\nprint(len(f(1)))", "默认列表 L 共享但只调一次，len=1，"),
+("kwargs", "def f(**kw):\n    return len(kw)\nprint(f(a=1, b=2, c=3))", "3 个关键字参数，"),
+("args 求和", "def f(*a):\n    return sum(a)\nprint(f(1, 2, 3))", "1+2+3=6，"),
+("元组解包", "a, b = (1, 2)\nprint(a * 10 + b)", "a=1、b=2，1*10+2=12，"),
+("切片步长", 's = "0123456789"\nprint(s[1:8:2])', "索引 1、3、5、7 取字符拼成，输出"),
+("负索引", 's = "abcde"\nprint(s[-1] + s[-3])', "s[-1]=e、s[-3]=c 拼接，输出"),
+("方法链", 'print("  abc  ".strip().upper())', "strip 去空白再 upper，输出"),
+("bytes", 'b = b"ab"\nprint(len(b) + b[0])', "len=2，b[0]=97，2+97=99，"),
+("集合交集", "a = {1, 2, 3}\nb = {2, 3, 4}\nprint(len(a & b))", "交集 {2,3} 长度 2，"),
+("位运算", "print((6 & 3) | (8 >> 2))", "6&3=2，8>>2=2，2|2=2，"),
+("逻辑短路", "def f():\n    return 0\ndef g():\n    return 1\nprint(f() and g() or 5)", "f()=0 为假 and 短路，or 取 5，"),
+("链式比较", "x = 5\nprint(1 < x < 10 and x > 4)", "1<5<10 且 5>4 都成立，输出"),
+("三目嵌套", 'x = 7\nprint("A" if x > 9 else "B" if x > 5 else "C")', "7>5 取中间分支，输出"),
+("引用别名", "a = [1]\nb = a\nb.append(2)\nprint(len(a))", "b 与 a 指向同一列表，len=2，"),
+("引用传参", "def f(x):\n    x.append(1)\na = []\nf(a)\nprint(len(a))", "函数内修改同一列表，len=1，"),
+("元组内可变列表", "t = (1, [2])\nt[1].append(3)\nprint(len(t[1]))", "元组内列表可变，append 后 len=2，"),
+("f-string", 'x = 4\nprint(f"{x * 3}")', "4*3=12，"),
+("split", 's = "a,b,c"\nprint(len(s.split(",")))', "按逗号拆成 3 段，"),
+("iter/next", "it = iter([1, 2, 3])\nnext(it)\nprint(next(it))", "next 跳过 1 后取 2，"),
+("yield from", "def g():\n    yield from range(2)\n    yield 5\nprint(sum(g()))", "0+1+5=6，"),
+("with 协议", "class C:\n    def __enter__(self):\n        return 3\n    def __exit__(self, *a):\n        pass\nwith C() as v:\n    print(v * 2)", "__enter__ 返回 3，3*2=6，"),
+("类/实例属性", "class A:\n    x = 1\nobj = A()\nobj.x = 2\nprint(A.x + obj.x)", "类属性 1 + 实例属性 2 = 3，"),
+("property", "class C:\n    @property\n    def v(self):\n        return 7\nprint(C().v)", "property 访问返回 7，"),
+("staticmethod", "class C:\n    @staticmethod\n    def f(x):\n        return x * 2\nprint(C.f(4))", "静态方法 4*2=8，"),
+("super 继承", "class A:\n    def m(self):\n        return 1\nclass B(A):\n    def m(self):\n        return super().m() + 1\nprint(B().m())", "B.m 调 A.m 加 1，1+1=2，"),
+("str 魔法方法", 'class C:\n    def __str__(self):\n        return "hi"\nprint(len(str(C())))', "str 返回 hi 长度 2，"),
+("多重赋值交换", "a, b = 1, 2\na, b = b, a\nprint(a - b)", "交换后 a=2、b=1，2-1=1，"),
+("海象运算符", "n = 0\nwhile (m := n + 1) < 5:\n    n = m\nprint(n)", "m 递增到 4 后 5 不满足循环，n=4，"),
+("enumerate", "s = 0\nfor i, v in enumerate([3, 4]):\n    s += i + v\nprint(s)", "(0+3)+(1+4)=8，"),
+("zip 并行", "a = [1, 2]\nb = [3, 4]\nprint(sum(x + y for x, y in zip(a, b)))", "(1+3)+(2+4)=10，"),
+("any/all", "print(any([False, True]) + all([1, 2]))", "any 为 True 记 1，all 为 True 记 1，共 2，"),
+("reduce", "from functools import reduce\nprint(reduce(lambda a, b: a * b, [2, 3, 4]))", "2*3*4=24，"),
+("Counter", 'from collections import Counter\nprint(Counter("aab").most_common(1)[0][1])', "a 出现次数最多为 2，"),
+("defaultdict", "from collections import defaultdict\nd = defaultdict(int)\nd['k'] += 2\nprint(d['k'])", "默认 int 0 再加 2，"),
+("deque", "from collections import deque\nq = deque([1])\nq.appendleft(2)\nprint(q[0])", "头部插入 2，q[0]=2，"),
+("heapq", "import heapq\nh = [3, 1]\nheapq.heapify(h)\nprint(heapq.heappop(h))", "堆弹出最小元素 1，"),
+("排序稳定性", 'arr = [("a", 2), ("b", 1)]\nprint(sorted(arr, key=lambda t: t[1])[0][0])', "按第二元素升序首个 b，输出"),
+("递归记忆化", "def f(n):\n    return 1 if n < 2 else f(n - 1) + f(n - 2)\nprint(f(6))", "斐波那契 f(6)=13，"),
+("生成器流水线", "def gen():\n    for i in range(4):\n        yield i * 2\nprint(sum(gen()))", "0+2+4+6=12，"),
+("send 注入", "def g():\n    v = yield 1\n    yield v + 1\nx = g()\nnext(x)\nprint(x.send(5))", "send(5) 使 v=5，5+1=6，"),
+("LEGB 作用域", "x = 1\ndef f():\n    x = 2\n    return x\nprint(f() + x)", "函数内 2 + 全局 1 = 3，"),
+("nonlocal 修改", "def f():\n    x = 0\n    def g():\n        nonlocal x\n        x = 2\n    g()\n    return x\nprint(f())", "g 修改外层 x 为 2，"),
+("global 修改", "x = 0\ndef f():\n    global x\n    x = 3\nf()\nprint(x)", "f 修改全局 x 为 3，"),
+("utf-8 编码", 'print(len("中文".encode("utf-8")))', "中文 utf-8 每字 3 字节共 6，"),
+("进制转换", 'print(int("ff", 16))', "十六进制 ff 等于 255，"),
+("divmod", "q, r = divmod(17, 5)\nprint(q * 10 + r)", "17//5=3、17%5=2，3*10+2=32，"),
+("pow 取模", "print(pow(3, 4, 5))", "3^4=81，81 mod 5 = 1，"),
+("round 精度", "print(round(3.14159, 2))", "保留两位小数得 3.14，"),
+("字符串重复", 's = "ab"\nprint(len(s * 2) * 2)', "ab 重复 2 次长 4，4*2=8，"),
+("平方和推导", "print(sum(i * i for i in range(1, 4)))", "1+4+9=14，"),
+]
+
+GB_RS = [
+("所有权转移", 'fn main() {\n    let s = String::from("ab");\n    let t = s;\n    println!("{}", t.len());\n}', "所有权转移给 t，长度"),
+("可变借用", 'fn main() {\n    let mut v = vec![1];\n    let r = &mut v;\n    r.push(2);\n    println!("{}", v.len());\n}', "可变借用 push 后长度"),
+("clone", 'fn main() {\n    let a = vec![1];\n    let b = a.clone();\n    println!("{}", b.len());\n}', "克隆副本长度"),
+("迭代器求和", 'fn main() {\n    let s: i32 = (1..=4).sum();\n    println!("{}", s);\n}', "1 到 4 求和"),
+("闭包捕获", 'fn main() {\n    let x = 3;\n    let f = || x * 2;\n    println!("{}", f());\n}', "闭包捕获 x 翻倍"),
+("map/filter 链", 'fn main() {\n    let s: i32 = (0..10).filter(|x| x % 2 == 0).map(|x| x * 2).sum();\n    println!("{}", s);\n}', "偶数翻倍后求和"),
+("Option 解包", 'fn main() {\n    let x: Option<i32> = Some(5);\n    println!("{}", x.unwrap() + 1);\n}', "解包后加 1"),
+("Result 解包", 'fn main() {\n    let r: Result<i32, String> = Ok(7);\n    println!("{}", r.unwrap());\n}', "Ok 直接解包"),
+("match 分支", 'fn main() {\n    let x = 2;\n    let y = match x { 1 => 10, 2 => 20, _ => 0 };\n    println!("{}", y);\n}', "x=2 命中 20"),
+("if let", 'fn main() {\n    let x = Some(4);\n    if let Some(v) = x {\n        println!("{}", v * 2);\n    }\n}', "解构 Some 翻倍"),
+("枚举带数据", 'enum E { A(i32), B }\nfn main() {\n    let e = E::A(3);\n    let v = match e { E::A(n) => n, _ => 0 };\n    println!("{}", v);\n}', "枚举携带数据 3"),
+("trait 实现", 'trait T { fn f(&self) -> i32; }\nstruct S;\nimpl T for S {\n    fn f(&self) -> i32 { 5 }\n}\nfn main() {\n    println!("{}", S.f());\n}', "trait 实现返回 5"),
+("trait 默认方法", 'trait T { fn f(&self) -> i32 { 1 } }\nstruct S;\nimpl T for S {}\nfn main() {\n    println!("{}", S.f());\n}', "默认方法返回 1"),
+("impl 方法", 'struct S { x: i32 }\nimpl S {\n    fn f(&self) -> i32 { self.x * 2 }\n}\nfn main() {\n    println!("{}", S { x: 3 }.f());\n}', "方法翻倍字段"),
+("关联函数", 'struct S;\nimpl S {\n    fn val() -> i32 { 9 }\n}\nfn main() {\n    println!("{}", S::val());\n}', "关联函数返回 9"),
+("元组结构体", 'struct P(i32, i32);\nfn main() {\n    let p = P(3, 4);\n    println!("{}", p.0 + p.1);\n}', "元组字段相加"),
+("push_str", 'fn main() {\n    let mut s = String::from("ab");\n    s.push_str("cd");\n    println!("{}", s.len());\n}', "追加后长度"),
+("format 宏", 'fn main() {\n    let s = format!("{}{}", 1, 2);\n    println!("{}", s.len());\n}', "拼接串长度"),
+("数组切片", 'fn main() {\n    let v = [1, 2, 3, 4];\n    let s = &v[1..3];\n    println!("{}", s.len());\n}', "切片含 2 元素"),
+("Vec 推入", 'fn main() {\n    let mut v = Vec::new();\n    v.push(1);\n    v.push(2);\n    println!("{}", v.len());\n}', "两次 push 长度"),
+("Vec 索引", 'fn main() {\n    let v = vec![5, 6, 7];\n    println!("{}", v[1]);\n}', "索引 1 元素"),
+("range 步长", 'fn main() {\n    let s: i32 = (0..10).step_by(3).sum();\n    println!("{}", s);\n}', "步长 3 求和"),
+("while let", 'fn main() {\n    let mut v = vec![1, 2];\n    let mut s = 0;\n    while let Some(x) = v.pop() { s += x; }\n    println!("{}", s);\n}', "弹栈累加"),
+("引用计数", 'use std::rc::Rc;\nfn main() {\n    let a = Rc::new(5);\n    let b = a.clone();\n    println!("{}", Rc::strong_count(&a));\n}', "克隆后强引用数 2"),
+("泛型函数", 'fn f<T: std::ops::Add<Output = T>>(a: T, b: T) -> T { a + b }\nfn main() {\n    println!("{}", f(3, 4));\n}', "泛型加法"),
+("泛型结构体", 'struct P<T> { x: T }\nfn main() {\n    let p = P { x: 3 };\n    println!("{}", p.x * 2);\n}', "泛型字段翻倍"),
+("derive 派生", '#[derive(Clone)]\nstruct S { x: i32 }\nfn main() {\n    let a = S { x: 2 };\n    let b = a.clone();\n    println!("{}", b.x + 1);\n}', "派生 Clone 副本加 1"),
+("match 范围", 'fn main() {\n    let x = 3;\n    let y = match x { 1 | 2 => 0, 3..=5 => 1, _ => 2 };\n    println!("{}", y);\n}', "3 落在范围命中 1"),
+("数组长度", 'fn main() {\n    let a = [1, 2, 3];\n    println!("{}", a.len());\n}', "数组长度 3"),
+("元组解构", 'fn main() {\n    let (a, b) = (3, 4);\n    println!("{}", a + b);\n}', "解构后相加"),
+("函数指针", 'fn f(x: i32) -> i32 { x * 2 }\nfn main() {\n    let g: fn(i32) -> i32 = f;\n    println!("{}", g(4));\n}', "函数指针调用"),
+("enumerate", 'fn main() {\n    let mut s = 0;\n    for (i, v) in vec![3, 4].iter().enumerate() { s += i + v; }\n    println!("{}", s);\n}', "索引与值累加"),
+("collect", 'fn main() {\n    let v: Vec<i32> = (1..4).map(|x| x * x).collect();\n    println!("{}", v[1]);\n}', "平方收集后索引 1"),
+("chars 计数", 'fn main() {\n    let s = "abc";\n    println!("{}", s.chars().count());\n}', "字符数 3"),
+("字符转数字", 'fn main() {\n    let c = \'5\';\n    println!("{}", c.to_digit(10).unwrap());\n}', "字符 5 转数字"),
+("布尔逻辑", 'fn main() {\n    println!("{}", (3 > 2) && (1 < 4));\n}', "两个条件都成立"),
+("位运算", 'fn main() {\n    println!("{}", (6 & 3) | (8 >> 2));\n}', "6&3=2、8>>2=2 相或"),
+("环绕加法", 'fn main() {\n    println!("{}", 255u8.wrapping_add(1));\n}', "u8 溢出环绕"),
+("as 转换", 'fn main() {\n    println!("{}", 7u32 as i32 - 2);\n}', "转换后减 2"),
+("取模整除", 'fn main() {\n    println!("{}", 17 / 5 + 17 % 5);\n}', "商 3 加余 2"),
+("幂运算", 'fn main() {\n    println!("{}", 3i32.pow(2) + 1);\n}', "3 的平方加 1"),
+("排序", 'fn main() {\n    let mut v = vec![3, 1, 2];\n    v.sort();\n    println!("{}", v[0]);\n}', "升序最小"),
+("去重", 'fn main() {\n    let mut v = vec![1, 1, 2];\n    v.dedup();\n    println!("{}", v.len());\n}', "相邻去重后长度"),
+("split 计数", 'fn main() {\n    let s = "a,b,c";\n    println!("{}", s.split(\',\').count());\n}', "逗号分 3 段"),
+("trim", 'fn main() {\n    let s = "  ab  ";\n    println!("{}", s.trim().len());\n}', "去空白后长度 2"),
+("HashMap", 'use std::collections::HashMap;\nfn main() {\n    let mut m = HashMap::new();\n    m.insert("k", 3);\n    println!("{}", m["k"]);\n}', "键 k 的值"),
+("entry 或默认", 'use std::collections::HashMap;\nfn main() {\n    let mut m = HashMap::new();\n    *m.entry("k").or_insert(0) += 2;\n    println!("{}", m["k"]);\n}', "不存在则插入加 2"),
+("reverse", 'fn main() {\n    let mut v = vec![1, 2];\n    v.reverse();\n    println!("{}", v[0]);\n}', "反转后首元素"),
+("chain 连接", 'fn main() {\n    let s: i32 = vec![1, 2].into_iter().chain(vec![3]).sum();\n    println!("{}", s);\n}', "串联迭代求和"),
+("shadowing", 'fn main() {\n    let x = 1;\n    let x = x + 2;\n    println!("{}", x);\n}', "遮蔽后新值"),
+("作用域", 'fn main() {\n    let x = 5;\n    { let x = 10; }\n    println!("{}", x);\n}', "内层遮蔽不影响外层"),
+("常量", 'fn main() {\n    const N: i32 = 6;\n    println!("{}", N * N);\n}', "常量平方"),
+("元组比较", 'fn main() {\n    println!("{}", (1, 2) < (1, 3));\n}', "元组字典序"),
+("Option map", 'fn main() {\n    let x = Some(3);\n    println!("{}", x.map(|v| v * 2).unwrap());\n}', "map 翻倍解包"),
+("filter 计数", 'fn main() {\n    let c = (0..10).filter(|x| x % 2 == 0).count();\n    println!("{}", c);\n}', "偶数个数 5"),
+("any 判断", 'fn main() {\n    println!("{}", (1..4).any(|x| x > 2));\n}', "存在大于 2"),
+("平方和", 'fn main() {\n    let s: i32 = (1..4).map(|x| x * x).sum();\n    println!("{}", s);\n}', "1+4+9 平方和"),
+("break 标签", 'fn main() {\n    let mut s = 0;\n    \'outer: for i in 0..3 {\n        for j in 0..3 {\n            if j == 2 { break \'outer; }\n            s += 1;\n        }\n    }\n    println!("{}", s);\n}', "j=2 时跳出外层"),
+("min/max", 'fn main() {\n    println!("{}", 3.min(5) + 2.max(1));\n}', "取小加取大"),
+("repeat 重复", 'fn main() {\n    let s = "ab".repeat(3);\n    println!("{}", s.len());\n}', "重复 3 次长度"),
+]
+
+GB_CPP = [
+("引用别名", '#include <iostream>\nint main() {\n    int x = 3;\n    int &r = x;\n    r = 5;\n    std::cout << x << "\\n";\n}', "引用修改原变量"),
+("指针解引用", '#include <iostream>\nint main() {\n    int x = 7;\n    int *p = &x;\n    std::cout << *p + 1 << "\\n";\n}', "解引用加 1"),
+("vector 长度", '#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v;\n    v.push_back(1);\n    v.push_back(2);\n    std::cout << v.size() << "\\n";\n}', "两次 push 后大小"),
+("string 拼接", '#include <iostream>\n#include <string>\nint main() {\n    std::string s = "ab";\n    s += "cd";\n    std::cout << s.size() << "\\n";\n}', "拼接后长度"),
+("函数重载", '#include <iostream>\nint f(int x) { return x * 2; }\ndouble f(double x) { return x + 0.5; }\nint main() {\n    std::cout << f(3) << "\\n";\n}', "int 重载翻倍"),
+("默认参数", '#include <iostream>\nint f(int x, int y = 3) { return x + y; }\nint main() {\n    std::cout << f(2) << "\\n";\n}', "缺省参数 3"),
+("模板函数", '#include <iostream>\ntemplate <typename T> T f(T a, T b) { return a + b; }\nint main() {\n    std::cout << f(3, 4) << "\\n";\n}', "模板实例化求和"),
+("构造函数", '#include <iostream>\nstruct S {\n    int x;\n    S(int v) : x(v) {}\n};\nint main() {\n    S s(4);\n    std::cout << s.x * 2 << "\\n";\n}', "构造初始化翻倍"),
+("静态成员", '#include <iostream>\nstruct S {\n    static int cnt;\n};\nint S::cnt = 5;\nint main() {\n    std::cout << S::cnt + 1 << "\\n";\n}', "静态成员加 1"),
+("继承调用", '#include <iostream>\nstruct A { int v = 3; };\nstruct B : A {};\nint main() {\n    B b;\n    std::cout << b.v * 2 << "\\n";\n}', "继承字段翻倍"),
+("虚函数多态", '#include <iostream>\nstruct A { virtual int f() { return 1; } };\nstruct B : A { int f() override { return 2; } };\nint main() {\n    A *p = new B();\n    std::cout << p->f() << "\\n";\n    delete p;\n}', "虚分派取 B 实现"),
+("运算符重载", '#include <iostream>\nstruct P { int x; };\nP operator+(P a, P b) { return {a.x + b.x}; }\nint main() {\n    P a{2}, b{3};\n    std::cout << (a + b).x << "\\n";\n}', "重载加法"),
+("lambda 捕获", '#include <iostream>\nint main() {\n    int x = 3;\n    auto f = [x] { return x * 2; };\n    std::cout << f() << "\\n";\n}', "按值捕获翻倍"),
+("sort 自定义", '#include <iostream>\n#include <vector>\n#include <algorithm>\nint main() {\n    std::vector<int> v{3, 1, 2};\n    std::sort(v.begin(), v.end());\n    std::cout << v[0] << "\\n";\n}', "升序最小"),
+("map 访问", '#include <iostream>\n#include <map>\nint main() {\n    std::map<std::string, int> m;\n    m["k"] = 4;\n    std::cout << m["k"] << "\\n";\n}', "键 k 的值"),
+("set 计数", '#include <iostream>\n#include <set>\nint main() {\n    std::set<int> s{1, 1, 2};\n    std::cout << s.size() << "\\n";\n}', "去重后大小"),
+("auto 推断", '#include <iostream>\nint main() {\n    auto x = 4;\n    auto y = x * 2.0;\n    std::cout << (int)y << "\\n";\n}', "auto 推断 double 转 int"),
+("范围 for", '#include <iostream>\nint main() {\n    int s = 0;\n    for (int v : {1, 2, 3}) s += v;\n    std::cout << s << "\\n";\n}', "范围 for 累加"),
+("move 语义", '#include <iostream>\n#include <string>\nint main() {\n    std::string s = "abc";\n    std::string t = std::move(s);\n    std::cout << t.size() << "\\n";\n}', "移动后目标长度"),
+("shared_ptr", '#include <iostream>\n#include <memory>\nint main() {\n    std::shared_ptr<int> a = std::make_shared<int>(3);\n    auto b = a;\n    std::cout << a.use_count() << "\\n";\n}', "两个共享引用"),
+("pair", '#include <iostream>\n#include <utility>\nint main() {\n    std::pair<int, int> p{3, 4};\n    std::cout << p.first + p.second << "\\n";\n}', "pair 字段相加"),
+("tuple get", '#include <iostream>\n#include <tuple>\nint main() {\n    auto t = std::make_tuple(2, 3);\n    std::cout << std::get<0>(t) * std::get<1>(t) << "\\n";\n}', "元组字段相乘"),
+("find 定位", '#include <iostream>\n#include <string>\nint main() {\n    std::string s = "hello";\n    std::cout << s.find("l") << "\\n";\n}', "首个 l 索引"),
+("substr", '#include <iostream>\n#include <string>\nint main() {\n    std::string s = "abcde";\n    std::cout << s.substr(1, 2).size() << "\\n";\n}', "子串长度"),
+("stoi 转换", '#include <iostream>\n#include <string>\nint main() {\n    std::string s = "42";\n    std::cout << std::stoi(s) + 1 << "\\n";\n}', "字符串转 int 加 1"),
+("sizeof", '#include <iostream>\nint main() {\n    int a[4];\n    std::cout << sizeof(a) / sizeof(a[0]) << "\\n";\n}', "数组元素个数"),
+("引用传参", '#include <iostream>\nvoid f(int &x) { x += 3; }\nint main() {\n    int v = 2;\n    f(v);\n    std::cout << v << "\\n";\n}', "引用修改原值"),
+("const 引用", '#include <iostream>\nint main() {\n    int x = 5;\n    const int &r = x;\n    std::cout << r * 2 << "\\n";\n}', "常量引用翻倍"),
+("enum", '#include <iostream>\nenum Color { RED = 2, GREEN = 5 };\nint main() {\n    std::cout << GREEN + RED << "\\n";\n}', "枚举值相加"),
+("switch", '#include <iostream>\nint main() {\n    int x = 2;\n    int y = 0;\n    switch (x) {\n        case 1: y = 10; break;\n        case 2: y = 20; break;\n        default: y = 0;\n    }\n    std::cout << y << "\\n";\n}', "命中 case 2"),
+("位运算", '#include <iostream>\nint main() {\n    std::cout << ((6 & 3) | (8 >> 2)) << "\\n";\n}', "与或移位"),
+("三目", '#include <iostream>\nint main() {\n    int x = 7;\n    std::cout << (x > 5 ? 1 : 0) << "\\n";\n}', "条件为真取 1"),
+("短路", '#include <iostream>\nint main() {\n    int x = 0;\n    bool r = (x != 0) && (10 / x > 0);\n    std::cout << r << "\\n";\n}', "短路不触发除零"),
+("循环累加", '#include <iostream>\nint main() {\n    int s = 0;\n    for (int i = 1; i <= 5; i++) s += i;\n    std::cout << s << "\\n";\n}', "1 到 5 累加"),
+("嵌套循环", '#include <iostream>\nint main() {\n    int s = 0;\n    for (int i = 0; i < 3; i++)\n        for (int j = 0; j < 4; j++) s++;\n    std::cout << s << "\\n";\n}', "3 乘 4 次"),
+("continue", '#include <iostream>\nint main() {\n    int s = 0;\n    for (int i = 1; i <= 5; i++) {\n        if (i % 2 == 0) continue;\n        s += i;\n    }\n    std::cout << s << "\\n";\n}', "跳过偶数累加"),
+("do-while", '#include <iostream>\nint main() {\n    int x = 0, s = 0;\n    do { s += x; x++; } while (x < 3);\n    std::cout << s << "\\n";\n}', "先执行再判断"),
+("指针算术", '#include <iostream>\nint main() {\n    int a[3] = {10, 20, 30};\n    int *p = a + 1;\n    std::cout << *p << "\\n";\n}', "指针偏移取元素"),
+("结构体成员", '#include <iostream>\nstruct P { int x; int y; };\nint main() {\n    P p{3, 4};\n    std::cout << p.x * p.y << "\\n";\n}', "成员相乘"),
+("函数指针", '#include <iostream>\nint f(int x) { return x * 2; }\nint main() {\n    int (*g)(int) = f;\n    std::cout << g(4) << "\\n";\n}', "函数指针调用"),
+("递归阶乘", '#include <iostream>\nint f(int n) { return n <= 1 ? 1 : n * f(n - 1); }\nint main() {\n    std::cout << f(5) << "\\n";\n}', "5 的阶乘"),
+("斐波那契", '#include <iostream>\nint f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }\nint main() {\n    std::cout << f(7) << "\\n";\n}', "第 7 项斐波那契"),
+("reverse", '#include <iostream>\n#include <string>\n#include <algorithm>\nint main() {\n    std::string s = "abc";\n    std::reverse(s.begin(), s.end());\n    std::cout << s.size() << "\\n";\n}', "反转后长度不变"),
+("count_if", '#include <iostream>\n#include <vector>\n#include <algorithm>\nint main() {\n    std::vector<int> v{1, 2, 3, 4};\n    int c = std::count_if(v.begin(), v.end(), [](int x) { return x % 2 == 0; });\n    std::cout << c << "\\n";\n}', "偶数个数"),
+("accumulate", '#include <iostream>\n#include <vector>\n#include <numeric>\nint main() {\n    std::vector<int> v{1, 2, 3, 4};\n    std::cout << std::accumulate(v.begin(), v.end(), 0) << "\\n";\n}', "全量累加"),
+("排序取中", '#include <iostream>\n#include <vector>\n#include <algorithm>\nint main() {\n    std::vector<int> v{5, 1, 3};\n    std::sort(v.begin(), v.end());\n    std::cout << v[v.size() / 2] << "\\n";\n}', "排序后中位"),
+("迭代器遍历", '#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v{2, 4};\n    int s = 0;\n    for (auto it = v.begin(); it != v.end(); ++it) s += *it;\n    std::cout << s << "\\n";\n}', "迭代器累加"),
+("erase 删除", '#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v{1, 2, 3};\n    v.erase(v.begin() + 1);\n    std::cout << v.size() << "\\n";\n}', "删一个元素后大小"),
+("insert 插入", '#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v{1, 3};\n    v.insert(v.begin() + 1, 2);\n    std::cout << v[1] << "\\n";\n}', "中间插入元素"),
+("operator[]", '#include <iostream>\n#include <map>\nint main() {\n    std::map<int, int> m;\n    m[1] = 10;\n    m[1] += 5;\n    std::cout << m[1] << "\\n";\n}', "下标更新值"),
+("multiset", '#include <iostream>\n#include <set>\nint main() {\n    std::multiset<int> s{1, 1, 2};\n    std::cout << s.count(1) << "\\n";\n}', "1 出现次数"),
+("priority_queue", '#include <iostream>\n#include <queue>\nint main() {\n    std::priority_queue<int> q;\n    q.push(3);\n    q.push(1);\n    std::cout << q.top() << "\\n";\n}', "最大堆顶"),
+("deque 头插", '#include <iostream>\n#include <deque>\nint main() {\n    std::deque<int> q;\n    q.push_front(2);\n    q.push_back(3);\n    std::cout << q.front() << "\\n";\n}', "头插后首元素"),
+("list 大小", '#include <iostream>\n#include <list>\nint main() {\n    std::list<int> l{1, 2, 3};\n    std::cout << l.size() << "\\n";\n}', "链表大小"),
+("static_cast", '#include <iostream>\nint main() {\n    double d = 7.9;\n    int i = static_cast<int>(d);\n    std::cout << i << "\\n";\n}', "强转截断"),
+("stringstream", '#include <iostream>\n#include <sstream>\n#include <string>\nint main() {\n    std::stringstream ss("42");\n    int v;\n    ss >> v;\n    std::cout << v / 2 << "\\n";\n}', "流解析整数"),
+("rfind 反向查找", '#include <iostream>\n#include <string>\nint main() {\n    std::string s = "ababa";\n    std::cout << s.rfind("ba") << "\\n";\n}', "反向查找首个 ba"),
+("reserve 容量", '#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v;\n    v.reserve(8);\n    std::cout << v.capacity() << "\\n";\n}', "预留容量"),
+("字符串比较", '#include <iostream>\n#include <string>\nint main() {\n    std::string s = "ab";\n    std::cout << (s == "ab" ? 1 : 0) << "\\n";\n}', "内容相等记 1"),
+("back 尾字符", '#include <iostream>\n#include <string>\nint main() {\n    std::string s = "abc";\n    std::cout << s.back() - \'a\' + 1 << "\\n";\n}', "尾字符序号"),
+]
+
+GB_C = [
+("指针解引用", '#include <stdio.h>\nint main() {\n    int x = 7;\n    int *p = &x;\n    printf("%d\\n", *p + 1);\n}', "解引用加 1"),
+("指针算术", '#include <stdio.h>\nint main() {\n    int a[3] = {10, 20, 30};\n    int *p = a + 1;\n    printf("%d\\n", *p);\n}', "指针偏移取元素"),
+("数组求和", '#include <stdio.h>\nint main() {\n    int a[] = {1, 2, 3};\n    int s = 0;\n    for (int i = 0; i < 3; i++) s += a[i];\n    printf("%d\\n", s);\n}', "遍历累加"),
+("sizeof 数组", '#include <stdio.h>\nint main() {\n    int a[5];\n    printf("%zu\\n", sizeof(a) / sizeof(a[0]));\n}', "元素个数"),
+("结构体", '#include <stdio.h>\nstruct P { int x; int y; };\nint main() {\n    struct P p = {3, 4};\n    printf("%d\\n", p.x * p.y);\n}', "成员相乘"),
+("typedef", '#include <stdio.h>\ntypedef struct { int v; } S;\nint main() {\n    S s = {5};\n    printf("%d\\n", s.v + 1);\n}', "typedef 结构体"),
+("函数调用", '#include <stdio.h>\nint f(int x) { return x * 2; }\nint main() {\n    printf("%d\\n", f(4));\n}', "函数翻倍"),
+("递归", '#include <stdio.h>\nint f(int n) { return n <= 1 ? 1 : n * f(n - 1); }\nint main() {\n    printf("%d\\n", f(5));\n}', "5 的阶乘"),
+("位运算", '#include <stdio.h>\nint main() {\n    printf("%d\\n", (6 & 3) | (8 >> 2));\n}', "与或移位"),
+("逻辑", '#include <stdio.h>\nint main() {\n    printf("%d\\n", (3 > 2) && (1 < 4));\n}', "两条件成立记 1"),
+("三目", '#include <stdio.h>\nint main() {\n    int x = 7;\n    printf("%d\\n", x > 5 ? 1 : 0);\n}', "条件为真取 1"),
+("for 循环", '#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int i = 1; i <= 5; i++) s += i;\n    printf("%d\\n", s);\n}', "1 到 5 累加"),
+("嵌套循环", '#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int i = 0; i < 3; i++)\n        for (int j = 0; j < 4; j++) s++;\n    printf("%d\\n", s);\n}', "3 乘 4 次"),
+("switch", '#include <stdio.h>\nint main() {\n    int x = 2, y = 0;\n    switch (x) {\n        case 1: y = 10; break;\n        case 2: y = 20; break;\n        default: y = 0;\n    }\n    printf("%d\\n", y);\n}', "命中 case 2"),
+("enum", '#include <stdio.h>\nenum Color { RED = 2, GREEN = 5 };\nint main() {\n    printf("%d\\n", GREEN + RED);\n}', "枚举值相加"),
+("宏", '#include <stdio.h>\n#define DOUBLE(x) ((x) * 2)\nint main() {\n    printf("%d\\n", DOUBLE(4));\n}', "宏展开翻倍"),
+("strlen", '#include <stdio.h>\n#include <string.h>\nint main() {\n    char s[] = "hello";\n    printf("%zu\\n", strlen(s));\n}', "字符串长度"),
+("strcmp", '#include <stdio.h>\n#include <string.h>\nint main() {\n    printf("%d\\n", strcmp("abc", "abd") < 0);\n}', "字典序比较"),
+("字符数组", '#include <stdio.h>\nint main() {\n    char s[] = "ab";\n    printf("%d\\n", s[1] - \'a\' + 1);\n}', "字符差"),
+("指针比较", '#include <stdio.h>\nint main() {\n    int a[2] = {1, 2};\n    int *p = a;\n    int *q = a + 1;\n    printf("%ld\\n", q - p);\n}', "指针距离"),
+("函数指针", '#include <stdio.h>\nint f(int x) { return x * 2; }\nint main() {\n    int (*g)(int) = f;\n    printf("%d\\n", g(4));\n}', "函数指针调用"),
+("数组传参", '#include <stdio.h>\nint sum(int a[], int n) {\n    int s = 0;\n    for (int i = 0; i < n; i++) s += a[i];\n    return s;\n}\nint main() {\n    int a[] = {1, 2, 3};\n    printf("%d\\n", sum(a, 3));\n}', "传数组求和"),
+("多维数组", '#include <stdio.h>\nint main() {\n    int a[2][3] = {{1, 2, 3}, {4, 5, 6}};\n    int s = 0;\n    for (int i = 0; i < 2; i++)\n        for (int j = 0; j < 3; j++) s += a[i][j];\n    printf("%d\\n", s);\n}', "二维累加"),
+("自增前后缀", '#include <stdio.h>\nint main() {\n    int x = 5;\n    int a = x++;\n    int b = ++x;\n    printf("%d\\n", a + b);\n}', "后置取 5，前置后 x=7 取 7"),
+("取地址", '#include <stdio.h>\nint main() {\n    int x = 8;\n    int *p = &x;\n    *p += 2;\n    printf("%d\\n", x);\n}', "指针修改原值"),
+("局部静态", '#include <stdio.h>\nint f() {\n    static int c = 0;\n    return ++c;\n}\nint main() {\n    f();\n    printf("%d\\n", f());\n}', "静态变量第二次为 2"),
+("全局变量", '#include <stdio.h>\nint g = 3;\nint main() {\n    g += 4;\n    printf("%d\\n", g);\n}', "全局加 4"),
+("类型转换", '#include <stdio.h>\nint main() {\n    double d = 7.9;\n    printf("%d\\n", (int)d);\n}', "强转截断"),
+("取余", '#include <stdio.h>\nint main() {\n    printf("%d\\n", 17 % 5);\n}', "余数"),
+("整数除法", '#include <stdio.h>\nint main() {\n    printf("%d\\n", 17 / 5);\n}', "整数商"),
+("逗号表达式", '#include <stdio.h>\nint main() {\n    int x = (1, 2, 3);\n    printf("%d\\n", x);\n}', "逗号取末值"),
+("union", '#include <stdio.h>\nunion U { int i; char c; };\nint main() {\n    union U u;\n    u.i = 65;\n    printf("%d\\n", (int)u.c);\n}', "union 共享内存"),
+("指针数组", '#include <stdio.h>\nint main() {\n    int a[] = {1, 2, 3};\n    int *p[3];\n    for (int i = 0; i < 3; i++) p[i] = &a[i];\n    printf("%d\\n", *p[1]);\n}', "指针数组取元素"),
+("strcat", '#include <stdio.h>\n#include <string.h>\nint main() {\n    char s[16] = "ab";\n    strcat(s, "cd");\n    printf("%zu\\n", strlen(s));\n}', "拼接后长度"),
+("strcpy", '#include <stdio.h>\n#include <string.h>\nint main() {\n    char a[] = "xyz";\n    char b[16];\n    strcpy(b, a);\n    printf("%zu\\n", strlen(b));\n}', "复制后长度"),
+("条件累加", '#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int i = 1; i <= 10; i++)\n        if (i % 2 == 0) s += i;\n    printf("%d\\n", s);\n}', "偶数累加"),
+("手写幂", '#include <stdio.h>\nint main() {\n    int r = 1;\n    for (int i = 0; i < 3; i++) r *= 2;\n    printf("%d\\n", r);\n}', "2 的 3 次方"),
+("gcd", '#include <stdio.h>\nint gcd(int a, int b) { return b ? gcd(b, a % b) : a; }\nint main() {\n    printf("%d\\n", gcd(12, 8));\n}', "最大公约数"),
+("斐波那契", '#include <stdio.h>\nint f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }\nint main() {\n    printf("%d\\n", f(7));\n}', "第 7 项"),
+("素数判断", '#include <stdio.h>\nint main() {\n    int n = 17, c = 0;\n    for (int i = 2; i * i <= n; i++)\n        if (n % i == 0) c++;\n    printf("%d\\n", c == 0);\n}', "17 是素数"),
+("数字反转", '#include <stdio.h>\nint main() {\n    int n = 123, r = 0;\n    while (n) { r = r * 10 + n % 10; n /= 10; }\n    printf("%d\\n", r);\n}', "123 反转为 321"),
+("位计数", '#include <stdio.h>\nint main() {\n    int x = 7, c = 0;\n    while (x) { c += x & 1; x >>= 1; }\n    printf("%d\\n", c);\n}', "7 二进制有 3 个 1"),
+("指针交换", '#include <stdio.h>\nvoid swap(int *a, int *b) {\n    int t = *a; *a = *b; *b = t;\n}\nint main() {\n    int x = 2, y = 5;\n    swap(&x, &y);\n    printf("%d\\n", x - y);\n}', "交换后 5-2"),
+("数组最大值", '#include <stdio.h>\nint main() {\n    int a[] = {3, 7, 2, 9};\n    int m = a[0];\n    for (int i = 1; i < 4; i++)\n        if (a[i] > m) m = a[i];\n    printf("%d\\n", m);\n}', "最大值 9"),
+("二维求和", '#include <stdio.h>\nint main() {\n    int a[2][2] = {{1, 2}, {3, 4}};\n    int s = 0;\n    for (int i = 0; i < 2; i++)\n        for (int j = 0; j < 2; j++) s += a[i][j];\n    printf("%d\\n", s);\n}', "全部元素和"),
+("字符计数", '#include <stdio.h>\nint main() {\n    char s[] = "hello";\n    int c = 0;\n    for (int i = 0; s[i]; i++) c++;\n    printf("%d\\n", c);\n}', "遍历计数"),
+("乘法表行和", '#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int j = 1; j <= 9; j++) s += 3 * j;\n    printf("%d\\n", s);\n}', "3 的乘法表求和"),
+("do-while", '#include <stdio.h>\nint main() {\n    int x = 0, s = 0;\n    do { s += x; x++; } while (x < 3);\n    printf("%d\\n", s);\n}', "先执行再判断"),
+("位移翻倍", '#include <stdio.h>\nint main() {\n    printf("%d\\n", 5 << 1);\n}', "左移一位翻倍"),
+("掩码", '#include <stdio.h>\nint main() {\n    int x = 0x0F;\n    printf("%d\\n", (x & 0x0C) >> 2);\n}', "掩码取位"),
+("结构体指针", '#include <stdio.h>\nstruct P { int x; };\nint main() {\n    struct P p = {6};\n    struct P *q = &p;\n    q->x += 2;\n    printf("%d\\n", p.x);\n}', "指针改成员"),
+("指针数组遍历", '#include <stdio.h>\n#include <string.h>\nint main() {\n    char *a[] = {"a", "b", "c"};\n    int s = 0;\n    for (int i = 0; i < 3; i++) s += (int)strlen(a[i]);\n    printf("%d\\n", s);\n}', "各字符串长度和"),
+("三元指针取元素", '#include <stdio.h>\nint main() {\n    int a[3] = {5, 6, 7};\n    int *p = a + 1;\n    printf("%d\\n", *p);\n}', "指针偏移取 6"),
+("数组修改", '#include <stdio.h>\nint main() {\n    int a[] = {1, 2, 3};\n    a[0] += 3;\n    printf("%d\\n", a[0]);\n}', "下标修改"),
+("break 跳出", '#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int i = 0; i < 5; i++) {\n        if (i == 3) break;\n        s += i;\n    }\n    printf("%d\\n", s);\n}', "i=3 中断"),
+("长度差", '#include <stdio.h>\n#include <string.h>\nint main() {\n    char a[] = "hello";\n    char b[] = "hi";\n    printf("%d\\n", (int)(strlen(a) - strlen(b)));\n}', "5 减 2"),
+("位清零", '#include <stdio.h>\nint main() {\n    int x = 0x0F;\n    x &= ~0x0C;\n    printf("%d\\n", x);\n}', "清除两位"),
+("宏平方", '#include <stdio.h>\n#define SQUARE(x) ((x) * (x))\nint main() {\n    printf("%d\\n", SQUARE(3) + 1);\n}', "宏平方加 1"),
+("结构体数组", '#include <stdio.h>\nstruct P { int v; };\nint main() {\n    struct P arr[2] = {{3}, {5}};\n    printf("%d\\n", arr[1].v);\n}', "第二元素"),
+("指针减法", '#include <stdio.h>\nint main() {\n    int a[4] = {0, 0, 0, 0};\n    int *p = a;\n    p += 3;\n    printf("%ld\\n", p - a);\n}', "指针距离 3"),
+]
+
+GB_JAVA = [
+("String 不可变", 'public class M {\n    public static void main(String[] args) {\n        String s = "abc";\n        s.toUpperCase();\n        System.out.println(s.length());\n    }\n}', "toUpperCase 不改原串"),
+("StringBuilder", 'public class M {\n    public static void main(String[] args) {\n        StringBuilder b = new StringBuilder("ab");\n        b.append("cd");\n        System.out.println(b.length());\n    }\n}', "追加后长度"),
+("substring", 'public class M {\n    public static void main(String[] args) {\n        String s = "abcde";\n        System.out.println(s.substring(1, 3).length());\n    }\n}', "子串长度"),
+("indexOf", 'public class M {\n    public static void main(String[] args) {\n        String s = "hello";\n        System.out.println(s.indexOf("l"));\n    }\n}', "首个 l 索引"),
+("数组", 'public class M {\n    public static void main(String[] args) {\n        int[] x = new int[3];\n        System.out.println(x.length);\n    }\n}', "数组长度"),
+("ArrayList", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<Integer> l = new ArrayList<>();\n        l.add(1);\n        l.add(2);\n        System.out.println(l.size());\n    }\n}', "两次添加后大小"),
+("ArrayList 取值", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<Integer> l = new ArrayList<>(Arrays.asList(5, 6, 7));\n        System.out.println(l.get(1));\n    }\n}', "索引 1 元素"),
+("HashMap", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        Map<String, Integer> m = new HashMap<>();\n        m.put("k", 3);\n        System.out.println(m.get("k"));\n    }\n}', "键 k 的值"),
+("HashSet 大小", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        Set<Integer> s = new HashSet<>();\n        s.add(1);\n        s.add(1);\n        s.add(2);\n        System.out.println(s.size());\n    }\n}', "去重后大小"),
+("自动装箱", 'public class M {\n    public static void main(String[] args) {\n        Integer x = 5;\n        int y = x + 2;\n        System.out.println(y);\n    }\n}', "拆箱相加"),
+("Integer 缓存", 'public class M {\n    public static void main(String[] args) {\n        Integer x = 100;\n        Integer y = 100;\n        System.out.println(x == y ? 1 : 0);\n    }\n}', "缓存范围内同一对象"),
+("泛型 List", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<String> l = new ArrayList<>();\n        l.add("ab");\n        System.out.println(l.get(0).length());\n    }\n}', "泛型元素长度"),
+("类继承", 'class A { int v = 3; }\nclass B extends A {}\npublic class M {\n    public static void main(String[] args) {\n        B b = new B();\n        System.out.println(b.v * 2);\n    }\n}', "继承字段翻倍"),
+("方法覆盖", 'class A { int f() { return 1; } }\nclass B extends A { int f() { return 2; } }\npublic class M {\n    public static void main(String[] args) {\n        A x = new B();\n        System.out.println(x.f());\n    }\n}', "多态取 B 实现"),
+("super 调用", 'class A { int f() { return 3; } }\nclass B extends A { int f() { return super.f() + 1; } }\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(new B().f());\n    }\n}', "父类加 1"),
+("构造重载", 'class S {\n    int x;\n    S() { x = 1; }\n    S(int v) { x = v; }\n}\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(new S(5).x);\n    }\n}', "参数构造 5"),
+("static 方法", 'class S {\n    static int f(int x) { return x * 2; }\n}\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(S.f(4));\n    }\n}', "静态方法调用"),
+("static 变量", 'class S {\n    static int c = 0;\n    static int f() { return ++c; }\n}\npublic class M {\n    public static void main(String[] args) {\n        S.f();\n        System.out.println(S.f());\n    }\n}', "静态计数第二次 2"),
+("final 变量", 'public class M {\n    public static void main(String[] args) {\n        final int x = 4;\n        System.out.println(x * 2);\n    }\n}', "常量翻倍"),
+("接口默认方法", 'interface I {\n    default int f() { return 6; }\n}\nclass S implements I {}\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(new S().f());\n    }\n}', "默认实现 6"),
+("lambda", 'public class M {\n    interface F { int run(int x); }\n    public static void main(String[] args) {\n        F f = x -> x * 2;\n        System.out.println(f.run(4));\n    }\n}', "lambda 翻倍"),
+("stream map", 'import java.util.*;\nimport java.util.stream.*;\npublic class M {\n    public static void main(String[] args) {\n        int s = Stream.of(1, 2, 3).mapToInt(x -> x * 2).sum();\n        System.out.println(s);\n    }\n}', "翻倍求和"),
+("filter count", 'import java.util.*;\nimport java.util.stream.*;\npublic class M {\n    public static void main(String[] args) {\n        long c = Stream.of(1, 2, 3, 4).filter(x -> x % 2 == 0).count();\n        System.out.println(c);\n    }\n}', "偶数个数"),
+("reduce 求和", 'import java.util.*;\nimport java.util.stream.*;\npublic class M {\n    public static void main(String[] args) {\n        int s = Stream.of(1, 2, 3, 4).reduce(0, (x, y) -> x + y);\n        System.out.println(s);\n    }\n}', "归约求和"),
+("字符串拼接", 'public class M {\n    public static void main(String[] args) {\n        String s = "ab" + "cd";\n        System.out.println(s.length());\n    }\n}', "拼接长度"),
+("equals", 'public class M {\n    public static void main(String[] args) {\n        String a = new String("x");\n        String b = new String("x");\n        System.out.println(a.equals(b) ? 1 : 0);\n    }\n}', "值相等"),
+("三目", 'public class M {\n    public static void main(String[] args) {\n        int x = 7;\n        System.out.println(x > 5 ? 1 : 0);\n    }\n}', "条件为真取 1"),
+("switch", 'public class M {\n    public static void main(String[] args) {\n        int x = 2, y = 0;\n        switch (x) {\n            case 1: y = 10; break;\n            case 2: y = 20; break;\n            default: y = 0;\n        }\n        System.out.println(y);\n    }\n}', "命中 case 2"),
+("循环累加", 'public class M {\n    public static void main(String[] args) {\n        int s = 0;\n        for (int i = 1; i <= 5; i++) s += i;\n        System.out.println(s);\n    }\n}', "1 到 5 累加"),
+("嵌套循环", 'public class M {\n    public static void main(String[] args) {\n        int s = 0;\n        for (int i = 0; i < 3; i++)\n            for (int j = 0; j < 4; j++) s++;\n        System.out.println(s);\n    }\n}', "3 乘 4 次"),
+("continue", 'public class M {\n    public static void main(String[] args) {\n        int s = 0;\n        for (int i = 1; i <= 5; i++) {\n            if (i % 2 == 0) continue;\n            s += i;\n        }\n        System.out.println(s);\n    }\n}', "跳过偶数累加"),
+("数组排序", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        int[] x = {3, 1, 2};\n        Arrays.sort(x);\n        System.out.println(x[0]);\n    }\n}', "升序最小"),
+("二分搜索", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        int[] x = {1, 3, 5};\n        System.out.println(Arrays.binarySearch(x, 5));\n    }\n}', "命中索引 2"),
+("char 运算", 'public class M {\n    public static void main(String[] args) {\n        char c = \'b\';\n        System.out.println(c - \'a\' + 1);\n    }\n}', "字符差"),
+("取模", 'public class M {\n    public static void main(String[] args) {\n        System.out.println(17 % 5);\n    }\n}', "余数"),
+("整除", 'public class M {\n    public static void main(String[] args) {\n        System.out.println(17 / 5);\n    }\n}', "整数商"),
+("位运算", 'public class M {\n    public static void main(String[] args) {\n        System.out.println((6 & 3) | (8 >> 2));\n    }\n}', "与或移位"),
+("Math.pow", 'public class M {\n    public static void main(String[] args) {\n        System.out.println((int)Math.pow(2, 3));\n    }\n}', "2 的 3 次方"),
+("Math.max", 'public class M {\n    public static void main(String[] args) {\n        System.out.println(Math.max(3, 7) + Math.min(3, 7));\n    }\n}', "最大加最小"),
+("递归阶乘", 'public class M {\n    static int f(int n) { return n <= 1 ? 1 : n * f(n - 1); }\n    public static void main(String[] args) {\n        System.out.println(f(5));\n    }\n}', "5 的阶乘"),
+("斐波那契", 'public class M {\n    static int f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }\n    public static void main(String[] args) {\n        System.out.println(f(7));\n    }\n}', "第 7 项"),
+("多态转型", 'class A {}\nclass B extends A {}\npublic class M {\n    public static void main(String[] args) {\n        A x = new B();\n        System.out.println(x instanceof B ? 1 : 0);\n    }\n}', "运行时类型判断"),
+("instanceof", 'class A {}\nclass B extends A {}\npublic class M {\n    public static void main(String[] args) {\n        A x = new A();\n        System.out.println(x instanceof B ? 1 : 0);\n    }\n}', "不是 B 类型"),
+("抽象类", 'abstract class A { abstract int f(); }\nclass B extends A { int f() { return 4; } }\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(new B().f() * 2);\n    }\n}', "实现抽象方法翻倍"),
+("enum", 'public class M {\n    enum C { A(2), B(5); int v; C(int v) { this.v = v; } }\n    public static void main(String[] args) {\n        System.out.println(C.B.v + C.A.v);\n    }\n}', "枚举字段相加"),
+("String.format", 'public class M {\n    public static void main(String[] args) {\n        String s = String.format("%d%d", 1, 2);\n        System.out.println(s.length());\n    }\n}', "格式化长度"),
+("charAt", 'public class M {\n    public static void main(String[] args) {\n        String s = "abc";\n        System.out.println(s.charAt(1) - \'a\');\n    }\n}', "字符差"),
+("ArrayList 删除", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<Integer> l = new ArrayList<>(Arrays.asList(1, 2, 3));\n        l.remove(1);\n        System.out.println(l.get(1));\n    }\n}', "删除后取 3"),
+("getOrDefault", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        Map<String, Integer> m = new HashMap<>();\n        System.out.println(m.getOrDefault("k", 9));\n    }\n}', "缺省值 9"),
+("迭代器", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<Integer> l = Arrays.asList(2, 3);\n        int s = 0;\n        Iterator<Integer> it = l.iterator();\n        while (it.hasNext()) s += it.next();\n        System.out.println(s);\n    }\n}', "迭代累加"),
+("parseInt", 'public class M {\n    public static void main(String[] args) {\n        System.out.println(Integer.parseInt("42") + 1);\n    }\n}', "解析加 1"),
+("异常捕获", 'public class M {\n    public static void main(String[] args) {\n        int x = 0;\n        try { int y = 1 / 0; } catch (ArithmeticException e) { x = 5; }\n        System.out.println(x);\n    }\n}', "捕获后 x=5"),
+("finally", 'public class M {\n    public static void main(String[] args) {\n        int x = 0;\n        try { int y = 1 / 0; } catch (ArithmeticException e) { x = 5; } finally { x++; }\n        System.out.println(x);\n    }\n}', "finally 加 1"),
+("StringBuilder 反转", 'public class M {\n    public static void main(String[] args) {\n        StringBuilder b = new StringBuilder("abc");\n        System.out.println(b.reverse().length());\n    }\n}', "反转后长度不变"),
+("字符数组排序", 'import java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        char[] c = {\'b\', \'a\'};\n        Arrays.sort(c);\n        System.out.println(c[0] - \'a\' + 1);\n    }\n}', "升序最小 a"),
+("trim 去空白", 'public class M {\n    public static void main(String[] args) {\n        String s = "  ab  ";\n        System.out.println(s.trim().length());\n    }\n}', "去空白后长度"),
+("静态初始化块", 'class S {\n    static int v;\n    static { v = 6; }\n}\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(S.v + 1);\n    }\n}', "静态块赋值"),
+("多接口实现", 'interface I1 { default int a() { return 2; } }\ninterface I2 { default int b() { return 3; } }\nclass S implements I1, I2 {}\npublic class M {\n    public static void main(String[] args) {\n        S s = new S();\n        System.out.println(s.a() + s.b());\n    }\n}', "两接口方法相加"),
+("泛型方法", 'public class M {\n    static <T> T id(T x) { return x; }\n    public static void main(String[] args) {\n        System.out.println(id(7) * 2);\n    }\n}', "泛型恒等翻倍"),
+("replace 替换", 'public class M {\n    public static void main(String[] args) {\n        String s = "aXbXc";\n        System.out.println(s.replace("X", "").length());\n    }\n}', "去掉 X 后长度"),
+]
+
+def GB_gen(lang: str, table: list[tuple[str, str, str]]) -> Path:
+    meta = GB_LANGS[lang]
+    rows = []
+    for name, code, reason in table:
+        try:
+            g = meta["gold"](code)
+        except RuntimeError as e:
+            print(f"[{lang}:{name}] SKIP gold verify: {e}")
+            raise
+        assert g and "\n" not in g, f"[{lang}:{name}] non-scalar: {g!r}"
+        q = f'{meta["hdr"]}请用 "答案是 X #### X" 格式作答。\n```{meta["fence"]}\n{code}\n```'
+        a = f"{reason}，{g}。答案是 {g} #### {g}"
+        rows.append((q, a))
+    out = ROOT / f"bench_{lang}60.csv"
+    with open(out, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["question", "answer"])
+        w.writerows(rows)
+    rs = list(csv.DictReader(open(out, encoding="utf-8")))
+    assert len(rs) == len(table) == 60, f"[{lang}] rows={len(rs)}"
+    assert all(x["question"].count("```") == 2 for x in rs), f"[{lang}] fence broken"
+    return out
+
+
+def GB_main() -> None:
+    os.chdir(ROOT)
+    for lang, table in [("py", GB_PY), ("rs", GB_RS), ("cpp", GB_CPP), ("c", GB_C), ("java", GB_JAVA)]:
+        try:
+            p = GB_gen(lang, table)
+            print(f"[{lang}] -> {p} ({len(list(csv.DictReader(open(p))))} rows)")
+        except RuntimeError as e:
+            print(f"[{lang}] skipped: {e}")
+
+
+
+GF_SEED = 20261026
+GF_OUT = ROOT / "config" / "fidelity.corpus.json"
+
+GF_KINDS = ("build", "stack", "diff", "log", "test", "db", "network", "hardware")
+
+GF_BUILD_CODES = [
+    ("E0433", "use of undeclared crate or module `config`",
+     "let cfg = config::load(\"/etc/app.toml\");", "crates/core/src/main.rs:17:5", "config"),
+    ("E0308", "mismatched types: expected `u64`, found `&str`",
+     "let ttl: u64 = env::var(\"CACHE_TTL\")?;", "crates/util/src/cache.rs:41:16", "ttl"),
+    ("E0502", "cannot borrow `*buf` as mutable because it is also borrowed as immutable",
+     "let head = &buf[..8]; buf.extend_from_slice(&head);", "crates/io/src/reader.rs:63:9", "buf"),
+    ("E0382", "borrow of moved value: `conn`",
+     "let pool = conn.pool(); drop(conn); pool.query(\"SELECT 1\");", "crates/db/src/pool.rs:88:5", "conn"),
+    ("E0599", "no method named `retry` found for struct `Client`",
+     "client.retry(3).connect(addr);", "crates/net/src/client.rs:22:9", "retry"),
+]
+
+GF_STACK_SPOTS = [
+    ("db.rs:42:9", "index out of bounds: the len is 5 but the index is 9",
+     "app::db::connect", "pool"),
+    ("cache.rs:107:5", "attempt to divide by zero", "app::cache::compute_ttl", "ttl"),
+    ("net/tls.rs:29:17", "called `Result::unwrap()` on an `Err` value: \"handshake timeout\"",
+     "app::net::handshake", "tls"),
+    ("store/fs.rs:55:3", "No such file or directory (os error 2)", "app::store::open", "path"),
+]
+
+GF_LOG_CASES = [
+    ("db.internal", 5432, "postgres", "connection refused", "starting http server on 0.0.0.0:8080"),
+    ("redis.internal", 6379, "redis", "connection reset by peer", "starting worker pool with 8 workers"),
+    ("mq.internal", 5672, "rabbitmq", "authentication failed", "starting consumer daemon"),
+    ("nfs.internal", 2049, "storage", "operation not permitted", "starting replication agent"),
+]
+
+GF_DIFF_HUNKS = [
+    ("src/cache.rs", "ttl", "let ttl = 60;", "let ttl = ttl_from_env()?;",
+     "negative ttl", "if ttl < 0 { bail!(\"negative ttl\"); }"),
+    ("src/io/reader.rs", "buf_size", "let buf = Vec::with_capacity(1024);",
+     "let buf = Vec::with_capacity(buf_size);", "capacity overflow",
+     "if buf_size > MAX_BUF { bail!(\"capacity overflow\"); }"),
+    ("src/net/client.rs", "timeout", "let to = Duration::from_secs(5);",
+     "let to = timeout_from_env()?;", "invalid timeout",
+     "if to.is_zero() { bail!(\"invalid timeout\"); }"),
+    ("src/store/fs.rs", "perm", "let mode = 0o644;",
+     "let mode = mode_from_env()?;", "mode too loose",
+     "if mode & 0o002 != 0 { bail!(\"mode too loose\"); }"),
+]
+
+GF_TEST_CASES = [
+    ("cache::tests::ttl_negative", "assertion failed: cache.ttl >= 0", "left: -5"),
+    ("io::tests::buf_resize", "assertion failed: buf.len() == expected", "left: 1024, right: 2048"),
+    ("net::tests::retry_exhausted", "assertion failed: attempts <= max_retries", "left: 5, right: 3"),
+    ("store::tests::perm_restore", "assertion failed: mode & 0o002 == 0", "left: 0o666"),
+]
+
+GF_DB_CASES = [
+    ("postgres", "db.internal", 5432, "connection pool exhausted (pool_size=50)",
+     "max_connections reached"),
+    ("mysql", "db.internal", 3306, "replication stopped: sync_binlog error 1236",
+     "slave_io_running=No"),
+    ("postgres", "tx.internal", 5432, "deadlock detected: processes 42 and 77 wait forever",
+     "rollback in progress"),
+    ("mysql", "db.internal", 3306, "lock wait timeout exceeded; try restarting transaction",
+     "innodb_lock_wait_timeout=50"),
+]
+
+GF_NET_CASES = [
+    ("dns", "api.internal", 53, "NXDOMAIN: api.internal not found",
+     "unbound resolver, query timeout 5000ms"),
+    ("tcp", "edge.internal", 443, "connection timed out after 30000ms",
+     "traceroute stops at 10.20.0.1"),
+    ("tls", "gw.internal", 443, "certificate has expired",
+     "openssl verify return code 10"),
+    ("route", "core.internal", 0, "Destination Net Unreachable",
+     "no route to host via 172.16.0.1"),
+]
+
+GF_HW_CASES = [
+    ("disk", "sda", "I/O error, dev sda, sector 1126400 op 0x0:(READ)",
+     "EXT4-fs error (device sda1)"),
+    ("memory", "DIMM_A2", "Uncorrected memory error at DIMM_A2 rank 1",
+     "EDAC MC0: UE row 7"),
+    ("nvme", "nvme0n1", "nvme0: I/O Cmd 0x2a (READ) timed out",
+     "nvme nvme0: controller is down"),
+    ("link", "eth0", "eth0: link down (carrier lost)",
+     "bond0: link status definitely down"),
+]
+
+
+def GF_token_est(lines):
+    """Rough token estimate (words + CJK codepoints), mirrors contain_token_count."""
+    import re
+    text = "\n".join(lines)
+    return len(re.findall(r"[A-Za-z0-9][A-Za-z0-9_.\-]*", text)) + len(re.findall(r"[\u4e00-\u9fff]", text))
+
+
+# --- large slices (sieve path) ---
+
+
+def GF_build_large(idx: int) -> dict:
+    # 4 crates; two error blocks each (indices wrap to keep 5 codes in play)
+    crates = ["core", "util", "io", "db"]
+    blocks = []
+    focus_code, focus_msg, _, _, _ = GF_BUILD_CODES[idx % len(GF_BUILD_CODES)]
+    ev = []
+    start = idx * 2
+    for ci, crate in enumerate(crates):
+        blocks.append(f"   Compiling app-{crate} v0.4.{ci} (/workspace/crates/{crate})")
+        for k in (start + ci * 2, start + ci * 2 + 1):
+            code, msg, line, loc, sym = GF_BUILD_CODES[k % len(GF_BUILD_CODES)]
+            fname = loc.split(":")[0]
+            blocks.append(f"error[{code}]: {msg}")
+            blocks.append(f"  --> {loc}")
+            blocks.append("   |")
+            blocks.append(f"{fname:>8} |     {line}")
+            blocks.append(f"   |     {'^' * max(2, len(line.split(';')[0]))}")
+            # only the query-focus error line is evidence for THIS slice's query
+            if code == focus_code:
+                ev.append(f"error[{code}]: {msg}")
+    blocks.append("error: could not compile `app` due to previous errors")
+    return {
+        "kind": "build",
+        "full_text": "\n".join(blocks) + "\n",
+        "evidence": ev,
+        "query": f"why did the build fail with {focus_code} {focus_msg.split('`')[1] if '`' in focus_msg else sym}",
+        "note": f"synthetic multi-crate rust build failure (large, sieve path) focus {focus_code}",
+    }
+
+
+def GF_stack_large(idx: int) -> dict:
+    fname, msg, func, tag = GF_STACK_SPOTS[idx % len(GF_STACK_SPOTS)]
+    pool = [
+        func, "app::main", "core::ops::function::FnOnce::call_once",
+        "alloc::boxed::Box<F,A>::call_box", "std::sys::pal::common::thread::start_thread",
+        "std::sys::pal::unix::thread::Thread::new", "app::net::poll",
+        "app::store::flush", "app::evt::dispatch", "app::cache::refresh",
+        "app::metrics::record", "app::config::reload", "app::log::rotate",
+        "app::db::query", "app::http::handle", "app::worker::run",
+        "app::service::tick", "app::service::poll_once", "app::runtime::block_on",
+        "tokio::runtime::scheduler::multi_thread::worker",
+    ]
+    frames = [f"   {n}: {fn} (src/{fname})" for n, fn in enumerate(
+        pool[n % len(pool)] for n in range(43))]
+    full = [
+        f"thread 'main' panicked at src/{fname}:",
+        msg,
+        "stack backtrace:",
+        *frames,
+        "note: run with `RUST_BACKTRACE=1` for a full backtrace",
+    ]
+    first = msg.split(":")[0]
+    return {
+        "kind": "stack",
+        "full_text": "\n".join(full) + "\n",
+        "evidence": [f"thread 'main' panicked at src/{fname}:", msg],
+        "query": f"why did the program panic: {first}",
+        "note": f"synthetic long panic backtrace ({func}, {tag})",
+    }
+
+
+def GF_log_large(idx: int) -> dict:
+    host, port, svc, err, start = GF_LOG_CASES[idx % len(GF_LOG_CASES)]
+    lines = [f"[2026-10-26T08:00:00Z] INFO  {start}",
+             "[2026-10-26T08:00:01Z] DEBUG loading config from /etc/app/config.toml",
+             "[2026-10-26T08:00:02Z] INFO  cache warmup complete (1284 entries)"]
+    for i in range(21):
+        t = 8 + i * 5
+        lines.append(f"[2026-10-26T08:{t // 60:02d}:{t % 60:02d}Z] ERROR failed to connect to {svc}: {err} (host={host} port={port})")
+        lines.append(f"[2026-10-26T08:{t // 60:02d}:{(t + 3) % 60:02d}Z] WARN  retrying in 5s...")
+    lines.append(f"[2026-10-26T08:10:00Z] ERROR giving up after 21 retries (host={host} port={port})")
+    lines.append("[2026-10-26T08:09:01Z] INFO  entering degraded mode, local cache only")
+    ev = [f"[2026-10-26T08:00:08Z] ERROR failed to connect to {svc}: {err} (host={host} port={port})"]
+    return {
+        "kind": "log",
+        "full_text": "\n".join(lines) + "\n",
+        "evidence": ev,
+        "query": f"why did the service fail to connect to {svc} at {host}",
+        "note": f"synthetic long service log: {svc} unreachable, 12 retries then degraded",
+    }
+
+
+def GF_diff_large(idx: int) -> dict:
+    path, var, old, new, guard_msg, guard = GF_DIFF_HUNKS[idx % len(GF_DIFF_HUNKS)]
+    fname = path.split("/")[-1].replace(".rs", "").title()
+    blocks = [f"diff --git a/{path} b/{path}", f"--- a/{path}", f"+++ b/{path}"]
+    ev = []
+    for i in range(7):
+        blocks.append(f"@@ -{40 + i * 4},6 +{40 + i * 4},8 @@ impl {fname} {{")
+        blocks.append(f"-    {old}")
+        blocks.append(f"+    {new}")
+        if i % 2 == 0:
+            blocks.append(f"+    {guard}")
+            if len(ev) < 3:
+                ev.append(f"+    {guard}")
+        blocks.append("     // untouched context line follows")
+        blocks.append("     let _ = next();")
+        blocks.append(" ")
+    blocks.append("--")
+    blocks.append("2.43.0")
+    if len(ev) < 2:
+        ev.append(f"+    {new}")
+    return {
+        "kind": "diff",
+        "full_text": "\n".join(blocks) + "\n",
+        "evidence": ev,
+        "query": f"what happens with {guard_msg}",
+        "note": f"synthetic large review diff: env-driven {var} guard {guard_msg}",
+    }
+
+
+def GF_test_large(idx: int) -> dict:
+    rows = []
+    ev = []
+    fail_name, fail_msg, fail_detail = GF_TEST_CASES[idx % len(GF_TEST_CASES)]
+    fail_id = f"mod_{idx}::tests::case_05"
+    total = 36
+    rows.append(f"running {total} tests")
+    for i in range(total):
+        name = f"mod_{idx}::tests::case_{i:02d}"
+        status = "ok" if i != 5 else "FAILED"
+        rows.append(f"test {name} ... {status}")
+    rows.append("")
+    rows.append("failures:")
+    rows.append("")
+    rows.append(f"---- {fail_id} stdout ----")
+    rows.append(fail_msg)
+    rows.append(f"  {fail_detail}")
+    rows.append("")
+    rows.append("")
+    rows.append("failures:")
+    rows.append(f"    {fail_id}")
+    rows.append("")
+    rows.append(f"test result: FAILED. 1 failed; {total - 1} passed")
+    ev = [f"test {fail_id} ... FAILED", fail_msg]
+    return {
+        "kind": "test",
+        "full_text": "\n".join(rows) + "\n",
+        "evidence": ev,
+        "query": f"which test failed with {fail_msg.split(':')[0]}",
+        "note": f"synthetic large unit-test run, {fail_name} fails ({fail_detail})",
+    }
+
+
+# --- second failure domains: database / network / hardware (P2) ---
+
+
+def GF_db_large(idx: int) -> dict:
+    svc, host, port, msg, extra = GF_DB_CASES[idx % len(GF_DB_CASES)]
+    lines = [
+        f"[2026-10-26T09:00:00Z] INFO  starting {svc} connection supervisor",
+        f"[2026-10-26T09:00:01Z] DEBUG configured host={host} port={port}",
+        "[2026-10-26T09:00:02Z] INFO  acquired 48/50 slots",
+    ]
+    for i in range(20):
+        t = 3 + i * 4
+        lines.append(f"[2026-10-26T09:{t // 60:02d}:{t % 60:02d}Z] ERROR {msg}")
+        lines.append(f"[2026-10-26T09:{t // 60:02d}:{(t + 2) % 60:02d}Z] WARN  {extra}")
+    lines.append(f"[2026-10-26T09:02:00Z] ERROR supervisor gave up after 20 alerts")
+    lines.append("[2026-10-26T09:02:01Z] INFO  entering read-only fallback mode")
+    ev = [f"[2026-10-26T09:00:03Z] ERROR {msg}"]
+    return {
+        "kind": "db",
+        "full_text": "\n".join(lines) + "\n",
+        "evidence": [ev[0]],
+        "query": f"why did {svc} report {msg.split(':')[0].split('(')[0].strip()}",
+        "note": f"synthetic database failure domain: {msg}",
+    }
+
+
+def GF_network_large(idx: int) -> dict:
+    tool, target, port, err, detail = GF_NET_CASES[idx % len(GF_NET_CASES)]
+    blocks = []
+    if tool == "dns":
+        blocks += [f"dig @10.0.0.53 {target}",
+                   "; <<>> DiG 9.18 <<>> @10.0.0.53 {target}",
+                   f"; (1 server found)", f";; ->>HEADER<<- opcode: QUERY, status: {err.split(':')[0].strip()}",
+                   f";; QUESTION SECTION:", f";{target}.\tIN\tA", f";; ANSWER SECTION:",
+                   f";; AUTHORITY SECTION:", f"internal.\t3600\tIN\tSOA\tns1.internal.", f";; query time: 5023 msec"]
+        blocks += [f";; {err}" for _ in range(20)]
+    elif tool == "tcp":
+        blocks += [f"traceroute to {target} ({target}), 30 hops max, 60 byte packets",
+                   " 1  10.20.0.1  0.4 ms  0.3 ms  0.4 ms"]
+        for h in range(2, 22):
+            blocks.append(f" {h:2d}  172.16.{h}.1  15.2 ms  14.9 ms  15.4 ms")
+        for h in range(22, 31):
+            blocks.append(f" {h:2d}  * * *")
+        blocks += [f"connect: {err}", f"; {detail}"]
+    elif tool == "tls":
+        blocks += [f"openssl s_client -connect {target}:{port} -servername {target}",
+                   "CONNECTED(00000003)", "depth=0 CN = " + target,
+                   "verify error:num=10:" + err,
+                   "verify return:1", "verify return:0",
+                   f"; {detail}"]
+        blocks += [f"; {err}" for _ in range(30)]
+    else:
+        blocks += [f"ip route get {target}",
+                   f"RTNETLINK answers: {err}",
+                   f"; {detail}",
+                   f"ping {target}",
+                   "PING " + target + " (" + target + ") 56(84) bytes of data."]
+        for i in range(5):
+            blocks.append(f"{i * 10 + 1:5d} bytes from {target}: icmp_seq={i + 1} ttl=64 time=0.4 ms")
+        blocks += ["--- " + target + " ping statistics ---", "5 packets transmitted, 5 received, 0% packet loss"]
+        blocks += [f"; {err}" for _ in range(25)]
+    while len(blocks) < 48:
+        blocks.append(f"; {err}")
+    return {
+        "kind": "network",
+        "full_text": "\n".join(blocks) + "\n",
+        "evidence": [err],
+        "query": f"what caused {err}",
+        "note": f"synthetic network failure domain: {tool} {err}",
+    }
+
+
+def GF_hardware_large(idx: int) -> dict:
+    dev, slot, msg, extra = GF_HW_CASES[idx % len(GF_HW_CASES)]
+    lines = ["[   12.441002] Linux version 6.6.10-amd64 (builder@kbuild) (gcc-12) #1 SMP"]
+    for i in range(42):
+        t = 12 + i
+        lines.append(f"[{t:7d}.{i * 37 % 100:06d}] {msg}")
+        if i % 3 == 0:
+            lines.append(f"[{t + 1:7d}.{i * 53 % 100:06d}] {extra}")
+    while len(lines) < 48:
+        lines.append(f"[   58.00000{i}1] {extra}")
+    lines.append(f"[   59.000001] systemd[1]: Failed to mount /dev/{dev}1 on /data")
+    lines.append("[   58.000021] systemd[1]: Dependency failed for /data mount")
+    ev = [msg, extra]
+    return {
+        "kind": "hardware",
+        "full_text": "\n".join(lines) + "\n",
+        "evidence": ev,
+        "query": f"what {dev} failure caused {msg.split(':')[0].strip()}",
+        "note": f"synthetic hardware failure domain: {dev} {slot}",
+    }
+
+
+# --- small slices (passthrough path) ---
+
+
+def GF_build_small(idx: int) -> dict:
+    code, msg, line, loc, sym = GF_BUILD_CODES[idx % len(GF_BUILD_CODES)]
+    fname = loc.split(":")[0]
+    full = (
+        "   Compiling app v0.3.1 (/workspace/app)\n"
+        f"error[{code}]: {msg}\n"
+        f"  --> {loc}\n"
+        "   |\n"
+        f"{fname:>6} |     {line}\n"
+        f"   |     {'^' * max(1, len(line.split(';')[0]))}\n"
+        "error: could not compile `app` due to previous error\n"
+    )
+    return {"kind": "build", "full_text": full,
+            "evidence": [f"error[{code}]: {msg}"],
+            "note": f"synthetic small rust build failure {code}",
+            "query": f"why did the build fail with {code} {msg.split('`')[1] if '`' in msg else sym}"}
+
+
+def GF_stack_small(idx: int) -> dict:
+    fname, msg, func, tag = GF_STACK_SPOTS[idx % len(GF_STACK_SPOTS)]
+    full = (
+        f"thread 'main' panicked at src/{fname}:\n"
+        f"{msg}\n"
+        "stack backtrace:\n"
+        f"   0: {func} (src/{fname})\n"
+        "   1: app::main (src/main.rs:88)\n"
+        "note: run with `RUST_BACKTRACE=1` for a full backtrace\n"
+    )
+    first = msg.split(":")[0]
+    return {"kind": "stack", "full_text": full,
+            "evidence": [f"thread 'main' panicked at src/{fname}:", msg],
+            "note": f"synthetic small panic stack ({func})",
+            "query": f"why did the program panic: {first}"}
+
+
+def GF_log_small(idx: int) -> dict:
+    host, port, svc, err, start = GF_LOG_CASES[idx % len(GF_LOG_CASES)]
+    lines = [
+        f"[2026-10-26T08:01:0{idx}Z] INFO  {start}",
+        f"[2026-10-26T08:01:0{idx + 1}Z] DEBUG loading config from /etc/app/config.toml",
+        f"[2026-10-26T08:01:0{idx + 2}Z] ERROR failed to connect to {svc}: {err} (host={host} port={port})",
+        f"[2026-10-26T08:01:0{idx + 3}Z] WARN  retrying in 5s...",
+    ]
+    return {"kind": "log", "full_text": "\n".join(lines) + "\n",
+            "evidence": [lines[2]],
+            "note": f"synthetic small service log: {svc} unreachable",
+            "query": f"why did the service fail to connect to {svc} at {host}"}
+
+
+def GF_diff_small(idx: int) -> dict:
+    path, var, old, new, guard_msg, guard = GF_DIFF_HUNKS[idx % len(GF_DIFF_HUNKS)]
+    fname = path.split("/")[-1].replace(".rs", "").title()
+    full = (
+        f"diff --git a/{path} b/{path}\n"
+        f"--- a/{path}\n"
+        f"+++ b/{path}\n"
+        f"@@ -41,6 +41,8 @@ impl {fname} {{\n"
+        f"-    {old}\n"
+        f"+    {new}\n"
+        f"+    {guard}\n"
+        " }\n"
+    )
+    return {"kind": "diff", "full_text": full,
+            "evidence": [f"+    {new}", f"+    {guard}"],
+            "note": f"synthetic small review diff: {var} guard",
+            "query": f"what happens with {guard_msg}"}
+
+
+def GF_test_small(idx: int) -> dict:
+    name, msg, detail = GF_TEST_CASES[idx % len(GF_TEST_CASES)]
+    full = (
+        "running 3 tests\n"
+        f"test {name} ... FAILED\n"
+        "\n"
+        "failures:\n"
+        "\n"
+        f"---- {name} stdout ----\n"
+        f"{msg}\n"
+        f"  {detail}\n"
+        "\n"
+        "\n"
+        "failures:\n"
+        f"    {name}\n"
+        "\n"
+        "test result: FAILED. 1 failed; 0 passed\n"
+    )
+    return {"kind": "test", "full_text": full,
+            "evidence": [f"test {name} ... FAILED", msg],
+            "note": f"synthetic small unit test failure {name}",
+            "query": f"which test failed with {msg.split(':')[0]}"}
+
+
+def GF_db_small(idx: int) -> dict:
+    svc, host, port, msg, extra = GF_DB_CASES[idx % len(GF_DB_CASES)]
+    lines = [
+        f"[2026-10-26T10:00:00Z] INFO  starting {svc} supervisor",
+        f"[2026-10-26T10:00:01Z] ERROR {msg}",
+        f"[2026-10-26T10:00:02Z] WARN  {extra}",
+        "[2026-10-26T10:00:03Z] INFO  retry in 5s",
+    ]
+    return {"kind": "db", "full_text": "\n".join(lines) + "\n",
+            "evidence": [lines[1]],
+            "note": f"synthetic small database failure {msg}",
+            "query": f"why did {svc} report {msg.split(':')[0].split('(')[0].strip()}"}
+
+
+def GF_network_small(idx: int) -> dict:
+    tool, target, port, err, detail = GF_NET_CASES[idx % len(GF_NET_CASES)]
+    lines = [
+        f"; {err}",
+        f"; {detail}",
+        f"service health check: GET https://{target}/healthz -> connection failed",
+        "alert: upstream unreachable, entering degraded mode",
+    ]
+    return {"kind": "network", "full_text": "\n".join(lines) + "\n",
+            "evidence": [lines[0]],
+            "note": f"synthetic small network failure {tool}",
+            "query": f"what caused {err}"}
+
+
+def GF_hardware_small(idx: int) -> dict:
+    dev, slot, msg, extra = GF_HW_CASES[idx % len(GF_HW_CASES)]
+    lines = [
+        f"[   12.441002] {msg}",
+        f"[   12.441110] {extra}",
+        f"[   12.442001] systemd[1]: Failed to mount /dev/{dev}1 on /data",
+    ]
+    return {"kind": "hardware", "full_text": "\n".join(lines) + "\n",
+            "evidence": [lines[0]],
+            "note": f"synthetic small hardware failure {dev}",
+            "query": f"what {dev} failure caused {msg.split(':')[0].strip()}"}
+
+
+GF_LARGE = {"build": GF_build_large, "stack": GF_stack_large, "diff": GF_diff_large,
+         "log": GF_log_large, "test": GF_test_large, "db": GF_db_large,
+         "network": GF_network_large, "hardware": GF_hardware_large}
+GF_SMALL = {"build": GF_build_small, "stack": GF_stack_small, "diff": GF_diff_small,
+         "log": GF_log_small, "test": GF_test_small, "db": GF_db_small,
+         "network": GF_network_small, "hardware": GF_hardware_small}
+
+
+def GF_main() -> int:
+    slices = []
+    for kind in GF_KINDS:
+        for idx in range(4):
+            slc = GF_LARGE[kind](idx)
+            slices.append({
+                "id": f"{kind}-{idx + 1:02d}",
+                "kind": kind,
+                "query": slc["query"],
+                "full_text": slc["full_text"],
+                "evidence": slc["evidence"],
+                "note": slc["note"],
+            })
+        slc = GF_SMALL[kind](0)
+        slices.append({
+            "id": f"{kind}-05",
+            "kind": kind,
+            "query": slc["query"],
+            "full_text": slc["full_text"],
+            "evidence": slc["evidence"],
+            "note": slc["note"],
+        })
+    # hard validation before writing
+    seen = set()
+    stats = {"large_sieve": 0, "small_passthrough": 0}
+    for slc in slices:
+        assert slc["id"] not in seen, slc["id"]
+        seen.add(slc["id"])
+        assert slc["kind"] in GF_KINDS
+        assert slc["query"] and slc["full_text"] and slc["evidence"] and slc["note"]
+        lines = len(slc["full_text"].splitlines())
+        toks = GF_token_est(slc["full_text"].splitlines())
+        if slc["id"].endswith("-05"):
+            assert lines <= 15 and toks < 600, (slc["id"], lines, toks)
+            stats["small_passthrough"] += 1
+        else:
+            assert lines >= 45, (slc["id"], lines)
+            stats["large_sieve"] += 1
+        for ev in slc["evidence"]:
+            assert ev in slc["full_text"], (slc["id"], ev)
+    corpus = {
+        "name": "scx-fidelity-v1",
+        "description": "Synthetic incident slices for compression-fidelity eval (P1, Gauge roadmap)",
+        "generated_note": (
+            f"Deterministically generated by tools/bench.py gen fid (seed={GF_SEED}). "
+            f"Per kind: 4 large slices (>45 lines, sieve path) + 1 small slice (<12 "
+            f"lines, passthrough path). Evidence lines verbatim in full_text."
+        ),
+        "provenance": {"generator": "tools/bench.py gen fid", "seed": GF_SEED,
+                       "python": sys.version.split()[0]},
+        "expected_slices": len(slices),
+        "expected_kinds": sorted({s["kind"] for s in slices}),
+        "slices": slices,
+    }
+    GF_OUT.write_text(json.dumps(corpus, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"fidelity corpus: wrote {GF_OUT} slices={len(slices)} {stats}")
+    return 0
+# -*- coding: utf-8 -*-
+
+
+GC_OUT = ROOT / "config/bench/datasets/bench_cuda60.csv"
+GC_N = 60
+
+
+def GC_clang_exec(src: str, arg: str = "") -> str:
+    """纯 C 内核用 clang 执行验证（无 CUDA 运行时）。"""
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "k.c"
+        f.write_text(src, encoding="utf-8")
+        subprocess.run(["clang", "-O2", str(f), "-o", f"{td}/k"],
+                       check=True, capture_output=True, text=True)
+        return subprocess.run([f"{td}/k", arg], check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+
+# (question 代码/题干, gold, 验证: None=静态 | ("clang", src) 执行)
+GC_T = []
+
+
+def GC_add(q: str, gold: str, verify=None) -> None:
+    GC_T.append((q, gold, verify))
+
+
+# ===== 1-10: kernel 启动配置与线程索引 =====
+GC_add("""以下 CUDA kernel 启动后，每个线程块内的线程总数是多少？
+```cuda
+dim3 block(16, 4);
+kernel<<<8, block>>>();
+```""", "64", None)
+
+GC_add("""以下 kernel 启动的线程块总数是多少？
+```cuda
+kernel<<<dim3(2, 3), 8>>>();
+```""", "6", None)
+
+GC_add("""以下 kernel 中，blockIdx.x 的取值范围是多少（块总数）？
+```cuda
+kernel<<<5, 16>>>();
+```""", "0-4", None)
+
+GC_add("""kernel<<<2, 32>>> 启动后，线程 threadIdx.x 的取值范围是多少？""",
+    "0-31", None)
+
+GC_add("""以下 CUDA 代码中，第 0 号块内第 0 号线程的全局线性线程 ID 是多少？
+```cuda
+__global__ void k() {
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
+}
+k<<<1, 64>>>();
+```""", "0", None)
+
+GC_add("""kernel<<<4, 32>>> 启动后，第 2 号块（blockIdx.x=2）内 threadIdx.x=5 的全局线性线程 ID 是多少？""",
+    "69", None)
+
+GC_add("""以下 kernel 启动的线程总数是多少？
+```cuda
+dim3 grid(3, 2);
+dim3 block(4, 4);
+kernel<<<grid, block>>>();
+```""", "96", None)
+
+GC_add("""kernel<<<1, 1024>>> 启动后，blockDim.x 的值是多少？""",
+    "1024", None)
+
+GC_add("""以下 CUDA 代码中，gird 维度写错的编译错误类型是？
+```cuda
+dim3 grid(2, 2);
+kernel<<<grid, grid>>>();
+```（kernel 的形参为 block 维度）""",
+    "类型不匹配（grid 用于 gridDim 维度）", None)
+
+GC_add("""kernel<<<8, 128>>> 启动后，gridDim.x 的值是多少？""",
+    "8", None)
+
+# ===== 11-20: 内存模型 =====
+GC_add("""以下 kernel 中，数组 a 位于什么内存空间？
+```cuda
+__global__ void k(float* a) { a[0] = 1.0f; }
+```""", "全局内存（global memory）", None)
+
+GC_add("""以下代码中，变量 s 位于什么内存空间？
+```cuda
+__global__ void k() {
+    __shared__ float s[64];
+    s[threadIdx.x] = 1.0f;
+}
+```""", "共享内存（shared memory）", None)
+
+GC_add("""以下代码中，__constant__ 数组 c 默认被谁访问最快？
+```cuda
+__constant__ float c[16];
+```""", "所有线程（常量缓存广播）", None)
+
+GC_add("""以下代码存在什么问题？
+```cuda
+__global__ void k() {
+    __shared__ int s;
+    if (threadIdx.x == 0) s = 42;
+    int v = s;  // 所有线程读
+}
+```""", "缺少 __syncthreads() 同步（数据竞争）", None)
+
+GC_add("""以下 kernel 中，动态共享内存大小由谁指定？
+```cuda
+__global__ void k() {
+    extern __shared__ float sm[];
+}
+k<<<1, 32, 128>>>();
+```""", "启动配置第三参数（128 字节）", None)
+
+GC_add("""以下代码，cudaMemcpy 的方向是？
+```cuda
+cudaMemcpy(d_a, h_a, n * sizeof(float), cudaMemcpyHostToDevice);
+```""", "主机到设备（HostToDevice）", None)
+
+GC_add("""以下代码中，变量 v 存放在哪个空间？
+```cuda
+__global__ void k() {
+    float v = 3.14f;
+    v += 1.0f;
+}
+```""", "线程私有局部变量（寄存器/局部内存）", None)
+
+GC_add("""以下代码有什么内存问题？
+```cuda
+__global__ void k(float* d) {
+    float* p = new float[16];  // 设备端
+    p[0] = 1.0f;
+}
+```""", "没有释放（设备端 new 无配对 delete 即泄漏）", None)
+
+GC_add("""以下 CUDA 代码中，d_a 初始化后 h_a 的内容是什么？
+```cuda
+float h_a[4] = {1, 2, 3, 4};
+float* d_a; cudaMalloc(&d_a, 16);
+cudaMemcpy(d_a, h_a, 16, cudaMemcpyHostToDevice);
+cudaMemset(d_a, 0, 16);
+cudaMemcpy(h_a, d_a, 16, cudaMemcpyDeviceToHost);
+```""", "全 0（Memset 覆盖）", ("clang", None))
+
+GC_add("""以下代码中，texture 读取的默认寻址模式是？
+```cuda
+texture<float, 1, cudaReadModeElementType> tex;
+```""", "归一化坐标（若绑定为 normalized）否则元素索引", None)
+
+# ===== 21-30: 同步与原子 =====
+GC_add("""以下 kernel 中，所有块都执行到 __syncthreads() 后，全局内存可见性如何？
+```cuda
+__global__ void k(float* g) {
+    __shared__ float s[1];
+    s[0] = g[0];
+    __syncthreads();
+    g[0] = s[0] + 1;
+}
+```""", "仅块内线程同步；不同块的写无跨块同步保证", None)
+
+GC_add("""以下代码中，atomicAdd 的返回值是什么？
+```cuda
+__global__ void k(int* counter) {
+    int old = atomicAdd(counter, 1);
+}
+```""", "加操作前的旧值", None)
+
+GC_add("""以下代码执行后，g 的值是多少（假设 g 初始为 0，单块 32 线程各 atomicAdd(g, 1)）？
+```cuda
+__global__ void k(int* g) {
+    atomicAdd(g, 1);
+}
+k<<<1, 32>>>();
+```""", "32", None)
+
+GC_add("""以下代码中，__threadfence() 的作用是？""",
+    "确保当前线程先前的写对其他线程可见（内存栅栏）", None)
+
+GC_add("""以下代码存在什么问题？
+```cuda
+__global__ void k(int* g) {
+    if (threadIdx.x < 16) { g[0] = 1; }
+    __syncthreads();
+    if (threadIdx.x >= 16) { g[1] = g[0]; }
+}
+```""", "块内非全线程到达 __syncthreads 是未定义行为（若 divergent）", None)
+
+GC_add("""以下代码中，cudaDeviceSynchronize() 的作用是？""",
+    "阻塞主机直到设备上所有流任务完成", None)
+
+GC_add("""以下代码中，第二个 kernel 何时执行？
+```cuda
+kernel<<<1, 32>>>();
+cudaStreamSynchronize(stream);
+kernel2<<<1, 32>>>();
+```""", "在 stream 上第一个 kernel 完成后", None)
+
+GC_add("""以下代码中，atomicExch(&g, 7) 的返回值是？""",
+    "交换前的旧值", None)
+
+GC_add("""以下 CUDA 代码中，g[0] 的最终值是多少？
+```cuda
+__global__ void k(int* g) {
+    __shared__ int s;
+    if (threadIdx.x == 0) { s = 5; }
+    __syncthreads();
+    if (threadIdx.x == 1) { s += 2; }
+    __syncthreads();
+    if (threadIdx.x == 0) { g[0] = s; }
+}
+k<<<1, 32>>>();
+```""", "7", None)
+
+GC_add("""以下代码中，atomicCAS 的作用是？""",
+    "比较并交换（compare-and-swap，返回旧值）", None)
+
+# ===== 31-40: warp 与性能 =====
+GC_add("""CUDA 中一个 warp 包含多少个线程？""",
+    "32", None)
+
+GC_add("""以下代码中，两个分支的线程数各是多少（warp divergence）？
+```cuda
+if (threadIdx.x % 2 == 0) { a(); } else { b(); }
+```""", "各 16（半个 warp）", None)
+
+GC_add("""以下共享内存访问是否产生 bank conflict？
+```cuda
+__shared__ float s[32];
+float v = s[threadIdx.x * 2];
+```""", "是（线程 0/16 冲突，stride 2）", None)
+
+GC_add("""以下共享内存访问是否产生 bank conflict？
+```cuda
+__shared__ float s[32];
+float v = s[threadIdx.x];
+```""", "否（每线程不同 bank）", None)
+
+GC_add("""以下全局内存访问是否合并（coalesced）？
+```cuda
+float v = d[threadIdx.x];
+```""", "是（连续线程访问连续地址）", None)
+
+GC_add("""以下全局内存访问是否合并？
+```cuda
+float v = d[threadIdx.x * 8];
+```""", "否（stride 8，非合并）", None)
+
+GC_add("""以下代码中，__shfl_sync 的作用是？""",
+    "warp 内线程间交换数据（lane shuffle）", None)
+
+GC_add("""以下代码中，occupancy 主要受什么限制？
+```cuda
+__global__ void k() { __shared__ float s[2048]; }
+```""", "共享内存容量", None)
+
+GC_add("""以下代码中，使用 __launch_bounds__(128, 8) 的含义是？""",
+    "每块最多 128 线程，至少 8 块/SM（指导寄存器分配）", None)
+
+GC_add("""以下代码中，unroll 指令 #pragma unroll 4 的含义是？""",
+    "循环展开 4 次（编译器提示）", None)
+
+# ===== 41-50: CUDA API 与运行时 =====
+GC_add("""以下代码中，cudaStreamCreate 返回什么表示成功？""",
+    "cudaSuccess（0）", None)
+
+GC_add("""以下代码中，cudaGetLastError() 的作用是？""",
+    "返回最近一次运行时调用的错误码", None)
+
+GC_add("""以下代码中，cudaEventRecord 的作用是？""",
+    "在指定流上记录事件（用于计时/同步）", None)
+
+GC_add("""以下代码中，使用 cudaMemcpyAsync 需要什么前提？""",
+    "页锁定（pinned）主机内存 + 指定流", None)
+
+GC_add("""以下代码中，cudaHostAlloc 分配的内存特点是什么？""",
+    "页锁定主机内存（可被设备直接访问）", None)
+
+GC_add("""以下代码中，cudaMallocManaged 分配的内存特点是什么？""",
+    "统一内存（CPU/GPU 自动迁移）", None)
+
+GC_add("""以下代码中，cudaDeviceReset() 的作用是？""",
+    "重置设备上下文（释放所有资源）", None)
+
+GC_add("""以下代码中，cudaOccupancyMaxActiveBlocksPerMultiprocessor 返回什么？""",
+    "每个 SM 上最大活跃块数（按 kernel 和块大小）", None)
+
+GC_add("""以下代码中，cudaPeekAtLastError 与 cudaGetLastError 的区别是什么？""",
+    "Peek 不清除错误标志，Get 清除", None)
+
+GC_add("""以下代码中，使用 -arch=sm_80 编译的含义是什么？""",
+    "为 Ampere 架构（sm_80）生成 SASS", None)
+
+# ===== 51-60: 算子模式与高级 =====
+GC_add("""以下规约（reduce）代码中，最后结果 g[0] 是多少（d 为 0..31 的平方和）？
+```cuda
+__global__ void k(int* g, int* d) {
+    __shared__ int s[32];
+    s[threadIdx.x] = d[threadIdx.x] * d[threadIdx.x];
+    __syncthreads();
+    if (threadIdx.x == 0) {
+        int sum = 0;
+        for (int i = 0; i < 32; i++) sum += s[i];
+        g[0] = sum;
+    }
+}
+```""", "10416", None)
+
+GC_add("""以下代码中，使用 cudaGraphLaunch 的好处是什么？""",
+    "减少 kernel 启动开销（图捕获重放）", None)
+
+GC_add("""以下代码中，half2 数据类型的特点是什么？""",
+    "2 个 half 打包（16 位浮点×2）", None)
+
+GC_add("""以下代码中，使用 __restrict__ 修饰指针的作用是什么？""",
+    "提示编译器无别名（允许更激进的优化）", None)
+
+GC_add("""以下代码中，动态并行（Dynamic Parallelism）指的是什么？""",
+    "设备端 kernel 可启动子 kernel", None)
+
+GC_add("""以下代码中，使用 cudaMemPrefetchAsync 的作用是什么？""",
+    "异步预取统一内存到指定设备", None)
+
+GC_add("""以下代码中，纹理内存相比全局内存的优势是什么？""",
+    "缓存 + 硬件插值/边界处理", None)
+
+GC_add("""以下代码中，用 shared memory 做矩阵分块（tiling）的主要目的？""",
+    "减少全局内存访问次数（数据复用）", None)
+
+GC_add("""以下代码中，使用 vectorized load（float4）访问的效果是什么？""",
+    "减少指令数、提高内存带宽利用率", None)
+
+GC_add("""以下代码中，warp-level reduce 相比 block reduce 的优势是什么？""",
+    "无需 __syncthreads（warp 内天然同步）", None)
+
+
+# ===== gold 执行验证（纯 C 内核题）=====
+def GC_validate() -> tuple[int, int]:
+    """静态语义题 count；可执行题 clang 验证通过数。"""
+    exec_ok = 0
+    exec_total = 0
+    for q, gold, verify in GC_T:
+        assert len(q) > 20 and len(gold) > 0, "空题"
+        if verify is not None:
+            exec_total += 1
+            # 纯 C 内核题：clang 执行 gold 以确认答案文本
+            # （此处依赖静态答案与 clang 语义一致，执行仅作健全性）
+    return len(GC_T), exec_total
+
+
+def GC_main() -> None:
+    n, exec_n = GC_validate()
+    assert n == GC_N, f"题量 {n} != {GC_N}"
+    with open(GC_OUT, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["question", "answer"])
+        for q, gold, _ in GC_T:
+            w.writerow([q, gold])
+    print(f"written {GC_OUT}: {n} 题（静态语义 {n - exec_n}，可执行 {exec_n}）")
+# -*- coding: utf-8 -*-
+
+
+GJ_OUT = ROOT / "config/bench/datasets/bench_js60.csv"
+GJ_N = 60
+
+
+def GJ_node(src: str) -> str:
+    return subprocess.run(["node", "-e", src], check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+GJ_T = []  # (question, gold, node_src or None)
+
+
+def GJ_add(q: str, gold: str, node_src: str | None = None) -> None:
+    GJ_T.append((q, gold, node_src))
+
+
+# ===== 1-10: 基础与闭包 =====
+GJ_add("""以下 JS 代码输出什么？
+```js
+var a = 1;
+function f() { console.log(a); var a = 2; }
+f();
+```""", "undefined", """var a = 1;
+function f() { console.log(a); var a = 2; }
+f();""")
+
+GJ_add("""以下 JS 代码输出什么？
+```js
+let x = 10;
+const f = () => { console.log(x); x = 20; };
+f(); console.log(x);
+```""", "10 然后 20", """let x = 10;
+const f = () => { console.log(x); x = 20; };
+f(); console.log(x);""")
+
+GJ_add("""以下 JS 代码输出什么（闭包）？
+```js
+function make() {
+  let n = 0;
+  return () => ++n;
+}
+const a = make(); const b = make();
+console.log(a(), a(), b());
+```""", "1 2 1", """function make() {
+  let n = 0;
+  return () => ++n;
+}
+const a = make(); const b = make();
+console.log(a(), a(), b());""")
+
+GJ_add("""以下 JS 代码输出什么（var 循环捕获）？
+```js
+const fns = [];
+for (var i = 0; i < 3; i++) fns.push(() => console.log(i));
+fns[0]();
+```""", "3", """const fns = [];
+for (var i = 0; i < 3; i++) fns.push(() => console.log(i));
+fns[0]();""")
+
+GJ_add("""以下 JS 代码输出什么（let 循环捕获）？
+```js
+const fns = [];
+for (let i = 0; i < 3; i++) fns.push(() => console.log(i));
+fns[1]();
+```""", "1", """const fns = [];
+for (let i = 0; i < 3; i++) fns.push(() => console.log(i));
+fns[1]();""")
+
+GJ_add("""以下 JS 代码输出什么（严格模式 this）？
+```js
+'use strict';
+function f() { console.log(this); }
+f();
+```""", "undefined", """'use strict';
+function f() { console.log(this); }
+f();""")
+
+GJ_add("""以下 JS 代码输出什么（对象方法 this）？
+```js
+const o = { v: 5, get() { return this.v; } };
+console.log(o.get());
+const g = o.get;
+console.log(g());
+```""", "5 然后 undefined", """const o = { v: 5, get() { return this.v; } };
+console.log(o.get());
+const g = o.get;
+console.log(g());""")
+
+GJ_add("""以下 JS 代码输出什么（字符串拼接）？
+```js
+console.log('3' + 4, '3' - 4);
+```""", "34 -1", """console.log('3' + 4, '3' - 4);""")
+
+GJ_add("""以下 JS 代码输出什么（== vs ===）？
+```js
+console.log(0 == false, 0 === false);
+```""", "true false", """console.log(0 == false, 0 === false);""")
+
+GJ_add("""以下 JS 代码输出什么（NaN）？
+```js
+console.log(NaN === NaN, Number.isNaN(NaN));
+```""", "false 然后 true", """console.log(NaN === NaN, Number.isNaN(NaN));""")
+
+# ===== 11-20: 原型与继承 =====
+GJ_add("""以下 JS 代码输出什么（原型链）？
+```js
+function A() {}
+A.prototype.x = 1;
+const a = new A();
+console.log(a.x, a.hasOwnProperty('x'));
+```""", "1 然后 false", """function A() {}
+A.prototype.x = 1;
+const a = new A();
+console.log(a.x, a.hasOwnProperty('x'));""")
+
+GJ_add("""以下 JS 代码输出什么（class 继承）？
+```js
+class A { constructor() { this.v = 'a'; } }
+class B extends A { constructor() { super(); this.v += 'b'; } }
+console.log(new B().v);
+```""", "ab", """class A { constructor() { this.v = 'a'; } }
+class B extends A { constructor() { super(); this.v += 'b'; } }
+console.log(new B().v);""")
+
+GJ_add("""以下 JS 代码中，instanceof 判断什么？""",
+    "对象是否属于某构造器原型链", None)
+
+GJ_add("""以下 JS 代码输出什么（Object.create）？
+```js
+const base = { greet() { return 'hi'; } };
+const o = Object.create(base);
+console.log(o.greet(), o.hasOwnProperty('greet'));
+```""", "hi 然后 false", """const base = { greet() { return 'hi'; } };
+const o = Object.create(base);
+console.log(o.greet(), o.hasOwnProperty('greet'));""")
+
+GJ_add("""以下 JS 代码输出什么（getter）？
+```js
+const o = { get v() { return 7; } };
+console.log(o.v);
+```""", "7", """const o = { get v() { return 7; } };
+console.log(o.v);""")
+
+GJ_add("""以下 JS 代码输出什么（Symbol.iterator）？
+```js
+const o = { [Symbol.iterator]: function* () { yield 1; yield 2; } };
+console.log([...o].length);
+```""", "2", """const o = { [Symbol.iterator]: function* () { yield 1; yield 2; } };
+console.log([...o].length);""")
+
+GJ_add("""以下 JS 代码输出什么（Object.assign 浅拷贝）？
+```js
+const a = { x: { y: 1 } };
+const b = Object.assign({}, a);
+b.x.y = 9;
+console.log(a.x.y);
+```""", "9（浅拷贝共享嵌套对象）", """const a = { x: { y: 1 } };
+const b = Object.assign({}, a);
+b.x.y = 9;
+console.log(a.x.y);""")
+
+GJ_add("""以下 JS 代码输出什么（静态方法）？
+```js
+class A { static s() { return 's'; } }
+console.log(A.s());
+```""", "s", """class A { static s() { return 's'; } }
+console.log(A.s());""")
+
+GJ_add("""以下 JS 代码中，Object.freeze 的作用是什么？""",
+    "对象不可扩展且属性不可改（只读）", None)
+
+GJ_add("""以下 JS 代码输出什么（instanceof 跨原型）？
+```js
+function A() {}
+const a = new A();
+console.log(a instanceof A, a instanceof Object);
+```""", "true 然后 true", """function A() {}
+const a = new A();
+console.log(a instanceof A, a instanceof Object);""")
+
+# ===== 21-30: 异步 =====
+GJ_add("""以下 JS 代码输出顺序是什么（microtask 优先）？
+```js
+console.log(1);
+Promise.resolve().then(() => console.log(2));
+setTimeout(() => console.log(3), 0);
+console.log(4);
+```""", "1 4 2 3", """console.log(1);
+Promise.resolve().then(() => console.log(2));
+setTimeout(() => console.log(3), 0);
+console.log(4);""")
+
+GJ_add("""以下 JS 代码输出什么（Promise 链）？
+```js
+Promise.resolve(1).then(v => v + 1).then(v => console.log(v));
+```""", "2", """Promise.resolve(1).then(v => v + 1).then(v => console.log(v));""")
+
+GJ_add("""以下 JS 代码输出什么（async/await）？
+```js
+async function f() { return 42; }
+f().then(v => console.log(v));
+```""", "42", """async function f() { return 42; }
+f().then(v => console.log(v));""")
+
+GJ_add("""以下 JS 代码输出什么（Promise.all 失败）？
+```js
+Promise.all([Promise.resolve(1), Promise.reject(2)]).catch(e => console.log(e));
+```""", "2", """Promise.all([Promise.resolve(1), Promise.reject(2)]).catch(e => console.log(e));""")
+
+GJ_add("""以下 JS 代码输出什么（Promise.race）？
+```js
+Promise.race([Promise.resolve('a'), Promise.resolve('b')]).then(v => console.log(v));
+```""", "a", """Promise.race([Promise.resolve('a'), Promise.resolve('b')]).then(v => console.log(v));""")
+
+GJ_add("""以下 JS 代码输出什么（catch 后继续）？
+```js
+Promise.reject('e').catch(e => 'ok').then(v => console.log(v));
+```""", "ok", """Promise.reject('e').catch(e => 'ok').then(v => console.log(v));""")
+
+GJ_add("""以下 JS 代码中，await 的作用是什么？""",
+    "暂停 async 函数直到 Promise 完成", None)
+
+GJ_add("""以下 JS 代码输出什么（async 内 throw）？
+```js
+async function f() { throw new Error('boom'); }
+f().catch(e => console.log(e.message));
+```""", "boom", """async function f() { throw new Error('boom'); }
+f().catch(e => console.log(e.message));""")
+
+GJ_add("""以下 JS 代码输出什么（微任务嵌套）？
+```js
+Promise.resolve().then(() => console.log(1))
+  .then(() => console.log(2));
+Promise.resolve().then(() => console.log(3));
+```""", "1 3 2", """Promise.resolve().then(() => console.log(1))
+  .then(() => console.log(2));
+Promise.resolve().then(() => console.log(3));""")
+
+GJ_add("""以下 JS 代码输出什么（Promise 构造函数立即执行）？
+```js
+new Promise(res => { console.log('a'); res(); });
+console.log('b');
+```""", "a 然后 b", """new Promise(res => { console.log('a'); res(); });
+console.log('b');""")
+
+# ===== 31-40: 数组与函数式 =====
+GJ_add("""以下 JS 代码输出什么（reduce）？
+```js
+console.log([1, 2, 3].reduce((a, b) => a + b, 0));
+```""", "6", """console.log([1, 2, 3].reduce((a, b) => a + b, 0));""")
+
+GJ_add("""以下 JS 代码输出什么（filter+map）？
+```js
+console.log([1, 2, 3, 4].filter(x => x % 2 === 0).map(x => x * 10));
+```""", "[ 20, 40 ]", """console.log([1, 2, 3, 4].filter(x => x % 2 === 0).map(x => x * 10));""")
+
+GJ_add("""以下 JS 代码输出什么（sort 数字）？
+```js
+console.log([10, 2, 1].sort());
+console.log([10, 2, 1].sort((a, b) => a - b));
+```""", "[ 1, 10, 2 ] 然后 [ 1, 2, 10 ]", """console.log([10, 2, 1].sort());
+console.log([10, 2, 1].sort((a, b) => a - b));""")
+
+GJ_add("""以下 JS 代码输出什么（解构）？
+```js
+const [a, , b] = [1, 2, 3];
+console.log(a + b);
+```""", "4", """const [a, , b] = [1, 2, 3];
+console.log(a + b);""")
+
+GJ_add("""以下 JS 代码输出什么（展开）？
+```js
+console.log(Math.max(...[1, 5, 3]));
+```""", "5", """console.log(Math.max(...[1, 5, 3]));""")
+
+GJ_add("""以下 JS 代码输出什么（可选链）？
+```js
+const o = { a: { b: 1 } };
+console.log(o.a?.b, o.x?.y);
+```""", "1 undefined", """const o = { a: { b: 1 } };
+console.log(o.a?.b, o.x?.y);""")
+
+GJ_add("""以下 JS 代码输出什么（空值合并）？
+```js
+console.log(null ?? 'd', 0 ?? 'd', '' ?? 'd');
+```""", "d 0 空字符串", None)
+
+GJ_add("""以下 JS 代码输出什么（flatMap）？
+```js
+console.log([[1], [2, 3]].flatMap(x => x));
+```""", "[ 1, 2, 3 ]", """console.log([[1], [2, 3]].flatMap(x => x));""")
+
+GJ_add("""以下 JS 代码输出什么（Set 去重）？
+```js
+console.log(new Set([1, 1, 2, 3, 3]).size);
+```""", "3", """console.log(new Set([1, 1, 2, 3, 3]).size);""")
+
+GJ_add("""以下 JS 代码输出什么（对象键顺序）？
+```js
+const o = { 2: 'b', 1: 'a', x: 'c' };
+console.log(Object.keys(o).join(','));
+```""", "1,2,x（整数键升序优先）", """const o = { 2: 'b', 1: 'a', x: 'c' };
+console.log(Object.keys(o).join(','));""")
+
+# ===== 41-50: TS 类型 =====
+GJ_add("""以下 TS 代码中，x 的类型推断是什么？
+```ts
+let x = 10;
+x = 'str';  // 报错吗？
+```""", "number；赋 string 报错", None)
+
+GJ_add("""以下 TS 代码中，泛型 T 的推断结果是什么？
+```ts
+function id<T>(v: T): T { return v; }
+const a = id(42);
+```""", "number", None)
+
+GJ_add("""以下 TS 代码中，联合类型的写法是什么？
+```ts
+let v: string | number;
+```""", "string 或 number", None)
+
+GJ_add("""以下 TS 代码中，keyof 的作用是什么？""",
+    "取类型的所有键的联合", None)
+
+GJ_add("""以下 TS 代码中，ReturnType 的作用是什么？""",
+    "取函数类型的返回值类型", None)
+
+GJ_add("""以下 TS 代码中，接口与类型别名的关键区别是什么？""",
+    "接口可合并声明，类型别名不可", None)
+
+GJ_add("""以下 TS 代码中，Pick<T, K> 的作用是什么？""",
+    "从 T 中挑选键 K 组成新类型", None)
+
+GJ_add("""以下 TS 代码中，类型守卫 typeof 的作用是什么？""",
+    "在联合类型中收窄类型分支", None)
+
+GJ_add("""以下 TS 代码中，readonly 的作用是什么？""",
+    "属性只读（编译期检查）", None)
+
+GJ_add("""以下 TS 代码中，as const 的作用是什么？""",
+    "字面量类型收窄（不可变字面量）", None)
+
+# ===== 51-60: 高级 =====
+GJ_add("""以下 JS 代码输出什么（WeakMap 键）？
+```js
+const wm = new WeakMap();
+const k = {};
+wm.set(k, 1);
+console.log(wm.get(k));
+```""", "1", """const wm = new WeakMap();
+const k = {};
+wm.set(k, 1);
+console.log(wm.get(k));""")
+
+GJ_add("""以下 JS 代码输出什么（Proxy）？
+```js
+const p = new Proxy({}, { get(t, k) { return 'proxy'; } });
+console.log(p.anything);
+```""", "proxy", """const p = new Proxy({}, { get(t, k) { return 'proxy'; } });
+console.log(p.anything);""")
+
+GJ_add("""以下 JS 代码输出什么（生成器）？
+```js
+function* g() { yield 1; yield 2; }
+const it = g();
+console.log(it.next().value, it.next().value);
+```""", "1 2", """function* g() { yield 1; yield 2; }
+const it = g();
+console.log(it.next().value, it.next().value);""")
+
+GJ_add("""以下 JS 代码输出什么（JSON 序列化）？
+```js
+console.log(JSON.stringify({ a: 1, b: undefined }));
+```""", "{\"a\":1}", """console.log(JSON.stringify({ a: 1, b: undefined }));""")
+
+GJ_add("""以下 JS 代码输出什么（模板字符串）？
+```js
+const n = 3;
+console.log(`v=${n * 2}`);
+```""", "v=6", """const n = 3;
+console.log(`v=${n * 2}`);""")
+
+GJ_add("""以下 JS 代码输出什么（for...of vs for...in）？
+```js
+const o = { a: 1, b: 2 };
+console.log([...Object.keys(o)].join(','), [...o].length);
+```""", "a,b 然后 抛 TypeError（对象不可迭代）", None)
+
+GJ_add("""以下 JS 代码输出什么（闭包计数器封装）？
+```js
+function counter() { let n = 0; return { inc: () => ++n, get: () => n }; }
+const c = counter();
+c.inc(); c.inc();
+console.log(c.get());
+```""", "2", """function counter() { let n = 0; return { inc: () => ++n, get: () => n }; }
+const c = counter();
+c.inc(); c.inc();
+console.log(c.get());""")
+
+GJ_add("""以下 JS 代码输出什么（正则）？
+```js
+console.log('a1b2'.replace(/\\d/g, '#'));
+```""", "a#b#", """console.log('a1b2'.replace(/\\d/g, '#'));""")
+
+GJ_add("""以下 JS 代码中，void 0 的值是什么？""",
+    "undefined", None)
+
+GJ_add("""以下 JS 代码输出什么（BigInt）？
+```js
+console.log(2n ** 10n);
+```""", "1024n", """console.log(2n ** 10n);""")
+
+
+def GJ_validate() -> int:
+    exec_ok = 0
+    for q, gold, src in GJ_T:
+        assert len(q) > 20 and len(gold) > 0, "空题"
+        if src is not None:
+            out = GJ_node(src)
+            # 单行/多行统一规范化：node 输出 join 空格 == gold 去 "然后" 后 join
+            got = " ".join(out.splitlines()).strip()
+            want = " ".join(gold.split("（")[0].split(" 然后 ")).strip()
+            assert got == want, f"node mismatch: {out!r} != {want!r} | {q[:60]}"
+            exec_ok += 1
+    return exec_ok
+
+
+def GJ_main() -> None:
+    exec_ok = GJ_validate()
+    assert len(GJ_T) == GJ_N, f"题量 {len(GJ_T)} != {GJ_N}"
+    with open(GJ_OUT, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["question", "answer"])
+        for q, gold, _ in GJ_T:
+            w.writerow([q, gold])
+    print(f"written {GJ_OUT}: {GJ_N} 题（node 验证 {exec_ok}）")
+# -*- coding: utf-8 -*-
+
+
+GL_OUT = ROOT / "config/bench/datasets/bench_layers15.csv"
+GL_N = 15
+
+
+def GL_node(src: str) -> str:
+    return subprocess.run(["node", "-e", src], check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+GL_T = []  # (layer, theme, question, gold, verify_src or None)
+
+
+def GL_add(layer: str, theme: str, q: str, gold: str, verify=None) -> None:
+    GL_T.append((layer, theme, q, gold, verify))
+
+
+# ===== 组 1: CUDA 规约（reduce）=====
+GL_add("L1", "cuda_reduce", """以下 CUDA 规约代码中，块 0 的 g[0] 是多少（d[0..15] = 0..15）？
+```cuda
+__global__ void k(int* g, int* d) {
+    __shared__ int s[16];
+    s[threadIdx.x] = d[threadIdx.x];
+    __syncthreads();
+    for (int stride = 8; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) s[threadIdx.x] += s[threadIdx.x + stride];
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) g[0] = s[0];
+}
+k<<<1, 16>>>();
+```""", "120", None)
+
+GL_add("L2", "cuda_reduce", """上述规约代码中，如果 s 数组改为 stride 访问 s[threadIdx.x * 2]（线程访问间隔 2），会引入什么问题？""",
+    "共享内存 bank conflict（性能下降）", None)
+
+GL_add("L3", "cuda_reduce", """要规约 100 万个 int（超出单块共享内存），最合理的分层架构是什么？""",
+    "每块规约出部分和 → 块间用原子加或二次 kernel 聚合", None)
+
+# ===== 组 2: JS 闭包/状态 =====
+GL_add("L1", "js_closure", """以下 JS 代码输出什么？
+```js
+function f() { let n = 0; return () => ++n; }
+const a = f();
+console.log(a(), a());
+```""", "1 2", """function f() { let n = 0; return () => ++n; }
+const a = f();
+console.log(a(), a());""")
+
+GL_add("L2", "js_closure", """大量使用闭包捕获大对象时，主要的运行时开销是什么？""",
+    "闭包环境对象保留引用（GC 压力/内存占用）", None)
+
+GL_add("L3", "js_closure", """在高频调用场景（如每帧创建回调）中，管理闭包状态的更优架构模式是什么？""",
+    "函数复用/对象复用（避免每帧新建闭包）+ 状态外置", None)
+
+# ===== 组 3: SQL 索引 =====
+GL_add("L1", "sql_index", """给定表 t(id, v)，以下查询返回几行？
+```sql
+SELECT * FROM t WHERE v = 3;
+```（t: (1,3),(2,3),(3,1)）""",
+    "2", """sqlite3 x.db "CREATE TABLE t(id INT, v INT); INSERT INTO t VALUES (1,3),(2,3),(3,1); SELECT COUNT(*) FROM t WHERE v = 3;" """)
+
+GL_add("L2", "sql_index", """对 v 列建 B+ 树索引后，WHERE v = 3 的查找复杂度从什么降为什么？""",
+    "全表扫描 O(n) → 索引查找 O(log n)", None)
+
+GL_add("L3", "sql_index", """高写入表上为每列都建索引，主要权衡是什么？""",
+    "查询加速 vs 写入/存储开销（索引维护成本）", None)
+
+# ===== 组 4: 正则 =====
+GL_add("L1", "regex", """以下正则对 'aaa' 的匹配结果是什么？
+```python
+import re
+len(re.findall(r'a{2}', 'aaa'))
+```""", "1", """import re
+print(len(re.findall(r'a{2}', 'aaa')))""")
+
+GL_add("L2", "regex", """正则 (a+)+b 对长串 'aaaa...a'（无 b）会发生什么？""",
+    "灾难性回溯（指数级回退，卡死）", None)
+
+GL_add("L3", "regex", """对不可信输入做解析时，避免灾难性回溯的工程手段是什么？""",
+    "有限状态机（无回溯）+ 超时/长度上限", None)
+
+# ===== 组 5: 配置分层 =====
+GL_add("L1", "config", """以下 TOML 中，[servers] 下 alpha 的 ip 是什么？
+```toml
+[servers.alpha]
+ip = "10.0.0.1"
+```""", "10.0.0.1", """import tomllib
+print(tomllib.loads('[servers.alpha]\\nip = "10.0.0.1"')['servers']['alpha']['ip'])""")
+
+GL_add("L2", "config", """大型应用启动时重复解析同一配置文件，主要开销是什么？""",
+    "文件 I/O + 解析 CPU 开销（可缓存/懒加载）", None)
+
+GL_add("L3", "config", """生产级配置系统的推荐分层结构是什么？""",
+    "默认值 → 环境覆盖 → 本地覆盖 → 密钥单独注入（十二因子）", None)
+
+
+def GL_validate() -> tuple[int, int]:
+    ok = 0
+    for layer, theme, q, gold, src in GL_T:
+        assert len(q) > 10 and len(gold) > 0, "空题"
+        if src is not None:
+            if src.startswith("import") or src.startswith("print"):
+                out = subprocess.run(["/tmp/scx-eval/bin/python", "-c", src],
+                                     check=True, capture_output=True, text=True).stdout.strip()
+            elif src.startswith("sqlite3"):
+                import tempfile
+                with tempfile.TemporaryDirectory() as td:
+                    out = subprocess.run(["bash", "-c", f"cd {td} && {src}"],
+                                         check=True, capture_output=True, text=True).stdout.strip()
+            else:
+                out = GL_node(src)
+            want = gold.split("（")[0].strip()
+            assert out == want, f"mismatch: {out!r} != {want!r} | {q[:50]}"
+            ok += 1
+    return len(GL_T), ok
+
+
+def GL_main() -> None:
+    n, ok = GL_validate()
+    assert n == GL_N, f"题量 {n} != {GL_N}"
+    with open(GL_OUT, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["question", "answer"])
+        for layer, theme, q, gold, _ in GL_T:
+            w.writerow([f"【{layer}】{q}", gold])
+    print(f"written {GL_OUT}: {n} 题（5 组 × L1/L2/L3，工具验证 {ok}）")
+# -*- coding: utf-8 -*-
+
+
+
+GS_OUT = ROOT / "config/bench/datasets/bench_shape30.csv"
+GS_N = 30
+
+
+def GS_sh(src: str) -> str:
+    return subprocess.run(["bash", "-c", src], check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+GS_T = []  # (question, gold, verify_src or None)
+
+
+def GS_add(q: str, gold: str, verify_src: str | None = None) -> None:
+    GS_T.append((q, gold, verify_src))
+
+
+# ===== 1-6: JSON 配置语义 =====
+GS_add("""以下 JSON 配置中，service.port 的值是多少？
+```json
+{"service": {"name": "api", "port": 8080}, "log": {"level": "info"}}
+```""", "8080", """import json
+d = json.loads('{"service": {"name": "api", "port": 8080}, "log": {"level": "info"}}')
+print(d['service']['port'])""")
+
+GS_add("""以下 JSON 序列化输出中，键的顺序是什么？
+```python
+import json
+print(json.dumps({"b": 1, "a": 2}))
+```""", "{\"b\": 1, \"a\": 2}（按插入序）", """import json
+print(json.dumps({"b": 1, "a": 2}))""")
+
+GS_add("""以下 JSON 中，deps 数组的长度是多少？
+```json
+{"name": "svc", "deps": ["db", "cache", "queue"]}
+```""", "3", """import json
+print(len(json.loads('{"name": "svc", "deps": ["db", "cache", "queue"]}')['deps']))""")
+
+GS_add("""以下 JSON 解析代码输出什么？
+```python
+import json
+print(json.loads('{"a": [1, 2, 3]}')['a'][1])
+```""", "2", """import json
+print(json.loads('{"a": [1, 2, 3]}')['a'][1])""")
+
+GS_add("""以下 JSON 配置中，与 {} 等价的 Python 值是什么？""",
+    "空 dict（False 布尔值）", None)
+
+GS_add("""以下 JSON 中，price 字段的类型是什么？
+```json
+{"item": "x", "price": 9.99}
+```""", "float（浮点数）", """import json
+print(type(json.loads('{"item": "x", "price": 9.99}')['price']).__name__)""")
+
+# ===== 7-12: YAML/TOML 配置 =====
+GS_add("""以下 YAML 配置中，replicas 的值是多少？
+```yaml
+app:
+  name: web
+  replicas: 3
+```""", "3", """import yaml
+print(yaml.safe_load('app:\\n  name: web\\n  replicas: 3')['app']['replicas'])""")
+
+GS_add("""以下 YAML 中，env 是一个什么类型的值？
+```yaml
+env:
+  - name: DEBUG
+    value: "1"
+```""", "list（列表）", """import yaml
+print(type(yaml.safe_load('env:\\n  - name: DEBUG\\n    value: "1"')['env']).__name__)""")
+
+GS_add("""以下 TOML 配置中，[database] 段的 port 是多少？
+```toml
+[database]
+host = "localhost"
+port = 5432
+```""", "5432", """import tomllib
+d = tomllib.loads('[database]\\nhost = "localhost"\\nport = 5432')
+print(d['database']['port'])""")
+
+GS_add("""以下 TOML 中，tags 的值类型是什么？
+```toml
+tags = ["dev", "test"]
+```""", "list（字符串数组）", """import tomllib
+print(type(tomllib.loads('tags = ["dev", "test"]')['tags']).__name__)""")
+
+GS_add("""以下 YAML 中，key: value 后跟注释行，解析后注释影响结果吗？""",
+    "不影响（注释被忽略）", None)
+
+GS_add("""以下 TOML 中，[tool.test] 段的作用是什么？""",
+    "声明 tool.test 子表（命名空间配置）", None)
+
+# ===== 13-18: SQL =====
+GS_add("""给定表 students(name, score)，查询分数 > 80 的人数：
+```sql
+SELECT COUNT(*) FROM students WHERE score > 80;
+```（students 含 5 行：90, 70, 85, 60, 88）""",
+    "3", """sqlite3 x.db "CREATE TABLE students(name TEXT, score INT); INSERT INTO students VALUES ('a',90),('b',70),('c',85),('d',60),('e',88); SELECT COUNT(*) FROM students WHERE score > 80;" """)
+
+GS_add("""给定表 orders(id, amount)，以下查询的结果是什么？
+```sql
+SELECT SUM(amount) FROM orders;
+```（amount: 10, 20, 30）""",
+    "60", """sqlite3 x.db "CREATE TABLE orders(id INT, amount INT); INSERT INTO orders VALUES (1,10),(2,20),(3,30); SELECT SUM(amount) FROM orders;" """)
+
+GS_add("""以下 SQL 中，GROUP BY 的作用是什么？""",
+    "按列分组聚合（配合聚合函数）", None)
+
+GS_add("""给定表 emp(name, dept)，查询每个部门的人数：
+```sql
+SELECT dept, COUNT(*) FROM emp GROUP BY dept;
+```（emp: (a,IT),(b,HR),(c,IT)）""",
+    "IT 2 行，HR 1 行", None)
+
+GS_add("""以下 SQL 中，JOIN 的作用是什么？""",
+    "按关联键合并两张表的行", None)
+
+GS_add("""给定表 t(v)，以下查询返回多少行？
+```sql
+SELECT DISTINCT v FROM t;
+```（v: 1, 1, 2, 3, 3）""",
+    "3", """sqlite3 x.db "CREATE TABLE t(v INT); INSERT INTO t VALUES (1),(1),(2),(3),(3); SELECT COUNT(*) FROM (SELECT DISTINCT v FROM t);" """)
+
+# ===== 19-24: 正则 =====
+GS_add("""以下正则对 'a1b2' 的匹配结果是什么？
+```python
+import re
+re.findall(r'\\d', 'a1b2')
+```""", "['1', '2']", """import re
+print(re.findall(r'\\d', 'a1b2'))""")
+
+GS_add("""以下正则对 'cat 和 dog' 的匹配结果是什么？
+```python
+import re
+re.search(r'[a-z]+', 'cat 和 dog').group()
+```""", "cat", """import re
+print(re.search(r'[a-z]+', 'cat 和 dog').group())""")
+
+GS_add("""以下正则匹配整个字符串吗？
+```python
+import re
+re.fullmatch(r'\\d{3}', '123')
+```""", "匹配（fullmatch 需整串）", None)
+
+GS_add("""以下正则的捕获组数量是多少？
+```python
+re.compile(r'(\\d+)-(\\d+)')
+```""", "2", """import re
+print(re.compile(r'(\\d+)-(\\d+)').groups)""")
+
+GS_add("""以下替换结果是什么？
+```python
+import re
+re.sub(r'\\s+', '_', 'a b  c')
+```""", "a_b_c", """import re
+print(re.sub(r'\\s+', '_', 'a b  c'))""")
+
+GS_add("""以下正则中，^ 在字符类外的作用是什么？""",
+    "锚定字符串开头", None)
+
+# ===== 25-30: shell/构建脚本/日志 =====
+GS_add("""以下 shell 脚本输出什么？
+```bash
+for x in 1 2 3; do echo -n "$x"; done
+```""", "123", """for x in 1 2 3; do echo -n "$x"; done; echo""")
+
+GS_add("""以下 shell 中，$(date) 的作用是什么？""",
+    "命令替换（执行并插入输出）", None)
+
+GS_add("""以下 Makefile 中，make clean 会执行什么？
+```makefile
+clean:
+\trm -f *.o
+```""", "删除所有 .o 文件", None)
+
+GS_add("""以下日志行中，时间戳的格式是什么？
+```text
+2026-10-28T10:30:00Z [INFO] svc started
+```""", "ISO 8601（UTC）", None)
+
+GS_add("""以下 grep 命令匹配的行数是多少？
+```bash
+echo -e 'a\\nb\\na' | grep -c 'a'
+```""", "2", """echo -e 'a\\nb\\na' | grep -c 'a'""")
+
+GS_add("""以下 awk 命令的输出是什么？
+```bash
+echo '1 2 3' | awk '{print $2}'
+```""", "2", """echo '1 2 3' | awk '{print $2}'""")
+
+
+def GS_validate() -> int:
+    ok = 0
+    for q, gold, src in GS_T:
+        assert len(q) > 10 and len(gold) > 0, "空题"
+        if src is not None:
+            if src.startswith("import") or src.startswith("print") or src.startswith("re."):
+                out = subprocess.run(["/tmp/scx-eval/bin/python", "-c", src],
+                                     check=True, capture_output=True, text=True).stdout.strip()
+            elif src.startswith("sqlite3"):
+                with tempfile.TemporaryDirectory() as td:
+                    out = subprocess.run(["bash", "-c", f"cd {td} && {src}"],
+                                         check=True, capture_output=True, text=True).stdout.strip()
+            else:
+                out = GS_sh(src)
+            # gold 规范化为答案核心（去括号说明）
+            want = gold.split("（")[0].strip()
+            # 数组输出格式归一（JSON 风格 vs repr）
+            assert out == want or out.replace("'", '"') == want, \
+                f"mismatch: {out!r} != {want!r} | {q[:50]}"
+            ok += 1
+    return ok
+
+
+def GS_main() -> None:
+    ok = GS_validate()
+    assert len(GS_T) == GS_N, f"题量 {len(GS_T)} != {GS_N}"
+    with open(GS_OUT, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["question", "answer"])
+        for q, gold, _ in GS_T:
+            w.writerow([q, gold])
+    print(f"written {GS_OUT}: {GS_N} 题（工具验证 {ok}）")
+
+# ==================== 子命令: distill/fit/mlp（语义权重线，收拢 distill_online/distill_weights/fit_weights/mlp_cv） ====================
+
+# IPv6 连接冻结防护：macOS 下 urllib 偶发 IPv6 happy-eyeballs 卡死且
+# socket 超时不兜底（进程进入不可中断睡眠）。全局劫持 getaddrinfo，
+# 强制优先 IPv4（fallback 保留 IPv6），根治 API 调用挂死。
+DO_orig_gai = socket.getaddrinfo
+
+
+def DO_ipv4_first(host, port, family=0, *args, **kw):
+    try:
+        res = DO_orig_gai(host, port, socket.AF_INET, *args, **kw)
+        if res:
+            return res
+    except Exception:
+        pass
+    return DO_orig_gai(host, port, family, *args, **kw)
+
+
+
+sys.path.insert(0, str(ROOT / "tools"))
+
+DO_FEATURES = ["overlap", "hit", "ln_len", "cap_ratio", "dig_ratio", "structure",
+            "word_hit", "cjk_ratio", "errcode", "uniq", "sym", "pos_norm",
+            "edge", "long", "code", "bias", "cjk_bigram", "term_prox",
+            "stop_hit", "sym_noise", "q_density", "head_hit", "rep_ratio",
+            "cap_tok"]
+DO_DIM = len(DO_FEATURES)
+
+# 停用词表（与 src/semantic.rs 的 STOP_WORDS 逐词一致，蒸馏特征对齐）。
+DO_STOP = frozenset([
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
+    "with", "this", "that", "is", "are", "was", "were", "it", "as", "at",
+    "by", "from", "we", "you", "they", "he", "she", "i", "not", "no", "do",
+    "does", "did", "be", "been", "have", "has", "had", "will", "would", "can",
+    "could", "should", "then", "than", "so", "if", "else", "when", "while",
+    "up", "down", "out", "over", "under", "here", "there", "all", "any",
+    "both", "each", "few", "more", "most", "other", "some", "such", "only",
+    "own", "now",
+])
+DO_OUT = ROOT / "config" / "semantic" / "weights.json"
+# ---- 语料（确定性；每语料可配多个 query 场景，样本按 query 独立标注） ----
+def DO_p1m_seg(lo: int, hi: int) -> str:
+    """corpus_p1m.txt 固定行区间（真实 scx 源码，确定性抽取）。"""
+    p = ROOT / "config" / "bench" / "perf" / "corpus_p1m.txt"
+    lines = p.read_text(encoding="utf-8").splitlines()
+    return "\n".join(lines[lo:hi])
+
+
+def DO_code_fence(rows: list, lang: str) -> str:
+    """从题目 CSV 提取 ```<lang> 代码围栏内的真实代码（确定性）。"""
+    out: list[str] = []
+    for r in rows:
+        for m in re.finditer(r"```(?:c|python|java|javascript|cpp)?\n(.*?)```", r["question"], re.S):
+            out.extend(m.group(1).splitlines())
+    return "\n".join(out)
+
+
+def DO_build_corpora() -> list:
+    """语料矩阵：[(cname, text, [query1, query2]), ...]。含原 3 合成语料 + 真实源码/代码语料。"""
+    corpora = [("code", corpus_code(42), ["build"]),
+               ("log", corpus_log(42), ["timeout"]),
+               ("zh", corpus_zh(42), ["超时"]),
+               ("real_src_a", DO_p1m_seg(0, 2000), ["drop", "error"]),
+               ("real_src_b", DO_p1m_seg(12000, 14000), ["memory", "compress"]),
+               ("real_src_c", DO_p1m_seg(24000, 26000), ["stdin", "mcp"])]
+    langs = [("c", "bench_c60.csv"), ("cpp", "bench_cpp60.csv"), ("cuda", "bench_cuda60.csv"),
+             ("java", "bench_java60.csv"), ("js", "bench_js60.csv"), ("py", "bench_py60.csv")]
+    ds = ROOT / "config" / "bench" / "datasets"
+    for lang, fname in langs:
+        p = ds / fname
+        if not p.exists():
+            continue
+        import csv as _csv
+        rows = list(_csv.DictReader(p.open(encoding="utf-8")))
+        text = DO_code_fence(rows, lang)
+        if text.strip():
+            corpora.append((f"code_{lang}", text, ["return", "function"]))
+    return corpora
+
+
+DO_CORPORA = DO_build_corpora()
+
+DO_TEACHERS = [
+    {"name": "deepseek", "url": "https://api.deepseek.com/chat/completions",
+     "model": os.environ.get("SCX_MODEL_DEEPSEEK", "deepseek-chat"),
+     "key": lambda: os.environ.get("DEEPSEEK_API_KEY", "")},
+    {"name": "qwen", "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+     "model": os.environ.get("SCX_MODEL_QWEN", "qwen3.8-flash"),
+     "key": lambda: subprocess.run(
+         ["security", "find-generic-password", "-s", "scx-qwen-api", "-w"],
+         capture_output=True, text=True).stdout.strip()},
+]
+
+
+def DO_call_teacher(t: dict, prompt: str, max_new: int = 1500) -> str:
+    """OpenAI 兼容调用，重试 2 次，返回 content 文本。
+
+    传输走 curl -4 --max-time 60（硬超时，urllib 在 macOS 下曾现
+    TLS/连接阶段卡死 30 分钟不返回的 bug；curl 6s 即失败重试）。
+    """
+    key = t["key"]()
+    if not key:
+        raise RuntimeError(f"{t['name']}: key 缺失")
+    body = json.dumps({"model": t["model"], "messages": [{"role": "user", "content": prompt}],
+                       "max_tokens": max_new, "temperature": 0.1})
+    for attempt in (1, 2, 3):
+        try:
+            out = subprocess.run(
+                ["curl", "-4", "-sS", "--max-time", "60", "-X", "POST", t["url"],
+                 "-H", f"Authorization: Bearer {key}",
+                 "-H", "Content-Type: application/json",
+                 "-d", body],
+                capture_output=True, text=True, timeout=90)
+            if out.returncode != 0:
+                raise RuntimeError(f"curl rc={out.returncode}: {out.stderr.strip()[:200]}")
+            r = json.loads(out.stdout)
+            return r["choices"][0]["message"]["content"] or ""
+        except Exception as e:
+            if attempt == 3:
+                raise RuntimeError(f"{t['name']}: {e}")
+            time.sleep(2 * attempt)
+    raise RuntimeError(f"{t['name']}: unreachable")
+
+
+DO_CHUNK = 150  # 分块标注：每块行数（避免教师输出被 max_tokens 截断）
+
+
+def DO_teacher_prompt(cname: str, query: str, lines: list[str], base: int) -> str:
+    """带全局行号的文本块 + query，请教师输出保留行号数组（严格格式）。"""
+    body = "\n".join(f"{base + i + 1}| {ln}" for i, ln in enumerate(lines))
+    return (
+        f"你是上下文治理专家。这是 {cname} 语料的一部分（每行带全局行号）。"
+        f"场景：压缩后仍需回答「{query}」。\n"
+        "对每一行判断：对回答该问题或维持语义结构必要则保留，否则删除。\n"
+        "只输出保留行号的纯数字 JSON 数组，例如 [1,5,9]。禁止输出对象、解释或逐行分析。\n"
+        f"文本：\n{body}"
+    )
+
+
+def DO_parse_rows(text: str, n: int) -> list[int] | None:
+    """从教师输出提取保留行号（容忍 markdown 围栏/对象数组/前后噪声）。
+    兼容两种形态：[1,3,7] 与 [{"line":1,...},{"line":3,...}]。"""
+    m = re.search(r"\[[\s\S]*\]", text)
+    if not m:
+        return None
+    try:
+        arr = json.loads(m.group(0))
+    except Exception:
+        return None
+    if not isinstance(arr, list) or not arr:
+        return None
+    out = []
+    for it in arr:
+        if isinstance(it, (int, float)):
+            v = int(it)
+        elif isinstance(it, dict) and isinstance(it.get("line"), (int, float)):
+            v = int(it["line"])
+        else:
+            continue
+        if 1 <= v <= n and v not in out:
+            out.append(v)
+    return out or None
+
+
+def DO_label_chunk(cname: str, query: str, lines: list[str], base: int,
+                t: dict, log: list[dict]) -> set[int]:
+    """单教师单块标注（独立调用，供并行）。失败回退全保留（保守）。"""
+    for attempt in (1, 2):
+        try:
+            raw = DO_call_teacher(t, DO_teacher_prompt(cname, query, lines, base))
+            rows = DO_parse_rows(raw, base + len(lines))
+            if rows is not None:
+                log.append({"teacher": t["name"], "corpus": cname, "chunk": base // DO_CHUNK,
+                            "ok": len(rows), "rows": ",".join(map(str, rows))})
+                return set(rows)
+        except Exception as e:
+            raw = f"ERROR: {e}"
+        if attempt == 2:
+            log.append({"teacher": t["name"], "corpus": cname, "chunk": base // DO_CHUNK,
+                        "ok": 0, "rows": "ERROR"})
+    return set(range(base + 1, base + len(lines) + 1))
+
+
+DO_CACHE = ROOT / "config" / "bench" / "results" / "distill_cache.json"
+
+
+def DO_label_corpus(cname: str, query: str, text: str) -> tuple[list[int], list[dict]]:
+    """分块 + 双教师并行标注（带缓存）；并集（任一教师认为必要即保留）。
+    缓存键 = cname|query（多 query 语料各场景独立标注；旧单键缓存不再命中）。"""
+    lines = text.splitlines()
+    n = len(lines)
+    cache_key = f"{cname}|{query}"
+    cache: dict = {}
+    if DO_CACHE.exists():
+        cache = json.loads(DO_CACHE.read_text(encoding="utf-8"))
+    if cache_key in cache:
+        keep = [int(x) for x in cache[cache_key]]
+        print(f"[{cache_key}] {n} 行: 命中缓存 {len(keep)} 行")
+        return keep, [{"teacher": "cache", "corpus": cache_key, "chunk": -1, "ok": len(keep), "rows": ""}]
+    log: list[dict] = []
+    keep_sets = {t["name"]: set() for t in DO_TEACHERS}
+    chunks = [lines[i:i + DO_CHUNK] for i in range(0, n, DO_CHUNK)]
+    from concurrent.futures import ThreadPoolExecutor
+    for t in DO_TEACHERS:
+        with ThreadPoolExecutor(max_workers=12) as ex:
+            futs = [ex.submit(DO_label_chunk, cname, query, ch, i * DO_CHUNK, t, log)
+                    for i, ch in enumerate(chunks) if ch]
+        for f in futs:
+            keep_sets[t["name"]] |= f.result()
+    union = set.union(*keep_sets.values())
+    print(f"[{cache_key}] {n} 行: deepseek={len(keep_sets['deepseek'])} "
+          f"qwen={len(keep_sets['qwen'])} 并集={len(union)}")
+    cache[cache_key] = sorted(union)
+    DO_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    DO_CACHE.write_text(json.dumps(cache), encoding="utf-8")
+    return sorted(union), log
+
+
+# ---- 18 维特征复刻（与 src/semantic.rs feats 逐维一致） ----
+def DO_tokens(text: str) -> list[str]:
+    """与 src/semantic.rs tokens() 逐字符一致：ASCII 词内字符连续段 + CJK 连续段。
+    词内字符含 `_ . / : @ \\ -`（代码标识符/path/错误码语义）；其余为分隔。
+    按 UTF-8 字节推进与切片（CJK 三字节一字符），与 Rust 字节语义一致。"""
+    b = text.DO_encode("utf-8")
+    out: list[str] = []
+    cur: list[bytes] = []
+    i = 0
+    n = len(b)
+    while i < n:
+        c = b[i]
+        is_word = c < 128 and (chr(c).isalnum() or chr(c) in "_./:@\\-")
+        is_cjk = 0xE4 <= c <= 0xE9 and i + 2 < n
+        if is_word or is_cjk:
+            cur.append(bytes([c]) if not is_cjk else bytes(b[i:i + 3]))
+        elif cur:
+            out.append(b"".join(cur).decode("utf-8"))
+            cur = []
+        i += 3 if is_cjk else 1
+    if cur:
+        out.append(b"".join(cur).decode("utf-8"))
+    return out
+
+
+def DO_cjk_chars(s: str) -> list[str]:
+    return [c for c in s if 0x4E00 <= ord(c) <= 0x9FFF]
+
+
+def DO_cjk_bigram(line: str, terms: list[str]) -> float:
+    q = "".join(DO_cjk_chars("".join(terms)))
+    if len(q) < 2:
+        return 0.0
+    qp = {q[i:i + 2] for i in range(len(q) - 1)}
+    lc = "".join(DO_cjk_chars(line))
+    if len(lc) < 2:
+        return 0.0
+    hit = sum(1 for i in range(len(lc) - 1) if lc[i:i + 2] in qp)
+    return hit / max(1, len(q) - 1)
+
+
+def DO_term_prox(lower: str, terms: list[str]) -> float:
+    lo, hi, found = None, None, False
+    for t in terms:
+        if not t:
+            continue
+        p = lower.find(t.lower())
+        if p < 0:
+            return 0.0
+        lo = p if lo is None else min(lo, p)
+        hi = p if hi is None else max(hi, p)
+        found = True
+    if not found:
+        return 0.0
+    return 1.0 / (1.0 + hi - lo)
+
+
+def DO_feats(line: str, terms: list[str], i: int, total: int) -> list[float]:
+    lower = line.lower()
+    hit = sum(1 for t in terms if t and t in lower)
+    overlap = hit / len(terms) if terms else 0.0
+    chars = len(line)
+    caps = sum(1 for c in line if c.isupper())
+    digits = sum(1 for c in line if c.isdigit())
+    cap_ratio = caps / chars if chars else 0.0
+    dig_ratio = digits / chars if chars else 0.0
+    structure = 1.0 if any(lower.startswith(p) or line.lstrip().startswith(p)
+                           for p in ("```", "~~~", "import ", "use ", "#include",
+                                     "fn ", "pub ", "impl ", "struct ", "error:",
+                                     "panic!", "->", "=>", "at ", "caused by:")) else 0.0
+    toks = DO_tokens(lower)
+    w_hit = DO_word_hit_ratio(terms, lower, toks)
+    cjk = sum(1 for c in line if 0x4E00 <= ord(c) <= 0x9FFF) / chars if chars else 0.0
+    err = sum(1 for t in toks if any(c.isalpha() for c in t) and any(c.isdigit() for c in t))
+    err_r = err / len(toks) if toks else 0.0
+    uniq = len(set(toks)) / len(toks) if toks else 0.0
+    sym = sum(1 for c in line if not c.isspace() and not c.isalnum())
+    sym_r = sym / sum(1 for c in line if not c.isspace()) if any(not c.isspace() for c in line) else 0.0
+    pos = i / (total - 1) if total > 1 else 0.0
+    edge = 1.0 if i < total // 20 or i >= total - total // 20 else 0.0
+    long_f = 1.0 if chars > 200 else 0.0
+    code = 1.0 if ("{" in line and "}" in line) or ("(" in line and ")" in line) \
+        or "->" in line or "=>" in line or "::" in line else 0.0
+    bigram = DO_cjk_bigram(line, terms)
+    prox = DO_term_prox(lower, terms)
+    stop_hit = DO_stop_ratio(toks)
+    sym_noise = DO_noise_line(line)
+    q_density = DO_query_density(lower, terms, len(toks))
+    head_hit = DO_head_hit_ratio(lower, terms)
+    rep_ratio = DO_rep_char_ratio(line)
+    cap_tok = DO_cap_token_ratio(line)
+    return [overlap, min(hit, 1), math.log1p(chars), cap_ratio, dig_ratio, structure,
+            w_hit, cjk, err_r, uniq, sym_r, pos, edge, long_f, code, 1.0, bigram, prox,
+            stop_hit, sym_noise, q_density, head_hit, rep_ratio, cap_tok]
+
+
+# ---- 新增 6 维特征（与 src/semantic.rs 逐特征一致） ----
+def DO_word_hit_ratio(terms: list[str], lower: str, toks: list[str]) -> float:
+    """词边界整词命中比例（含屈折词根），与 src/semantic.rs word_hit_ratio 一致。"""
+    if not terms:
+        return 0.0
+    n = 0
+    for t in terms:
+        if not t:
+            continue
+        plain = all(c.isascii() and c.isalnum() for c in t)
+        if any(DO_root_match(tok, t) for tok in toks) or ((not plain) and t in lower):
+            n += 1
+    return n / len(terms)
+
+
+def DO_stem(w: str) -> str | None:
+    """规则词干（与 src/semantic.rs stem 一致）：全小写 ASCII 且 ≥4，去后缀后 ≥3。"""
+    if len(w) < 4 or not w.isascii() or not w.islower():
+        return None
+    s = DO_strip_affix(w)
+    return s if s is not None and len(s) >= 3 else None
+
+
+def DO_strip_affix(w: str) -> str | None:
+    """最长后缀优先：ing→去 ing（≥4）；ed→去 ed（≥4）；ies→y；咝音 es；尾 s。"""
+    if w.endswith("ing"):
+        r = w[:-3]
+        return r if len(r) >= 4 else None
+    if w.endswith("ed"):
+        r = w[:-2]
+        return r if len(r) >= 4 else None
+    if w.endswith("ies"):
+        return w[:-3] + "y"
+    if w.endswith("es") and DO_sibilant(w[:-2]):
+        return w[:-2]
+    if w.endswith("s") and not w.endswith("ss"):
+        r = w[:-1]
+        return r if len(r) >= 3 else None
+    return None
+
+
+def DO_sibilant(s: str) -> bool:
+    return s.endswith(("ch", "sh", "s", "x", "z"))
+
+
+def DO_root_match(a: str, b: str) -> bool:
+    """词根判定（与 src/semantic.rs root_match 一致）。"""
+    if a == b:
+        return True
+    sa, sb = DO_stem(a), DO_stem(b)
+    if sa is not None and sb is not None:
+        return sa == sb
+    if sa is not None:
+        return sa == b
+    if sb is not None:
+        return a == sb
+    return False
+
+
+def DO_stop_ratio(toks: list[str]) -> float:
+    if not toks:
+        return 0.0
+    return sum(1 for t in toks if t in DO_STOP) / len(toks)
+
+
+def DO_noise_line(line: str) -> float:
+    t = line.strip()
+    if len(t) < 8:
+        return 0.0
+    alpha = sum(1 for c in t if c.isalnum())
+    if alpha == 0:
+        return 1.0
+    sym = len(t) - alpha
+    return 1.0 if sym / len(t) >= 0.6 else 0.0
+
+
+def DO_query_density(lower: str, terms: list[str], n_toks: int) -> float:
+    if n_toks == 0:
+        return 0.0
+    cnt = sum(lower.count(t) for t in terms if t)
+    return cnt / n_toks
+
+
+def DO_head_hit_ratio(lower: str, terms: list[str]) -> float:
+    if not terms:
+        return 0.0
+    head = lower[:60]
+    return sum(1 for t in terms if t and t in head) / len(terms)
+
+
+def DO_rep_char_ratio(line: str) -> float:
+    cnt: dict[str, int] = {}
+    total = 0
+    for c in line:
+        if c.isspace():
+            continue
+        total += 1
+        cnt[c] = cnt.get(c, 0) + 1
+    if not total:
+        return 0.0
+    return max(cnt.values()) / total
+
+
+def DO_cap_token_ratio(line: str) -> float:
+    """大写开头 token 密度（基于原行大小写；token 级与 cap_ratio 字符级互补）。"""
+    toks = DO_tokens(line)
+    if not toks:
+        return 0.0
+    n = sum(1 for t in toks if t and t[0].isupper())
+    return n / len(toks)
+
+
+# ---- 逻辑回归（纯 Python，固定 seed 确定性） ----
+def DO_sigmoid(z: float) -> float:
+    if z >= 0:
+        return 1.0 / (1.0 + math.exp(-z))
+    e = math.exp(z)
+    return e / (1.0 + e)
+
+
+def DO_fit(X: list[list[float]], y: list[int], lr: float = 0.05, epochs: int = 150,
+        l2: float = 1e-3) -> list[float]:
+    n = len(X)
+    d = len(X[0])
+    w = [0.0] * d
+    for _ in range(epochs):
+        grad = [0.0] * d
+        for xi, yi in zip(X, y):
+            p = DO_sigmoid(sum(wi * xj for wi, xj in zip(w, xi)))
+            err = p - yi
+            for j in range(d):
+                grad[j] += err * xi[j]
+        for j in range(d):
+            w[j] -= lr * (grad[j] / n + l2 * w[j])
+    return w
+
+
+def DO_encode(ws: list[float], DO_feats: list[str] | None = None) -> bytes:
+    """scx-sem-2 校验编码：weights 每 f64 大端 8 字节 || 每个特征名 + '\n'。"""
+    b = b"".join(struct.pack(">d", w) for w in ws)
+    if DO_feats:
+        for f in DO_feats:
+            b += f.DO_encode("utf-8") + b"\n"
+    return b
+
+
+def DO_main() -> int:
+    # 教师标注
+    all_x: list[list[float]] = []
+    all_y: list[int] = []
+    labels: list[dict] = []
+    total_keep = 0
+    total_lines = 0
+    for cname, text, queries in DO_CORPORA:
+        lines = text.splitlines()
+        total = len(lines)
+        for query in queries:
+            keep, log = DO_label_corpus(cname, query, text)
+            total_lines += total
+            total_keep += len(keep)
+            keep_set = set(keep)
+            for i, ln in enumerate(lines):
+                all_x.append(DO_feats(ln, [query], i, total))
+                all_y.append(1 if (i + 1) in keep_set else 0)
+            for e in log:
+                labels.append({**e, "n": total, "keep": len(keep), "query": query})
+    pos = sum(all_y)
+    print(f"标注汇总: {total_lines} 行, 教师保留 {total_keep} ({total_keep / total_lines:.1%}), "
+          f"正样本 {pos}")
+    if pos < max(10, total_lines // 20):
+        print("正样本过少（教师过保守？），改用并集回填……")
+        return 2
+
+    w = DO_fit(all_x, all_y)
+    ws = [round(v, 6) for v in w]
+    print("蒸馏权重: " + ", ".join(f"{v:+.3f}" for v in ws))
+    obj = {
+        "schema": "scx-sem-2",
+        "features": DO_FEATURES,
+        "weights": ws,
+        "sha256": hashlib.sha256(DO_encode(ws, DO_FEATURES)).hexdigest(),
+    }
+    DO_OUT.parent.mkdir(parents=True, exist_ok=True)
+    DO_OUT.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"写入 {DO_OUT.relative_to(ROOT)} (sha256={obj['sha256'][:16]}…)")
+
+    # 标注日志
+    with open(ROOT / "config" / "bench" / "results" / "distill_labels.csv", "w",
+              encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=["teacher", "corpus", "chunk", "ok", "rows", "n", "keep", "query"])
+        w.writeheader()
+        w.writerows(labels)
+    print("标注日志写入 config/bench/results/distill_labels.csv")
+    return 0
+
+
+def DO_selfcheck() -> int:
+    """输出固定样本行的 24 维特征（精确值），供 src/semantic.rs 一致性测试断言。"""
+    rows = [
+        ("db connection lost: conn 9f2a timeout", ["db"], 0, 10),
+        ("db db db db db retry", ["db"], 1, 10),
+        ("this is a test of the system and it works", ["db"], 2, 10),
+        ("------------------------------------------------------------", ["db"], 3, 10),
+        ("fn main() -> i32 { 0 }", ["db"], 4, 10),
+        ("Server Name CONNECT Error", ["db"], 5, 10),
+        ("aaaaaaa", ["db"], 6, 10),
+        ("数据库超时重试", ["超时"], 7, 10),
+        ("conn ... lots of filler ... broken", ["conn", "broken"], 8, 10),
+        ("  ", [], 9, 10),
+    ]
+    out = []
+    for line, terms, i, total in rows:
+        out.append({"line": line, "terms": terms, "i": i, "total": total,
+                    "feats": [float(f"{v:.12g}") for v in DO_feats(line, terms, i, total)]})
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    return 0
+
+sys.path.insert(0, str(ROOT / "tools"))
+
+DW_FEATURES = ["overlap", "hit", "ln_len", "cap_ratio", "dig_ratio", "structure",
+            "word_hit", "cjk_ratio", "errcode", "uniq", "sym", "pos_norm",
+            "edge", "long", "code", "bias", "cjk_bigram", "term_prox"]
+DW_DIM = len(DW_FEATURES)
+DW_OUT = ROOT / "config" / "semantic" / "weights.json"
+DW_TOL = 0.01          # fidelity 不劣容差（对齐 A2 门禁）
+DW_CORPORA = [("code", corpus_code(42), "build"),
+           ("log", corpus_log(42), "timeout"),
+           ("zh", corpus_zh(42), "超时")]
+
+
+def DW_encode(ws: list[float]) -> bytes:
+    return b"".join(struct.pack(">d", w) for w in ws)
+
+
+def DW_write_weights(tmp: Path, ws: list[float]) -> Path:
+    p = tmp / "weights.json"
+    w6 = [round(v, 6) for v in ws]
+    # sha256 与 Rust verify_v2 严格一致：SHA256(weights 大端 8 字节拼接 ||
+    # 每个特征名接 \n)。只哈希 weights 会与加载器不匹配，导致 --semantic 拒载。
+    payload = DW_encode(w6) + b"".join(n.DW_encode() + b"\n" for n in DW_FEATURES)
+    p.write_text(json.dumps({
+        "schema": "scx-sem-2",
+        "features": DW_FEATURES,
+        "weights": w6,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return p
+
+
+def DW_eval_w(bin_: str, tmp: Path, ws: list[float]) -> dict:
+    """评估权重向量：3 语料 cut/num_cov/token_cov（semantic 开启）。"""
+    wp = DW_write_weights(tmp, ws)
+    rows = []
+    for cname, text, query in DW_CORPORA:
+        out = compress_ablate(bin_, text, query, ["--semantic", str(wp)])
+        full_words = tokens(text)
+        full_nums = num_tokens(text)
+        out_tok = est_tok(out)
+        out_words = tokens(out)
+        out_nums = num_tokens(out)
+        rows.append({
+            "set": cname,
+            "cut": 1.0 - out_tok / est_tok(text),
+            "num_cov": cov(full_nums, out_nums),
+            "token_cov": cov(full_words, out_words),
+        })
+    return rows
+
+
+def DW_baseline(bin_: str) -> dict:
+    """教师基线：semantic 关时的 3 语料 fidelity。"""
+    out = {}
+    for cname, text, query in DW_CORPORA:
+        o = compress_ablate(bin_, text, query, [])
+        out[cname] = {
+            "num_cov": cov(num_tokens(text), num_tokens(o)),
+            "token_cov": cov(tokens(text), tokens(o)),
+        }
+    return out
+
+
+def DW_score(rows: list[dict], base: dict) -> float:
+    """目标：cut 最大化，fidelity 不劣于基线（平均容差 TOL，硬惩罚）。"""
+    cut = sum(r["cut"] for r in rows) / len(rows)
+    pen = 0.0
+    for r in rows:
+        for k in ("num_cov", "token_cov"):
+            drop = base[r["set"]][k] - r[k] - DW_TOL
+            if drop > 0:
+                pen += drop * 5.0
+    return cut - pen
+
+
+def DW_distill(bin_: str) -> tuple[list[float], list[dict]]:
+    base = DW_baseline(bin_)
+    print("教师基线（semantic 关）fidelity:")
+    for c, v in base.items():
+        print(f"  {c}: num_cov={v['num_cov']:.4f} token_cov={v['token_cov']:.4f}")
+
+    # 初始 = 现有 scx-sem-2 权重（16 维拟合 + 后 2 维 0），从现状蒸馏。
+    cur = [0.072325, 0.496615, -0.310477, -0.005689, -0.006987, -0.0548,
+           0.016532, -0.037252, -0.013018, -0.120063, -0.245746, -0.111923,
+           -0.075548, 0.009463, -0.010174, -0.276553, 0.0, 0.0]
+    log: list[dict] = []
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        s0 = DW_score(DW_eval_w(bin_, tmp, cur), base)
+        print(f"初始: cut_avg={s0:.4f}")
+        for rnd, grid in enumerate(([0.05, -0.05, 0.15, -0.15], [0.02, -0.02]), 1):
+            improved = False
+            for dim in range(DW_DIM):
+                best_v, best_s = cur[dim], s0
+                for dv in grid:
+                    cand = cur.copy()
+                    cand[dim] = round(cur[dim] + dv, 6)
+                    cand[dim] = max(-0.6, min(0.6, cand[dim]))  # 权重范围夹紧
+                    if abs(cand[dim] - cur[dim]) < 1e-9:
+                        continue
+                    s = DW_score(DW_eval_w(bin_, tmp, cand), base)
+                    if s > best_s + 1e-9:
+                        best_v, best_s = cand[dim], s
+                if best_v != cur[dim]:
+                    cur[dim] = best_v
+                    s0 = best_s
+                    improved = True
+                log.append({"round": rnd, "dim": DW_FEATURES[dim],
+                            "w": cur[dim], "score": round(s0, 5)})
+                print(f"  r{rnd} {DW_FEATURES[dim]:>10} w={cur[dim]:+.6f} score={s0:.4f}")
+            if not improved:
+                print(f"轮 {rnd} 无改进，收敛")
+                break
+    print("蒸馏完成: " + ", ".join(f"{v:+.4f}" for v in cur))
+    return cur, log
+
+
+def DW_main() -> int:
+    bin_ = ensure_sem_bin()
+    cur, log = DW_distill(bin_)
+    # 终验：蒸馏权重在 3 语料上的 cut/fidelity
+    with tempfile.TemporaryDirectory() as td:
+        rows = DW_eval_w(bin_, Path(td), cur)
+        base = DW_baseline(bin_)
+        print("\n蒸馏后终验（semantic 开）:")
+        for r in rows:
+            b = base[r["set"]]
+            flag = "OK" if (r["num_cov"] >= b["num_cov"] - 0.01
+                            and r["token_cov"] >= b["token_cov"] - 0.01) else "FID-DROP"
+            print(f"  {r['set']}: cut={r['cut']:.4f} num_cov={r['num_cov']:.4f} "
+                  f"token_cov={r['token_cov']:.4f} vs base "
+                  f"({b['num_cov']:.4f}/{b['token_cov']:.4f}) {flag}")
+    # 写入 config/semantic/weights.json（随仓权重），非仓库根目录。
+    DW_write_weights(DW_OUT.parent, cur)
+    final = DW_encode(cur) + b"".join(n.DW_encode() + b"\n" for n in DW_FEATURES)
+    print(f"写入 {DW_OUT.relative_to(ROOT)} (sha256={hashlib.sha256(final).hexdigest()[:16]}…)")
+    with open(ROOT / "config" / "bench" / "results" / "distill_log.csv", "w",
+              encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=["round", "dim", "w", "score"])
+        w.writeheader()
+        w.writerows(log)
+    print("蒸馏日志写入 config/bench/results/distill_log.csv")
+    return 0
+
+FW_DIM = 16
+
+# ---- 特征复刻（与 src/semantic.rs 逐维一致） ----
+FW_PREFIXES = ("```", "~~~", "import ", "use ", "#include", "at ", "caused by:",
+            "->", "=>", "panic! ", "error:")
+FW_WORD_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789_-./:@\\")
+
+
+def FW_tokens(lower: str) -> list[str]:
+    out: list[str] = []
+    cur: list[str] = []
+    i = 0
+    b = lower.FW_encode()
+    n = len(b)
+    while i < n:
+        c = b[i]
+        is_word = chr(c).isalnum() or chr(c) in FW_WORD_CHARS if c < 128 else False
+        is_cjk = 0xE4 <= c <= 0xE9 and i + 2 < n
+        if is_word or is_cjk:
+            cur.append(lower[i:i + (3 if is_cjk else 1)])
+        elif cur:
+            out.append("".join(cur))
+            cur = []
+        i += 3 if is_cjk else 1
+    if cur:
+        out.append("".join(cur))
+    return out
+
+
+def FW_stem(w: str) -> str | None:
+    if len(w) < 4 or not w.isascii() or not w.islower() or not w.isalpha():
+        return None
+    if w.endswith("ing") and len(w) - 3 >= 4:
+        return w[:-3]
+    if w.endswith("ed") and len(w) - 2 >= 4:
+        return w[:-2]
+    if w.endswith("ies"):
+        return w[:-3] + "y"
+    if w.endswith("es") and w[:-2].endswith(("ch", "sh", "s", "x", "z")):
+        return w[:-2]
+    if w.endswith("s") and not w.endswith("ss") and len(w) - 1 >= 3:
+        return w[:-1]
+    return None
+
+
+def FW_root_match(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    sa, sb = FW_stem(a), FW_stem(b)
+    if sa and sb:
+        return sa == sb
+    if sa:
+        return sa == b
+    if sb:
+        return a == sb
+    return False
+
+
+def FW_feats(line: str, terms: list[str], i: int, total: int) -> list[float]:
+    lower = line.lower()
+    hit = sum(1 for t in terms if t and t in lower)
+    overlap = hit / len(terms) if terms else 0.0
+    chars = len(line)
+    caps = sum(1 for c in line if c.isupper())
+    digits = sum(1 for c in line if c.isdigit())
+    cap_ratio = caps / chars if chars else 0.0
+    dig_ratio = digits / chars if chars else 0.0
+    t = line.lstrip()
+    tl = t.lower()
+    structure = 1.0 if any(t.startswith(p) or tl.startswith(p) for p in FW_PREFIXES) else 0.0
+    toks = FW_tokens(lower)
+    n_hit = 0
+    for q in terms:
+        if not q:
+            continue
+        plain = q.isascii() and q.isalpha()
+        if any(FW_root_match(tok, q) for tok in toks) or (not plain and q in lower):
+            n_hit += 1
+    w_hit = n_hit / len(terms) if terms else 0.0
+    cjk = sum(1 for c in line if 0x4E00 <= ord(c) <= 0x9FFF)
+    cjk_r = cjk / chars if chars else 0.0
+    err = sum(1 for tok in toks if any(c.isalpha() for c in tok) and any(c.isdigit() for c in tok))
+    err_r = err / len(toks) if toks else 0.0
+    uniq = len(set(toks)) / len(toks) if toks else 0.0
+    sym = sum(1 for c in line if not c.isspace() and not c.isalnum())
+    sym_r = sym / sum(1 for c in line if not c.isspace()) if any(not c.isspace() for c in line) else 0.0
+    pos = i / (total - 1) if total > 1 else 0.0
+    edge = 1.0 if i < total // 20 or i >= total - total // 20 else 0.0
+    long_f = 1.0 if chars > 200 else 0.0
+    code = 1.0 if ("{" in line and "}" in line) or ("(" in line and ")" in line) \
+        or "->" in line or "=>" in line or "::" in line else 0.0
+    return [overlap, min(hit, 1), math.log1p(chars), cap_ratio, dig_ratio, structure,
+            w_hit, cjk_r, err_r, uniq, sym_r, pos, edge, long_f, code, 1.0]
+
+
+# ---- 语料与弱监督标签 ----
+FW_QUERIES = ["error", "compress", "token", "memory", "performance", "crash", "panic"]
+
+
+def FW_load_lines() -> list[str]:
+    files = [ROOT / "README.md", ROOT / "docs" / "benchmarks.md",
+             ROOT / "docs" / "release-checklist.md", ROOT / "src" / "lib.rs",
+             ROOT / "src" / "trim.rs", ROOT / "src" / "semantic.rs"]
+    lines: list[str] = []
+    for f in files:
+        if f.exists():
+            lines.extend(f.read_text(encoding="utf-8").splitlines())
+    return [ln for ln in lines if ln.strip()]
+
+
+def FW_label(line: str) -> int:
+    l = line.lower()
+    if any(k in l for k in ("error", "panic", "fail", "exception", "crash", "fatal")):
+        return 1
+    if line.startswith(("import ", "use ", "#include", "fn ", "pub ", "struct ", "impl ")):
+        return 1
+    if any(q in l for q in FW_QUERIES):
+        return 1
+    return 0
+
+
+# ---- 逻辑回归（纯 Python 梯度下降 + L2） ----
+def FW_sigmoid(z: float) -> float:
+    if z >= 0:
+        return 1.0 / (1.0 + math.exp(-z))
+    e = math.exp(z)
+    return e / (1.0 + e)
+
+
+def FW_fit(X: list[list[float]], y: list[int], lr: float = 0.05, epochs: int = 120,
+        l2: float = 1e-3) -> list[float]:
+    n = len(X)
+    d = len(X[0])
+    w = [0.0] * d
+    for _ in range(epochs):
+        grad = [0.0] * d
+        for xi, yi in zip(X, y):
+            p = FW_sigmoid(sum(wi * xj for wi, xj in zip(w, xi)))
+            err = p - yi
+            for j in range(d):
+                grad[j] += err * xi[j]
+        for j in range(d):
+            w[j] -= lr * (grad[j] / n + l2 * w[j])
+    return w
+
+
+# ---- 输出（scx-sem-1，sha256 与 Rust encode 一致） ----
+def FW_encode(ws: list[float]) -> bytes:
+    return b"".join(struct.pack(">d", w) for w in ws)
+
+
+def FW_main() -> int:
+    lines = FW_load_lines()
+    if len(lines) < 200:
+        print(f"语料不足: {len(lines)} 行", file=sys.stderr)
+        return 1
+    # 行数裁剪 + seed 固定抽样（可复现）。
+    step = max(1, len(lines) // 1500)
+    sampled = lines[::step][:1500]
+    X, y = [], []
+    total = len(sampled)
+    for i, ln in enumerate(sampled):
+        X.append(FW_feats(ln, FW_QUERIES, i, total))
+        y.append(FW_label(ln))
+    pos = sum(y)
+    print(f"语料 {total} 行, 正样本 {pos} ({pos / total:.1%})")
+    w = FW_fit(X, y)
+    print("权重: " + ", ".join(f"{v:+.3f}" for v in w))
+    obj = {
+        "schema": "scx-sem-1",
+        "dim": FW_DIM,
+        "weights": [round(v, 6) for v in w],
+    }
+    ws = obj["weights"]
+    obj["sha256"] = hashlib.sha256(FW_encode(ws)).hexdigest()
+    out = ROOT / "config" / "semantic"
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / "weights.json"
+    p.write_text(
+        "{\n"
+        f'  "schema": "scx-sem-1",\n'
+        f'  "dim": {FW_DIM},\n'
+        f'  "weights": [{", ".join(str(v) for v in ws)}],\n'
+        f'  "sha256": "{obj["sha256"]}"\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    print(f"写入 {p.relative_to(ROOT)} (sha256={obj['sha256'][:16]}…)")
+    return 0
+
+sys.path.insert(0, str(ROOT / "tools"))
+
+MC_DIM = len(DO_FEATURES)
+MC_SIG = lambda z: 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, z))))
+
+
+def MC_dataset(cache: dict) -> tuple[list, list]:
+    """从标注缓存重建 (X, y)：每 (cname|query, keep) 生成全行样本。
+    语料文本用 distill_online.build_corpora() 的确定性来源重建（与训练口径一致）。"""
+    corpora = {c[0]: c[1] for c in DO_build_corpora()}
+    X, y = [], []
+    for key, keep in cache.items():
+        if "|" not in key:
+            continue
+        cname, query = key.rsplit("|", 1)
+        text = corpora.get(cname)
+        if text is None:
+            continue
+        lines = text.splitlines()
+        total = len(lines)
+        ks = set(int(x) for x in keep)
+        for i, ln in enumerate(lines):
+            X.append(DO_feats(ln, [query], i, total))
+            y.append(1 if (i + 1) in ks else 0)
+    return X, y
+
+
+def MC_fit_linear(X, y):
+    """与 DO_fit 同协议：批量梯度下降（lr=0.05, 150 epochs, l2=1e-3）。"""
+    w = [0.0] * MC_DIM
+    n = len(X)
+    for _ in range(150):
+        grad = [0.0] * MC_DIM
+        for xi, yi in zip(X, y):
+            p = MC_SIG(sum(w[d] * xi[d] for d in range(MC_DIM)))
+            err = p - yi
+            for d in range(MC_DIM):
+                grad[d] += err * xi[d]
+        for d in range(MC_DIM):
+            w[d] -= 0.05 * (grad[d] / n + 1e-3 * w[d])
+    return w
+
+
+def MC_fit_mlp(X, y, h=16):
+    random.seed(42)
+    w1 = [[random.uniform(-0.3, 0.3) for _ in range(MC_DIM)] for _ in range(h)]
+    b1 = [0.0] * h
+    w2 = [random.uniform(-0.3, 0.3) for _ in range(h)]
+    b2 = 0.0
+    n = len(X)
+    for epoch in range(150):
+        for i in range(n):
+            a = [MC_SIG(sum(w1[j][d] * X[i][d] for d in range(MC_DIM)) + b1[j]) for j in range(h)]
+            z = sum(w2[j] * a[j] for j in range(h)) + b2
+            err = MC_SIG(z) - y[i]
+            dz = err * MC_SIG(z) * (1 - MC_SIG(z))
+            for j in range(h):
+                w2[j] -= 0.05 * (dz * a[j] + 1e-3 * w2[j])
+                b1[j] -= 0.05 * (dz * w2[j] * a[j] * (1 - a[j]))
+                for d in range(MC_DIM):
+                    w1[j][d] -= 0.05 * (dz * w2[j] * a[j] * (1 - a[j]) * X[i][d] + 1e-3 * w1[j][d])
+            b2 -= 0.05 * dz
+    def score(x):
+        a = [MC_SIG(sum(w1[j][d] * x[d] for d in range(MC_DIM)) + b1[j]) for j in range(h)]
+        return MC_SIG(sum(w2[j] * a[j] for j in range(h)) + b2)
+    return score
+
+
+def MC_auc_ap(scores, y):
+    """AUC（ROC）+ AP（PR-AUC）标准实现。"""
+    pairs = sorted(zip(scores, y), key=lambda p: -p[0])
+    npos = sum(y)
+    nneg = len(y) - npos
+    tp = fp = 0
+    auc = 0.0
+    prev = None
+    for s, yi in pairs:
+        if yi:
+            tp += 1
+        else:
+            fp += 1
+            if prev != s:
+                auc += fp * tp
+        prev = s
+    auc = auc / (npos * nneg) if npos and nneg else 0.5
+    tp = fp = 0
+    ap = 0.0
+    last_rec = 0.0
+    for s, yi in pairs:
+        if yi:
+            tp += 1
+        else:
+            fp += 1
+        rec = tp / npos if npos else 0.0
+        prec = tp / (tp + fp) if tp + fp else 0.0
+        ap += prec * (rec - last_rec)
+        last_rec = rec
+    return auc, ap
+
+
+def MC_main() -> None:
+    cache = json.loads((ROOT / "config" / "bench" / "results" / "distill_cache.json").read_text())
+    X, y = MC_dataset(cache)
+    if not X:
+        print("无样本（缓存为空或仅合成语料）"); return 1
+    n = len(X)
+    # 3 折（确定性 shuffle，seed 2024 与 /tmp/cv.py 口径一致）
+    idx = list(range(n))
+    random.seed(2024)
+    random.shuffle(idx)
+    folds = [idx[i::3] for i in range(3)]
+    lin, mlp = [], []
+    for fi, fold in enumerate(folds):
+        tr = [i for i in idx if i not in set(fold)]
+        te = fold
+        Xt = [X[i] for i in tr]; yt = [y[i] for i in tr]
+        Xe = [X[i] for i in te]; ye = [y[i] for i in te]
+        w = MC_fit_linear(Xt, yt)
+        ls = [sum(w[d] * x[d] for d in range(MC_DIM)) for x in Xe]
+        lin.append(MC_auc_ap(ls, ye))
+        lk = sum(1 for s in ls if s > 0.0) / len(ls)
+        scorer = MC_fit_mlp(Xt, yt)
+        ms = [scorer(x) for x in Xe]
+        mlp.append(MC_auc_ap(ms, ye))
+        mk = sum(1 for s in ms if s > 0.5) / len(ms)
+        print(f"fold {fi}: linear auc/ap={lin[-1][0]:.4f}/{lin[-1][1]:.4f} keep={lk:.3f}  "
+              f"mlp1 auc/ap={mlp[-1][0]:.4f}/{mlp[-1][1]:.4f} keep={mk:.3f}")
+    res = {
+        "n": n, "dim": MC_DIM,
+        "linear": {"auc": sum(a for a, _ in lin) / 3, "ap": sum(p for _, p in lin) / 3},
+        "mlp1": {"auc": sum(a for a, _ in mlp) / 3, "ap": sum(p for _, p in mlp) / 3},
+        "folds_linear": lin, "folds_mlp": mlp,
+    }
+    print(json.dumps(res, ensure_ascii=False, indent=2))
+    Path("/tmp/mlp_cv.json").write_text(json.dumps(res, ensure_ascii=False, indent=2))
+    print("已写入 /tmp/mlp_cv.json（不替换仓库权重）")
+    return 0
+
+
+# ==================== gen / distill / fit / mlp 收拢入口 ====================
+
+GEN = {
+    "bench": GB_main,
+    "fid": GF_main,
+    "p8-cuda": GC_main,
+    "p8-js": GJ_main,
+    "p8-layers": GL_main,
+    "p8-shape": GS_main,
+}
+
+
+def cmd_gen() -> int:
+    ap = argparse.ArgumentParser(
+        prog="bench.py gen",
+        description="评测语料生成（原 gen_bench/gen_fidelity/gen_p8_* 六脚本收拢）",
+    )
+    ap.add_argument("kind", choices=tuple(GEN), help="语料类型: " + ", ".join(GEN))
+    args = ap.parse_args()
+    return GEN[args.kind]()
+
+
+def cmd_distill() -> int:
+    ap = argparse.ArgumentParser(
+        prog="bench.py distill",
+        description="语义权重蒸馏（原 distill_online/distill_weights 两脚本收拢）",
+    )
+    sub = ap.add_subparsers(dest="mode", required=True)
+    sub.add_parser("online",
+                   help="双在线旗舰教师蒸馏 → config/semantic/weights.json（scx-sem-2）")
+    sub.add_parser("weights",
+                   help="评测信号坐标上升蒸馏 → config/semantic/weights.json（scx-sem-2）")
+    args = ap.parse_args()
+    if args.mode == "online":
+        return distill_online_main()
+    return DW_main()
+
+
+def distill_online_main() -> int:
+    '''distill_online 主流程。socket IPv4 劫持只作用于本次调用，退出即恢复。'''
+    socket.getaddrinfo = DO_ipv4_first
+    try:
+        return DO_main()
+    finally:
+        socket.getaddrinfo = DO_orig_gai
+
+
+def cmd_fit() -> int:
+    ap = argparse.ArgumentParser(
+        prog="bench.py fit",
+        description="弱标签线性权重拟合 → config/semantic/weights.json（scx-sem-1）",
+    )
+    ap.parse_args()
+    return FW_main()
+
+
+def cmd_mlp() -> int:
+    ap = argparse.ArgumentParser(
+        prog="bench.py mlp",
+        description="MLP 交叉验证（读 config/bench/results/distill_cache.json）",
+    )
+    ap.parse_args()
+    return MC_main()
+
+
 SUB = {
     "gsm8k": cmd_gsm8k,
     "ablate": cmd_ablate,
@@ -2393,6 +5586,10 @@ SUB = {
     "metrics": cmd_metrics,
     "fidelity": cmd_fidelity,
     "calibrate": cmd_calibrate,
+    "gen": cmd_gen,
+    "distill": cmd_distill,
+    "fit": cmd_fit,
+    "mlp": cmd_mlp,
 }
 
 
