@@ -56,7 +56,7 @@ jobs:
         run: cargo run --release --locked --example bench -- memory
       - name: CLI smoke (Unix)
         if: runner.os != 'Windows'
-        run: sh tools/scx --version
+        run: bash tools/scx --version
       - name: CLI smoke (Windows)
         if: runner.os == 'Windows'
         shell: cmd

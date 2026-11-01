@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# scx 统一入口（macOS / Linux / WSL）：run / install / setup / doctor 四合一。
+# scx 统一入口（macOS / Linux / WSL）：run / install / setup / doctor / check / perf 六合一。
 #
 # - run（默认）：自举构建后原样转发参数；构建产物只落 target-dir，绝不向源码树
 #   拷贝二进制。无显式子命令时首参即视为 CLI 参数（等价 `scx run ...`）。
 # - install：release 构建 + 软链到 ~/.local/bin/scx（SCX_BIN_DIR 可覆盖）。
 # - setup：调用 `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等+备份+自检）。
 # - doctor：`scx mcp` stdio 握手自检。
+# - check：评测闭环门禁（cargo test×3 + clippy/fmt 零告警 + eval-manifest 冻结校验
+#   + A2 保真断言 + 新开关冒烟 + unwrap/panic 审计）。
+# - perf：压缩性能基线（src+docs+评测集语料，lossless/r0.3/r0.2 三档 ×3 次最优）。
 #
-# 零第三方依赖；仅用 bash 内建与 cargo。本机有 Rust 即可（无 cargo 时给出指引）。
+# 零第三方依赖；仅用 bash 内建、cargo 与评测 Python（SCX_EVAL_PY，缺省 /tmp/scx-eval/bin/python，
+# 不存在则回退 python3）。本机有 Rust 即可（无 cargo 时给出指引）。
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -17,16 +21,22 @@ LOCK="$ROOT/Cargo.lock"
 TD="${SCX_TARGET_DIR:-${TMPDIR:-/tmp}/scx-cargo-target}"
 SCX_BIN="$TD/release/scx"
 BIN_DIR="${SCX_BIN_DIR:-$HOME/.local/bin}"
+PY="${SCX_EVAL_PY:-/tmp/scx-eval/bin/python}"
+[ -x "$PY" ] || PY=python3
+RESULTS="$ROOT/config/bench/results"
+MANIFEST_JSON="$ROOT/config/bench/eval-manifest.json"
 
-cmd="${1:-}"
-case "$cmd" in
-  run) shift ;;
-  install) shift ;;
-  setup) shift ;;
-  doctor) shift ;;
-  "") ;;             # 无参 = run（scx 自身打印帮助）
-  *) cmd="run" ;;    # 非子命令视为 scx CLI 参数
-esac
+usage() {
+  cat >&2 <<'EOF'
+usage: tools/scx [run] [ARGS...] | install | setup | doctor | check | perf
+  run     自举构建后转发参数（默认；非子命令首参即 CLI 参数）
+  install release 构建 + 软链到 ~/.local/bin/scx
+  setup   注册 MCP 配置（Claude/Codex/Cursor，幂等+备份+自检）
+  doctor  scx mcp stdio 握手自检
+  check   评测闭环门禁（cargo test/clippy/fmt + manifest 冻结 + A2 保真 + 开关冒烟 + unwrap 审计）
+  perf    压缩性能基线（lossless/r0.3/r0.2 三档 ×3 次最优）
+EOF
+}
 
 require_cargo() {
   if ! command -v cargo >/dev/null 2>&1; then
@@ -35,72 +45,197 @@ require_cargo() {
   fi
 }
 
+# 构建 release 到 TD（stale 检测：二进制缺失或 src/Cargo.toml/Cargo.lock 更新即重建）。
+require_scx() {
+  require_cargo
+  local stale=0
+  if [ ! -x "$SCX_BIN" ]; then
+    stale=1
+  elif find "$ROOT/src" "$MANIFEST" "$LOCK" -newer "$SCX_BIN" -print -quit 2>/dev/null | grep -q .; then
+    stale=1
+  fi
+  if [ "$stale" -eq 1 ]; then
+    echo "[scx] release build (--locked) ..." >&2
+    cargo build --release --quiet --locked --manifest-path "$MANIFEST" --target-dir "$TD"
+  fi
+}
+
+cmd_run() {
+  require_scx
+  exec "$SCX_BIN" "$@"
+}
+
+cmd_install() {
+  require_cargo
+  echo "[scx] release build (--locked) ..."
+  cargo build --release --quiet --locked --manifest-path "$MANIFEST" --target-dir "$TD" >&2
+  mkdir -p "$BIN_DIR"
+  ln -sf "$SCX_BIN" "$BIN_DIR/scx"
+  "$BIN_DIR/scx" --version
+  echo "installed: $BIN_DIR/scx"
+  echo "提示：若 $BIN_DIR 不在 PATH，可追加：export PATH=\"$BIN_DIR:\$PATH\""
+}
+
+cmd_setup() {
+  require_scx
+  exec "$SCX_BIN" setup "$@"
+}
+
+cmd_doctor() {
+  require_scx
+  if printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+    | "$SCX_BIN" mcp | grep -q '"serverInfo"'; then
+    echo "ok: initialize handshake (scx mcp)"
+  else
+    echo "fail: initialize 握手失败" >&2
+    exit 1
+  fi
+  if printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+    | "$SCX_BIN" mcp | grep -q 'compress_context'; then
+    echo "ok: tools/list 包含 compress_context"
+  else
+    echo "fail: tools/list 异常" >&2
+    exit 1
+  fi
+  echo "ok: scx mcp ready (stdio)"
+}
+
+# check：评测闭环门禁（P7-E）。任一失败累积报告，最后统一非零退出（CI 可直接挂接）。
+cmd_check() {
+  local FAIL=0 T=""
+  step() { printf '\n== %s ==\n' "$1"; }
+  fail() { FAIL=1; echo "FAIL: $1"; }
+  trap 'rm -rf "${T:-}"' EXIT
+
+  step "cargo test --locked --lib"
+  cargo test --locked --lib 2>&1 | tail -3 | grep -q "0 failed" || fail "lib tests"
+
+  step "cargo test --locked --features semantic --lib"
+  cargo test --locked --features semantic --lib 2>&1 | tail -3 | grep -q "0 failed" || fail "semantic tests"
+
+  step "cargo test --locked --test golden"
+  cargo test --locked --test golden 2>&1 | tail -3 | grep -q "0 failed" || fail "golden tests"
+
+  step "clippy --all-targets"
+  W=$(cargo clippy --locked --all-targets 2>&1 | grep -cE "^warning:|^error" || true)
+  [ "$W" = "0" ] || fail "clippy $W warnings"
+
+  step "fmt --check"
+  cargo fmt --check >/dev/null 2>&1 || fail "fmt not clean"
+
+  step "eval-manifest 冻结校验"
+  [ -f "$MANIFEST_JSON" ] || fail "missing $MANIFEST_JSON"
+  "$PY" - "$MANIFEST_JSON" "$RESULTS" <<'PY' || fail "manifest integrity"
+import hashlib, json, os, sys
+m = json.load(open(sys.argv[1], encoding="utf-8"))
+res = sys.argv[2]
+ok = True
+for name, want in m.get("frozen", {}).items():
+    p = os.path.join(res, name)
+    if not os.path.exists(p):
+        print(f"  frozen {name}: MISSING"); ok = False; continue
+    data = open(p, "rb").read()
+    rows = data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
+    h = hashlib.sha256(data).hexdigest()
+    for key, val in (("sha256", h), ("rows", rows)):
+        if str(want.get(key)) != str(val):
+            print(f"  frozen {name}: {key} mismatch want={want.get(key)} got={val}"); ok = False
+for item in m.get("present", []):
+    p = os.path.join(res, item["file"])
+    if not os.path.exists(p):
+        print(f"  present {item['file']}: MISSING"); ok = False; continue
+    rows = sum(1 for _ in open(p, encoding="utf-8"))
+    if rows < item.get("min_rows", 2):
+        print(f"  present {item['file']}: rows={rows} < {item.get('min_rows',2)}"); ok = False
+print("  " + ("OK: frozen + present 全部匹配" if ok else "FAIL"))
+sys.exit(0 if ok else 1)
+PY
+
+  step "A2 保真断言（fidelity_thresholds 分档）"
+  "$PY" "$ROOT/tools/check.py" fidelity || fail "A2 fidelity"
+
+  step "新开关冒烟（P1/P0 新增 flag：budget/fold/auto-anchor/cluster）"
+  require_scx
+  T="$(mktemp -d)"
+  printf 'task start\n  log: build err=42 retry timeout\n  log: build ok step 2\n  log: flush cache err=7\n  a=1 b=2\n  summary: done\n' > "$T/in.txt"
+  "$SCX_BIN" --version | grep -q "0.11.0" || fail "smoke version"
+  for FLAG in "--budget 0.5" "--fold 1" "--auto-anchor 1" "--cluster 1" "--budget 0.35 --cluster 1"; do
+    # shellcheck disable=SC2086
+    "$SCX_BIN" "$T/in.txt" --query "build timeout" $FLAG --json > "$T/out.json" 2>/dev/null || fail "smoke $FLAG rc"
+    grep -q "compressed: kept=" "$T/out.json" || fail "smoke $FLAG stats"
+    "$SCX_BIN" "$T/in.txt" --query "build timeout" $FLAG --json > "$T/out2.json" 2>/dev/null
+    cmp -s "$T/out.json" "$T/out2.json" || fail "smoke $FLAG nondeterministic"
+  done
+  [ "$FAIL" = "0" ] && echo "  OK: 四新开关冒烟全过（rc + stats + 双跑确定性）"
+
+  step "unwrap/panic 审计（生产裸 unwrap=0，消息非空）"
+  "$PY" "$ROOT/tools/audit_unwrap.py" || fail "audit_unwrap"
+
+  if [ "$FAIL" = "0" ]; then
+    echo; echo "scx check: 全部通过 ✓"
+  else
+    echo; echo "scx check: 存在失败项"; exit 1
+  fi
+}
+
+# perf：压缩性能基线（P7-C）。三档 ×3 次，记录最快 real 及其 cut（原脚本 cut 绑定 bug 已修）。
+cmd_perf() {
+  require_scx
+  local TMP_IN="" CHARS LINES
+  TMP_IN="$(mktemp -t scx_perf.XXXXXX)"
+  trap 'rm -f "${TMP_IN:-}"' EXIT
+  {
+    find "$ROOT/src" -name '*.rs' -print0 | sort -z | xargs -0 cat
+    cat "$ROOT/docs/plan.md" "$ROOT/README.md" 2>/dev/null || true
+    SCX_ROOT="$ROOT" "$PY" - <<'PY'
+import csv, glob, os
+root = os.environ["SCX_ROOT"]
+for f in sorted(glob.glob(os.path.join(root, "config", "bench", "datasets", "*.csv"))):
+    try:
+        for row in csv.reader(open(f, encoding="utf-8")):
+            if len(row) >= 2 and row[0].strip():
+                print(row[0])
+    except FileNotFoundError:
+        pass
+PY
+  } > "$TMP_IN"
+
+  CHARS=$(wc -c < "$TMP_IN" | tr -d ' ')
+  LINES=$(wc -l < "$TMP_IN" | tr -d ' ')
+  echo "== scx perf baseline =="
+  echo "input: ${CHARS} chars / ${LINES} lines"
+
+  run() { # ratio label
+    local r="$1" label="$2" best="" cut="" out real
+    for i in 1 2 3; do
+      out="$(mktemp -t scx_perf_out.XXXXXX)"
+      /usr/bin/time -p "$SCX_BIN" --query "fn compress" --ratio "$r" \
+          --trim 1 --trim-ratio "$r" --trim-op-keep 1 --num-line-keep 1 \
+          "$TMP_IN" > "$out" 2>/tmp/scx_perf_err.txt || { rm -f "$out"; continue; }
+      real=$(grep '^real' /tmp/scx_perf_err.txt | awk '{print $2}')
+      if [ -z "$best" ] || awk -v a="$real" -v b="$best" 'BEGIN { exit !(a < b) }'; then
+        best="$real"
+        cut=$(awk -v i="$CHARS" -v o="$(wc -c < "$out" | tr -d ' ')" \
+            'BEGIN { printf "%.1f%%", (1 - o / i) * 100 }')
+      fi
+      rm -f "$out"
+    done
+    printf '%-12s best=%-8s cut=%s\n' "$label" "${best:-n/a}" "${cut:-n/a}"
+  }
+
+  run 1.0   "lossless"
+  run 0.3   "r0.3"
+  run 0.2   "r0.2"
+}
+
+cmd="${1:-}"
 case "$cmd" in
-  run)
-    stale=0
-    if [ ! -f "$SCX_BIN" ] || [ ! -x "$SCX_BIN" ]; then
-      stale=1
-    elif find "$ROOT/src" "$MANIFEST" "$LOCK" -newer "$SCX_BIN" -print -quit 2>/dev/null | grep -q .; then
-      stale=1
-    fi
-    if [ "$stale" -eq 1 ]; then
-      require_cargo
-      cargo build --release --quiet --locked --manifest-path "$MANIFEST" --target-dir "$TD" >&2
-    fi
-    exec "$SCX_BIN" "$@"
-    ;;
-  install)
-    require_cargo
-    echo "[scx] release build (--locked) ..."
-    cargo build --release --quiet --locked --manifest-path "$MANIFEST" --target-dir "$TD" >&2
-    mkdir -p "$BIN_DIR"
-    ln -sf "$SCX_BIN" "$BIN_DIR/scx"
-    "$BIN_DIR/scx" --version
-    echo "installed: $BIN_DIR/scx"
-    echo "提示：若 $BIN_DIR 不在 PATH，可追加：export PATH=\"$BIN_DIR:\$PATH\""
-    ;;
-  setup)
-    require_cargo
-    stale=0
-    if [ ! -x "$SCX_BIN" ]; then
-      stale=1
-    elif find "$ROOT/src" "$MANIFEST" "$LOCK" -newer "$SCX_BIN" -print -quit 2>/dev/null | grep -q .; then
-      stale=1
-    fi
-    if [ "$stale" -eq 1 ]; then
-      cargo build --release --quiet --locked --manifest-path "$MANIFEST" --target-dir "$TD" >&2
-    fi
-    exec "$SCX_BIN" setup "$@"
-    ;;
-  doctor)
-    require_cargo
-    stale=0
-    if [ ! -x "$SCX_BIN" ]; then
-      stale=1
-    elif find "$ROOT/src" "$MANIFEST" "$LOCK" -newer "$SCX_BIN" -print -quit 2>/dev/null | grep -q .; then
-      stale=1
-    fi
-    if [ "$stale" -eq 1 ]; then
-      cargo build --release --quiet --locked --manifest-path "$MANIFEST" --target-dir "$TD" >&2
-    fi
-    if printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-      | "$SCX_BIN" mcp | grep -q '"serverInfo"'; then
-      echo "ok: initialize handshake (scx mcp)"
-    else
-      echo "fail: initialize 握手失败" >&2
-      exit 1
-    fi
-    if printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-      | "$SCX_BIN" mcp | grep -q 'compress_context'; then
-      echo "ok: tools/list 包含 compress_context"
-    else
-      echo "fail: tools/list 异常" >&2
-      exit 1
-    fi
-    echo "ok: scx mcp ready (stdio)"
-    ;;
-  *)
-    echo "usage: tools/scx [run] [ARGS...] | install | setup | doctor" >&2
-    exit 2
-    ;;
+  check) cmd_check ;;
+  perf) cmd_perf ;;
+  run) shift; cmd_run "$@" ;;
+  install) shift; cmd_install "$@" ;;
+  setup) shift; cmd_setup "$@" ;;
+  doctor) shift; cmd_doctor "$@" ;;
+  "") cmd_run ;;            # 无参 = run（scx 自身打印帮助）
+  *) cmd_run "$@" ;;        # 非子命令视为 scx CLI 参数
 esac

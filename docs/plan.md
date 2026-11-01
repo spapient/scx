@@ -2753,3 +2753,17 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 - **兼容细节**：gsm8k 节 torch/datasets/transformers 延迟加载移至 parse_args 后（--help 即时返回）；calibrate 保持位置参数接口（非 argparse，与原版一致）；补充合并剥离误删的 glob/ThreadPoolExecutor/threading 标准库 import。
 - **删除 12 个旧脚本**：bench_ablate/arch/budget/code/kernel/long/perf/real/calibrate/check_fidelity/check_subset/eval_fidelity；保留 audit_unwrap.py、bench_perf.sh（独立 shell 性能基线，不依赖被删脚本）。
 - **验证**：py_compile 过、import 加载 SUB=10、10 子命令 --help 冒烟全过、calibrate 实跑（P95 分位数输出）、check.py fidelity A2 断言实跑通过、metrics real 链路通；全仓 grep 无旧文件名残留引用。未触发任何评测重跑（用户三次否决评测重跑，合并仅做语法/只读冒烟）；冻结产物 config/bench/results/* 与 eval-manifest 未触碰。
+
+## tools/ shell 合并轮（2026-11-02，commit 本轮）
+
+用户点名"tools/bench_perf.sh + tools/check_bench.sh + tools/scx 优化成一个文件，质量要提升必须"。交付：
+
+- **三合一 → tools/scx 六子命令**：`run/install/setup/doctor`（原 scx 包装）+ `check`（原 check_bench.sh 门禁）+ `perf`（原 bench_perf.sh 基线）；删除 check_bench.sh、bench_perf.sh。
+- **质量提升**：
+  - 构建收拢：run/setup/doctor/check/perf 五处冗余 stale 检测 → `require_scx()`（二进制缺失或 src/Cargo.toml/Cargo.lock 更新即重建，构建产物统一落 `SCX_TARGET_DIR` 不污染源码树）。
+  - 修原 perf bug：cut%（压缩率）原脚本与 best（最快 real）不同次绑定（cut 显示末次迭代值）；现 cut 与 best 同次记录。
+  - 统一评测 Python：`SCX_EVAL_PY`（缺省 /tmp/scx-eval/bin/python，缺失回退 python3）；perf 语料拼装与 manifest 校验、check.py、audit_unwrap 同口径。
+  - clippy 计数加 `|| true` 缓冲：error 时仍走累积报告而非 set -e 中断。
+  - CI 显式化：`.github/workflows/ci.yml` `sh tools/scx --version` → `bash tools/scx --version`（消除 sh/dash 与 bash 语义歧义）。
+- **验证**：bash -n 过；`scx --version`（run 路径自举构建）出 0.11.0；`scx check` 全门禁——cargo test×3（lib/semantic/golden）、clippy/fmt 零告警、A2 保真断言、四新开关冒烟（rc+stats+双跑确定性）、unwrap 审计**全部通过**；`scx perf` 三档基准输出（1.5MB/41k 行语料，lossless cut=58.6% / r0.3 74.0% / r0.2 76.7%）。
+- **既有漂移如实记录（非本次引入）**：check 的 eval-manifest 冻结校验报 bench_p22_compactbench.json（sha256/rows 81 vs 82）与 bench_p23_amabench.json（rows 488 vs 452）不匹配；工作区与 HEAD 一致、校验算法与 HEAD 版 check_bench.sh 逐字一致 → 该失败在干净 HEAD 上同样发生，属仓库冻结值与已提交结果文件的历史漂移，待用户决策（更新冻结或重生成），本轮未触碰冻结产物。
