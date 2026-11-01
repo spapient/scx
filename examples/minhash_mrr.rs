@@ -61,9 +61,9 @@ fn main() {
             },
         )
         .unwrap_or_else(|e| {
-                eprintln!("recall error for {query:?}: {e}");
-                Vec::new()
-            });
+            eprintln!("recall error for {query:?}: {e}");
+            Vec::new()
+        });
         for h in &hits {
             let tail = h.id.rsplit('_').next().unwrap_or(&h.id);
             writeln!(out, "{tail}").expect("write hit");

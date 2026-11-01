@@ -147,7 +147,7 @@ fn call(id: Option<Json>, msg: &Json, usage: &mut Usage) -> Option<String> {
 fn wire(id: &Option<Json>) -> String {
     match id {
         Some(Json::Num(n)) => format!("{n}"),
-        Some(Json::Str(s)) => format!("\"{}\"", jesc(s)),
+        Some(Json::Str(s)) => crate::json::string(s),
         Some(Json::Null) | None => "null".to_string(),
         Some(_) => "null".to_string(),
     }
@@ -157,7 +157,7 @@ fn error(id: Option<Json>, code: i64, message: &str) -> String {
     format!(
         "{{\"jsonrpc\":\"2.0\",\"id\":{},\"error\":{{\"code\":{code},\"message\":\"{}\"}}}}",
         wire(&id),
-        jesc(message)
+        crate::json::escape(message)
     )
 }
 
@@ -165,27 +165,8 @@ fn result(id: Option<Json>, text: &str) -> String {
     format!(
         "{{\"jsonrpc\":\"2.0\",\"id\":{},\"result\":{{\"content\":[{{\"type\":\"text\",\"text\":\"{}\"}}],\"isError\":false}}}}",
         wire(&id),
-        jesc(text)
+        crate::json::escape(text)
     )
-}
-
-/// JSON 字符串转义：反斜杠、引号、换行、回车、制表符与全部 C0 控制字符。
-/// 效果卡为多行文本，缺少换行转义会使返回帧非法 JSON；query/text 可能携带
-/// 任意控制字符，未转义会产出非法 JSON 帧。
-fn jesc(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 8);
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            _ => out.push(c),
-        }
-    }
-    out
 }
 
 /// 从 JSON 值取数值参数（整数语义：f64 → usize，负值钳 0）。
@@ -231,7 +212,14 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
     let json = crate::ops::render(&outcome);
     // v0.6.6：单块 text（效果卡在上、机器 JSON 在下）。实测豆包对多 content 只渲染
     // JSON 转述、效果卡不可见；合并为一块后任意客户端对话均原样显示效果卡，模型仍可读 JSON。
-    let combined = format!("{card}\n{json}");
+    // 修复：render 仅输出元数据 JSON，不含压缩正文；把 outcome.text 作为 "text"
+    // 字段嵌入 JSON，使 MCP 调用方能拿到压缩产物（契约不变：效果卡在上、机器 JSON 在下）。
+    let mut body = json;
+    body.pop();
+    body.push_str(",\"text\":\"");
+    body.push_str(&crate::json::escape(&outcome.text));
+    body.push_str("\"}");
+    let combined = format!("{card}\n{body}");
     result(id, &combined)
 }
 
@@ -608,11 +596,15 @@ mod tests {
     }
 
     #[test]
-    fn jesc_escapes_all_c0_control_chars() {
-        assert_eq!(jesc("a\x01b"), r#"a\u0001b"#, "C0 控制字符须转义");
-        assert_eq!(jesc("a\x1bb"), r#"a\u001bb"#, "ESC 须转义");
-        assert_eq!(jesc("a\nb"), r#"a\nb"#);
-        assert_eq!(jesc("a\"b\\c"), r#"a\"b\\c"#);
+    fn escape_escapes_all_c0_control_chars() {
+        assert_eq!(
+            crate::json::escape("a\x01b"),
+            r#"a\u0001b"#,
+            "C0 控制字符须转义"
+        );
+        assert_eq!(crate::json::escape("a\x1bb"), r#"a\u001bb"#, "ESC 须转义");
+        assert_eq!(crate::json::escape("a\nb"), r#"a\nb"#);
+        assert_eq!(crate::json::escape("a\"b\\c"), r#"a\"b\\c"#);
     }
 
     #[test]

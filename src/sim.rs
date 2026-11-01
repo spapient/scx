@@ -144,9 +144,7 @@ pub fn compute_vec(
     let mut miss: Vec<(usize, String, &str)> = Vec::new();
     for (i, t) in texts.iter().enumerate() {
         let key = vec_key(t);
-        let hit = dir
-            .as_deref()
-            .and_then(|d| read_vec(&cache_path(d, &key)));
+        let hit = dir.as_deref().and_then(|d| read_vec(&cache_path(d, &key)));
         match hit {
             Some(v) => tv.push(v),
             None => {
@@ -214,7 +212,9 @@ fn spawn_vec(program: &str, query: &str, texts: &[&str]) -> Result<Vec<Vec<f32>>
             .read_line(&mut line)
             .map_err(|e| format!("--embed-vec read: {e}"))?;
         if n == 0 {
-            return Err("--embed-vec: provider closed stdout before emitting all vectors".to_string());
+            return Err(
+                "--embed-vec: provider closed stdout before emitting all vectors".to_string(),
+            );
         }
         let v: Vec<f32> = line
             .split_whitespace()
