@@ -320,7 +320,7 @@ def seed_corpus(corpus, mem_dir, binary, force, jobs=1):
     layers = validate_corpus(corpus)
     binary = binary or default_binary()
     if not binary or not Path(binary).is_file():
-        sys.exit("seed: missing release binary; run `./tools/scx --version` first")
+        sys.exit("seed: missing release binary; run `./tools/ops.py --version` first")
     mem_dir = prepare_mem_dir(mem_dir, force)
     jobs = int(jobs)
     items = list(corpus_cases(corpus))

@@ -2779,3 +2779,26 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 - **shell 改引**：`scx check` 门禁链 `check.py fidelity` → `scx.py check a2`、`audit_unwrap.py` → `scx.py audit`。
 - **命名遵循**：单单词 + Unix 共识缩写（check/audit/freeze/extract/gen/distill/fit/mlp），禁自造缩写。
 - **验证**：py_compile 全过；scx.py 14 子命令、bench.py 14 子命令 + gen/distill 二级 `--help` 全 0；`scx check` 全门禁绿（eval-manifest 69 冻结全匹配 + A2 保真 + 四新开关冒烟 + unwrap 审计）；scx.py selftest/check a2/audit 实跑 PASS。全程未触发评测/蒸馏/拟合重跑，冻结产物（eval-manifest、蒸馏产物、weights.json）零触碰。
+
+## tools/ 四文件改造轮（2026-11-02，commit 本轮）
+
+用户点名"Python 文件可以改成四个；一定要文件变少、代码变少；可以配置化"。交付：
+
+- **tools/ 收敛为 4 个 Python 文件**：`ops.py`（运维六合一入口，新增）+ `scx.py` + `bench.py` + `common.py`。
+- **ops.py（222 行，配置表驱动）**：等价替代原 `scx`（bash 241 行）+ `scx.cmd`（Windows 19 行，共 260 行 → 净减 38 行）。六子命令 run/install/setup/doctor/check/perf 由顶部 TOOLCHAIN 常量表注册（usage 由 CMDS 表驱动，禁硬编码）；`SCX_TARGET_DIR / SCX_BIN_DIR / SCX_EVAL_PY` 环境变量可覆盖；非子命令/参数（`--version`、`--query`、路径等）一律转发给 scx 自身（与原 bash 行为一致）。
+- **引用同步**：README 20 处 `./tools/scx` / `scx.cmd` → `./tools/ops.py`（含 Claude Code/Codex skill 安装路径）；tools/scx.py 提示文本更新。docs/ 历史记录段保留原名可追溯。
+- **等价性验证**：`ops.py check` 全门禁绿（cargo test×3 + clippy/fmt 零告警 + eval-manifest 69 冻结全匹配 + A2 保真 + 四新开关冒烟双跑确定性 + unwrap 审计）；`ops.py doctor` stdio 握手 OK；`ops.py perf` 三档跑通（1,509,236 chars / 41,105 lines，lossless 67.4% / r0.3 77.2% / r0.2 79.1%）；perf 语料拼接与 bash 原逻辑 sha256 全等（cut 高于 2026-10-29 冻结基线纯因 plan.md/README/src 增长）。
+- **总量**：tools/ 8595 → 8557 行（-38），文件 5 → 4（全 Python，零 bash/批处理）。
+
+## P25 语义通道演进计划（2026-11-02 定稿；编号修正：P19 已为 KEEP-Bench 官方基准，语义线专精轮顺延为 P25）
+
+用户点名"语义通道后续演进方向要顶级优秀、看能提升多少；对标 SuperCompress（supercompress.dev，query-aware 上下文压缩，主攻 coding-agent dumps）"。现状锚点：24 维权 scx-sem-2（3 折 CV AP 0.7678、code 0.2992→0.5082=1.70×）、`--sem-gate` 默认关、#66 comp_sem 0.733 vs comp 0.717（代码问答增益小）。阶段门（每门不过不进下一阶段）：
+
+| 阶段 | 内容 | 量化门禁（可证伪） |
+|---|---|---|
+| P25-A | query 感知特征强化（q_density/head_hit 已有雏形 → 对齐 SuperCompress query-aware 核心） + 弱标签一致性清洗 | 端到端 #66 协议 comp_sem 增益 ≥ +0.05（0.733→0.78+）；蒸馏 AP code ≥ 0.60 |
+| P25-B | 学生容量阶梯：线性 → 逐段线性/阈值表（Rust 编译期权重表，保持零依赖确定性）；MLP 教训=keep 钳制防 AP 虚高 | 全量 AP 0.7678 → ≥0.80；weights sha256 冻结 + golden 零漂移 |
+| P25-C | 联合 gating：`--sem-gate` 单通道 → 与 fold/trim/熵/锚簇 联合加权（per-operator 权重由蒸馏产出，配置化） | A2 保真分档全过；同压缩率强口径 keep 保持 4.5× LLMLingua-2 |
+| P25-D | 评测闭环：SuperCompress 同口径对比（D1 20 题协议 + 端到端 60 题协议，cut 对齐 0.35/0.5） | keep/cut 双领先；eval-manifest 冻结扩编 |
+
+铁律全程不可破：Rust 零依赖、确定性、无 GPU、配置化（禁硬编码）、golden 零漂移、体积冻结。新竞品对比（P25-D）为唯一允许触发的评测动作，需用户确认后执行。
