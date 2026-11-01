@@ -60,7 +60,7 @@ sys.exit(0 if ok else 1)
 PY
 
 step "A2 保真断言（fidelity_thresholds 分档）"
-/tmp/scx-eval/bin/python tools/check_fidelity.py || fail "A2 fidelity"
+/tmp/scx-eval/bin/python tools/check.py fidelity || fail "A2 fidelity"
 
 step "新开关冒烟（P1/P0 新增 flag：budget/fold/auto-anchor/cluster）"
 cargo build --release --locked >/dev/null 2>&1 || fail "smoke build"

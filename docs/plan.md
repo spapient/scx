@@ -2741,3 +2741,15 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 - **复用收拢**：新增 `testsupport::tmpdir`（cfg(test) 专用唯一临时路径 helper），收拢 store.rs×3 + input.rs×1 重复的 `SystemTime→as_nanos` 手写；顺带修 lib.rs 重复 `#[cfg(test)]`。
 - 静态死代码全扫（pub+私有 fn 调用点统计）确认 parse.rs 的 annotation/actions/gates 为 CHECKS 表驱动校验器（非死代码）、meter from_bucket/mode_of 为函数指针引用（非死代码）。
 - 验证：build/clippy 0 warning；lib 397 + bin 4 全过；cli 16 passed + 1 pre-existing FAILED（并发 gen 竞争，HEAD 复现与本次无关）。
+
+## tools/ 合并轮（2026-11-02，接管并行会话后完成）
+
+用户拍板"tools/ 整体架构优化：减少大量文件/代码、消除重复合并代码、优化命名"；执行中发现另一并行会话同做此任务（已改 4 个 bench 脚本收拢 common、删除历史评测目录），经用户裁决"我接管完成合并"。交付：
+
+- **10 脚本 → 1**：bench.py（原 384 行 GSM8K）+ bench_ablate + bench_budget + bench_arch + bench_code + bench_kernel + bench_long + bench_metrics（= bench_perf+bench_real 并行合并版）+ eval_fidelity + calibrate → 单一 `tools/bench.py`（2400 行）子命令分发：`gsm8k/ablate/budget/arch/code/kernel/long/metrics/fidelity/calibrate`；`python3 tools/bench.py --ablate/--budget/...` 与旧命令天然兼容。
+- **check 二合一**：check_fidelity.py + check_subset.py → `tools/check.py fidelity|subset`；check_bench.sh 门禁链同步改引 `check.py fidelity`。
+- **公共封装**：`tools/common.py`（chat OpenAI 兼容调用 + compress scx 二进制调用），消除 bench_arch/bench_code/bench_kernel 三处 api_call urllib 重复、bench_ablate/budget 两处 compress tempfile 重复。
+- **命名优化**：api_call→code_call/arch_call、check→check_ans/check_kernel、build_prompt→arch_prompt/kernel_prompt/long_prompt/fid_prompt、norm→norm_ans、extract_answer→code_answer、JUDGE_CFG→CODE_CFG/ARCH_CFG、main→cmd_* 子命令入口（避免同文件重名冲突）。
+- **兼容细节**：gsm8k 节 torch/datasets/transformers 延迟加载移至 parse_args 后（--help 即时返回）；calibrate 保持位置参数接口（非 argparse，与原版一致）；补充合并剥离误删的 glob/ThreadPoolExecutor/threading 标准库 import。
+- **删除 12 个旧脚本**：bench_ablate/arch/budget/code/kernel/long/perf/real/calibrate/check_fidelity/check_subset/eval_fidelity；保留 audit_unwrap.py、bench_perf.sh（独立 shell 性能基线，不依赖被删脚本）。
+- **验证**：py_compile 过、import 加载 SUB=10、10 子命令 --help 冒烟全过、calibrate 实跑（P95 分位数输出）、check.py fidelity A2 断言实跑通过、metrics real 链路通；全仓 grep 无旧文件名残留引用。未触发任何评测重跑（用户三次否决评测重跑，合并仅做语法/只读冒烟）；冻结产物 config/bench/results/* 与 eval-manifest 未触碰。
