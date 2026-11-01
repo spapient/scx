@@ -213,11 +213,6 @@ impl Ledger {
         Ledger { snaps }
     }
 
-    /// 导出账本为 JSONL 文件（审计日志导出）。
-    pub fn save_jsonl(&self, path: &str) -> std::io::Result<()> {
-        std::fs::write(path, self.to_jsonl())
-    }
-
     /// 从 JSONL 文件恢复账本。
     pub fn load_jsonl(path: &str) -> std::io::Result<Ledger> {
         std::fs::read_to_string(path).map(|s| Ledger::from_jsonl(&s))

@@ -136,18 +136,10 @@ mod tests {
 
     #[test]
     fn fix_file_is_capped_before_decode() {
-        let path = std::env::temp_dir().join(format!(
-            "scx-fix-cap-{}-{}.txt",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let path = format!("{}.txt", crate::testsupport::tmpdir("fix-cap"));
         std::fs::write(&path, b"12345").unwrap();
-        let path = path.to_string_lossy();
         assert_eq!(fix(&path, 5).unwrap(), "12345");
         assert!(fix(&path, 4).is_err());
-        let _ = std::fs::remove_file(path.as_ref());
+        let _ = std::fs::remove_file(&path);
     }
 }

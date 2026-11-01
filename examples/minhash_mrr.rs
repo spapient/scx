@@ -47,8 +47,20 @@ fn main() {
         if query.trim().is_empty() {
             continue;
         }
-        let hits = scx::memory::search_fused(&mem_dir, &query, 10, true, None, 0.0, weight, None, None)
-            .unwrap_or_else(|e| {
+        let hits = scx::memory::search_fused(
+            &mem_dir,
+            &query,
+            10,
+            true,
+            scx::memory::FuseOpts {
+                embed_cmd: None,
+                embed_weight: 0.0,
+                minhash_weight: weight,
+                embed_vec: None,
+                embed_cache: None,
+            },
+        )
+        .unwrap_or_else(|e| {
                 eprintln!("recall error for {query:?}: {e}");
                 Vec::new()
             });

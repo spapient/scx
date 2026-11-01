@@ -499,11 +499,13 @@ fn recall(
             query,
             k,
             true,
-            embed_cmd.as_deref(),
-            sim_weight,
-            minhash_weight,
-            embed_vec.as_deref(),
-            embed_cache.as_deref().map(std::path::Path::new),
+            crate::memory::FuseOpts {
+                embed_cmd: embed_cmd.as_deref(),
+                embed_weight: sim_weight,
+                minhash_weight,
+                embed_vec: embed_vec.as_deref(),
+                embed_cache: embed_cache.as_deref().map(std::path::Path::new),
+            },
         )?,
         kind.as_deref(),
     )?;
@@ -1142,11 +1144,13 @@ fn memory(out: &mut dyn Write, job: &Compress) -> Reply {
         &job.query,
         job.recall,
         false,
-        job.embed_cmd.as_deref(),
-        job.config.sim_weight,
-        job.minhash_weight,
-        job.embed_vec.as_deref(),
-        job.embed_cache.as_deref().map(std::path::Path::new),
+        crate::memory::FuseOpts {
+            embed_cmd: job.embed_cmd.as_deref(),
+            embed_weight: job.config.sim_weight,
+            minhash_weight: job.minhash_weight,
+            embed_vec: job.embed_vec.as_deref(),
+            embed_cache: job.embed_cache.as_deref().map(std::path::Path::new),
+        },
     ) {
         Ok(hits) => hits,
         Err(e) => {

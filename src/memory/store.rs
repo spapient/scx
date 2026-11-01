@@ -614,14 +614,7 @@ mod tests {
     /// P3 兼容：老库 case.json 缺 version/life 键 → 解码为 version=1/life=active。
     #[test]
     fn decode_missing_version_and_life_keys_fall_back() {
-        let root = std::env::temp_dir().join(format!(
-            "scx-mem-legacy-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let root = root.to_str().unwrap().to_string();
+        let root = crate::testsupport::tmpdir("mem-legacy");
         ensure(&root).unwrap();
         let id = "2026-10-22_legacy01";
         let mut c = Case::new(id.into(), "q".into(), vec![], "t".into());
@@ -675,14 +668,7 @@ mod tests {
 
     #[test]
     fn invalid_case_ids_cannot_escape_the_cases_directory() {
-        let root = std::env::temp_dir().join(format!(
-            "scx-mem-id-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let root = root.to_str().unwrap().to_string();
+        let root = crate::testsupport::tmpdir("mem-id");
         ensure(&root).unwrap();
 
         for bad in ["", "..", "../escape", "a/b", "a\\b", "with space"] {
@@ -732,14 +718,7 @@ mod tests {
 
     #[test]
     fn concurrent_case_writes_are_lossless() {
-        let root = std::env::temp_dir().join(format!(
-            "scx-mem-conc-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let root = root.to_str().unwrap().to_string();
+        let root = crate::testsupport::tmpdir("mem-conc");
         ensure(&root).unwrap();
         let mut handles = Vec::new();
         for t in 0..8 {

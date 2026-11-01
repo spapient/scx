@@ -233,20 +233,27 @@ const RRF_K: f64 = 60.0;
 /// `embed_vec` 为向量后端（`--embed-vec`，scx 内算余弦）；`embed_cache` 为候选
 /// 向量持久化目录（`--embed-cache`，仿 usearch：text 向量落盘一次、仅 query
 /// 在线编码）。二者取 `embed_vec`（若给出）优先于 `embed_cmd`。
+/// 融合召回配置：embed B 线（`embed_cmd`/`embed_vec`/`embed_cache`）+ P4 minhash
+/// 权重。打包为 struct 使 `search_fused` 签名参数数 ≤ clippy 阈值（7）。
+#[derive(Clone, Copy)]
+pub struct FuseOpts<'a> {
+    pub embed_cmd: Option<&'a str>,
+    pub embed_weight: f64,
+    pub minhash_weight: f64,
+    pub embed_vec: Option<&'a str>,
+    pub embed_cache: Option<&'a Path>,
+}
+
 pub fn search_fused(
     root: &str,
     query: &str,
     k: usize,
     read_only: bool,
-    embed_cmd: Option<&str>,
-    embed_weight: f64,
-    minhash_weight: f64,
-    embed_vec: Option<&str>,
-    embed_cache: Option<&Path>,
+    fuse: FuseOpts<'_>,
 ) -> std::io::Result<Vec<Hit>> {
     let bm25 = search(root, query, k, read_only)?;
-    let use_embed = (embed_cmd.is_some() || embed_vec.is_some()) && embed_weight > 0.0;
-    let use_minhash = minhash_weight > 0.0;
+    let use_embed = (fuse.embed_cmd.is_some() || fuse.embed_vec.is_some()) && fuse.embed_weight > 0.0;
+    let use_minhash = fuse.minhash_weight > 0.0;
     if k == 0 || (!use_embed && !use_minhash) {
         return Ok(bm25);
     }
@@ -254,7 +261,7 @@ pub fn search_fused(
     // 快照同窗口复用；键含配置盐，不同 embed/minhash 权重不串快照。命中则
     // 跳过全库重载 + 签名重算（该步与基础 search 的会话缓存相互独立）。
     let meta = crate::memory::meta::load(root)?;
-    let salt = fuse_salt(embed_vec.or(embed_cmd), embed_weight, minhash_weight);
+    let salt = fuse_salt(fuse.embed_vec.or(fuse.embed_cmd), fuse.embed_weight, fuse.minhash_weight);
     let cache_window = (meta.param("session_cache_minutes").max(0.0) * 60.0) as u64;
     if let Some(out) = session_fused(root, query, &salt, &meta, cache_window, k) {
         return Ok(out);
@@ -282,10 +289,10 @@ pub fn search_fused(
         .collect();
 
     let embed_term = if use_embed {
-        let sims = match embed_vec {
-            Some(v) => crate::sim::compute_vec(Some(v), embed_cache, query, &refs)
+        let sims = match fuse.embed_vec {
+            Some(v) => crate::sim::compute_vec(Some(v), fuse.embed_cache, query, &refs)
                 .map_err(std::io::Error::other)?,
-            None => crate::sim::compute(embed_cmd, query, &refs).map_err(std::io::Error::other)?,
+            None => crate::sim::compute(fuse.embed_cmd, query, &refs).map_err(std::io::Error::other)?,
         };
         Some(full_rank_term(&ids, &sims))
     } else {
@@ -584,7 +591,7 @@ mod tests {
         );
         seed(&root, "disk full", "disk full errno=28\nfix: clean up");
         let plain = search(&root, "db timeout", 2, true).unwrap();
-        let fused = search_fused(&root, "db timeout", 2, true, None, 1.0, 0.0, None, None).unwrap();
+        let fused = search_fused(&root, "db timeout", 2, true, FuseOpts { embed_cmd: None, embed_weight: 1.0, minhash_weight: 0.0, embed_vec: None, embed_cache: None }).unwrap();
         assert_eq!(plain, fused, "embed_cmd=None 必须与 search 逐字节一致");
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -595,7 +602,7 @@ mod tests {
         seed(&root, "db timeout", "db timeout conn pool");
         seed(&root, "disk full", "disk full errno=28");
         let cmd = "printf '0.5\\n0.5\\n'";
-        let hits = search_fused(&root, "db timeout", 2, true, Some(cmd), 1.0, 0.0, None, None).unwrap();
+        let hits = search_fused(&root, "db timeout", 2, true, FuseOpts { embed_cmd: Some(cmd), embed_weight: 1.0, minhash_weight: 0.0, embed_vec: None, embed_cache: None }).unwrap();
         assert!(!hits.is_empty(), "融合召回不应为空");
         assert!(hits.len() <= 2, "融合召回须受 k 约束");
         assert!(
@@ -614,7 +621,7 @@ mod tests {
             "db connection timeout conn pool",
         );
         seed(&root, "disk full", "disk full errno=28");
-        let hits = search_fused(&root, "db connection timeout", 2, true, None, 0.0, 1.0, None, None).unwrap();
+        let hits = search_fused(&root, "db connection timeout", 2, true, FuseOpts { embed_cmd: None, embed_weight: 0.0, minhash_weight: 1.0, embed_vec: None, embed_cache: None }).unwrap();
         assert!(!hits.is_empty(), "MinHash 融合召回不应为空");
         assert!(hits.len() <= 2, "MinHash 融合召回须受 k 约束");
         assert!(
@@ -687,10 +694,10 @@ mod tests {
             "clean up disk",
         );
         let _ = seed(&root, "disk full", "disk full\nroot cause: pool exhausted");
-        let fused = search_fused(&root, "disk full errno=28", 2, true, None, 0.0, 1.0, None, None).unwrap();
+        let fused = search_fused(&root, "disk full errno=28", 2, true, FuseOpts { embed_cmd: None, embed_weight: 0.0, minhash_weight: 1.0, embed_vec: None, embed_cache: None }).unwrap();
         assert_eq!(fused.len(), 2, "两 case 均应有信号");
         assert_eq!(fused[0].id, a, "实体键全命中者（errno=28）应居首");
-        let again = search_fused(&root, "disk full errno=28", 2, true, None, 0.0, 1.0, None, None).unwrap();
+        let again = search_fused(&root, "disk full errno=28", 2, true, FuseOpts { embed_cmd: None, embed_weight: 0.0, minhash_weight: 1.0, embed_vec: None, embed_cache: None }).unwrap();
         assert_eq!(fused, again, "同配置融合必须确定");
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -704,10 +711,10 @@ mod tests {
             "db timeout conn pool\nroot cause: pool exhausted",
         );
         seed(&root, "disk full", "disk full errno=28\nfix: clean up");
-        let a = search_fused(&root, "db timeout", 2, false, None, 0.0, 1.0, None, None).unwrap();
-        let b = search_fused(&root, "db timeout", 2, false, None, 0.0, 1.0, None, None).unwrap();
+        let a = search_fused(&root, "db timeout", 2, false, FuseOpts { embed_cmd: None, embed_weight: 0.0, minhash_weight: 1.0, embed_vec: None, embed_cache: None }).unwrap();
+        let b = search_fused(&root, "db timeout", 2, false, FuseOpts { embed_cmd: None, embed_weight: 0.0, minhash_weight: 1.0, embed_vec: None, embed_cache: None }).unwrap();
         assert_eq!(a, b, "窗口内二次融合召回必须逐字段一致（快照命中）");
-        let c = search_fused(&root, "db timeout", 2, true, None, 0.0, 1.0, None, None).unwrap();
+        let c = search_fused(&root, "db timeout", 2, true, FuseOpts { embed_cmd: None, embed_weight: 0.0, minhash_weight: 1.0, embed_vec: None, embed_cache: None }).unwrap();
         assert_eq!(a, c, "read_only 路径结果必须与可写路径一致");
         let _ = std::fs::remove_dir_all(&root);
     }

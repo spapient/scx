@@ -660,5 +660,7 @@ pub(crate) fn prefix(out: &mut String, n: usize) {
 }
 
 #[cfg(test)]
+mod testsupport;
+
 #[cfg(test)]
 mod lib_tests;
