@@ -2712,3 +2712,23 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 - 门禁三项全未达（差 acc 1.51 点 / F1 1.77 点 / 超 bm25 需 +5 点）——**P24-B-2 未过门，如实记录**；超 bm25 ≥5 点为结构性缺口（turn 级证据 vs 轨迹整体，词面任务上 embedding 增益有限）。
 - B 线基础设施（`--embed-vec/--embed-cache` 持久化缓存）保留在 `b4af5d8`（代码）+ `1bc83a1`（docs），**未 push**；功能复验：cargo test 16 passed / 1 pre-existing FAILED（`concurrent_store_processes_…`，HEAD 复现，与 B 线无关）无回归。
 - 转 **P24-C 治理线复跑确认**（费用低，先动）。
+
+## P24-C 治理线复跑确认（2026-11-01 深夜，抽样确认无回归，commit 待填）
+
+**背景**：`/tmp/scx_bench_longmem`、`/tmp/scx_bench_memora` 被系统清理，复跑须重建语料；冻结结果 JSON 在仓库内未丢（P20 88.35 / P21 ΔFAMA 10.68）。用户拍板"抽一下即可，不搞全量长流程"，本段以抽样 + 代码审计双证据收尾。
+
+**数据恢复**：
+- LongMemEval 官方 repo clone 成功（commit `9e0b455f4ef0e2ab8f2e582289761153549043fc`）；P20 S 集 500 问 + oracle 从 HF `xiaowu0162/longmemeval-cleaned` 落盘 `/tmp/scx_bench_longmem/data/`；**M 集未下成**（HF 网络中断，README 已知边界，如实记录）。
+- Memora 直连 git clone / codeload tarball 三次失败（网络 early EOF），经 **ghfast.top 镜像 depth 1 clone 成功**，HEAD = `a6493188efc836d6511ed5e4163fe3ba87da30ff`（与冻结 commit 一致，数据版本完全吻合）。
+
+**P20 抽样复跑**（S 集，5 能力 × 10 = 50 问 seed 20261101 + MSR 补抽 10 问 seed 20261102，合计 60 问，跑批 91s/批）：
+- IE 1.0 / TR 0.90 / KU 0.80 / ABS 0.90 与冻结（0.9533 / 0.8976 / 0.875 / 0.7667）吻合；MSR 两批 0.30 / 0.67（合并 9/19 = 0.47 vs 冻结 0.7438）为唯一离群。
+- **逐题召回诊断**：MSR 判错 10 题中 **8 题 recall_any@10=1.0**（证据全在 top10 内）→ judge/reader 波动，非召回回归；仅 `c18a7dc8`、`gpt4_f2262a51` 两题召回硬失败（单题现象，冻结时 MSR 本就 ~26% 错误）。
+- **B 线代码审计（决定性）**：`b4af5d8` 对 `search_fused` 仅新增 `embed_vec/embed_cache` 参数；`embed_cmd=None` 时 `use_embed=false` → 直接返回 BM25 原路（行为逐字节不变），单测 `embed_cmd=None 必须与 search 逐字节一致` 通过（16 passed）。
+- **结论**：P20 治理线无回归；抽样 task-averaged 0.78 与冻结 0.8835 的差距 = MSR 单能力 judge 波动 + n=10~20 抽样方差，非 B 线召回回归。
+
+**P21 抽样复跑**（Memora，ingest 全量 60 组本地完成 gov/nogov；eval `--sample-frac 0.1 --seed 21` → nogov 60 题完整 + gov 10 题）：
+- nogov FAMA 20.57（60 题）/ gov FAMA 38.5（10 题）→ **ΔFAMA = 17.93 vs 冻结 10.68**，门禁 ≥9.0 ✓；gov−nogov 正增益方向与冻结一致。
+- 抽样口径说明：gov 仅 10 题（用户拍板不再补跑），ΔFAMA 含抽样方差，结论为"治理增益方向保持、无回归迹象"。
+
+**收尾**：P24-C 复跑确认完成（用户定调抽样即可）；冻结 JSON 未覆盖（抽样结果存 `/tmp/scx_bench_memora/results/`、`/tmp/scx_bench_longmem/runs/`，不写 `config/bench/results/`）；M 集缺失与网络受阻如实记录；B 线两 commit（`b4af5d8`/`1bc83a1`）未 push，待用户拍板。
