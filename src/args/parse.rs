@@ -66,7 +66,7 @@ pub fn usage() -> String {
         "                       self-built kernel via SCX_GPU_BIN (falls back to cpu if unavailable)\n",
     );
     s.push_str(
-        "  --max-mem MB         semantic batch scoring memory budget in MB (default 64; >=1)\n",
+        "  --max-mem MB         semantic batch scoring memory budget in MB (default 128; >=1)\n",
     );
     s.push_str(
         "  --minhash-weight F   weight of MinHash-LSH Jaccard recall in RRF fusion (default 0; >=0)\n",
