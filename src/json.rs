@@ -39,9 +39,9 @@ impl Json {
 }
 
 /// JSON 字符串转义（唯一实现，供各序列化点复用，避免重复）。
-pub fn string(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
+/// 转义核心：把 JSON 字符串体写入 `out`（不含首尾引号）。
+/// `mcp` 与 `memory/json` 共用，消除重复实现；C0/ESC 可见化与 v0.4.1 逐字节一致。
+pub fn push_escaped(s: &str, out: &mut String) {
     for c in s.chars() {
         match c {
             '"' => out.push_str("\\\""),
@@ -53,6 +53,20 @@ pub fn string(s: &str) -> String {
             c => out.push(c),
         }
     }
+}
+
+/// 转义后的字符串体（不含首尾引号）。
+pub fn escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    push_escaped(s, &mut out);
+    out
+}
+
+/// 完整 JSON 字符串字面量（含首尾引号）。
+pub fn string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    push_escaped(s, &mut out);
     out.push('"');
     out
 }

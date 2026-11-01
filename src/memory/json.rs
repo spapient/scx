@@ -16,21 +16,7 @@ pub enum Val {
 
 /// 字符串转义（JSON 字符串字面量所需的最小集）。
 pub fn escape(s: &str, out: &mut String) {
-    for c in s.chars() {
-        glyph(c, out);
-    }
-}
-
-fn glyph(c: char, out: &mut String) {
-    match c {
-        '"' => out.push_str("\\\""),
-        '\\' => out.push_str("\\\\"),
-        '\n' => out.push_str("\\n"),
-        '\r' => out.push_str("\\r"),
-        '\t' => out.push_str("\\t"),
-        c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-        c => out.push(c),
-    }
+    crate::json::push_escaped(s, out);
 }
 
 /// 序列化 Val 到字符串。
