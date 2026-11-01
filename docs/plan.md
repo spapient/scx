@@ -2732,3 +2732,12 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 - 抽样口径说明：gov 仅 10 题（用户拍板不再补跑），ΔFAMA 含抽样方差，结论为"治理增益方向保持、无回归迹象"。
 
 **收尾**：P24-C 复跑确认完成（用户定调抽样即可）；冻结 JSON 未覆盖（抽样结果存 `/tmp/scx_bench_memora/results/`、`/tmp/scx_bench_longmem/runs/`，不写 `config/bench/results/`）；M 集缺失与网络受阻如实记录；B 线两 commit（`b4af5d8`/`1bc83a1`）未 push，待用户拍板。
+
+## 架构/废代码清理轮（2026-11-01 夜，commit 6f69d6b）
+
+用户拍板"架构优化 + 废代码清理 + 复用架构/质量优化"。盘点基线：build/clippy 双 0 warning、lib 397 测试全过（仓库维护质量已高，此前多轮审查修复见效）。本轮交付：
+- **FuseOpts 参数收拢**：`search_fused` 9 参数（B 线 embed 3 参 + minhash + weight 超 clippy 阈值 7）→ 打包 `FuseOpts` struct，签名 5 参，消 `too_many_arguments` 警告；生产调用（ops.rs×2）与测试/示例全量更新。
+- **死代码删除**：`meter.rs save_jsonl`（src/ 内 0 调用，唯一确定死代码）；`by_share` 保留（examples 在用）。
+- **复用收拢**：新增 `testsupport::tmpdir`（cfg(test) 专用唯一临时路径 helper），收拢 store.rs×3 + input.rs×1 重复的 `SystemTime→as_nanos` 手写；顺带修 lib.rs 重复 `#[cfg(test)]`。
+- 静态死代码全扫（pub+私有 fn 调用点统计）确认 parse.rs 的 annotation/actions/gates 为 CHECKS 表驱动校验器（非死代码）、meter from_bucket/mode_of 为函数指针引用（非死代码）。
+- 验证：build/clippy 0 warning；lib 397 + bin 4 全过；cli 16 passed + 1 pre-existing FAILED（并发 gen 竞争，HEAD 复现与本次无关）。
