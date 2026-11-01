@@ -239,14 +239,14 @@
       "rows": 86
     },
     "bench_p22_compactbench.json": {
-      "sha256": "a1b68163e353ef9dc34e1c98d9e6b436c743573006dd065f56ed8eeaf4f51af4",
-      "bytes": 5172,
-      "rows": 81
+      "sha256": "4a7cab2be55893992cee37faf3f90188cf2833f4c2bc1feff32a4c5508f338af",
+      "bytes": 5218,
+      "rows": 82
     },
     "bench_p23_amabench.json": {
-      "sha256": "0327de3e8001dfa801353ffefcbfb932131c7e5a2294ee153c1b83c7f4c0df11",
-      "bytes": 40286,
-      "rows": 488
+      "sha256": "5b26d8996781254ca5ba35b550dee5ae0ffa075206e216f6acd25ff80ff1cc07",
+      "bytes": 21071,
+      "rows": 452
     },
     "bench_qwen_n100.csv": {
       "sha256": "d467d10d0741e833ead6005bb1b5f9187de75a21b2c56c41892907164a5ebb10",
