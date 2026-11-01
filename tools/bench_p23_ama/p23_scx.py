@@ -180,9 +180,13 @@ class SCXMemory:
     def recall(self, episode: dict[str, Any], question: str, k: int = 10,
                minhash_weight: float = 1.0,
                embed_cmd: str | None = None,
-               sim_weight: float = 1.0) -> list[dict[str, Any]]:
+               sim_weight: float = 1.0,
+               embed_vec: str | None = None,
+               embed_cache: str | None = None) -> list[dict[str, Any]]:
         """召回：默认开 MinHash-LSH 语义融合路（RRF BM25+字段+MinHash 四路）；
-        传 embed_cmd 额外开 embedding 余弦路（外部 provider，见 src/sim.rs）。"""
+        传 embed_cmd 额外开 embedding 余弦路（外部 provider，见 src/sim.rs）；
+        传 embed_vec 改用向量后端（scx 内 f64 余弦），embed_cache 开候选向量
+        持久化缓存（仿 usearch：text 向量落盘一次，仅 query 在线编码）。"""
         eid = episode["episode_id"]
         registry_path = self._registry_path(eid)
         if not registry_path.exists():
@@ -194,7 +198,11 @@ class SCXMemory:
                 "--query", question]
         if minhash_weight > 0.0:
             args += ["--minhash-weight", str(minhash_weight)]
-        if embed_cmd:
+        if embed_vec:
+            args += ["--embed-vec", embed_vec, "--sim-weight", str(sim_weight)]
+            if embed_cache:
+                args += ["--embed-cache", embed_cache]
+        elif embed_cmd:
             args += ["--embed-cmd", embed_cmd, "--sim-weight", str(sim_weight)]
         try:
             proc = subprocess.run(args, capture_output=True, timeout=120)

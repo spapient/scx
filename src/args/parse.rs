@@ -186,6 +186,8 @@ pub(crate) fn free(s: &mut ParseState, f: &Flag, v: String) {
         "--query" => s.query = Some(v),
         "--fix" => s.fix = v,
         "--embed-cmd" => s.embed_cmd = Some(v),
+        "--embed-vec" => s.embed_vec = Some(v),
+        "--embed-cache" => s.embed_cache = Some(v),
         "--revise" => s.revise = Some(v),
         "--retire" => s.retire = Some(v),
         "--retire-reason" => s.retire_reason = v,
@@ -337,8 +339,8 @@ pub(crate) fn word(
         return Err(format!("{} {}", f.name, f.err_empty));
     }
     match f.name {
-        "--query" | "--fix" | "--mem-dir" | "--embed-cmd" | "--revise" | "--retire"
-        | "--retire-reason" | "--recall-kind" => free(s, f, v),
+        "--query" | "--fix" | "--mem-dir" | "--embed-cmd" | "--embed-vec" | "--embed-cache"
+        | "--revise" | "--retire" | "--retire-reason" | "--recall-kind" => free(s, f, v),
         _ => path(s, f, v),
     }
     Ok(())
@@ -1207,6 +1209,8 @@ pub(crate) fn finish(s: ParseState) -> Opts {
         mem_dir: s.mem_dir,
         files: s.files,
         embed_cmd: s.embed_cmd,
+        embed_vec: s.embed_vec,
+        embed_cache: s.embed_cache,
         minhash_weight: s.minhash_weight,
         redact: s.redact,
         kind_auto: s.kind_auto,

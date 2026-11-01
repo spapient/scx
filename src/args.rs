@@ -87,6 +87,10 @@ pub struct Opts {
     pub files: Vec<String>,
     /// 可插拔相似度后端命令（`--embed-cmd <sh 命令>`）；`None` = 不启用。
     pub embed_cmd: Option<String>,
+    /// 向量后端命令（`--embed-vec <sh 命令>`，输出原始向量、scx 内算余弦）；`None` = 不启用。
+    pub embed_vec: Option<String>,
+    /// 向量持久化缓存目录（`--embed-cache <dir>`，仿 usearch mmap：候选向量编码一次落盘、仅 query 在线编码）。
+    pub embed_cache: Option<String>,
     /// MinHash-LSH 召回在 RRF 融合中的权重（`--minhash-weight`，默认 0 = 关）。
     pub minhash_weight: f64,
     /// 压缩前脱敏种类（`--redact`，逗号分隔：secret/id-card/phone/email）。
@@ -295,6 +299,24 @@ pub(crate) static FLAGS: &[Flag] = &[
         kind: Kind::Value,
         what: "",
         err_empty: "requires a command",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--embed-vec",
+        once: true,
+        kind: Kind::Value,
+        what: "",
+        err_empty: "requires a command",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--embed-cache",
+        once: true,
+        kind: Kind::Value,
+        what: "",
+        err_empty: "requires a directory",
         err_zero: "",
         min: 0,
     },
@@ -865,6 +887,8 @@ pub(crate) struct ParseState {
     pub(crate) mem_dir: String,
     pub(crate) files: Vec<String>,
     pub(crate) embed_cmd: Option<String>,
+    pub(crate) embed_vec: Option<String>,
+    pub(crate) embed_cache: Option<String>,
     pub(crate) minhash_weight: f64,
     pub(crate) redact: Vec<crate::redact::RedactKind>,
     /// `--kind auto` 标记：正文类型在 ops 层按 infer 推断。
@@ -917,6 +941,8 @@ impl ParseState {
             mem_dir: home(),
             files: Vec::new(),
             embed_cmd: None,
+            embed_vec: None,
+            embed_cache: None,
             minhash_weight: 0.0,
             redact: Vec::new(),
             kind_auto: false,

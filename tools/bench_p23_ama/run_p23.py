@@ -230,6 +230,10 @@ def main() -> None:
                     help="scx 通道 MinHash-LSH 融合路权重（>0 开，RRF 路开关）")
     ap.add_argument("--embed-cmd", default=None,
                     help="scx 通道 embedding 融合 provider 命令（见 src/sim.rs 协议）")
+    ap.add_argument("--embed-vec", default=None,
+                    help="scx 通道向量后端 provider 命令（--embed-vec，scx 内 f64 余弦）")
+    ap.add_argument("--embed-cache", default=None,
+                    help="scx 通道候选向量持久化缓存目录（--embed-cache，仿 usearch）")
     args = ap.parse_args()
 
     work = Path(args.work)
@@ -299,7 +303,9 @@ def main() -> None:
         if channel == "scx":
             hits = scx.recall(ep, qa["question"], k=args.k,
                               minhash_weight=args.minhash_weight,
-                              embed_cmd=args.embed_cmd)
+                              embed_cmd=args.embed_cmd,
+                              embed_vec=args.embed_vec,
+                              embed_cache=args.embed_cache)
             context = SCXMemory.context_from_hits(hits)
         else:
             bm = bm25_indexes[ep["episode_id"]]
