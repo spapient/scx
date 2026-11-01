@@ -56,6 +56,9 @@ pub mod wrap;
 #[cfg(feature = "semantic")]
 pub mod semantic;
 
+#[cfg(feature = "semantic")]
+pub mod sem_backend;
+
 /// 类型路由 + 计量桶 + 前后快照（P1 治理层，复用 `compress` 内核）。
 pub mod bucket;
 /// PostToolUse 自动拦截（P0）：压缩 Bash 大输出替换 tool_response。
@@ -293,6 +296,14 @@ pub struct Config {
     /// 直接整行保留（独立于预算裁剪的语义锚通道）。默认关 = 空操作，
     /// 与现状逐字节一致。
     pub sem_gate: f64,
+    /// 语义打分后端（`--sem-backend cpu|gpu`，默认 cpu；feature=semantic
+    /// 下生效）。cpu = 确定性并行实现（逐位一致）；gpu = 可选加速通道，
+    /// 调用自研内核（`SCX_GPU_BIN`），不可用自动回落 cpu。
+    #[cfg(feature = "semantic")]
+    pub sem_backend: crate::sem_backend::Backend,
+    /// 语义批量打分工作内存预算上限（`--max-mem`，MB，默认 64）。cpu/gpu
+    /// 后端均按此预算分块，控制峰值内存；默认路径（semantic 关）不受影响。
+    pub max_mem: usize,
     /// 预计算的「query 与每行」相似度（`--embed-cmd` 时由 `ops` 层填充；
     /// 长度须 == 输入行数）。`None` = 不注入，默认路径逐字节不变。
     pub sims: Option<Vec<f64>>,
@@ -381,6 +392,9 @@ impl Default for Config {
             structure: false,
             #[cfg(feature = "semantic")]
             semantic: None,
+            #[cfg(feature = "semantic")]
+            sem_backend: crate::sem_backend::Backend::Cpu,
+            max_mem: 64,
             sim_weight: 1.0,
             sem_weight: 1.0,
             sem_gate: 0.0,

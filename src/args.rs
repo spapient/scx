@@ -275,6 +275,25 @@ pub(crate) static FLAGS: &[Flag] = &[
         err_zero: "",
         min: 0,
     },
+    #[cfg(feature = "semantic")]
+    Flag {
+        name: "--sem-backend",
+        once: true,
+        kind: Kind::Value,
+        what: "cpu|gpu",
+        err_empty: "requires cpu|gpu",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--max-mem",
+        once: true,
+        kind: Kind::U64,
+        what: "MB",
+        err_empty: "",
+        err_zero: "must be >= 1",
+        min: 1,
+    },
     Flag {
         name: "--policy-file",
         once: true,

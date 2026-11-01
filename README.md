@@ -356,6 +356,8 @@ scx --query "..." [OPTIONS] [file...]
 | `--trim-ratio <F>` | `--trim 1` 时的低分 token 保留比例（默认 `0.5`；范围 `0.1..=1.0`） |
 | `--force <P>` | 强制保留匹配行；字面子串（大小写不敏感）；`re:` 前缀进入有限正则子集（`\|` 交替、`[...]` 字符类、`*` `+` `?` 量词，Thompson NFA，非法模式报错并提示支持子集） |
 | `--semantic <WEIGHTS>` | 可选神经重打分（需 `cargo build --features semantic` 构建）；权重文件自描述 JSON：v2 `{schema:"scx-sem-2",features,weights,sha256}`（命名式，特征可任意子集/顺序）或 v1 `{schema:"scx-sem-1",dim,weights,sha256}`（位置式，兼容）；SHA256 校验失败即拒绝运行；打分 `sigmoid(w·x)` 经居中化（`2·sigmoid−1`）做有符号叠加——正提升、负降权；不启用时默认路径逐字节不变 |
+| `--sem-backend <cpu|gpu>` | 语义打分后端（默认 cpu，需 `--semantic` 与 feature=semantic）：cpu = 确定性并行（多核分块，与串行逐位一致，golden 零漂移）；gpu = 可选加速通道，调用自研内核（`SCX_GPU_BIN` 指向可执行文件）：JSON lines 批处理协议，stdin 一行请求、stdout 分数行 + {"done":true,"n":N}，权重指纹 sha256 校验；内核缺失或调用失败自动回落 cpu（stderr 提示），不引入任何第三方推理引擎或模型 |
+| `--max-mem <MB>` | 语义批量打分工作内存预算上限（默认 64，>=1）：cpu/gpu 后端均按此分块控制峰值内存；默认路径（semantic 关）不受影响 |
 | `--help`, `--version` | 显示用法或版本 |
 
 ### 本地记忆库

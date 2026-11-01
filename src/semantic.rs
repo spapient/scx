@@ -226,6 +226,18 @@ impl Weights {
     pub fn centered_line(&self, line: &str, terms: &[String], i: usize, total: usize) -> f64 {
         2.0 * self.score_line(line, terms, i, total) - 1.0
     }
+
+    /// 权重确定性指纹（GPU 内核协议校验，`--sem-backend gpu` 用）：与
+    /// `verify_v2` 文件校验同口径 = hex(SHA256(权重大端字节 ++ 特征名逐名+\n))。
+    /// 内核加载同一权重文件后算出相同指纹，任何权重/特征序差异即拒绝。
+    pub(crate) fn weight_sha(&self) -> String {
+        let mut h = encode(&self.w);
+        for &i in &self.idx {
+            h.extend_from_slice(FEATURE_NAMES[i].as_bytes());
+            h.push(b'\n');
+        }
+        hex(&sha256(&h))
+    }
 }
 
 /// 数值稳定 sigmoid：分支避免 exp 上下溢，结果恒在 (0,1)。

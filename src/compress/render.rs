@@ -244,17 +244,31 @@ pub(crate) fn semantic(
     total: usize,
     dup: &[bool],
     scores: &mut [f64],
-) {
+) -> Option<Vec<f64>> {
     if let Some(w) = &cfg.semantic {
+        // 批量打分（后端抽象）：cpu 并行逐位一致（golden 安全）；gpu 为
+        // 可选自研内核加速，不可用自动回落 cpu。按 --max-mem 分块控内存。
+        let s = crate::sem_backend::centered_batch(
+            w,
+            lines,
+            uniq_terms,
+            total,
+            dup,
+            cfg.sem_backend,
+            cfg.max_mem,
+        );
         for i in 0..total {
             if dup[i] {
                 continue;
             }
             // 居中式有符号叠加：正 logit 提升、负 logit 降权（旧实现 sigmoid
             // ∈ (0,1) 只能加分，无法表达“子串命中但实为噪声”的降权）。
-            scores[i] += cfg.sem_weight * w.centered_line(lines[i], uniq_terms, i, total);
+            scores[i] += cfg.sem_weight * s[i];
         }
+        // 复用同一批分数供 --sem-gate 门控（避免二次计算）。
+        return Some(s);
     }
+    None
 }
 
 #[cfg(not(feature = "semantic"))]
@@ -265,7 +279,8 @@ pub(crate) fn semantic(
     _total: usize,
     _dup: &[bool],
     _scores: &mut [f64],
-) {
+) -> Option<Vec<f64>> {
+    None
 }
 
 pub(crate) fn optional(

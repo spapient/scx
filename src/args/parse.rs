@@ -58,6 +58,16 @@ pub fn usage() -> String {
         "                       centered semantic score >= F are kept whole, independent of\n",
     );
     s.push_str("                       optional-budget trimming (requires --semantic)\n");
+    s.push_str("  --sem-backend B      semantic scorer backend (default cpu; feature=semantic):\n");
+    s.push_str(
+        "                       cpu = deterministic parallel (bitwise-stable), gpu = optional\n",
+    );
+    s.push_str(
+        "                       self-built kernel via SCX_GPU_BIN (falls back to cpu if unavailable)\n",
+    );
+    s.push_str(
+        "  --max-mem MB         semantic batch scoring memory budget in MB (default 64; >=1)\n",
+    );
     s.push_str(
         "  --minhash-weight F   weight of MinHash-LSH Jaccard recall in RRF fusion (default 0; >=0)\n",
     );
@@ -341,6 +351,10 @@ pub(crate) fn word(
     match f.name {
         "--query" | "--fix" | "--mem-dir" | "--embed-cmd" | "--embed-vec" | "--embed-cache"
         | "--revise" | "--retire" | "--retire-reason" | "--recall-kind" => free(s, f, v),
+        #[cfg(feature = "semantic")]
+        "--sem-backend" => {
+            s.config.sem_backend = crate::sem_backend::Backend::parse(&v)?;
+        }
         _ => path(s, f, v),
     }
     Ok(())
@@ -481,6 +495,7 @@ pub(crate) fn unsigned(s: &mut ParseState, f: &Flag, parsed: u64) -> Result<(), 
         "--recall" => s.recall = parsed as usize,
         "--max-bytes" => s.max_bytes = Some(parsed),
         "--max-tokens" => s.limit = Some(parsed),
+        "--max-mem" => s.config.max_mem = parsed as usize,
         _ => return Err(format!("{} 缺少 U64 分支", f.name)),
     }
     Ok(())

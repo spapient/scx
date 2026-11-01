@@ -394,7 +394,10 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     );
     // 语义增强（可选）：feature=semantic 且显式加载权重时，对非 dup 候选行
     // 叠加 sigmoid 打分作为排序加分；不启用时与 v0.4.1 逐字节一致。
-    semantic(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
+    // 返回批量居中分数（复用给 --sem-gate 门控，避免二次计算）。
+    // 默认轨（feature=semantic 关）stub 返回 None，变量仅 semantic 轨使用。
+    #[allow(unused_variables)]
+    let sem_scores = semantic(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
     // P17-C 熵近似评分（--entropy 1，默认关=零影响）。
     crate::compress::plan::entropy_signal(cfg, &lines, &dup, &mut scores);
     apply_sims(cfg, &mut scores, &dup, total);
@@ -427,7 +430,14 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     // 语义锚（#65 --sem-gate，默认 0 = 关）：语义居中分数 ≥ 阈值的非重复行
     // 直接整行保留（独立于 optional 预算裁剪的语义高价值通道）。默认关 = 空操作。
     #[cfg(feature = "semantic")]
-    sem_anchors(&lines, &uniq_terms, &dup, &mut keep, &mut kept, total, cfg);
+    sem_anchors(
+        &dup,
+        &mut keep,
+        &mut kept,
+        total,
+        cfg,
+        sem_scores.as_deref(),
+    );
 
     // 行保护策略（--code-keep / --num-line-keep / --sym-line-keep / --zh-keep /
     // --list-keep / --evidence）：整行保留并标记 raw（render 跳过行内 trim）。
@@ -572,26 +582,23 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
 }
 /// 语义锚（#65 --sem-gate，默认 0 = 关）：feature=semantic 且已加载权重时，
 /// 语义居中分数 ≥ 阈值的非重复行直接整行保留（独立于 optional 预算裁剪的
-/// 语义高价值通道）。默认关 = 空操作，与现状逐字节一致。
+/// 语义高价值通道）。默认关 = 空操作，与现状逐字节一致。分数复用语义
+/// 增强的批量结果（`sem_scores`），避免二次计算。
 #[cfg(feature = "semantic")]
 fn sem_anchors(
-    lines: &[&str],
-    uniq_terms: &[String],
     dup: &[bool],
     keep: &mut [bool],
     kept: &mut usize,
     total: usize,
     cfg: &Config,
+    sem_scores: Option<&[f64]>,
 ) {
     if cfg.sem_gate <= 0.0 {
         return;
     }
-    if let Some(w) = &cfg.semantic {
+    if let Some(ss) = sem_scores {
         for i in 0..total {
-            if !dup[i]
-                && !keep[i]
-                && w.centered_line(lines[i], uniq_terms, i, total) >= cfg.sem_gate
-            {
+            if !dup[i] && !keep[i] && ss[i] >= cfg.sem_gate {
                 keep[i] = true;
                 *kept += 1;
             }
