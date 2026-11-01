@@ -177,7 +177,12 @@ class SCXMemory:
             truncated=truncated,
         )
 
-    def recall(self, episode: dict[str, Any], question: str, k: int = 10) -> list[dict[str, Any]]:
+    def recall(self, episode: dict[str, Any], question: str, k: int = 10,
+               minhash_weight: float = 1.0,
+               embed_cmd: str | None = None,
+               sim_weight: float = 1.0) -> list[dict[str, Any]]:
+        """召回：默认开 MinHash-LSH 语义融合路（RRF BM25+字段+MinHash 四路）；
+        传 embed_cmd 额外开 embedding 余弦路（外部 provider，见 src/sim.rs）。"""
         eid = episode["episode_id"]
         registry_path = self._registry_path(eid)
         if not registry_path.exists():
@@ -187,6 +192,10 @@ class SCXMemory:
         args = [self.binary, "--recall-only", "--recall", str(k),
                 "--recall-detail", "--mem-dir", str(self._mem_dir(eid)),
                 "--query", question]
+        if minhash_weight > 0.0:
+            args += ["--minhash-weight", str(minhash_weight)]
+        if embed_cmd:
+            args += ["--embed-cmd", embed_cmd, "--sim-weight", str(sim_weight)]
         try:
             proc = subprocess.run(args, capture_output=True, timeout=120)
         except subprocess.TimeoutExpired:

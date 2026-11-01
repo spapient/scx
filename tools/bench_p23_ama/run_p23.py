@@ -226,6 +226,10 @@ def main() -> None:
     ap.add_argument("--limit-episodes", type=int, default=0)
     ap.add_argument("--pilot", action="store_true",
                     help="仅跑前 2 个 episode，用于时延/成本估算")
+    ap.add_argument("--minhash-weight", type=float, default=1.0,
+                    help="scx 通道 MinHash-LSH 融合路权重（>0 开，RRF 路开关）")
+    ap.add_argument("--embed-cmd", default=None,
+                    help="scx 通道 embedding 融合 provider 命令（见 src/sim.rs 协议）")
     args = ap.parse_args()
 
     work = Path(args.work)
@@ -293,7 +297,9 @@ def main() -> None:
 
     def recall_for(ep: dict[str, Any], qa: dict[str, Any], channel: str):
         if channel == "scx":
-            hits = scx.recall(ep, qa["question"], k=args.k)
+            hits = scx.recall(ep, qa["question"], k=args.k,
+                              minhash_weight=args.minhash_weight,
+                              embed_cmd=args.embed_cmd)
             context = SCXMemory.context_from_hits(hits)
         else:
             bm = bm25_indexes[ep["episode_id"]]
