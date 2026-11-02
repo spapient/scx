@@ -35,14 +35,14 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Clippy (all features)
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - name: Release build
+        run: cargo build --release --locked
       - name: Test
         run: cargo test --locked --workspace
       - name: Test (all features)
         run: cargo test --locked --workspace --all-features
       - name: Check (no default features)
         run: cargo check --locked --no-default-features
-      - name: Release build
-        run: cargo build --release --locked
       - name: Evaluator selftest (Unix)
         if: runner.os != 'Windows'
         run: cargo run --release --locked --features eval --bin xtask -- selftest

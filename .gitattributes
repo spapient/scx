@@ -7,3 +7,4 @@
 Cargo.lock text eol=lf
 *.tsv text eol=lf whitespace=-blank-at-eol
 config/tests/** text eol=lf
+config/** text eol=lf
