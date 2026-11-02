@@ -113,11 +113,20 @@ def cmd_check(_args):
     fail = []
     step = lambda s: print(f"\n== {s} ==")
     must = lambda label, cond: fail.append(label) if not cond else None
+    def cargo_tests(label, cmd):
+        """跑 cargo test：returncode==0 且尾部含 0 failed 为过；失败时打印完整现场。"""
+        p = proc(cmd, capture_output=True)
+        ok = p.returncode == 0 and "0 failed" in p.stdout[-400:]
+        if not ok:
+            print(f"  rc={p.returncode}")
+            print(f"  stderr tail:\n{p.stderr[-1500:]}")
+            print(f"  stdout tail:\n{p.stdout[-1500:]}")
+        return ok
     for label, cmd in (("lib tests", ["cargo", "test", "--locked", "--lib"]),
                        ("semantic tests", ["cargo", "test", "--locked", "--features", "semantic", "--lib"]),
                        ("golden tests", ["cargo", "test", "--locked", "--test", "golden"])):
         step(f"cargo test {'/'.join(cmd[4:])}" if label == "lib tests" else "cargo test --locked --test golden")
-        must(label, "0 failed" in proc(cmd, capture_output=True).stdout[-400:])
+        must(label, cargo_tests(label, cmd))
     step("clippy --all-targets")
     must("clippy", not any(l.startswith(("warning:", "error"))
                            for l in proc(["cargo", "clippy", "--locked", "--all-targets"],
