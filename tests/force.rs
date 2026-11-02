@@ -3,7 +3,7 @@
 //! 非法正则 CLI 层报错（含支持子集提示）；字面子串行为与既有 golden 一致。
 
 mod common;
-use common::{run, scx};
+use common::run;
 
 /// 300 行噪音 + 两个信号行（conn9f2a 数字连接 / connX 非数字）。
 fn corpus() -> String {

@@ -3,7 +3,7 @@
 //! 非法文件报错含行号；不传时默认路径逐字节不变（golden 37 已覆盖）。
 
 mod common;
-use common::{run, scx};
+use common::run;
 
 fn tmp(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("scx-p34-{}-{}", name, std::process::id()))

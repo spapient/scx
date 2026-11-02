@@ -7,7 +7,7 @@
 use std::fs;
 
 mod common;
-use common::{run, scx};
+use common::run;
 
 fn sample_weights() -> String {
     format!(

@@ -19,6 +19,7 @@
 
 use std::fmt;
 pub mod analysis;
+pub mod cli;
 mod compress;
 pub mod contain;
 mod fold;
@@ -49,18 +50,14 @@ pub mod memory;
 pub mod hash;
 pub mod json;
 pub mod mcp;
-pub mod setup;
-/// `scx wrap`：包装命令自动压缩其大输出（壳层，复用 compress 内核）。
-pub mod wrap;
-
 #[cfg(feature = "semantic")]
 pub mod semantic;
+pub mod setup;
 
 #[cfg(feature = "semantic")]
 pub mod sem;
 
 /// 类型路由 + 计量桶 + 前后快照（P1 治理层，复用 `compress` 内核）。
-pub mod bucket;
 /// PostToolUse 自动拦截（P0）：压缩 Bash 大输出替换 tool_response。
 pub mod hook;
 /// Token 计量与压缩效果审计（P3 治理层：分桶统计/效果指标/预算管控/快照追溯）。

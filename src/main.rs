@@ -74,9 +74,9 @@ fn subcommand(args: &[String]) {
     let Some(sub) = args.first() else { return };
     let code = match sub.as_str() {
         "setup" => scx::setup::run(&args[1..]),
-        "wrap" => scx::wrap::run(&args[1..]),
+        "wrap" => scx::cli::wrap_run(&args[1..]),
         "hook" => scx::hook::run(),
-        "bucket" => scx::bucket::run(&args[1..]),
+        "bucket" => scx::cli::bucket_run(&args[1..]),
         "ledger" => scx::meter::run_ledger(&args[1..]),
         _ => return,
     };
