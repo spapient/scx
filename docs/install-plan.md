@@ -170,5 +170,4 @@ scx mcp                  # stdio JSON-RPC（serverInfo.name=scx）
 
 - 发布流程：`docs/release-checklist.md`
 - 版本与阶段记录：`docs/plan.md`（P1–P4 + 0.5.0→0.6.1 发布记录）
-- 能力对照：`docs/containcmp.md` / `docs/contain5-compare.json`（证据保留 70/70 vs 头截断 0/70）
-- 竞品深度对比：`docs/comparison-v051.md`（本地草稿，不入库）
+- 能力对照：`docs/containment.md` / `docs/contain5-compare.json`（证据保留 70/70 vs 头截断 0/70）

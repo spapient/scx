@@ -384,8 +384,8 @@ scx --query "..." [OPTIONS] [file...]
 运行 `scx --help` 可查看当前构建支持的完整参数。
 
 证据保留同场对照（contain5 合成语料：scx vs 头截断 vs 随机抽样基线，含证据
-存活率/压减率/延迟三指标，作者侧自测、非第三方盲审）见
-[docs/containcmp.md](docs/containcmp.md)，冻结口径见 [docs/containment.md](docs/containment.md)；
+存活率/压减率/延迟三指标，作者侧自测、非第三方盲审）与冻结口径见
+[docs/containment.md](docs/containment.md)；
 跨机性能量级见 [docs/benchmarks.md](docs/benchmarks.md)。
 
 ## 本地记忆库

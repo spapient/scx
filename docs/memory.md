@@ -30,7 +30,7 @@
 | tombstone（墓碑标记） | `life = retired` + `retire_reason` | `store.rs:103` |
 | supersede（版本取代） | `supersedes` 字段 + 双向链 | `store.rs:99` |
 | conflict arbitration | `conflict::detect` / `arbitrate` + `index/conflicts.log` | `conflict.rs` |
-| governance（治理框架） | memory 模块门面 + 本总览 | `mod.rs` / 本文档 / `context-governance-plan.md` |
+| governance（治理框架） | memory 模块门面 + 本总览 | `mod.rs` / 本文档 |
 
 ### 0.3 生命周期
 

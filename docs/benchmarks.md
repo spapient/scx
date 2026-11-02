@@ -67,7 +67,7 @@ export SCX_BENCH_REPEAT=21                              # 自定义采样数
 ## 证据保留同场对照（contain5，2026-10-26）
 
 > 作者侧自测，非第三方独立评测；合成语料。与 SuperCompress 的真实对比
-> 待第三方盲审。详见 [containcmp.md](containcmp.md)。
+> 待第三方盲审。详见 [containment.md](containment.md)。
 
 | 方法 | 证据存活率 | 字符压减率 | 单切片 wall-clock |
 |---|---:|---:|---:|
