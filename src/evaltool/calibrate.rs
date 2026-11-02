@@ -1,21 +1,24 @@
 //! `xtask calibrate`：BUDGET_SAFETY_FACTOR 上界系数标定（feature = "eval"）。
 //!
-//! 语料、启发式估计、分位数与报告均在 Rust；tiktoken 真值由调用方以
-//! `--truth` JSON 数组传入（`tools/bench.py calibrate` 保留 tiktoken 适配）。
-//! 迁移自 `tools/bench.py calibrate`。
+//! 语料、启发式估计、分位数与报告均在 Rust；tiktoken cl100k_base 真值由
+//! 内置词表（`config/calibrate/cl100k_base.tiktoken`）与贪心 BPE 计算，
+//! 不再依赖 Python tiktoken。迁移自 `tools/bench.py calibrate`。
 
+use super::bpe;
 use super::{fail, Fail};
 use crate::json::Json;
 use std::fs;
 use std::path::Path;
 
+const VOCAB: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/config/calibrate/cl100k_base.tiktoken"
+);
+
 const QS: [f64; 5] = [0.50, 0.90, 0.95, 0.99, 1.00];
 
 pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     let corpus = value(args, "--corpus");
-    let truth = value(args, "--truth").ok_or_else(|| {
-        usage("--truth is required (tiktoken ground truth, one integer per sample)")
-    })?;
     let samples = match corpus {
         Some(path) => load_samples(path)?,
         None => default_corpus(),
@@ -23,14 +26,11 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     if samples.is_empty() {
         return Err(fail("calibrate: empty corpus"));
     }
-    let truth = load_truth(truth)?;
-    if truth.len() != samples.len() {
-        return Err(fail(format!(
-            "calibrate: truth length {} != samples {}",
-            truth.len(),
-            samples.len()
-        )));
-    }
+    let ranks = bpe::load_ranks(VOCAB).map_err(fail)?;
+    let truth: Vec<f64> = samples
+        .iter()
+        .map(|sample| bpe::encode(&ranks, sample.as_bytes()).len() as f64)
+        .collect();
     let mut ratios: Vec<f64> = samples
         .iter()
         .zip(&truth)
@@ -58,19 +58,6 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     Ok(())
 }
 
-fn usage(message: impl Into<String>) -> Fail {
-    let body = "usage: xtask calibrate --truth FILE [--corpus FILE]\n";
-    let message = message.into();
-    Fail {
-        msg: if message.is_empty() {
-            body.to_string()
-        } else {
-            format!("{message}\n\n{body}")
-        },
-        code: 2,
-    }
-}
-
 fn value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     args.iter()
         .position(|arg| arg == name)
@@ -92,14 +79,6 @@ fn load_samples(path: &str) -> Result<Vec<String>, Fail> {
             .map(str::to_string)
             .collect()),
         _ => Err(fail("calibrate: corpus must be a JSON array of strings")),
-    }
-}
-
-fn load_truth(path: &str) -> Result<Vec<f64>, Fail> {
-    let value = load(Path::new(path))?;
-    match value {
-        Json::Arr(items) => Ok(items.iter().filter_map(Json::num).collect()),
-        _ => Err(fail("calibrate: truth must be a JSON array of numbers")),
     }
 }
 

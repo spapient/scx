@@ -1923,98 +1923,21 @@ def full(ch):
     )
 
 
-def heuristic_estimate(text):
-    """复现 `terms::estimate`：ASCII 4 字/tok、CJK 0.6 tok/字、other 2.5 字/tok、截距 +1。"""
-    ascii_n = cjk = other = 0
-    for ch in text:
-        if ch.isascii():
-            ascii_n += 1
-        elif full(ch):
-            cjk += 1
-        else:
-            other += 1
-    return ascii_n / 4.0 + cjk * 0.6 + other / 2.5 + 1.0
-
-
-def default_corpus():
-    """多脚本多行长度的代表性样本（含 ASCII/CJK/other/emoji，覆盖低估风险面）。"""
-    samples = []
-    for i in range(40):
-        lines = [
-            "INFO heartbeat seq=%d ok pool=3 latency=1ms" % (i * 10 + j)
-            for j in range(5 + i % 6)
-        ]
-        lines.append("ERROR db timeout at 12:01 pool exhausted (conn_id=9f2a) retry=3")
-        samples.append("\n".join(lines))
-    for i in range(40):
-        samples.append("The quick brown fox jumps over the lazy dog " * (i % 10 + 1))
-        samples.append("数据库连接超时 连接池耗尽 磁盘空间不足 errno=28")
-        samples.append("short")
-        samples.append("hello world")
-    for _ in range(40):
-        samples.append(
-            "fn main() {\n    let x = 1 + 2;\n    println!(\"{}\", x);\n}\n"
-        )
-        samples.append(
-            '{\n  "type": "object",\n  "properties": {\n    "id": {"type": "integer"}\n  }\n}'
-        )
-    for i in range(30):
-        samples.append("Привет мир как дела " * (i % 6 + 1))
-        samples.append("مرحبا بالعالم كيف الحال " * (i % 6 + 1))
-        samples.append("🚀 emoji ✨ mixed 中文")
-    return samples
-
-
-def quantiles(ratios, qs):
-    """最近秩分位数（对排序后的比率取 int(q*(n-1)) 下标）。"""
-    ratios = sorted(ratios)
-    n = len(ratios)
-    return [ratios[min(n - 1, int(q * (n - 1)))] for q in qs]
-
-
 def cmd_calibrate() -> int:
     ap = argparse.ArgumentParser(
         prog="bench.py calibrate",
-        description="BUDGET_SAFETY_FACTOR 上界系数标定（tiktoken 真值 / 启发式比率分位数）",
+        description="BUDGET_SAFETY_FACTOR 上界系数标定（cl100k_base 真值 / 启发式比率分位数）",
     )
     ap.add_argument("--corpus", default=None,
                     help="语料 JSON 路径；缺省用内置 default_corpus()")
     args = ap.parse_args()
-    corpus_path = args.corpus
-    samples = json.load(open(corpus_path, encoding="utf-8")) if corpus_path else default_corpus()
-
-    try:
-        import tiktoken  # noqa: F401
-
-        enc = tiktoken.get_encoding("cl100k_base")
-        ys = [len(enc.encode(s)) for s in samples]
-    except Exception as exc:  # tiktoken 缺失 → 无真值，无法定系数
-        print("无真值（tiktoken 不可用）：无法定安全系数。%s" % exc)
-        return 1
-
     xtask = xtask_binary()
-    if xtask:
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
-                                         encoding="utf-8") as fh:
-            json.dump(ys, fh)
-            truth = fh.name
-        try:
-            cmd = [xtask, "calibrate", "--truth", truth]
-            if corpus_path:
-                cmd += ["--corpus", corpus_path]
-            return subprocess.run(cmd).returncode
-        finally:
-            os.unlink(truth)
-    ratios = [y / heuristic_estimate(s) for s, y in zip(samples, ys, strict=True)]
-    qs = [0.50, 0.90, 0.95, 0.99, 1.00]
-    vals = quantiles(ratios, qs)
-    print("样本数=%d  比率（真值 / 启发式）分位数：" % len(samples))
-    for q, v in zip(qs, vals, strict=True):
-        print("  P%-4d = %.3f" % (int(q * 100), v))
-    p95, p99 = vals[2], vals[3]
-    print("\n建议 BUDGET_SAFETY_FACTOR = %.3f  （P95；更保守可改用 P99 = %.3f）" % (p95, p99))
-    print("写入 src/terms.rs：`pub(crate) const BUDGET_SAFETY_FACTOR: f64 = %.3f;`" % p95)
-    return 0
+    if not xtask:
+        sys.exit("calibrate 已迁 xtask；运行 cargo build --features eval --bin xtask")
+    cmd = [xtask, "calibrate"]
+    if args.corpus:
+        cmd += ["--corpus", args.corpus]
+    return subprocess.run(cmd).returncode
 
 
 # ==================== 分发入口 ====================

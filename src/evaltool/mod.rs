@@ -9,6 +9,7 @@
 
 mod bench;
 mod blind;
+mod bpe;
 mod calibrate;
 mod checks;
 mod contain;

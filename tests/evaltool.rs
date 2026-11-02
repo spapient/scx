@@ -597,14 +597,12 @@ fn extract_matches_python_reference() {
 }
 
 #[test]
-fn calibrate_matches_python_reference() {
+fn calibrate_matches_reference() {
     let output = Command::new(bin())
         .args([
             "calibrate",
             "--corpus",
             &fixtures("eval/calibrate/corpus.json"),
-            "--truth",
-            &fixtures("eval/calibrate/truth.json"),
         ])
         .output()
         .expect("spawn calibrate");
@@ -612,7 +610,6 @@ fn calibrate_matches_python_reference() {
     let got = String::from_utf8_lossy(&output.stdout);
     let want = fs::read_to_string(fixtures("eval/calibrate/expected.out")).unwrap();
     assert_eq!(got, want);
-    assert_eq!(run(&["calibrate"]).code(), Some(2));
 }
 
 #[test]
