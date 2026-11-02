@@ -1,5 +1,5 @@
 //! 评估核心：baseline/verbose 解析、A/B 指标、配对 bootstrap/permutation、
-//! 分层与 leave-one-incident-out。语义与 `tools/scx.py` 的 baseline/stats
+//! 分层与 leave-one-incident-out。语义与原 Python 工具的 baseline/stats
 //! 逐项对齐（含 CPython RNG 与输出格式），迁移完成后由 Rust 成为唯一真源。
 //!
 //! 解析与格式对齐函数分支多但都是线性映射；认知复杂度门禁针对压缩内核，
@@ -8,7 +8,7 @@
 
 use super::io;
 use super::rng::PyRng;
-use crate::json::Json;
+use scx::json::Json;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
@@ -30,7 +30,7 @@ pub(crate) struct Case {
 
 pub(crate) fn load_baseline(path: &str) -> Result<Vec<Case>, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    let value = crate::json::parse(&text).map_err(|e| format!("{path}: {e}"))?;
+    let value = scx::json::parse(&text).map_err(|e| format!("{path}: {e}"))?;
     let items = match value.get("cases") {
         Some(Json::Arr(items)) => items,
         _ => return Err("baseline: missing array \"cases\"".to_string()),
@@ -269,7 +269,7 @@ fn strata_from_memory(root: &str, cases: &[Case]) -> Result<Vec<String>, String>
             continue;
         }
         let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let value = crate::json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        let value = scx::json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         let fallback = entry
             .file_name()
             .map(|n| n.to_string_lossy().to_string())

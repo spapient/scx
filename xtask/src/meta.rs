@@ -1,11 +1,11 @@
-//! `xtask manifest` / `xtask report`：冻结输入哈希与冻结指标文档（feature = "eval"）。
+//! `xtask manifest` / `xtask report`：冻结输入哈希与冻结指标文档。
 //!
 //! - `manifest`：对评测输入计算 SHA-256；`--expect` 校验冻结 manifest，漂移退出 2；
 //!   `--files` + `--out` 重建 manifest；`date:` 前缀会把 `YYYY-MM-DD_` 规范化为 `<date>_`。
 //! - `report`：从 stats CSV / LOO JSON / fidelity JSON 组合 `docs/gauge-metrics.md`；
 //!   `--check` 逐字节校验，漂移退出 2。
 //!
-//! 语义与 `tools/scx.py manifest` / `report` 对齐。
+//! 语义与原 Python 工具的 `manifest` / `report` 对齐。
 
 // 报告格式化分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
 #![allow(clippy::cognitive_complexity)]
@@ -13,12 +13,12 @@
 use super::gen::to_j;
 use super::io::{self, J};
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 
 // ---------------------------------------------------------------------------
 // manifest
@@ -174,7 +174,7 @@ pub(crate) fn sha256_file(path: &str, normalize_date: bool) -> Result<String, Fa
     if normalize_date {
         data = normalize_date_bytes(&data);
     }
-    Ok(crate::hash::hex(&crate::hash::sha256(&data)))
+    Ok(scx::hash::hex(&scx::hash::sha256(&data)))
 }
 
 fn normalize_date_bytes(data: &[u8]) -> Vec<u8> {
@@ -653,7 +653,7 @@ fn parse_report(args: &[String]) -> Result<ReportOpts, Fail> {
 
 fn load(path: &Path) -> Result<Json, Fail> {
     let text = fs::read_to_string(path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
-    crate::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
+    scx::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
 }
 
 fn usage(message: impl Into<String>) -> Fail {
@@ -719,7 +719,7 @@ pub(crate) fn freeze(args: &[String]) -> Result<(), Fail> {
     let mut updated = 0usize;
     for (name, path) in files {
         let data = fs::read(&path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
-        let sha = crate::hash::hex(&crate::hash::sha256(&data));
+        let sha = scx::hash::hex(&scx::hash::sha256(&data));
         let rows = data_rows(&data) as u64;
         let bytes = data.len() as u64;
         if let Some(slot) = frozen.iter_mut().find(|(key, _)| *key == name) {

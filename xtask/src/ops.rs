@@ -1,6 +1,6 @@
-//! `xtask ops`：运维六合一（feature = "eval"）。
+//! `xtask ops`：运维六合一。
 //!
-//! 迁移自 `tools/ops.py`：run / install / setup / doctor / check / perf。
+//! 迁移自原 Python 工具的运维入口：run / install / setup / doctor / check / perf。
 //! 路径与命令语义保持原样；构建仍落在 `SCX_TARGET_DIR`（默认 tmp/scx-cargo-target），
 //! `check` 仍调用 Python `scx.py check a2` 与 `audit`（这两项尚未迁移）。
 
@@ -9,14 +9,14 @@
 
 use super::io;
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
@@ -485,7 +485,7 @@ fn check_manifest(manifest: &Path, results: &Path) -> bool {
         println!("  manifest: MISSING {}", manifest.display());
         return false;
     };
-    let Ok(value) = crate::json::parse(&text) else {
+    let Ok(value) = scx::json::parse(&text) else {
         println!("  manifest: parse error {}", manifest.display());
         return false;
     };
@@ -499,7 +499,7 @@ fn check_manifest(manifest: &Path, results: &Path) -> bool {
                 continue;
             };
             let got = [
-                ("sha256", crate::hash::hex(&crate::hash::sha256(&data))),
+                ("sha256", scx::hash::hex(&scx::hash::sha256(&data))),
                 ("rows", rows(&data).to_string()),
             ];
             for (key, value) in got {
@@ -588,7 +588,7 @@ mod tests {
         let results = PathBuf::from(&dir);
         fs::create_dir_all(&results).unwrap();
         fs::write(results.join("a.csv"), "x\n").unwrap();
-        let sha = crate::hash::hex(&crate::hash::sha256(b"x\n"));
+        let sha = scx::hash::hex(&scx::hash::sha256(b"x\n"));
         let manifest = results.join("manifest.json");
         let value = Json::Obj(vec![
             (

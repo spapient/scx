@@ -1,16 +1,16 @@
-//! `xtask selftest`：Rust 侧不变量自检（feature = "eval"）。
+//! `xtask selftest`：Rust 侧不变量自检。
 //!
-//! 替代原 `tools/scx.py selftest` 中对 Python 工具的断言：覆盖已迁移的
+//! 替代原 Python 工具 `selftest` 中的断言：覆盖已迁移的
 //! 记忆目录安全、语料校验、随机采样、统计指标、manifest 冻结/漂移与
 //! Holm-Bonferroni。失败退出 1，成功打印 `selftest: PASS`。
 
 use super::Fail;
 use super::{contain, meta, seed, stats};
-use crate::json::Json;
+use scx::json::Json;
 use std::fs;
 use std::path::Path;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 
 pub(crate) fn run() -> Result<(), Fail> {
     match checks() {
@@ -246,7 +246,7 @@ fn check(condition: bool, message: &str) -> Result<(), String> {
 
 fn load(path: &Path) -> Result<Json, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    crate::json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
+    scx::json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn nanos() -> u128 {

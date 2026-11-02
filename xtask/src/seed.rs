@@ -1,6 +1,6 @@
-//! `xtask seed`：评测语料 -> 记忆库 cases + eval CSV（feature = "eval"）。
+//! `xtask seed`：评测语料 -> 记忆库 cases + eval CSV。
 //!
-//! 迁移自 `tools/scx.py seed`：语料校验、安全清理记忆目录、并发调用
+//! 迁移自原 Python 工具的 `seed`：语料校验、安全清理记忆目录、并发调用
 //! `scx --store`，按语料顺序输出 CSV。文本以字节写 stdin，保持跨平台逐字节稳定。
 
 // 语料校验分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
@@ -9,7 +9,7 @@
 use super::contain;
 use super::io;
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -17,7 +17,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 const LAYERS: [&str; 3] = ["literal", "paraphrase", "semantic"];
 const MAX_JOBS: usize = 32;
 
@@ -173,7 +173,7 @@ fn usage(message: impl Into<String>) -> Fail {
 
 fn load(path: &Path) -> Result<Json, Fail> {
     let text = fs::read_to_string(path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
-    crate::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
+    scx::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
 }
 
 fn items(value: &Json) -> Vec<Item> {
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_queries() {
-        let value = crate::json::parse(
+        let value = scx::json::parse(
             r#"{"incidents":[{"id":"a","source":"https://x","root_cause":"r","fix":"f",
             "cases":[{"layer":"literal","store_query":"q","eval_query":"e"},
                      {"layer":"literal","store_query":"Q","eval_query":"e2"}]}]}"#,

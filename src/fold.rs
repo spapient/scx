@@ -153,8 +153,8 @@ pub(crate) fn collapse(block: &[&str], min: usize) -> Vec<String> {
 /// 从模板行 + 参数行重建第 2..=n 行（逐字节等于折叠前的对应原文）。
 /// 结构不合法（段数/参数数不匹配、前缀缺失）返回 `None`。
 /// 供测试与下游重建消费的可逆性契约 API；主链为压缩器，运行期不展开。
-#[allow(dead_code)]
-pub(crate) fn rebuild(tpl: &str, pstream: &str) -> Option<Vec<String>> {
+#[doc(hidden)]
+pub fn rebuild(tpl: &str, pstream: &str) -> Option<Vec<String>> {
     let (m, skeleton) = parse_template(tpl)?;
     if m == 0 {
         return Some(Vec::new());

@@ -1,6 +1,6 @@
-//! `xtask fit`：弱标签线性权重拟合（scx-sem-1，feature = "eval"）。
+//! `xtask fit`：弱标签线性权重拟合（scx-sem-1）。
 //!
-//! 迁移自 `tools/bench.py fit`：从仓库文档/源码行提取 16 维特征，弱监督打标，
+//! 迁移自原 Python 工具的 `fit`：从仓库文档/源码行提取 16 维特征，弱监督打标，
 //! 纯梯度下降逻辑回归，写入 `config/semantic/weights.json`。
 
 // 特征提取/拟合分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 const DIM: usize = 16;
 const PREFIXES: [&str; 11] = [
     "```",
@@ -74,7 +74,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
             .join(", ")
     );
     let weights: Vec<f64> = w.iter().map(|value| round6(*value)).collect();
-    let sha = crate::hash::hex(&crate::hash::sha256(&encode(&weights)));
+    let sha = scx::hash::hex(&scx::hash::sha256(&encode(&weights)));
     let body = format!(
         "{{\n  \"schema\": \"scx-sem-1\",\n  \"dim\": {DIM},\n  \"weights\": [{}],\n  \"sha256\": \"{sha}\"\n}}\n",
         weights

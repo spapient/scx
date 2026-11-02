@@ -1,6 +1,6 @@
-//! `xtask fidelity`：compression fidelity 协议（feature = "eval"）。
+//! `xtask fidelity`：compression fidelity 协议。
 //!
-//! 迁移自 `tools/scx.py fidelity`：逐切片调用 `scx`，在同字节预算下对比
+//! 迁移自原 Python 工具的 `fidelity`：逐切片调用 `scx`，在同字节预算下对比
 //! 头截断与随机行采样，统计证据保留、answerability、token-set recall，
 //! 并对跨域（kind）做 cluster bootstrap 与冻结门禁。
 //!
@@ -13,7 +13,7 @@ use super::contain::{self, Slice, TempDir};
 use super::io::{self, J};
 use super::rng::PyRng;
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -254,7 +254,7 @@ usage: xtask fidelity <corpus> [options]
 
 fn load_corpus(path: &str) -> Result<Corpus, Fail> {
     let source = fs::read_to_string(path).map_err(|e| fail(format!("{path}: {e}")))?;
-    let value = crate::json::parse(&source).map_err(|e| fail(format!("{path}: {e}")))?;
+    let value = scx::json::parse(&source).map_err(|e| fail(format!("{path}: {e}")))?;
     let items = match value.get("slices") {
         Some(Json::Arr(items)) => items,
         _ => return Err(fail("fidelity: corpus missing \"slices\" array")),

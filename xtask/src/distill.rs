@@ -1,6 +1,6 @@
-//! `xtask distill weights`：评测信号坐标上升蒸馏（scx-sem-2，feature = "eval"）。
+//! `xtask distill weights`：评测信号坐标上升蒸馏（scx-sem-2）。
 //!
-//! 迁移自 `tools/bench.py distill weights`：3 语料 cut/fidelity 目标下逐维坐标
+//! 迁移自原 Python 工具的 `distill weights`：3 语料 cut/fidelity 目标下逐维坐标
 //! 上升，写入 `config/semantic/weights.json`。`distill online` 仍由 Python 承担
 //! （在线教师 API）。
 //!
@@ -14,7 +14,7 @@ use super::{fail, Fail};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 const TOL: f64 = 0.01;
 const FEATURES: [&str; 18] = [
     "overlap",
@@ -59,9 +59,7 @@ struct LogRow {
 pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     match args.first().map(String::as_str) {
         Some("weights") => weights(&args[1..]),
-        Some("online") => Err(fail(
-            "distill online 依赖在线教师 API，保留 Python 实现（tools/bench.py distill online）",
-        )),
+        Some("online") => Err(fail("distill online 依赖在线教师 API，本轮未迁移")),
         Some(other) => Err(usage(format!("unknown distill mode: {other}"))),
         None => Err(usage("missing distill mode")),
     }
@@ -172,7 +170,7 @@ fn write_weights(path: &str, weights: &[f64]) -> Result<(), Fail> {
         payload.extend_from_slice(feature.as_bytes());
         payload.push(b'\n');
     }
-    let sha = crate::hash::hex(&crate::hash::sha256(&payload));
+    let sha = scx::hash::hex(&scx::hash::sha256(&payload));
     let value = J::Obj(vec![
         ("schema".to_string(), J::Str("scx-sem-2".to_string())),
         (
@@ -212,7 +210,7 @@ fn eval(bin: &str, weights: &[f64]) -> Result<Vec<Row>, Fail> {
         let out_nums = bench::num_tokens(&out);
         rows.push(Row {
             set: name.to_string(),
-            cut: 1.0 - crate::terms::estimate(&out) / crate::terms::estimate(&text),
+            cut: 1.0 - scx::terms::estimate(&out) / scx::terms::estimate(&text),
             num_cov: bench::cov(&full_nums, &out_nums),
             token_cov: bench::cov(&full_words, &out_words),
         });
@@ -347,7 +345,7 @@ fn sha(weights: &[f64]) -> String {
         payload.extend_from_slice(feature.as_bytes());
         payload.push(b'\n');
     }
-    crate::hash::hex(&crate::hash::sha256(&payload))
+    scx::hash::hex(&scx::hash::sha256(&payload))
 }
 
 fn round6(value: f64) -> f64 {

@@ -1,6 +1,6 @@
 //! CPython `random.Random` 兼容的 MT19937。
 //!
-//! 仅用于迁移期 parity：同一 seed 与同一调用序列必须与 `tools/scx.py`
+//! 仅用于迁移期 parity：同一 seed 与同一调用序列必须与原 Python 工具
 //! 逐位一致，才能对既有冻结基线做字节级对拍。Rust 侧已有的 xorshift
 //! （`memory::eval`）算法不同，不能直接替换已冻结的统计输出。
 

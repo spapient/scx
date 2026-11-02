@@ -1,6 +1,6 @@
-//! `xtask extract`：Claude Code 会话 JSONL -> 压缩语料（feature = "eval"）。
+//! `xtask extract`：Claude Code 会话 JSONL -> 压缩语料。
 //!
-//! 迁移自 `tools/scx.py extract`：扫描 `*.jsonl`，统计 tool_use / tool_result
+//! 迁移自原 Python 工具的 `extract`：扫描 `*.jsonl`，统计 tool_use / tool_result
 //! 文本量，并可把 result 字符数最大的 N 个会话导出为 `.dump.txt`。
 
 // JSONL 解析分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
@@ -8,7 +8,7 @@
 
 use super::io;
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -163,7 +163,7 @@ fn blocks(path: &Path) -> Result<Vec<(String, String)>, Fail> {
     let text = fs::read_to_string(path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
     let mut out = Vec::new();
     for line in text.lines() {
-        let Ok(value) = crate::json::parse(line) else {
+        let Ok(value) = scx::json::parse(line) else {
             continue;
         };
         let Json::Obj(object) = &value else {
@@ -313,7 +313,7 @@ mod tests {
             )
         );
         assert_eq!(
-            dumps(&crate::json::parse("{\"a\":[1,2]}").unwrap()),
+            dumps(&scx::json::parse("{\"a\":[1,2]}").unwrap()),
             "{\"a\": [1, 2]}"
         );
         let _ = fs::remove_file(path);

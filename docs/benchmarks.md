@@ -12,22 +12,22 @@
   `codegen-units=1` / `debug=1`；未启用 strip）
 - 方法：预热 1 次后采样 N 次取中位；N 默认 9（压缩）/ 21（召回），可用
   `SCX_BENCH_REPEAT` 覆盖；与同一会话中历史基线交错测量避免漂移。
-- 命令：`cargo run --release --locked --features eval --bin xtask -- bench compress`
+- 命令：`cargo run --release --locked -p xtask -- bench compress`
   （压缩四路径）/ `bench memory`（记忆库）
 
 ## 压缩路径（50k 行）
 
 | 路径 | 语料 | 中位 | 样本（µs） | kept | 备注 |
 |---|---:|---|---:|---:|---|
-| 默认 | 心跳+每百行 ERROR（2,338,389 字符） | 6,268 µs | 5981–6558 | 2498 | 含 50ms 回归门，实测 PASS |
-| `--structure 1` 关 | 结构富语料（import/stack/fence+噪声，1,438,623 字符） | 4,367 µs | 4142–4654 | 3002 | 与开启同语料对比用 |
-| `--structure 1` 开 | 同上 | 6,266 µs | 6128–6480 | 3002 | 相对关闭 +1,899 µs（+43.5%）；kept 不变 |
-| `--max-tokens 2000` | 默认语料 | 6,306 µs | 5724–6609 | 1499 | `mode=overflow:evidence`（证据地板 > 2000，全部证据保留并如实报告） |
-| `--policy-file` 字段覆盖 | 默认语料 | 9,549 µs（压缩） | 9387–9898 | 1499 | TOML 解析 25 µs（4 行，per-invocation） |
+| 默认 | 心跳+每百行 ERROR（2,338,389 字符） | 6,048 µs | 5397–6470 | 2498 | 含 50ms 回归门，实测 PASS |
+| `--structure 1` 关 | 结构富语料（import/stack/fence+噪声，1,438,623 字符） | 4,090 µs | 3912–4264 | 3002 | 与开启同语料对比用 |
+| `--structure 1` 开 | 同上 | 6,059 µs | 5659–6457 | 3002 | 相对关闭 +1,969 µs（+48.1%）；kept 不变 |
+| `--max-tokens 2000` | 默认语料 | 5,835 µs | 5426–6350 | 1499 | `mode=overflow:evidence`（证据地板 > 2000，全部证据保留并如实报告） |
+| `--policy-file` 字段覆盖 | 默认语料 | 8,670 µs（压缩） | 8220–9164 | 1499 | TOML 解析 1 µs（4 行，per-invocation） |
 
 口径说明：
 - `--policy-file` 的 TOML 解析是 **CLI 一次性开销**（读文件 + TOML 子集解析），
-  实测 25 µs，不进入每次压缩的热路径；完整 CLI 映射在 `args::parse_policy_file`，
+  实测 1 µs，不进入每次压缩的热路径；完整 CLI 映射在 `args::parse_policy_file`，
   本表为字段级近似（ratio/context/max_tokens/structure 代表字段）。
   2026-10-27 修正：此前本节把「首次冷压缩」误标为 TOML 解析（13–15 ms），
   基准计时已改为只覆盖解析本身。
@@ -35,19 +35,19 @@
   全部证据行（证据地板最高优先），不做静默裁剪。
 - 结构语料行更短（1.44M vs 2.34M 字符），绝对值不与默认语料横向比较；两行
   structure 之间同语料可直接比较增量。
-- 2026-11-02：`structure:on − off` 增量实测 1,899 µs；`kept` 不变，输出逐字节一致。
+- 2026-11-02：`structure:on − off` 增量实测 1,969 µs；`kept` 不变，输出逐字节一致。
 
 ## 记忆库（10k case）
 
 | 工作负载 | 本轮 | 历史快照（README） | 条件 |
 |---|---:|---:|---|
-| store（200 seeds） | 1,530 ms | — | 一次性 |
-| replicate 200→10000 | 4,160 ms | — | 一次性 |
-| 冷启动线性首查（no index） | p50 1.801 s | 0.95–0.97 s | 受系统负载与页缓存影响 |
-| 全量重建索引 | 732 ms | 373–388 ms | 三轮 |
-| 索引首次加载 | 17,613 µs | 11.6–11.8 ms | 每轮单独预热 |
-| 稳态倒排召回（稀疏） | p50 106 µs | 71–73 µs | 21 采样 |
-| 全候选宽查询 | p50 2.774 ms | 1.11–1.15 ms | 7 采样 |
+| store（200 seeds） | 1,527 ms | — | 一次性 |
+| replicate 200→10000 | 4,016 ms | — | 一次性 |
+| 冷启动线性首查（no index） | p50 1.765 s | 0.95–0.97 s | 受系统负载与页缓存影响 |
+| 全量重建索引 | 718 ms | 373–388 ms | 一次性 |
+| 索引首次加载 | 14,469 µs | 11.6–11.8 ms | 每轮单独预热 |
+| 稳态倒排召回（稀疏） | p50 135 µs | 71–73 µs | 21 采样 |
+| 全候选宽查询 | p50 3.299 ms | 1.11–1.15 ms | 7 采样 |
 | 性能门 | PASS（p50 < 5 ms） | — | 10k recall |
 
 ## 历史快照（2026-10-25，Apple M5 Pro，三轮 × 21 采样交错）
@@ -59,8 +59,8 @@
 ## 复现
 
 ```bash
-cargo run --release --locked --features eval --bin xtask -- bench compress  # 压缩四路径
-cargo run --release --locked --features eval --bin xtask -- bench memory    # 记忆库（含性能门）
+cargo run --release --locked -p xtask -- bench compress  # 压缩四路径
+cargo run --release --locked -p xtask -- bench memory    # 记忆库（含性能门）
 export SCX_BENCH_REPEAT=21                              # 自定义采样数
 ```
 

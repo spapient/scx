@@ -1,24 +1,23 @@
 # scx 评测工具
 
 可重建的评测语料、冻结标签、盲审包与语义权重位于 `config/`（纯数据目录）；评测
-入口为 `xtask`（`cargo build --release --locked --features eval --bin xtask`）。记忆库目录、verbose 日志、配对统计 CSV 等均为
-**生成物**，不进入版本库。
+入口为独立 workspace crate `xtask`（`cargo build --release --locked -p xtask`）。
+记忆库目录、verbose 日志、配对统计 CSV 等均为**生成物**，不进入版本库。
 
 在仓库根目录运行：
 
 ```bash
-xtask --help          # macOS / Linux
-xtask --help     # Windows
+cargo run --release --locked -p xtask -- --help
 ```
 
-评测器为 Rust 实现（`src/tooling`，feature=eval），负责语料播种、基线构造、
-盲审编排与统计；检索和证据门仍有且只有一份 Rust 实现，位于 `src/`。
+评测器为 Rust 实现（`xtask/` crate），负责语料播种、基线构造、盲审编排与统计；
+检索和证据门仍有且只有一份 Rust 实现，位于 `src/`。
 
 ## 目录
 
 | 路径 | 用途 |
 |---|---|
-| `.xtask` | 语料播种、基线构造、盲审、配对统计、包校验 |
+| `xtask/` | 语料播种、基线构造、盲审、配对统计、包校验 |
 | `config/gauge.corpus.json` | Gauge：30 起公开事故，150 条存储 case |
 | `config/v2.corpus.json` | v2 开发集：30 起公开事故，150 条存储 case |
 | `config/real.corpus.json` | 真实事故集：11 起公开复盘，40 条 case |

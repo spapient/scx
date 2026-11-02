@@ -17,25 +17,25 @@
 
 ```bash
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
-cargo fmt -- --check
-cargo clippy --locked --all-targets -- -D warnings
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
-cargo test --locked
+cargo test --locked --workspace --all-features
 cargo build --release --locked
-cargo run --release --locked --features eval --bin xtask -- selftest
+cargo run --release --locked -p xtask -- selftest
 ```
 
 Windows PowerShell：
 
 ```powershell
 $env:CARGO_TARGET_DIR = "$env:TEMP\scx-cargo-target"
-cargo fmt -- --check
-cargo clippy --locked --all-targets -- -D warnings
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
 $env:RUSTDOCFLAGS = "-D warnings"
 cargo doc --locked --no-deps
-cargo test --locked
+cargo test --locked --workspace --all-features
 cargo build --release --locked
-cargo run --release --locked --features eval --bin xtask -- selftest
+cargo run --release --locked -p xtask -- selftest
 ```
 
 PR 描述中请粘贴实际执行的命令与结果；未执行的检查不要写成已通过。

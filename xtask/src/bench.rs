@@ -1,6 +1,6 @@
-//! `xtask bench`：离线评测子命令（feature = "eval"）。
+//! `xtask bench`：离线评测子命令。
 //!
-//! 迁移自 `tools/bench.py` 的离线部分：
+//! 迁移自原 Python 评测工具的离线部分：
 //! - `real`：real-dump 压缩指标矩阵（ctx × gate × scoped）；
 //! - `perf`：压缩吞吐基线冻结；
 //! - `budget`：同预算对照（--budget vs SuperCompress 官方口径）；
@@ -15,16 +15,15 @@
 use super::contain;
 use super::io::{self, J};
 use super::{fail, Fail};
-use crate::json::Json;
-#[cfg(feature = "memory")]
-use crate::memory::{rebuild, save, search, Input, Stats};
-use crate::Config;
+use scx::json::Json;
+use scx::memory::{rebuild, save, search, Input, Stats};
+use scx::Config;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 
 pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     let Some(command) = args.first().map(String::as_str) else {
@@ -173,7 +172,7 @@ fn scx_json(
     let stderr = String::from_utf8_lossy(&output.stderr);
     for line in stderr.lines() {
         if let Some(text) = line.strip_prefix("scxjson:") {
-            return crate::json::parse(text).ok();
+            return scx::json::parse(text).ok();
         }
     }
     None
@@ -571,7 +570,7 @@ fn rebuild_folded(out: &str) -> String {
             };
             let params = lines[i + 1];
             if params.starts_with("scx-fold-params: ") {
-                if let Some(rows) = crate::fold::rebuild(line, params) {
+                if let Some(rows) = scx::rebuild(line, params) {
                     rebuilt.push(first);
                     rebuilt.extend(rows);
                     i += 2;
@@ -594,7 +593,7 @@ fn rebuild_folded(out: &str) -> String {
 
 fn tok_lines(text: &str) -> f64 {
     // Python 3.12 的 sum() 对浮点使用 Neumaier 补偿求和。
-    contain::compensated(text.lines().map(crate::terms::estimate))
+    contain::compensated(text.lines().map(scx::terms::estimate))
 }
 
 pub(crate) fn tokens(text: &str) -> Vec<String> {
@@ -850,7 +849,7 @@ fn ablate(args: &[String]) -> Result<(), Fail> {
     let configs = configs();
     let mut rows = Vec::new();
     for (name, text, query) in &corpora {
-        let full_tok = crate::terms::estimate(text);
+        let full_tok = scx::terms::estimate(text);
         let full_words = tokens(text);
         let full_nums = num_tokens(text);
         for (cfg_name, flags, need_sem) in &configs {
@@ -868,7 +867,7 @@ fn ablate(args: &[String]) -> Result<(), Fail> {
             let row = AblateRow {
                 set: name.to_string(),
                 cfg: cfg_name.to_string(),
-                cut: 1.0 - crate::terms::estimate(&out) / full_tok,
+                cut: 1.0 - scx::terms::estimate(&out) / full_tok,
                 num_cov: cov(&full_nums, &num_tokens(&fid_out)),
                 token_cov: cov(&full_words, &tokens(&fid_out)),
             };
@@ -955,7 +954,7 @@ fn ablate_combo(
     let combos = combos(weights);
     let mut rows = Vec::new();
     for (name, text, query) in corpora {
-        let full_tok = crate::terms::estimate(text);
+        let full_tok = scx::terms::estimate(text);
         let full_words = tokens(text);
         let full_nums = num_tokens(text);
         for (cfg_name, flags, need_sem) in &off_configs {
@@ -969,7 +968,7 @@ fn ablate_combo(
             let row = AblateRow {
                 set: name.to_string(),
                 cfg: cfg_name.to_string(),
-                cut: 1.0 - crate::terms::estimate(&out) / full_tok,
+                cut: 1.0 - scx::terms::estimate(&out) / full_tok,
                 num_cov: cov(&full_nums, &num_tokens(&fid_out)),
                 token_cov: cov(&full_words, &tokens(&fid_out)),
             };
@@ -986,7 +985,7 @@ fn ablate_combo(
     )];
     on_configs.extend(combos.iter().map(|(name, flags)| (*name, flags.clone())));
     for (name, text, query) in corpora {
-        let full_tok = crate::terms::estimate(text);
+        let full_tok = scx::terms::estimate(text);
         let full_words = tokens(text);
         let full_nums = num_tokens(text);
         for (cfg_name, flags) in &on_configs {
@@ -999,7 +998,7 @@ fn ablate_combo(
             let row = AblateRow {
                 set: name.to_string(),
                 cfg: cfg_name.to_string(),
-                cut: 1.0 - crate::terms::estimate(&out) / full_tok,
+                cut: 1.0 - scx::terms::estimate(&out) / full_tok,
                 num_cov: cov(&full_nums, &num_tokens(&fid_out)),
                 token_cov: cov(&full_words, &tokens(&fid_out)),
             };
@@ -1129,11 +1128,11 @@ fn compress_bench(_args: &[String]) -> Result<(), Fail> {
 
 /// 单路径中位耗时：预热一次后采样，报告 p50 与全样本。
 fn bench_median(text: &str, query: &str, cfg: &Config, label: &str, repeats: usize) -> u128 {
-    let _ = crate::compress(text, query, cfg);
+    let _ = scx::compress(text, query, cfg);
     let mut samples: Vec<u128> = Vec::with_capacity(repeats);
     for _ in 0..repeats {
         let t = Instant::now();
-        let outcome = crate::compress(text, query, cfg);
+        let outcome = scx::compress(text, query, cfg);
         samples.push(t.elapsed().as_micros());
         assert!(outcome.seeds > 0, "benchmark corpus must hit a seed");
     }
@@ -1144,7 +1143,7 @@ fn bench_median(text: &str, query: &str, cfg: &Config, label: &str, repeats: usi
         text.chars().count(),
         median,
         samples,
-        crate::compress(text, query, cfg).kept,
+        scx::compress(text, query, cfg).kept,
     );
     median
 }
@@ -1171,16 +1170,16 @@ fn max_tokens_bench(text: &str, query: &str, repeats: usize) {
         limit: Some(2000),
         ..Config::default()
     };
-    let _ = crate::compress(text, query, &cfg);
+    let _ = scx::compress(text, query, &cfg);
     let mut samples: Vec<u128> = Vec::with_capacity(repeats);
     for _ in 0..repeats {
         let t = Instant::now();
-        let outcome = crate::compress(text, query, &cfg);
+        let outcome = scx::compress(text, query, &cfg);
         samples.push(t.elapsed().as_micros());
         assert!(outcome.seeds > 0);
     }
     samples.sort_unstable();
-    let out = crate::compress(text, query, &cfg);
+    let out = scx::compress(text, query, &cfg);
     println!(
         "max-tokens: 50k lines median {} us | samples {:?} us | kept={} mode={}",
         samples[samples.len() / 2],
@@ -1194,7 +1193,7 @@ fn max_tokens_bench(text: &str, query: &str, repeats: usize) {
 fn policy_bench(text: &str, query: &str, repeats: usize) -> Result<(), Fail> {
     let body = "ratio = 0.5\ncontext = 1\nmax_tokens = 4000\nstructure = 1\n";
     let t = Instant::now();
-    let entries = crate::toml::parse(body.lines());
+    let entries = scx::toml::parse(body.lines());
     let parse_us = t.elapsed().as_micros();
     let mut cfg = Config::default();
     for e in &entries {
@@ -1225,12 +1224,12 @@ fn policy_bench(text: &str, query: &str, repeats: usize) -> Result<(), Fail> {
     let mut samples: Vec<u128> = Vec::with_capacity(repeats);
     for _ in 0..repeats {
         let t = Instant::now();
-        let outcome = crate::compress(text, query, &cfg);
+        let outcome = scx::compress(text, query, &cfg);
         samples.push(t.elapsed().as_micros());
         assert!(outcome.seeds > 0);
     }
     samples.sort_unstable();
-    let out = crate::compress(text, query, &cfg);
+    let out = scx::compress(text, query, &cfg);
     println!(
         "policy: toml parse {} us (one-shot, per-invocation) | compress median {} us | samples {:?} us | kept={} mode={}",
         parse_us,
@@ -1271,7 +1270,6 @@ fn bench_repeats() -> usize {
         .unwrap_or(9)
 }
 
-#[cfg(feature = "memory")]
 fn memory_bench(_args: &[String]) -> Result<(), Fail> {
     let root = std::env::temp_dir().join(format!("scx-mem-bench-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
@@ -1284,7 +1282,6 @@ fn memory_bench(_args: &[String]) -> Result<(), Fail> {
     result
 }
 
-#[cfg(feature = "memory")]
 fn memory_bench_at(root: &str) -> Result<(), Fail> {
     let stats = Stats {
         kept: 5,
@@ -1411,12 +1408,6 @@ fn memory_bench_at(root: &str) -> Result<(), Fail> {
     Ok(())
 }
 
-#[cfg(not(feature = "memory"))]
-fn memory_bench(_args: &[String]) -> Result<(), Fail> {
-    Err(usage("memory mode requires the memory feature"))
-}
-
-#[cfg(feature = "memory")]
 fn bench_case(seed: usize) -> String {
     if seed % 4 == 0 {
         let mut text = format!(
@@ -1443,7 +1434,6 @@ fn bench_case(seed: usize) -> String {
     }
 }
 
-#[cfg(feature = "memory")]
 fn bench_query(sample: usize) -> String {
     format!(
         "fam{} cid{} tail{}",
@@ -1453,7 +1443,6 @@ fn bench_query(sample: usize) -> String {
     )
 }
 
-#[cfg(feature = "memory")]
 /// 数字 → 全字母串（base26，避免 norm 数字折叠导致指纹去重）。
 fn letters(mut n: usize) -> String {
     let mut out = String::new();
@@ -1466,7 +1455,6 @@ fn letters(mut n: usize) -> String {
     }
 }
 
-#[cfg(feature = "memory")]
 fn percentiles(sorted: &[u128]) -> (u128, u128, u128) {
     fn pct(values: &[u128], q: usize) -> u128 {
         if values.is_empty() {
@@ -1478,7 +1466,6 @@ fn percentiles(sorted: &[u128]) -> (u128, u128, u128) {
     (pct(sorted, 50), pct(sorted, 95), pct(sorted, 99))
 }
 
-#[cfg(feature = "memory")]
 fn minhash_mrr(args: &[String]) -> Result<(), Fail> {
     use std::io::{BufRead, Write};
 
@@ -1491,12 +1478,12 @@ fn minhash_mrr(args: &[String]) -> Result<(), Fail> {
         if query.trim().is_empty() {
             continue;
         }
-        let hits = crate::memory::search_fused(
+        let hits = scx::memory::search_fused(
             &mem_dir,
             &query,
             10,
             true,
-            crate::memory::FuseOpts {
+            scx::memory::FuseOpts {
                 embed_cmd: None,
                 embed_weight: 0.0,
                 minhash_weight: weight,
@@ -1514,12 +1501,6 @@ fn minhash_mrr(args: &[String]) -> Result<(), Fail> {
     Ok(())
 }
 
-#[cfg(not(feature = "memory"))]
-fn minhash_mrr(_args: &[String]) -> Result<(), Fail> {
-    Err(usage("minhash-mrr requires the memory feature"))
-}
-
-#[cfg(feature = "memory")]
 fn minhash_args(args: &[String]) -> Result<(String, f64), Fail> {
     let mut mem_dir = None;
     let mut weight = 0.0f64;
@@ -1580,7 +1561,7 @@ mod tests {
     }
 
     fn sha(text: &str) -> String {
-        crate::hash::hex(&crate::hash::sha256(text.as_bytes()))
+        scx::hash::hex(&scx::hash::sha256(text.as_bytes()))
     }
 
     #[test]

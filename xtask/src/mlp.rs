@@ -1,8 +1,8 @@
-//! `xtask mlp`：语义特征线性/MLP 交叉验证（feature = "eval"）。
+//! `xtask mlp`：语义特征线性/MLP 交叉验证。
 //!
-//! 迁移自 `tools/bench.py mlp`：从 `distill_cache.json` 重建全行样本，
+//! 迁移自原 Python 工具的 `mlp`：从 `distill_cache.json` 重建全行样本，
 //! 3 折确定性交叉验证，输出 AUC/AP 与 keep 比例。24 维特征复用
-//! `crate::semantic::feats`，与 Python `DO_feats` 同源。
+//! `scx::semantic::feats`，与 Python `DO_feats` 同源。
 
 // 交叉验证分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
 #![allow(clippy::cognitive_complexity)]
@@ -10,13 +10,13 @@
 use super::io::{self, J};
 use super::rng::PyRng;
 use super::{fail, Fail};
-use crate::json::Json;
-use crate::semantic::{feats, FEATURE_NAMES};
+use scx::json::Json;
+use scx::semantic::{feats, FEATURE_NAMES};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 const MLP_H: usize = 16;
 
 pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
@@ -139,7 +139,7 @@ fn value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 
 fn load(path: &str) -> Result<Json, Fail> {
     let text = fs::read_to_string(path).map_err(|e| fail(format!("{path}: {e}")))?;
-    crate::json::parse(&text).map_err(|e| fail(format!("{path}: {e}")))
+    scx::json::parse(&text).map_err(|e| fail(format!("{path}: {e}")))
 }
 
 fn build_corpora() -> Result<HashMap<String, String>, Fail> {

@@ -57,11 +57,6 @@ pub mod setup;
 #[cfg(feature = "semantic")]
 pub mod sem;
 
-/// 开发工具（feature = "eval"，仅开发/CI 使用）：评测、基准、资产与运维
-/// 命令的统一实现；不进入发布二进制。
-#[cfg(feature = "eval")]
-pub mod tooling;
-
 /// 类型路由 + 计量桶 + 前后快照（P1 治理层，复用 `compress` 内核）。
 /// PostToolUse 自动拦截（P0）：压缩 Bash 大输出替换 tool_response。
 pub mod hook;
@@ -73,6 +68,8 @@ pub mod regex;
 pub mod sim;
 
 pub use compress::{compress, compress_bucketed};
+#[doc(hidden)]
+pub use fold::rebuild;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

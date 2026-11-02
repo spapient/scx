@@ -1,4 +1,4 @@
-//! cl100k_base 字节对编码（BPE）tokenizer（零第三方 crate，feature = "eval"）。
+//! cl100k_base 字节对编码（BPE）tokenizer（零第三方 crate）。
 //!
 //! 词表来自 OpenAI `cl100k_base.tiktoken`（`config/calibrate/cl100k_base.tiktoken`，
 //! 每行 `base64(bytes) rank`）。编码采用贪心最长前缀匹配——对普通文本（日志、
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn vectors_match_tiktoken() {
         let ranks = load_ranks(concat!(
-            env!("CARGO_MANIFEST_DIR"),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/.."),
             "/config/calibrate/cl100k_base.tiktoken"
         ))
         .unwrap();
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn roundtrip_self_consistent() {
         let ranks = load_ranks(concat!(
-            env!("CARGO_MANIFEST_DIR"),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/.."),
             "/config/calibrate/cl100k_base.tiktoken"
         ))
         .unwrap();

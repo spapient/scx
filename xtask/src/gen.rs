@@ -1,6 +1,6 @@
-//! `xtask gen`：评测语料生成/物化（feature = "eval"）。
+//! `xtask gen`：评测语料生成/物化。
 //!
-//! 迁移策略：这些语料原先由 `tools/bench.py gen` 用内嵌数据表 + 外部工具执行
+//! 迁移策略：这些语料原先由原 Python 工具 `gen` 用内嵌数据表 + 外部工具执行
 //! （node/clang/python）生成，产物已提交并被 `eval-manifest.json` 冻结。为保证
 //! 跨机器可复现，生成器数据改为 canonical JSON（`config/bench/gen/`），本命令
 //! 只做确定性物化，不再依赖外部工具链。
@@ -9,11 +9,11 @@
 
 use super::io::{self, J};
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 
 const CSV_KINDS: [(&str, &str, &str, usize); 4] = [
     ("cuda", "cuda.json", "bench_cuda60.csv", 60),
@@ -83,7 +83,7 @@ fn data(kind: &str) -> Result<Json, Fail> {
         .join("config/bench/gen")
         .join(format!("{kind}.json"));
     let text = fs::read_to_string(&path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
-    crate::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
+    scx::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
 }
 
 fn csv_kind(kind: &str, out: &Path) -> Result<(), Fail> {

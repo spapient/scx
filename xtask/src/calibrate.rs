@@ -1,17 +1,17 @@
-//! `xtask calibrate`：BUDGET_SAFETY_FACTOR 上界系数标定（feature = "eval"）。
+//! `xtask calibrate`：BUDGET_SAFETY_FACTOR 上界系数标定。
 //!
 //! 语料、启发式估计、分位数与报告均在 Rust；tiktoken cl100k_base 真值由
 //! 内置词表（`config/calibrate/cl100k_base.tiktoken`）与贪心 BPE 计算，
-//! 不再依赖 Python tiktoken。迁移自 `tools/bench.py calibrate`。
+//! 不再依赖 Python tiktoken。迁移自原 Python 工具的 `calibrate`。
 
 use super::bpe;
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::fs;
 use std::path::Path;
 
 const VOCAB: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
+    concat!(env!("CARGO_MANIFEST_DIR"), "/.."),
     "/config/calibrate/cl100k_base.tiktoken"
 );
 
@@ -34,7 +34,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     let mut ratios: Vec<f64> = samples
         .iter()
         .zip(&truth)
-        .map(|(sample, tokens)| *tokens / crate::terms::estimate(sample))
+        .map(|(sample, tokens)| *tokens / scx::terms::estimate(sample))
         .collect();
     ratios.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let n = ratios.len();
@@ -67,7 +67,7 @@ fn value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 
 fn load(path: &Path) -> Result<Json, Fail> {
     let text = fs::read_to_string(path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
-    crate::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
+    scx::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
 }
 
 fn load_samples(path: &str) -> Result<Vec<String>, Fail> {
@@ -82,7 +82,7 @@ fn load_samples(path: &str) -> Result<Vec<String>, Fail> {
     }
 }
 
-/// `tools/bench.py default_corpus()` 的确定性复刻。
+/// 原 Python 工具 `default_corpus()` 的确定性复刻。
 fn default_corpus() -> Vec<String> {
     let mut samples = Vec::new();
     for i in 0..40 {

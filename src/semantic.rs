@@ -530,7 +530,7 @@ fn term_prox(lower: &str, terms: &[String]) -> f64 {
     }
 }
 
-/// 停用词表（与 tools/distill_online.py 的 STOP 常量逐词一致，蒸馏特征对齐）。
+/// 停用词表（与原 Python 蒸馏脚本的 STOP 常量逐词一致，特征对齐）。
 const STOP_WORDS: &[&str] = &[
     "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for", "with", "this", "that",
     "is", "are", "was", "were", "it", "as", "at", "by", "from", "we", "you", "they", "he", "she",
@@ -1064,7 +1064,7 @@ mod tests {
 
     #[test]
     fn feats_match_python_selfcheck() {
-        // 与 tools/distill_online.py --selfcheck 输出逐位一致（双向同步验证）。
+        // 与原 Python 蒸馏脚本 --selfcheck 输出逐位一致（双向同步验证）。
         type Row = (&'static str, &'static [&'static str], usize, usize);
         let rows: &[Row] = &[
             (r"db connection lost: conn 9f2a timeout", &["db"], 0, 10),

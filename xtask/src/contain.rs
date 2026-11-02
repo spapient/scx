@@ -1,15 +1,15 @@
-//! `xtask contain`：evidence containment 协议编排（feature = "eval"）。
+//! `xtask contain`：evidence containment 协议编排。
 //!
-//! 迁移自 `tools/scx.py contain`：逐切片调用 `scx` 二进制，和头截断/随机行
+//! 迁移自原 Python 工具的 `contain`：逐切片调用 `scx` 二进制，和头截断/随机行
 //! 采样在同一字节预算下对照，输出逐切片表、聚合指标与可选 JSON。
-//! 判定复用 [`crate::contain::judge`]；随机基线复刻 CPython 字符串 seed +
+//! 判定复用 [`scx::contain::judge`]；随机基线复刻 CPython 字符串 seed +
 //! `shuffle`，保证与 Python 版确定性字段逐字节一致（wall 时间除外）。
 
 use super::io::{self, J};
 use super::rng::PyRng;
 use super::{fail, Fail};
-use crate::contain;
-use crate::json::Json;
+use scx::contain;
+use scx::json::Json;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -186,7 +186,7 @@ usage: xtask contain <corpus> [options]
 
 fn load_corpus(path: &str) -> Result<(Vec<Slice>, Vec<usize>), Fail> {
     let source = fs::read_to_string(path).map_err(|e| fail(format!("{path}: {e}")))?;
-    let value = crate::json::parse(&source).map_err(|e| fail(format!("{path}: {e}")))?;
+    let value = scx::json::parse(&source).map_err(|e| fail(format!("{path}: {e}")))?;
     let items = match value.get("slices") {
         Some(Json::Arr(items)) => items,
         _ => return Err(fail("contain: corpus missing \"slices\" array")),
@@ -424,7 +424,7 @@ fn parse_stats(stderr: &str) -> Option<Stats> {
         let Some(text) = line.strip_prefix("scxjson: ") else {
             continue;
         };
-        let value = crate::json::parse(text).ok()?;
+        let value = scx::json::parse(text).ok()?;
         return Some(Stats {
             mode: value
                 .get("mode")
@@ -927,7 +927,7 @@ fn floats(values: &[f64]) -> J {
 
 pub(crate) fn default_binary() -> Option<String> {
     for name in ["scx.exe", "scx"] {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/.."))
             .join("target/release")
             .join(name);
         if path.is_file() {

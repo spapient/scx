@@ -1,18 +1,53 @@
-//! `xtask` 开发工具的 Python 参考输出回归测试（feature = "eval"）。
-//! fixture 由 `tools/scx.py` 生成；本测试锁定 Rust 迁移后的逐字节一致性。
-
-#![cfg(feature = "eval")]
+//! `xtask` 开发工具的 Python 参考输出回归测试。
+//! fixture 由迁移前的 Python 参考实现生成；本测试锁定 Rust 迁移后的逐字节一致性。
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
+
+fn root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask 必须位于仓库根目录下")
+        .to_path_buf()
+}
+
+/// 测试进程内定位根包的 `scx` 二进制；缺失时按需构建一次。
+fn scx_bin() -> String {
+    static BIN: OnceLock<String> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let root = root();
+        let name = if cfg!(windows) { "scx.exe" } else { "scx" };
+        let path = root.join("target/debug").join(name);
+        if !path.is_file() {
+            let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+            let status = Command::new(cargo)
+                .current_dir(&root)
+                .args(["build", "--locked", "--bin", "scx"])
+                .status()
+                .expect("build scx binary");
+            assert!(status.success(), "cargo build --bin scx failed");
+        }
+        assert!(path.is_file(), "missing scx binary at {}", path.display());
+        path.to_string_lossy().into_owned()
+    })
+    .clone()
+}
 
 fn bin() -> &'static str {
     env!("CARGO_BIN_EXE_xtask")
 }
 
+/// 统一以仓库根为工作目录，保证工具与 fixture 的相对路径口径一致。
+fn command() -> Command {
+    let mut command = Command::new(bin());
+    command.current_dir(root());
+    command
+}
+
 fn fixture(name: &str) -> String {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    root()
         .join("config/tests/fixtures/eval")
         .join(name)
         .to_string_lossy()
@@ -24,10 +59,7 @@ fn temp(name: &str) -> PathBuf {
 }
 
 fn run(args: &[&str]) -> std::process::ExitStatus {
-    Command::new(bin())
-        .args(args)
-        .status()
-        .expect("spawn xtask")
+    command().args(args).status().expect("spawn xtask")
 }
 
 #[test]
@@ -112,14 +144,14 @@ fn loo_gate_failure_exits_two() {
 }
 
 fn corpus() -> String {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    root()
         .join("config/contain5.corpus.json")
         .to_string_lossy()
         .to_string()
 }
 
 fn fixtures(name: &str) -> String {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    root()
         .join("config/tests/fixtures")
         .join(name)
         .to_string_lossy()
@@ -127,7 +159,7 @@ fn fixtures(name: &str) -> String {
 }
 
 fn fidelity_corpus() -> String {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    root()
         .join("config/fidelity.corpus.json")
         .to_string_lossy()
         .to_string()
@@ -178,12 +210,12 @@ fn same(left: &scx::json::Json, right: &scx::json::Json) -> bool {
 #[test]
 fn contain_matches_python_reference() {
     let out = temp("contain.json");
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "contain",
             &corpus(),
             "--binary",
-            env!("CARGO_BIN_EXE_scx"),
+            &scx_bin(),
             "--timing-rounds",
             "1",
             "--out",
@@ -211,12 +243,12 @@ fn contain_matches_python_reference() {
 #[test]
 fn fidelity_matches_python_reference() {
     let out = temp("fidelity.json");
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "fidelity",
             &fidelity_corpus(),
             "--binary",
-            env!("CARGO_BIN_EXE_scx"),
+            &scx_bin(),
             "--domain-boot",
             "10000",
             "--domain-gate-p",
@@ -254,14 +286,14 @@ fn bench_budget_matches_python_reference() {
 
 #[test]
 fn bench_real_matches_python_reference() {
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "bench",
             "real",
             "--dumps",
             &fixtures("bench/dumps"),
             "--binary",
-            env!("CARGO_BIN_EXE_scx"),
+            &scx_bin(),
             "--query",
             "cache timeout",
             "--ratio",
@@ -279,7 +311,7 @@ fn bench_real_matches_python_reference() {
 fn gen_matches_frozen_artifacts() {
     let dir = temp("gen");
     fs::create_dir_all(&dir).unwrap();
-    let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let base = root();
     let cases = [
         ("cuda", "bench_cuda60.csv"),
         ("js", "bench_js60.csv"),
@@ -319,10 +351,7 @@ fn ops_help_exits_two() {
 
 #[test]
 fn audit_passes_repository() {
-    let output = Command::new(bin())
-        .arg("audit")
-        .output()
-        .expect("spawn audit");
+    let output = command().arg("audit").output().expect("spawn audit");
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("audit_unwrap: OK"), "{stdout}");
@@ -330,7 +359,7 @@ fn audit_passes_repository() {
 
 #[test]
 fn a2_passes_frozen_thresholds() {
-    let output = Command::new(bin()).arg("a2").output().expect("spawn a2");
+    let output = command().arg("a2").output().expect("spawn a2");
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("OK: A2 保真断言全部通过"), "{stdout}");
@@ -338,8 +367,8 @@ fn a2_passes_frozen_thresholds() {
 
 #[test]
 fn manifest_verify_passes() {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("config/eval-manifest.json");
-    let output = Command::new(bin())
+    let manifest = root().join("config/eval-manifest.json");
+    let output = command()
         .args(["manifest", "--expect", manifest.to_str().unwrap()])
         .output()
         .expect("spawn manifest");
@@ -353,7 +382,7 @@ fn manifest_verify_passes() {
 
 #[test]
 fn report_check_passes() {
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "report",
             "--stats",
@@ -378,7 +407,7 @@ fn report_check_passes() {
 fn freeze_matches_python_reference() {
     let manifest = temp("freeze.json");
     fs::write(&manifest, "{}\n").unwrap();
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "freeze",
             "--results",
@@ -403,8 +432,7 @@ fn subset_matches_frozen_output() {
     let out = temp("subset.json");
     let status = run(&["subset", "--out", out.to_str().unwrap()]);
     assert!(status.success());
-    let frozen =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("config/bench/results/p12_6_c2_subset.json");
+    let frozen = root().join("config/bench/results/p12_6_c2_subset.json");
     assert_eq!(fs::read(&out).unwrap(), fs::read(frozen).unwrap());
     let _ = fs::remove_file(out);
 }
@@ -414,12 +442,12 @@ fn seed_parallel_matches_serial() {
     let dir = temp("seed");
     fs::create_dir_all(&dir).unwrap();
     let corpus = fixtures("eval/seed/corpus.json");
-    let binary = env!("CARGO_BIN_EXE_scx");
+    let binary = scx_bin();
     let mut outputs = Vec::new();
     for (index, jobs) in ["2", "1"].iter().enumerate() {
         let mem = dir.join(format!("m{index}"));
         let csv = dir.join(format!("c{index}.csv"));
-        let output = Command::new(bin())
+        let output = command()
             .args([
                 "seed",
                 &corpus,
@@ -428,7 +456,7 @@ fn seed_parallel_matches_serial() {
                 "--csv",
                 csv.to_str().unwrap(),
                 "--binary",
-                binary,
+                binary.as_str(),
                 "--force",
                 "--jobs",
                 jobs,
@@ -472,25 +500,19 @@ fn normalize_dates(text: &str) -> String {
 
 #[test]
 fn selftest_passes() {
-    let output = Command::new(bin())
-        .arg("selftest")
-        .output()
-        .expect("spawn selftest");
+    let output = command().arg("selftest").output().expect("spawn selftest");
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("selftest: PASS"), "{stdout}");
 }
 
 fn repo(relative: &str) -> String {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(relative)
-        .to_string_lossy()
-        .to_string()
+    root().join(relative).to_string_lossy().to_string()
 }
 
 #[test]
 fn verify_matches_frozen_packet() {
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "verify",
             "--packet",
@@ -509,7 +531,7 @@ fn verify_matches_frozen_packet() {
 
 #[test]
 fn blind_progress_and_check_match() {
-    let progress = Command::new(bin())
+    let progress = command()
         .args([
             "blind",
             "progress",
@@ -524,7 +546,7 @@ fn blind_progress_and_check_match() {
         "{}",
         String::from_utf8_lossy(&progress.stdout)
     );
-    let check = Command::new(bin())
+    let check = command()
         .args([
             "blind",
             "check",
@@ -543,7 +565,7 @@ fn blind_progress_and_check_match() {
 
 #[test]
 fn blind_agree_matches() {
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "blind",
             "agree",
@@ -570,7 +592,7 @@ fn blind_agree_matches() {
 fn extract_matches_python_reference() {
     let dir = temp("extract");
     fs::create_dir_all(&dir).unwrap();
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "extract",
             "--dir",
@@ -598,7 +620,7 @@ fn extract_matches_python_reference() {
 
 #[test]
 fn calibrate_matches_reference() {
-    let output = Command::new(bin())
+    let output = command()
         .args([
             "calibrate",
             "--corpus",
@@ -615,7 +637,7 @@ fn calibrate_matches_reference() {
 #[test]
 fn fit_matches_python_weights() {
     let out = temp("fit-weights.json");
-    let output = Command::new(bin())
+    let output = command()
         .args(["fit", "--out", out.to_str().unwrap()])
         .output()
         .expect("spawn fit");
@@ -630,7 +652,7 @@ fn fit_matches_python_weights() {
 #[test]
 fn mlp_cross_validation_runs() {
     let out = temp("mlp.json");
-    let output = Command::new(bin())
+    let output = command()
         .args(["mlp", "--out", out.to_str().unwrap()])
         .output()
         .expect("spawn mlp");

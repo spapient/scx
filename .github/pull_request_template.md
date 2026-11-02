@@ -6,11 +6,11 @@
 
 <!-- 粘贴实际执行的命令和结果；未执行的检查请明确写“未执行”。 -->
 
-- [ ] `cargo fmt -- --check`
-- [ ] `cargo clippy --locked --all-targets -- -D warnings`
-- [ ] `cargo test --locked`
+- [ ] `cargo fmt --all -- --check`
+- [ ] `cargo clippy --locked --workspace --all-targets -- -D warnings`
+- [ ] `cargo test --locked --workspace --all-features`
 - [ ] `cargo build --release --locked`
-- [ ] `cargo run --release --locked --features eval --bin xtask -- selftest`（涉及开发工具或语料时）
+- [ ] `cargo run --release --locked -p xtask -- selftest`（涉及开发工具或语料时）
 - [ ] `cargo package --locked`（涉及发布元数据时）
 - [ ] 新增/修改行为有对应测试
 

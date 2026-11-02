@@ -1,21 +1,21 @@
-//! `xtask audit` / `xtask a2`：质量门禁（feature = "eval"）。
+//! `xtask audit` / `xtask a2`：质量门禁。
 //!
 //! - `audit`：扫描 `src/**/*.rs` 生产段（首个测试标记之前），禁止裸 unwrap、空 expect、空 panic/unreachable；`scope.join()` 后的 unwrap 豁免。
 //! - `a2`：按 `config/bench/fidelity_thresholds.json` 校验
 //!   `config/bench/results/p11_a_results.json` 的 round-trip 保真分档。
 //!
-//! 两者语义与 `tools/scx.py audit` / `check a2` 对齐。
+//! 两者语义与原 Python 工具的 `audit` / `check a2` 对齐。
 
 // 扫描/门禁分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
 #![allow(clippy::cognitive_complexity)]
 
 use super::io;
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 // 用 concat! 构造字面量，避免审计扫描到实现自身的模式字符串。
 const UNWRAP: &str = concat!(".un", "wrap()");
 const EXPECT_EMPTY: &str = concat!(".exp", "ect()");
@@ -271,7 +271,7 @@ pub(crate) fn a2() -> Result<(), Fail> {
 
 fn load(path: &Path) -> Result<Json, Fail> {
     let text = fs::read_to_string(path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
-    crate::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
+    scx::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
 }
 
 #[cfg(test)]

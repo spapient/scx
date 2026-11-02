@@ -198,8 +198,8 @@ Apple M5 Pro、release、零第三方依赖，2026-10-25 本机采样：
 复现：
 
 ```bash
-cargo run --release --locked --features eval --bin xtask -- bench compress
-cargo run --release --locked --features eval --bin xtask -- bench memory
+cargo run --release --locked -p xtask -- bench compress
+cargo run --release --locked -p xtask -- bench memory
 ```
 
 数字用于同机回归，不是跨机器承诺。与同一会话中的 HEAD 基线交错测量：压缩

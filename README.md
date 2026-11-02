@@ -500,7 +500,7 @@ fn main() {
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
 | `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
-| `src/tooling/` | 开发/CI 工具实现（`feature = "eval"`）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate/compress/memory/minhash-mrr）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现；`xtask` 目标仍复用 `src/main.rs` 入口，不进发布二进制 |
+| `xtask/` | 独立 workspace crate（`publish = false`，不进 `scx` 发布包）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate/compress/memory/minhash-mrr）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现；根包只保留 `scx` 单个 bin，禁止新增 `src/bin` |
 | `tests/golden.rs`, `config/tests/golden/manifest.toml` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例；`.err`/`.code` 仅非空/非零时落盘） |
 | `config/` | 可重建语料、冻结标签、盲审包与语义权重（`Gauge.*`/`contain5.*`/`real.*`/`v2.*`） |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
@@ -524,11 +524,11 @@ cargo test \
 
 每次变更通过以下门禁（0.6.0 起 mcp 已并入默认轨，为「默认 + semantic」双轨；可选 feature 均需编译与测试全绿）：
 
-- `cargo fmt -- --check`
-- `cargo clippy --locked --all-targets -- -D warnings`（另跑 `--features semantic` 轨）
+- `cargo fmt --all -- --check`
+- `cargo clippy --locked --workspace --all-targets -- -D warnings`（另跑全 feature 轨）
 - `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps`
 - 单元、CLI 集成、并发、金标与评测协议测试（`golden` 37 例逐字节零漂移为硬红线；新行为只走新测试例）
-- `cargo test --locked`（默认轨含 MCP stdio 冒烟）与 `--features semantic`（含权重校验/确定性）
+- `cargo test --locked --workspace`（默认轨含 MCP stdio 冒烟与 xtask CLI）与 `--all-features`（含权重校验/确定性）
 - `cargo build --release --locked`
 - Rust 1.82 声明 MSRV 实编译
 - 50k 行压缩基准
@@ -586,9 +586,9 @@ structure 结构并入）未在此快照内。
 
 ```bash
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
-cargo test --locked
-cargo run --release --locked --features eval --bin xtask -- bench compress
-cargo run --release --locked --features eval --bin xtask -- bench memory
+cargo test --locked --workspace --all-features
+cargo run --release --locked -p xtask -- bench compress
+cargo run --release --locked -p xtask -- bench memory
 ```
 
 ### 同类工具与可比性

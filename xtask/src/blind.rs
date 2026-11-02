@@ -1,6 +1,6 @@
-//! `xtask verify` / `xtask blind`：盲审包哈希与逐候选盲审协议（feature = "eval"）。
+//! `xtask verify` / `xtask blind`：盲审包哈希与逐候选盲审协议。
 //!
-//! 迁移自 `tools/scx.py verify` 与 `blind make/import/check/progress/agree/review`。
+//! 迁移自原 Python 工具的 `verify` 与 `blind make/import/check/progress/agree/review`。
 //! TSV 协议、标签 JSON、Cohen's kappa 与提示文案保持与 Python 版一致。
 
 // 盲审协议分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
@@ -9,7 +9,7 @@
 use super::io;
 use super::meta;
 use super::{fail, Fail};
-use crate::json::Json;
+use scx::json::Json;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::{self as stdio, Write};
@@ -191,7 +191,7 @@ fn write_text(path: &str, text: &str) -> Result<(), Fail> {
 
 fn load_json(path: &str) -> Result<Json, Fail> {
     let text = fs::read_to_string(path).map_err(|e| fail(format!("{path}: {e}")))?;
-    crate::json::parse(&text).map_err(|e| fail(format!("{path}: {e}")))
+    scx::json::parse(&text).map_err(|e| fail(format!("{path}: {e}")))
 }
 
 fn dump_json(path: &str, value: &Json) -> Result<(), Fail> {
@@ -217,7 +217,7 @@ fn to_j(value: &Json) -> io::J {
 }
 
 fn sha256_text(text: &str) -> String {
-    crate::hash::hex(&crate::hash::sha256(text.as_bytes()))
+    scx::hash::hex(&scx::hash::sha256(text.as_bytes()))
 }
 
 fn clean(text: &str) -> String {
@@ -1179,7 +1179,7 @@ mod tests {
     #[test]
     fn filled_packet_materializes_grades() {
         let value =
-            crate::json::parse(r#"{"cases":[{"case_index":0,"rel":{"a":2,"b":1}}]}"#).unwrap();
+            scx::json::parse(r#"{"cases":[{"case_index":0,"rel":{"a":2,"b":1}}]}"#).unwrap();
         let head: Vec<String> = PACKET_HEAD.map(str::to_string).to_vec();
         let rows = vec![
             vec![
@@ -1208,7 +1208,7 @@ mod tests {
 
     #[test]
     fn agreement_is_identity_on_same_labels() {
-        let value = crate::json::parse(
+        let value = scx::json::parse(
             r#"{"cases":[{"query":"q","rel":{"a":2,"b":1}},{"query":"q2","rel":{"c":2,"d":0}}]}"#,
         )
         .unwrap();

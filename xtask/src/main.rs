@@ -1,11 +1,11 @@
-//! `xtask`：开发工具（feature = "eval"）。
+//! `xtask`：仓库开发工具（独立 crate，不进 crates.io 发布包）。
 //!
-//! 迁移自 `tools/scx.py` 的 `baseline`/`stats`。契约保持不变：
+//! 迁移自原 Python 工具的 `baseline`/`stats`。契约保持不变：
 //! - 同一 baseline/verbose/memory 输入 → 同一 CSV/控制台输出；
 //! - bootstrap/permutation 复刻 CPython `random.Random`，可与 Python 版逐字节对拍；
 //! - 退出码：参数/输入错误 1，LOO gate 失败 2。
 //!
-//! 该二进制只在 `--features eval` 下构建，不进发布包。
+//! 依赖 `scx` 库（含 semantic feature），通过 workspace 独立构建。
 
 mod bench;
 mod blind;
@@ -28,8 +28,28 @@ mod selftest;
 mod sha512;
 mod stats;
 
-use crate::json::Json;
+use scx::json::Json;
 use std::collections::HashSet;
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    std::process::exit(run(&args));
+}
+
+#[cfg(test)]
+mod testsupport {
+    /// 唯一临时目录路径（`tag` 为前缀防碰撞）。
+    pub fn tmpdir(tag: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir()
+            .join(format!("scx-{tag}-{}-{nanos}", std::process::id()))
+            .to_string_lossy()
+            .to_string()
+    }
+}
 
 #[derive(Debug)]
 pub struct Fail {
@@ -299,7 +319,7 @@ fn field(row: &std::collections::HashMap<String, String>, key: &str) -> String {
     row.get(key).map(|v| v.trim()).unwrap_or("").to_string()
 }
 
-/// 复用 `crate::json::Json` 做数据模型，再走 Python 兼容的缩进输出。
+/// 复用 `scx::json::Json` 做数据模型，再走 Python 兼容的缩进输出。
 fn to_pretty(value: &Json) -> io::J {
     match value {
         Json::Null => io::J::Null,
