@@ -545,6 +545,6 @@ mod tests {
 
     #[test]
     fn selftest_runs() {
-        super::selftest_checks().expect("selftest");
+        selftest_checks().expect("selftest");
     }
 }

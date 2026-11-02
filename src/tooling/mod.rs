@@ -116,7 +116,7 @@ pub(crate) fn cjk(c: char) -> bool {
     ('\u{4e00}'..='\u{9fff}').contains(&c)
 }
 
-fn load_json(path: impl AsRef<std::path::Path>) -> Result<Json, Fail> {
+fn load_json(path: impl AsRef<Path>) -> Result<Json, Fail> {
     let path = path.as_ref().to_string_lossy();
     if let Some(name) = path.strip_prefix("result:") {
         let text = frozen::result_text(name)?;
