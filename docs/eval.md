@@ -1,13 +1,13 @@
 # scx 评测工具
 
 可重建的评测语料、冻结标签、盲审包与语义权重位于 `config/`（纯数据目录）；评测
-入口为同包 `xtask` 二进制（`cargo build --release --locked --features eval --bin xtask`），源码位于 `src/tooling/`。
+入口为同包 `scx-tooling` 二进制（`cargo build --release --locked --features eval --bin scx-tooling`），源码位于 `src/tooling/`。
 记忆库目录、verbose 日志、配对统计 CSV 等均为**生成物**，不进入版本库。
 
 在仓库根目录运行：
 
 ```bash
-cargo run --release --locked --features eval --bin xtask -- --help
+cargo run --release --locked --features eval --bin scx-tooling -- --help
 ```
 
 评测器为 Rust 实现（`src/tooling/`），负责语料播种、基线构造、盲审编排与统计；
@@ -17,7 +17,7 @@ cargo run --release --locked --features eval --bin xtask -- --help
 
 | 路径 | 用途 |
 |---|---|
-| `src/tooling/` | 语料播种、基线构造、盲审、配对统计、包校验；`xtask` 仅在 `--features eval` 下构建 |
+| `src/tooling/` | 语料播种、基线构造、盲审、配对统计、包校验；`scx-tooling` 仅在 `--features eval` 下构建 |
 | `corpus:gauge` | Gauge：30 起公开事故，150 条存储 case |
 | `corpus:v2` | v2 开发集：30 起公开事故，150 条存储 case |
 | `corpus:real` | 真实事故集：11 起公开复盘，40 条 case |
@@ -93,9 +93,9 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 ## 复现 Gauge
 
 ```bash
-xtask seed corpus:gauge \
+scx-tooling seed corpus:gauge \
   --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
-xtask baseline --csv /tmp/scx-gauge.csv \
+scx-tooling baseline --csv /tmp/scx-gauge.csv \
   --out /tmp/scx-gauge-mechanical.json \
   --judge-by mechanical-target-gauge-v1 \
   --judge-date 2026-10-23T00:00:00Z
@@ -108,7 +108,7 @@ scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
 ```bash
 scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
   --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-verbose.txt
-xtask stats --baseline /tmp/scx-gauge-mechanical.json \
+scx-tooling stats --baseline /tmp/scx-gauge-mechanical.json \
   --verbose /tmp/scx-gauge-verbose.txt --mem-dir /tmp/scx-gauge \
   --out /tmp/scx-gauge-stats.csv
 ```
@@ -185,7 +185,7 @@ scx --eval labels:gauge-policy --gate-human --mem-dir /tmp/scx-gauge
 ```bash
 scx --eval labels:gauge-human --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-hao.txt
-xtask stats \
+scx-tooling stats \
   --baseline labels:gauge-human \
   --verbose /tmp/scx-gauge-hao.txt \
   --mem-dir /tmp/scx-gauge \
@@ -198,17 +198,17 @@ xtask stats \
 ## 盲审
 
 ```bash
-xtask blind make \
+scx-tooling blind make \
   --baseline labels:gauge-policy --mem-dir /tmp/scx-gauge \
   --out /tmp/packet.tsv --manifest /tmp/manifest.json
-xtask blind progress --packet /tmp/packet.tsv
-xtask blind import \
+scx-tooling blind progress --packet /tmp/packet.tsv
+scx-tooling blind import \
   --baseline labels:gauge-policy --packet /tmp/packet.tsv \
   --out /tmp/human.json --judge <name> --date 2026-10-25T00:00:00Z
-xtask blind check --baseline /tmp/human.json
-xtask blind check --baseline /tmp/human.json \
+scx-tooling blind check --baseline /tmp/human.json
+scx-tooling blind check --baseline /tmp/human.json \
   --packet /tmp/packet.tsv --out /tmp/human-filled.tsv
-xtask blind agree \
+scx-tooling blind agree \
   --a /tmp/first-reviewer.json --b /tmp/second-reviewer.json
 ```
 
@@ -228,11 +228,11 @@ CRLF 文件与 LF 文件等价；`verify` 仍校验冻结文件的原始字节�
 ## v2 与 real
 
 ```bash
-xtask seed corpus:v2 \
+scx-tooling seed corpus:v2 \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
 scx --eval labels:v2 --gate --mem-dir /tmp/scx-v2
 
-xtask seed corpus:real \
+scx-tooling seed corpus:real \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
 scx --eval labels:real --gate-human --mem-dir /tmp/scx-real
 ```
@@ -256,10 +256,10 @@ v2 参与调参，且标签由 AI 预填后人工采纳，因此不是独立 hol
 
 ```bash
 cargo build --release --locked
-xtask contain corpus:contain5 --out /tmp/contain5-detail.json
+scx-tooling contain corpus:contain5 --out /tmp/contain5-detail.json
 ```
 
 - 语料：`contain5.corpus.json`（25 切片，build/stack/diff/log/test 各 5，全 synthetic）。
-- 入口：`xtask contain`（Rust 实现，无随机源）。
+- 入口：`scx-tooling contain`（Rust 实现，无随机源）。
 - 口径、复现命令、实测数字与 SHA256 见 [`containment.md`](containment.md)。
 - **自测性质**：作者侧合成语料自测，非第三方独立评测。

@@ -1,5 +1,5 @@
 //! 评估工具的零依赖 I/O：CSV（RFC 4180 子集）与 Python `json.dump(indent=1)`
-//! 兼容的 JSON 输出。仅 `xtask` 使用。
+//! 兼容的 JSON 输出。仅 `scx-tooling` 使用。
 //!
 //! CSV 状态机与 JSON 缩进器的分支是线性映射；拆分反而降低可读性。
 #![allow(clippy::cognitive_complexity)]

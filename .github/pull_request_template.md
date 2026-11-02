@@ -10,7 +10,7 @@
 - [ ] `cargo clippy --locked --workspace --all-targets -- -D warnings`
 - [ ] `cargo test --locked --workspace --all-features`
 - [ ] `cargo build --release --locked`
-- [ ] `cargo run --release --locked --features eval --bin xtask -- selftest`（涉及开发工具或语料时）
+- [ ] `cargo run --release --locked --features eval --bin scx-tooling -- selftest`（涉及开发工具或语料时）
 - [ ] `cargo package --locked`（涉及发布元数据时）
 - [ ] 新增/修改行为有对应测试
 

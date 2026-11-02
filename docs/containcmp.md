@@ -51,7 +51,7 @@
 
 ```bash
 cargo build --release --locked
-xtask contain corpus:contain5 \
+scx-tooling contain corpus:contain5 \
     --out docs/contain5-compare.json
 # 可选：--seed contain-rand-v1（默认）--timing-rounds 5（默认）
 ```

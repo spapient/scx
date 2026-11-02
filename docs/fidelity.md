@@ -38,9 +38,9 @@ log / test 开发域 + db / network / hardware 第二故障域，各 5）。每 
 
 ```bash
 cargo build --release --locked
-cargo build --release --locked --features eval --bin xtask
-./target/release/xtask fidelity corpus:fidelity --out /tmp/fidelity-detail.json
-./target/release/xtask fidelity corpus:fidelity --gate
+cargo build --release --locked --features eval --bin scx-tooling
+./target/release/scx-tooling fidelity corpus:fidelity --out /tmp/fidelity-detail.json
+./target/release/scx-tooling fidelity corpus:fidelity --gate
 ```
 
 `--gate` 冻结门禁（CI 强制执行）。实测数字统一以

@@ -117,7 +117,7 @@ fn validate(args: &[String]) -> Result<(), Fail> {
 }
 
 fn usage(message: impl Into<String>) -> Fail {
-    let body = "usage: xtask fit [--out PATH]\n";
+    let body = "usage: scx-tooling fit [--out PATH]\n";
     let message = message.into();
     Fail {
         msg: if message.is_empty() {

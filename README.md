@@ -500,7 +500,7 @@ fn main() {
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
 | `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
-| `src/tooling/` | 同包 `xtask` 开发工具（`required-features = ["eval"]`，不进发布运行路径）：基线/统计、containment/fidelity、bench、gen、ops、门禁、manifest/freeze、seed/blind/calibrate、distill/fit/mlp；禁止新增 `src/bin` |
+| `src/tooling/` | 同包 `scx-tooling` 开发工具（`required-features = ["eval"]`，不进发布运行路径）：基线/统计、containment/fidelity、bench、gen、ops、门禁、manifest/freeze、seed/blind/calibrate、distill/fit/mlp；禁止新增 `src/bin` |
 | `tests/golden.rs`, `config/tests/assets.json` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例） |
 | `config/` | 9 个规范命名资产文件：评测资产包、数据集包、冻结结果包、唯一 manifest、测试夹具、pipeline/semantic/tokenizer；不含历史目录与备份 |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
@@ -528,7 +528,7 @@ cargo test \
 - `cargo clippy --locked --workspace --all-targets -- -D warnings`（另跑全 feature 轨）
 - `RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps`
 - 单元、CLI 集成、并发、金标与评测协议测试（`golden` 37 例逐字节零漂移为硬红线；新行为只走新测试例）
-- `cargo test --locked --workspace`（默认轨含 MCP stdio 冒烟与 xtask CLI）与 `--all-features`（含权重校验/确定性）
+- `cargo test --locked --workspace`（默认轨含 MCP stdio 冒烟与 scx-tooling CLI）与 `--all-features`（含权重校验/确定性）
 - `cargo build --release --locked`
 - Rust 1.82 声明 MSRV 实编译
 - 50k 行压缩基准
@@ -587,8 +587,8 @@ structure 结构并入）未在此快照内。
 ```bash
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
 cargo test --locked --workspace --all-features
-cargo run --release --locked --features eval --bin xtask -- bench compress
-cargo run --release --locked --features eval --bin xtask -- bench memory
+cargo run --release --locked --features eval --bin scx-tooling -- bench compress
+cargo run --release --locked --features eval --bin scx-tooling -- bench memory
 ```
 
 ### 同类工具与可比性

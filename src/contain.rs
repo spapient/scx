@@ -1,7 +1,7 @@
 //! 内核评测协议：evidence containment（证据保留率）判定。
 //!
 //! 纯函数：给定压缩输出与语料证据行，判定证据行原文是否逐字节存活于输出。
-//! 语料编排与统计由 `xtask contain`（Rust，Python 版已委托）承担；本模块是
+//! 语料编排与统计由 `scx-tooling contain`（Rust，Python 版已委托）承担；本模块是
 //! 判定/计分的唯一事实源，两侧不得复刻彼此的语义。
 //! 口径与 `docs/containment.md` 一致；结果属作者侧自测，非第三方独立评测。
 

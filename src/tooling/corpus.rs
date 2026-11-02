@@ -158,7 +158,7 @@ fn parse_seed(args: &[String]) -> Result<SeedOpts, Fail> {
 }
 
 fn usage_seed(message: impl Into<String>) -> Fail {
-    let body = "usage: xtask seed <corpus> --mem-dir DIR [--csv PATH] [--binary PATH] [--jobs N] [--force]\n";
+    let body = "usage: scx-tooling seed <corpus> --mem-dir DIR [--csv PATH] [--binary PATH] [--jobs N] [--force]\n";
     let message = message.into();
     Fail {
         msg: if message.is_empty() {
@@ -628,7 +628,7 @@ fn parse_extract(args: &[String]) -> Result<ExtractOpts, Fail> {
 }
 
 fn usage_extract(message: impl Into<String>) -> Fail {
-    let body = "usage: xtask extract [--dir DIR] [--scan] [--extract N] [--out DIR]\n";
+    let body = "usage: scx-tooling extract [--dir DIR] [--scan] [--extract N] [--out DIR]\n";
     let message = message.into();
     Fail {
         msg: if message.is_empty() {

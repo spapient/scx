@@ -1,4 +1,4 @@
-//! `xtask fidelity`：compression fidelity 协议（feature = "eval"）。
+//! `scx-tooling fidelity`：compression fidelity 协议（feature = "eval"）。
 //!
 //! 迁移自 `tools/scx.py fidelity`：逐切片调用 `scx`，在同字节预算下对比
 //! 头截断与随机行采样，统计证据保留、answerability、token-set recall，
@@ -235,7 +235,7 @@ fn usage(message: String) -> Fail {
 
 fn fidelity_usage() -> String {
     "\
-usage: xtask fidelity <corpus> [options]
+usage: scx-tooling fidelity <corpus> [options]
 
   --binary PATH        scx binary (default: target/release/scx)
   --ratio F            optional-content budget [0.35]

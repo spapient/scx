@@ -1,4 +1,4 @@
-//! `xtask verify` / `xtask blind`：盲审包哈希与逐候选盲审协议（feature = "eval"）。
+//! `scx-tooling verify` / `scx-tooling blind`：盲审包哈希与逐候选盲审协议（feature = "eval"）。
 //!
 //! 迁移自 `tools/scx.py verify` 与 `blind make/import/check/progress/agree/review`。
 //! TSV 协议、标签 JSON、Cohen's kappa 与提示文案保持与 Python 版一致。
@@ -67,7 +67,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
 
 fn blind_usage() -> String {
     "\
-usage: xtask blind <command> [options]
+usage: scx-tooling blind <command> [options]
 
 commands:
   make      baseline + memory -> blind packet TSV + manifest

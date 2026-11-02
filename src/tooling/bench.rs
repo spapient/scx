@@ -1,4 +1,4 @@
-//! `xtask bench`：离线评测子命令（feature = "eval"）。
+//! `scx-tooling bench`：离线评测子命令（feature = "eval"）。
 //!
 //! 迁移自 `tools/bench.py` 的离线部分：
 //! - `real`：real-dump 压缩指标矩阵（ctx × gate × scoped）；
@@ -48,7 +48,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
 
 fn bench_usage() -> String {
     "\
-usage: xtask bench <command> [options]
+usage: scx-tooling bench <command> [options]
 
 commands:
   real    real-dump compression matrix
@@ -197,7 +197,10 @@ fn perf(_args: &[String]) -> Result<(), Fail> {
     }
     let out = std::env::temp_dir().join("scx-perf-baseline.json");
     let value = J::Obj(vec![
-        ("tool".to_string(), J::Str("xtask bench perf".to_string())),
+        (
+            "tool".to_string(),
+            J::Str("scx-tooling bench perf".to_string()),
+        ),
         ("date".to_string(), J::Str("2026-10-29".to_string())),
         ("corpus".to_string(), J::Str("generated".to_string())),
         (
@@ -1531,7 +1534,7 @@ fn minhash_args(args: &[String]) -> Result<(String, f64), Fail> {
         }
     }
     let mem_dir = mem_dir.filter(|s| !s.is_empty()).ok_or_else(|| {
-        usage("usage: xtask bench minhash-mrr --mem-dir DIR [--minhash-weight F]")
+        usage("usage: scx-tooling bench minhash-mrr --mem-dir DIR [--minhash-weight F]")
     })?;
     if !weight.is_finite() || weight < 0.0 {
         return Err(usage(

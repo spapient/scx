@@ -1,4 +1,4 @@
-//! `xtask audit` / `a2` / `selftest`：质量门禁与不变量自检（feature = "eval"）。
+//! `scx-tooling audit` / `a2` / `selftest`：质量门禁与不变量自检（feature = "eval"）。
 //!
 //! - `audit`：扫描 `src/**/*.rs` 生产段（首个测试标记之前），禁止裸 unwrap、空 expect、空 panic/unreachable；`scope.join()` 后的 unwrap 豁免。
 //! - `a2`：按 `config/fidelity-thresholds.json` 校验结果包中

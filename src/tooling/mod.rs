@@ -1,4 +1,4 @@
-//! `xtask`：开发工具（feature = "eval"）。
+//! `scx-tooling`：开发工具（feature = "eval"）。
 //!
 //! 迁移自 `tools/scx.py` 的 `baseline`/`stats`。契约保持不变：
 //! - 同一 baseline/verbose/memory 输入 → 同一 CSV/控制台输出；
@@ -26,7 +26,7 @@ use scx::json::Json;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-/// `xtask` 进程入口；同一文件作为库模块编译时由 `allow(dead_code)` 消除未使用告警。
+/// `scx-tooling` 进程入口；同一文件作为库模块编译时由 `allow(dead_code)` 消除未使用告警。
 #[allow(dead_code)]
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -183,14 +183,14 @@ pub fn run(args: &[String]) -> i32 {
 }
 
 fn unknown(command: &str) -> i32 {
-    eprintln!("xtask: unknown command: {command}");
+    eprintln!("scx-tooling: unknown command: {command}");
     eprint!("{}", usage());
     2
 }
 
 fn usage() -> String {
     "\
-usage: xtask <command> [options]
+usage: scx-tooling <command> [options]
 
 commands:
   baseline  eval CSV -> target baseline JSON

@@ -1,4 +1,4 @@
-//! `xtask calibrate`：BUDGET_SAFETY_FACTOR 上界系数标定（feature = "eval"）。
+//! `scx-tooling calibrate`：BUDGET_SAFETY_FACTOR 上界系数标定（feature = "eval"）。
 //!
 //! 语料、启发式估计、分位数与报告均在 Rust；tiktoken cl100k_base 真值由
 //! 内置词表（`config/tokenizer/cl100k_base.tiktoken`）与贪心 BPE 计算，

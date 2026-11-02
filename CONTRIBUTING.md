@@ -22,7 +22,7 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo test --locked --workspace --all-features
 cargo build --release --locked
-cargo run --release --locked --features eval --bin xtask -- selftest
+cargo run --release --locked --features eval --bin scx-tooling -- selftest
 ```
 
 Windows PowerShell：
@@ -35,7 +35,7 @@ $env:RUSTDOCFLAGS = "-D warnings"
 cargo doc --locked --no-deps
 cargo test --locked --workspace --all-features
 cargo build --release --locked
-cargo run --release --locked --features eval --bin xtask -- selftest
+cargo run --release --locked --features eval --bin scx-tooling -- selftest
 ```
 
 PR 描述中请粘贴实际执行的命令与结果；未执行的检查不要写成已通过。

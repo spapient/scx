@@ -91,7 +91,7 @@ AI 标签 `labels:gauge-ai`（`per-item-ai-v1`，384/384）只通过
 复现入口：
 
 ```bash
-xtask seed corpus:gauge \
+scx-tooling seed corpus:gauge \
   --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
 scx --eval labels:gauge-human --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge
@@ -118,7 +118,7 @@ v2 有 30 起公开事故、150 条查询（60/60/30），最终标签
 hard 数值达到门槛，但 v2 参与调参，不能写成独立确认。复现：
 
 ```bash
-xtask seed corpus:v2 \
+scx-tooling seed corpus:v2 \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
 scx --eval labels:v2 --gate --mem-dir /tmp/scx-v2
 ```
@@ -135,7 +135,7 @@ scx --eval labels:v2 --gate --mem-dir /tmp/scx-v2
 不是指标回归。复现：
 
 ```bash
-xtask seed corpus:real \
+scx-tooling seed corpus:real \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
 scx --eval labels:real --gate-human --mem-dir /tmp/scx-real
 ```

@@ -44,7 +44,7 @@ memory = []
 # 诊断计时（可选）：压缩主链分阶段耗时打印到 stderr；关闭时零代码零开销，
 # 输出与默认构建逐字节一致。仅用于性能定位，不参与任何结果路径。
 perf = []
-# 开发/CI 工具（xtask 二进制与 tests/tooling.rs）；不进发布路径。
+# 开发/CI 工具（scx-tooling 二进制与 tests/tooling.rs）；不进发布路径。
 eval = ["memory", "semantic"]
 
 [[bin]]
@@ -52,7 +52,7 @@ name = "scx"
 path = "src/main.rs"
 
 [[bin]]
-name = "xtask"
+name = "scx-tooling"
 path = "src/tooling/mod.rs"
 required-features = ["eval"]
 

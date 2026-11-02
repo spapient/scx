@@ -1,4 +1,4 @@
-//! `xtask contain`：evidence containment 协议编排（feature = "eval"）。
+//! `scx-tooling contain`：evidence containment 协议编排（feature = "eval"）。
 //!
 //! 迁移自 `tools/scx.py contain`：逐切片调用 `scx` 二进制，和头截断/随机行
 //! 采样在同一字节预算下对照，输出逐切片表、聚合指标与可选 JSON。
@@ -172,7 +172,7 @@ fn usage(message: String) -> Fail {
 
 fn contain_usage() -> String {
     "\
-usage: xtask contain <corpus> [options]
+usage: scx-tooling contain <corpus> [options]
 
   --binary PATH        scx binary (default: target/release/scx)
   --ratio F            optional-content budget [0.35]

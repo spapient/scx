@@ -560,7 +560,7 @@ fn render(
     let mut lines = vec![
         "# 评测实测指标（自动生成）".to_string(),
         String::new(),
-        "> 由 `xtask report` 生成；CI 断言与本文件逐字节一致，文档数字一律以本文件为准。".to_string(),
+        "> 由 `scx-tooling report` 生成；CI 断言与本文件逐字节一致，文档数字一律以本文件为准。".to_string(),
         String::new(),
         "## Gauge（150 查询，seed 20261023，tier:hard）".to_string(),
         String::new(),
@@ -720,7 +720,7 @@ fn parse_report(args: &[String]) -> Result<ReportOpts, Fail> {
 }
 
 fn usage(message: impl Into<String>) -> Fail {
-    let body = "usage: xtask manifest [--files PATH...] [--out PATH] [--expect PATH]\n       xtask report --stats CSV --stats-recall3 CSV --loo-json JSON --fidelity JSON [--out PATH | --check PATH]\n       xtask freeze [--results DIR] [--manifest FILE]\n       xtask subset [CSV...] [--dir DIR] [--out FILE]\n";
+    let body = "usage: scx-tooling manifest [--files PATH...] [--out PATH] [--expect PATH]\n       scx-tooling report --stats CSV --stats-recall3 CSV --loo-json JSON --fidelity JSON [--out PATH | --check PATH]\n       scx-tooling freeze [--results DIR] [--manifest FILE]\n       scx-tooling subset [CSV...] [--dir DIR] [--out FILE]\n";
     let message = message.into();
     Fail {
         msg: if message.is_empty() {
@@ -1138,7 +1138,7 @@ fn parse_gen(args: &[String]) -> Result<(String, PathBuf), Fail> {
 
 fn usage_gen(message: impl Into<String>) -> Fail {
     let text = message.into();
-    let body = "usage: xtask gen <cuda|js|layers|shape|bench> --out DIR\n";
+    let body = "usage: scx-tooling gen <cuda|js|layers|shape|bench> --out DIR\n";
     Fail {
         msg: if text.is_empty() {
             body.to_string()

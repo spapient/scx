@@ -2,7 +2,7 @@
 //!
 //! 数据子集：内置选择器 `corpus:contain5` 的 5 类代表切片
 //! （build/stack/diff/log/test 各 1），与其逐字一致；全量 25 片编排由
-//! `xtask contain`（Rust）承担，本文件是判定
+//! `scx-tooling contain`（Rust）承担，本文件是判定
 //! 语义的可执行规格（Rust 侧协议实现，见 scx::contain）。
 //! 口径：evidence containment（证据行原文逐字节存活），作者侧自测，非第三方独立评测。
 

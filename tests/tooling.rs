@@ -1,4 +1,4 @@
-//! `xtask` 开发工具的 Python 参考输出回归测试（feature = "eval"）。
+//! `scx-tooling` 开发工具的 Python 参考输出回归测试（feature = "eval"）。
 //! fixture 由 `tools/scx.py` 生成；本测试锁定 Rust 迁移后的逐字节一致性。
 
 #![cfg(feature = "eval")]
@@ -13,7 +13,7 @@ const DATASETS: &str = include_str!("../config/datasets.json");
 const RESULTS: &str = include_str!("../config/benchmark-results.json");
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_xtask")
+    env!("CARGO_BIN_EXE_scx-tooling")
 }
 
 fn fixture_root() -> &'static PathBuf {
@@ -51,7 +51,7 @@ fn run(args: &[&str]) -> std::process::ExitStatus {
     Command::new(bin())
         .args(args)
         .status()
-        .expect("spawn xtask")
+        .expect("spawn scx-tooling")
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn contain_matches_python_reference() {
             out.to_str().unwrap(),
         ])
         .output()
-        .expect("spawn xtask contain");
+        .expect("spawn scx-tooling contain");
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -240,7 +240,7 @@ fn fidelity_matches_python_reference() {
             out.to_str().unwrap(),
         ])
         .output()
-        .expect("spawn xtask fidelity");
+        .expect("spawn scx-tooling fidelity");
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -282,7 +282,7 @@ fn bench_real_matches_python_reference() {
             "0.35",
         ])
         .output()
-        .expect("spawn xtask bench real");
+        .expect("spawn scx-tooling bench real");
     assert!(output.status.success());
     let got = String::from_utf8_lossy(&output.stdout);
     let want = fs::read_to_string(fixtures("bench/real-expected.out")).unwrap();

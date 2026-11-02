@@ -34,7 +34,7 @@ mod policy;
 pub mod terms;
 /// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。
 pub mod toml;
-/// 开发/CI 工具（feature = "eval"）：xtask 二进制的实现，不进发布包。
+/// 开发/CI 工具（feature = "eval"）：scx-tooling 二进制的实现，不进发布包。
 #[cfg(feature = "eval")]
 pub mod tooling;
 mod trim;

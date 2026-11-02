@@ -1,4 +1,4 @@
-//! `xtask ops`：运维六合一（feature = "eval"）。
+//! `scx-tooling ops`：运维六合一（feature = "eval"）。
 //!
 //! 迁移自 `tools/ops.py`：run / install / setup / doctor / check / perf。
 //! 路径与命令语义保持原样；构建仍落在 `SCX_TARGET_DIR`（默认 tmp/scx-cargo-target），
@@ -44,7 +44,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
 }
 
 fn usage() {
-    eprintln!("usage: xtask ops [run] [ARGS...] | install | setup | doctor | check | perf");
+    eprintln!("usage: scx-tooling ops [run] [ARGS...] | install | setup | doctor | check | perf");
     eprintln!("  run      自举构建后转发参数（默认；非子命令首参即 CLI 参数）");
     eprintln!("  install  release 构建 + 软链到 ~/.local/bin/scx");
     eprintln!("  setup    注册 MCP 配置（Claude/Codex/Cursor，幂等+备份+自检）");

@@ -254,7 +254,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 | 子项 | 状态 | 证据 |
 |---|---|---|
 | 4.1 发布基建 | 完成 | `cargo package --locked` dry-run 196 文件 1.9MiB（压缩 350.5KiB）verify 通过；`tools/scx install` 实测 RC=0；`docs/release-checklist.md` |
-| 4.2 性能矩阵 | 完成 | `xtask bench compress`（`xtask/src/bench.rs`）四路径（默认 / structure off+on / max-tokens / policy）+ `docs/benchmarks.md` 跨机基准表；structure 开 +12~13%、max-tokens 12029–12449µs overflow:evidence、policy parse 13.3–13.5ms 一次性 |
+| 4.2 性能矩阵 | 完成 | `scx-tooling bench compress`（`src/tooling/bench.rs`）四路径（默认 / structure off+on / max-tokens / policy）+ `docs/benchmarks.md` 跨机基准表；structure 开 +12~13%、max-tokens 12029–12449µs overflow:evidence、policy parse 13.3–13.5ms 一次性 |
 | 4.3 RFC 多租户 | 完成 | `docs/rfc-multi-tenant.md`（设计 only，未实现；禁 publish/push/merge 纪律内） |
 | 4.4 存量复杂度清理 | 完成 | `memory/*` 18 个 lizard 候选全部人工核算；**recall_inner 19→8、score_pass 42→9**、index build 12→1 / parse 23→4、ranking expand 21→6、query_cache append 13→3 / merge 11→4、gate check_mode 23→4 / adjudication_checks 26→4、eval parse_baseline 35→8、annotate judge 25→8 / annotate_report 13→4、meta load_meta 18→9 / bump_word_w 18→5、feedback rate 13→4、json write_into 15→8、util parse_utc_secs 20→7、ingest persist 11→2；辅助函数全部 <10 |
 | 记忆库协议演进 | 完成 | L1 直答评测协议（fix 覆盖率 / 直答触发率 / 直答命中率 / MRR 下界）入 `docs/memory.md`；多进程写实测沿用 P2 `memory_concurrency` 压测 + `docs/locking.md`；内核/记忆库解耦复核：无跨模块引用（仅 ops 编排层调 memory） |
@@ -1441,7 +1441,7 @@ memory;`。消费面 cfg 化（照 semantic 先例）：
   消费者，随 feature cfg。
 - 测试：`tests/golden.rs` golden_gate/update_baselines、ops/redact/terms/
   analysis 的 memory 相关测试全部 `#[cfg(feature="memory")]`。
-- `xtask bench minhash-mrr` / `xtask bench memory`：按 `memory` feature
+- `scx-tooling bench minhash-mrr` / `scx-tooling bench memory`：按 `memory` feature
   cfg 编译，缺 feature 时明确报错。
 
 **门禁证据（双矩阵）**：default——lib 341、semantic 350、golden 2 passed

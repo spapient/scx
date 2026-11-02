@@ -45,15 +45,15 @@ jobs:
         run: cargo check --locked --no-default-features
       - name: Evaluator selftest (Unix)
         if: runner.os != 'Windows'
-        run: cargo run --release --locked --features eval --bin xtask -- selftest
+        run: cargo run --release --locked --features eval --bin scx-tooling -- selftest
       - name: Evaluator selftest (Windows)
         if: runner.os == 'Windows'
-        run: cargo run --release --locked --features eval --bin xtask -- selftest
+        run: cargo run --release --locked --features eval --bin scx-tooling -- selftest
       - name: Bench (compress 50k lines)
-        run: cargo run --release --locked --features eval --bin xtask -- bench compress
+        run: cargo run --release --locked --features eval --bin scx-tooling -- bench compress
       - name: Bench gate (10k memory recall)
         if: runner.os == 'Linux'
-        run: cargo run --release --locked --features eval --bin xtask -- bench memory
+        run: cargo run --release --locked --features eval --bin scx-tooling -- bench memory
       - name: CLI smoke (Unix)
         if: runner.os != 'Windows'
         run: ./target/release/scx --version
@@ -77,28 +77,28 @@ jobs:
           components: rustfmt, clippy
       - name: Build release
         run: cargo build --release --locked
-      - name: Build eval xtask
-        run: cargo build --release --locked --features eval --bin xtask
+      - name: Build scx-tooling
+        run: cargo build --release --locked --features eval --bin scx-tooling
       - name: Rustdoc
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --locked --no-deps
       - name: Tool selftest
-        run: .\target\release\xtask.exe selftest
+        run: .\target\release\scx-tooling.exe selftest
       - name: Fidelity gate (compression-fidelity eval)
         run: >-
-          .\target\release\xtask.exe fidelity corpus:fidelity
+          .\target\release\scx-tooling.exe fidelity corpus:fidelity
           --binary target/release/scx.exe --gate
           --domain-boot 10000 --domain-gate-p 0.05
           --out config/ci-fidelity.json
       - name: Rebuild Gauge corpus
         run: >-
-          .\target\release\xtask.exe seed corpus:gauge
+          .\target\release\scx-tooling.exe seed corpus:gauge
           --mem-dir config/ci-mem --csv config/ci-cases.csv
           --binary target/release/scx.exe --force
       - name: Rebuild Gauge corpus serially
         run: >-
-          .\target\release\xtask.exe seed corpus:gauge
+          .\target\release\scx-tooling.exe seed corpus:gauge
           --mem-dir config/ci-mem-serial --csv config/ci-cases-serial.csv
           --binary target/release/scx.exe --force --jobs 1
       - name: Compare parallel and serial seed output
@@ -111,7 +111,7 @@ jobs:
           }
       - name: Build mechanical baseline
         run: >-
-          .\target\release\xtask.exe baseline
+          .\target\release\scx-tooling.exe baseline
           --csv config/ci-cases.csv --out config/ci-baseline.json
           --judge-by mechanical-target-gauge-v1
           --judge-date 2026-10-23T00:00:00Z
@@ -135,7 +135,7 @@ jobs:
           $global:LASTEXITCODE = 0
       - name: Frozen blind packet
         run: >-
-          .\target\release\xtask.exe verify
+          .\target\release\scx-tooling.exe verify
           --packet packet:gauge
           --sha256 b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f
       - name: AI labels pass items gate, fail human gate
@@ -165,7 +165,7 @@ jobs:
           }
       - name: Gauge paired statistics
         run: >-
-          .\target\release\xtask.exe stats
+          .\target\release\scx-tooling.exe stats
           --baseline config/ci-baseline.json
           --verbose config/ci-verbose.txt
           --mem-dir config/ci-mem
@@ -189,7 +189,7 @@ jobs:
       - name: Gauge recall@3 gate
         shell: pwsh
         run: |
-          .\target\release\xtask.exe stats --baseline config/ci-baseline.json --verbose config/ci-verbose.txt --mem-dir config/ci-mem --out config/ci-stats-recall3.csv --metric recall@3 --cluster-size 5 --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
+          .\target\release\scx-tooling.exe stats --baseline config/ci-baseline.json --verbose config/ci-verbose.txt --mem-dir config/ci-mem --out config/ci-stats-recall3.csv --metric recall@3 --cluster-size 5 --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
           $rows = @(Import-Csv .\config\ci-stats-recall3.csv)
           $hard = @($rows | Where-Object { $_.group -eq 'tier:hard' })
           if ($hard.Count -ne 1) { throw "recall@3 hard result missing" }
@@ -200,7 +200,7 @@ jobs:
       - name: Gauge leave-one-incident-out gate
         shell: pwsh
         run: >-
-          .\target\release\xtask.exe stats
+          .\target\release\scx-tooling.exe stats
           --baseline config/ci-baseline.json
           --verbose config/ci-verbose.txt
           --mem-dir config/ci-mem
@@ -208,11 +208,11 @@ jobs:
           --loo --loo-group 5 --gate
           --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
       - name: Frozen evaluation-input manifest
-        run: .\target\release\xtask.exe manifest --expect config/manifest.json
+        run: .\target\release\scx-tooling.exe manifest --expect config/manifest.json
       - name: Frozen metrics report
         shell: pwsh
         run: >-
-          .\target\release\xtask.exe report
+          .\target\release\scx-tooling.exe report
           --stats config/ci-stats.csv
           --stats-recall3 config/ci-stats-recall3.csv
           --loo-json config/ci-stats-loo.loo.json

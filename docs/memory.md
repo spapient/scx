@@ -198,8 +198,8 @@ Apple M5 Pro、release、零第三方依赖，2026-10-25 本机采样：
 复现：
 
 ```bash
-cargo run --release --locked --features eval --bin xtask -- bench compress
-cargo run --release --locked --features eval --bin xtask -- bench memory
+cargo run --release --locked --features eval --bin scx-tooling -- bench compress
+cargo run --release --locked --features eval --bin scx-tooling -- bench memory
 ```
 
 数字用于同机回归，不是跨机器承诺。与同一会话中的 HEAD 基线交错测量：压缩
@@ -208,7 +208,7 @@ cargo run --release --locked --features eval --bin xtask -- bench memory
 冷启动线性首查 1.01–1.03 s → 0.95–0.97 s。
 稀疏提速来自“先部分选择 top-k，再只排序 3k 候选窗口”；冷启动收益来自 case 读取
 不再克隆整棵 JSON；宽查询仍以逐候选打分为主。
-冷启动线性首查受系统负载与页缓存影响明显，表中给出三轮实测跨度。`xtask bench memory`
+冷启动线性首查受系统负载与页缓存影响明显，表中给出三轮实测跨度。`scx-tooling bench memory`
 单独报告索引首次加载，并同时测量线性冷启动、稳态倒排召回与全候选宽查询，
 避免把索引 I/O 混入查询分布。基准库由 200 条种子复制为 1 万条，用于稳定测量
 实现开销，不代表真实事故的规模与分布。
@@ -291,11 +291,11 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
 
 ```bash
 # 1) 建库并灌入 Gauge 语料（fix 标签在 corpus 内，随 case 入库）
-xtask seed corpus:gauge --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
+scx-tooling seed corpus:gauge --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
 # 2) 机械 hard 层目标基线（judge-by 由确认轮次决定，照抄 eval.md 写法）
-xtask baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-gauge-v1
+scx-tooling baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-gauge-v1
 # 3) 显著性统计（mrr 为主指标；--mem-dir 用于分层）
-xtask stats --baseline /tmp/l1-mechanical.json   --verbose /tmp/l1-verbose.csv --out /tmp/l1-stats.csv
+scx-tooling stats --baseline /tmp/l1-mechanical.json   --verbose /tmp/l1-verbose.csv --out /tmp/l1-stats.csv
 # 4) fix 覆盖率：库内 fix 非空 case 占比（scx --stats 或直接统计 mem-dir）
 # 5) 直答触发/命中：对 Gauge 查询逐条跑 --recall 并核对 top1 tail16
 ```

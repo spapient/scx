@@ -1,4 +1,4 @@
-//! `xtask distill weights`：评测信号坐标上升蒸馏（scx-sem-2，feature = "eval"）。
+//! `scx-tooling distill weights`：评测信号坐标上升蒸馏（scx-sem-2，feature = "eval"）。
 //!
 //! 迁移自 `tools/bench.py distill weights`：3 语料 cut/fidelity 目标下逐维坐标
 //! 上升，写入 `config/semantic.json`。`distill online` 仍由 Python 承担
@@ -68,7 +68,7 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
 }
 
 fn usage(message: impl Into<String>) -> Fail {
-    let body = "usage: xtask distill weights [--sem-bin PATH] [--out PATH] [--log PATH]\n";
+    let body = "usage: scx-tooling distill weights [--sem-bin PATH] [--out PATH] [--log PATH]\n";
     let message = message.into();
     Fail {
         msg: if message.is_empty() {
