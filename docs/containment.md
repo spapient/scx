@@ -13,7 +13,7 @@ cargo build --release --locked --features eval --bin xtask
 
 # 1. 跑 containment 评测（stdout 表格 + 聚合；--out 写逐片 detail JSON）
 ./target/release/xtask contain config/contain5.corpus.json --out /tmp/contain5-detail.json
-# 或经 Python 包装（会委托同一 Rust 实现）：./tools/scx.py contain ...
+# 或经 Python 包装（会委托同一 Rust 实现）：xtask contain ...
 
 # 可选参数（默认即本次实测口径）：
 #   --ratio 0.35 --context 1 --binary target/release/scx
@@ -21,7 +21,7 @@ cargo build --release --locked --features eval --bin xtask
 
 评测器无随机源（随机基线由固定 seed 的 CPython 兼容 MT19937 生成）；对同一
 语料连跑两次，除 wall 时间外输出逐字节一致。压缩由 `target/release/scx`
-（Rust 唯一实现）完成，`xtask contain`（`scx.py` 委托）负责写临时输入、调用
+（Rust 唯一实现）完成，`xtask contain`（`xtask` 委托）负责写临时输入、调用
 二进制、解析 `scxjson:` 统计行并核对证据。
 
 ## 口径定义
@@ -110,7 +110,7 @@ cargo build --release --locked --features eval --bin xtask
 
 ## 判定实现（单一事实源）
 
-- **编排侧（`xtask contain`；`tools/scx.py contain` 委托）**：调用 `scx`
+- **编排侧（`xtask contain`；`xtask contain` 委托）**：调用 `scx`
   二进制解析 `scxjson:` 统计行，并调用 `scx::contain::judge` 判定证据。
 - **判定侧（`scx::contain` + `tests/contain.rs`）**：证据行原文与压缩正文做
   **substring 包含**判定（`ev in body_text`），与 Python 版逐字节一致；红黄蓝

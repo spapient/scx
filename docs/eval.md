@@ -1,24 +1,24 @@
 # scx 评测工具
 
 可重建的评测语料、冻结标签、盲审包与语义权重位于 `config/`（纯数据目录）；评测
-入口为仓库根的 `tools/scx.py`。记忆库目录、verbose 日志、配对统计 CSV 等均为
+入口为 `xtask`（`cargo build --release --locked --features eval --bin xtask`）。记忆库目录、verbose 日志、配对统计 CSV 等均为
 **生成物**，不进入版本库。
 
 在仓库根目录运行：
 
 ```bash
-./tools/scx.py --help          # macOS / Linux
-python tools/scx.py --help     # Windows
+xtask --help          # macOS / Linux
+xtask --help     # Windows
 ```
 
-评测器只使用 Python 标准库，负责语料播种、基线构造、盲审编排与统计；检索和
-证据门仍有且只有一份 Rust 实现，位于 `src/`。评测脚本不能在 Python 侧复刻排序。
+评测器为 Rust 实现（`src/evaltool`，feature=eval），负责语料播种、基线构造、
+盲审编排与统计；检索和证据门仍有且只有一份 Rust 实现，位于 `src/`。
 
 ## 目录
 
 | 路径 | 用途 |
 |---|---|
-| `../tools/scx.py` | 语料播种、基线构造、盲审、配对统计、包校验 |
+| `.xtask` | 语料播种、基线构造、盲审、配对统计、包校验 |
 | `config/gauge.corpus.json` | Gauge：30 起公开事故，150 条存储 case |
 | `config/v2.corpus.json` | v2 开发集：30 起公开事故，150 条存储 case |
 | `config/real.corpus.json` | 真实事故集：11 起公开复盘，40 条 case |
@@ -94,9 +94,9 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 ## 复现 Gauge
 
 ```bash
-./tools/scx.py seed config/gauge.corpus.json \
+xtask seed config/gauge.corpus.json \
   --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
-./tools/scx.py baseline --csv /tmp/scx-gauge.csv \
+xtask baseline --csv /tmp/scx-gauge.csv \
   --out /tmp/scx-gauge-mechanical.json \
   --judge-by mechanical-target-gauge-v1 \
   --judge-date 2026-10-23T00:00:00Z
@@ -109,7 +109,7 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 ```bash
 ./tools/scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
   --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-verbose.txt
-./tools/scx.py stats --baseline /tmp/scx-gauge-mechanical.json \
+xtask stats --baseline /tmp/scx-gauge-mechanical.json \
   --verbose /tmp/scx-gauge-verbose.txt --mem-dir /tmp/scx-gauge \
   --out /tmp/scx-gauge-stats.csv
 ```
@@ -186,7 +186,7 @@ common=384、raw=0.344、**κ=0.017**——AI 逐项盲审与人工盲审一致�
 ```bash
 ./tools/scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-hao.txt
-./tools/scx.py stats \
+xtask stats \
   --baseline config/gauge.human.labels.json \
   --verbose /tmp/scx-gauge-hao.txt \
   --mem-dir /tmp/scx-gauge \
@@ -199,17 +199,17 @@ common=384、raw=0.344、**κ=0.017**——AI 逐项盲审与人工盲审一致�
 ## 盲审
 
 ```bash
-./tools/scx.py blind make \
+xtask blind make \
   --baseline config/gauge.policy.labels.json --mem-dir /tmp/scx-gauge \
   --out /tmp/packet.tsv --manifest /tmp/manifest.json
-./tools/scx.py blind progress --packet /tmp/packet.tsv
-./tools/scx.py blind import \
+xtask blind progress --packet /tmp/packet.tsv
+xtask blind import \
   --baseline config/gauge.policy.labels.json --packet /tmp/packet.tsv \
   --out /tmp/human.json --judge <name> --date 2026-10-25T00:00:00Z
-./tools/scx.py blind check --baseline /tmp/human.json
-./tools/scx.py blind check --baseline /tmp/human.json \
+xtask blind check --baseline /tmp/human.json
+xtask blind check --baseline /tmp/human.json \
   --packet /tmp/packet.tsv --out /tmp/human-filled.tsv
-./tools/scx.py blind agree \
+xtask blind agree \
   --a /tmp/first-reviewer.json --b /tmp/second-reviewer.json
 ```
 
@@ -229,11 +229,11 @@ CRLF 文件与 LF 文件等价；`verify` 仍校验冻结文件的原始字节�
 ## v2 与 real
 
 ```bash
-./tools/scx.py seed config/v2.corpus.json \
+xtask seed config/v2.corpus.json \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
 ./tools/scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
 
-./tools/scx.py seed config/real.corpus.json \
+xtask seed config/real.corpus.json \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
 ./tools/scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
 ```
@@ -257,10 +257,10 @@ v2 参与调参，且标签由 AI 预填后人工采纳，因此不是独立 hol
 
 ```bash
 cargo build --release --locked
-./tools/scx.py contain config/contain5.corpus.json --out /tmp/contain5-detail.json
+xtask contain config/contain5.corpus.json --out /tmp/contain5-detail.json
 ```
 
 - 语料：`contain5.corpus.json`（25 切片，build/stack/diff/log/test 各 5，全 synthetic）。
-- 入口：`tools/scx.py contain`（新增 subcommand，标准库、无随机源）。
+- 入口：`xtask contain`（Rust 实现，无随机源）。
 - 口径、复现命令、实测数字与 SHA256 见 [`containment.md`](containment.md)。
 - **自测性质**：作者侧合成语料自测，非第三方独立评测。

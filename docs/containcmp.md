@@ -51,7 +51,7 @@
 
 ```bash
 cargo build --release --locked
-python3 tools/scx.py contain config/contain5.corpus.json \
+xtask contain config/contain5.corpus.json \
     --out docs/contain5-compare.json
 # 可选：--seed contain-rand-v1（默认）--timing-rounds 5（默认）
 ```

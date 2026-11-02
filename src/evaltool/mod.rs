@@ -112,13 +112,13 @@ commands:
   stats     verbose + baseline -> significance CSV
   contain   evidence containment vs head-truncation / random baseline
   fidelity  answerability + token retention + domain cluster bootstrap
-  bench     offline benchmarks (real / perf / budget)
+  bench     offline benchmarks (real / perf / budget / ablate)
   gen       materialize frozen corpora (cuda/js/layers/shape/bench/fid)
   ops       run/install/setup/doctor/check/perf
   verify    blind packet hash + row count
   blind     per-candidate blind review (make/import/check/progress/agree/review)
   extract   Claude Code JSONL -> compression corpus
-  calibrate BUDGET_SAFETY_FACTOR quantiles (tiktoken truth via --truth)
+  calibrate BUDGET_SAFETY_FACTOR quantiles (built-in cl100k_base BPE)
   distill   offline weight coordinate ascent (distill weights)
   fit       weak-label linear weight fit (scx-sem-1)
   mlp       linear/MLP cross-validation on distill cache

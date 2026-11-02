@@ -21,8 +21,6 @@ include = [
     "src/**",
     "docs/**",
     "!docs/comparison-v051.md",
-    "tools/**",
-    "!tools/__pycache__/**",
     "examples/**",
     "tests/**",
     "config/**",
