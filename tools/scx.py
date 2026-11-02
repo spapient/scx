@@ -700,7 +700,7 @@ def cmd_stats(args):
     verbose = parse_verbose(args.verbose, len(cases))
     tiers = strata_for(cases, args.mem_dir, args.strata)
     rows = []
-    for index, (case, hits) in enumerate(zip(cases, verbose)):
+    for index, (case, hits) in enumerate(zip(cases, verbose, strict=True)):
         target = str(case["expected"][0])
         if args.metric == "mrr":
             left = mrr(target_rank(hits["A"], target))
@@ -813,7 +813,7 @@ def write_text(path, text):
 
 def read_packet(path):
     head, rows = read_tsv(path)
-    return [dict(zip(head, row)) for row in rows]
+    return [dict(zip(head, row, strict=True)) for row in rows]
 
 
 def filled_packet(head, rows, cases):
@@ -825,7 +825,7 @@ def filled_packet(head, rows, cases):
         rel_by_case[case_index] = case.get("rel") or {}
     filled = []
     for number, row in enumerate(rows, 2):
-        fields = dict(zip(head, row))
+        fields = dict(zip(head, row, strict=True))
         try:
             grade = float(rel_by_case[int(fields["case_index"])][fields["candidate"]])
         except (KeyError, TypeError, ValueError):
@@ -941,7 +941,7 @@ def parse_grades(rows, allow_partial):
 
 def cmd_blind_import(args):
     head, table = read_tsv(args.packet)
-    rows = [dict(zip(head, row)) for row in table]
+    rows = [dict(zip(head, row, strict=True)) for row in table]
     grades = parse_grades(rows, args.allow_partial)
     baseline = load_json(args.baseline)
     cases = baseline["cases"]
@@ -1066,7 +1066,7 @@ def agreement(cases_a, cases_b):
     matrix = [[0, 0, 0] for _ in range(3)]
     disagreements = []
     total = agree = 0
-    for index, (left, right) in enumerate(zip(cases_a, cases_b), 1):
+    for index, (left, right) in enumerate(zip(cases_a, cases_b, strict=True), 1):
         rel_left = left.get("rel") or {}
         rel_right = right.get("rel") or {}
         for candidate, left_value in rel_left.items():
@@ -1184,7 +1184,7 @@ def validate_contain_corpus(corpus):
         sys.exit(f"contain: slices={len(slices)} must be 20..30")
     seen = set()
     kind_counts = {k: 0 for k in kinds}
-    for index, slc in enumerate(slices):
+    for _, slc in enumerate(slices):
         ident = str(slc.get("id") or "").strip()
         kind = str(slc.get("kind") or "").strip()
         query = str(slc.get("query") or "").strip()
@@ -1420,7 +1420,7 @@ def validate_fidelity_corpus(corpus):
         sys.exit(f"fidelity: slices={len(slices)} must be 20..60")
     seen = set()
     kind_counts = {k: 0 for k in kinds}
-    for index, slc in enumerate(slices):
+    for _, slc in enumerate(slices):
         ident = str(slc.get("id") or "").strip()
         kind = str(slc.get("kind") or "").strip()
         query = str(slc.get("query") or "").strip()
@@ -2564,7 +2564,6 @@ def ED_tool_blocks(path):
             for block in content:
                 kind = block.get("type")
                 if kind == "tool_use":
-                    name = block.get("name", "")
                     inp = block.get("input")
                     if isinstance(inp, dict):
                         if isinstance(inp.get("command"), str):

@@ -32,18 +32,15 @@ import re
 import subprocess
 import sys
 import tempfile
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-import collections
+from typing import Optional
 import hashlib
-import io
 import math
 import socket
 import struct
-import urllib.request
 import common  # 公共封装（chat/compress）
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -258,6 +255,7 @@ def load_model_mlx(spec: ModelSpec, quantize: int = 0):
     伤害大（实测 0.6→0.2），不推荐。
     """
     from mlx_lm.utils import load_model, quantize_model
+    from transformers import PreTrainedTokenizerFast  # noqa: E402
 
     model, _ = load_model(spec.path)
     if quantize:
@@ -350,9 +348,7 @@ def cmd_gsm8k() -> None:
     args = ap.parse_args()
 
     # MLX 评测依赖延迟加载：--help/参数错误即时返回，不拖慢其他子命令
-    import torch  # noqa: E402
     from datasets import load_dataset  # noqa: E402
-    from transformers import PreTrainedTokenizerFast  # noqa: E402
 
     scx_extra = tuple(args.scx_extra.split()) if args.scx_extra else ()
 
@@ -880,7 +876,7 @@ def run_budget(bin_: str, cname: str, text: str, query: str, budget: float | Non
 
     cut/kept_pct 用行级 token 分母（与 Rust budget 语义同源：预算 = Σ行 estimate）。
     """
-    flags = [f"--budget", f"{budget:.2f}"] if budget is not None else []
+    flags = ["--budget", f"{budget:.2f}"] if budget is not None else []
     out = compress_ablate(bin_, text, query, flags)
     fid_out = rebuild_folded(out)
     out_tok = tok_lines(out)
@@ -912,7 +908,6 @@ def cmd_budget() -> int:
     ]
     rows: list[dict] = []
     for cname, text, query in corpora:
-        full_tok = est_tok(text)
         # baseline（默认路径）→ budget 档位。
         base = run_budget(args.bin, cname, text, query, None)
         rows.append(base)
@@ -1169,7 +1164,7 @@ def cmd_arch() -> None:
             full_tok = len(tok.encode(prompt))
             scx_plans, scx_toks = {}, {}
             for rt in ratios:
-                extra = scx_extra_base + (f"--trim-ratio", rt) if rt else scx_extra
+                extra = scx_extra_base + ("--trim-ratio", rt) if rt else scx_extra
                 scx_out = scx_compress(args.scx_bin, prompt, Q_HINT.get(item["domain"], item["domain"]),
                                        extra=extra)
                 scx_plans[rt] = gen(scx_out)
@@ -1262,7 +1257,7 @@ def cmd_arch() -> None:
         print(f"\n=== P6n 架构文档 rubric 评测（{spec.display()} 生成本地 / judge={jname} 在线, {len(qa)} 题, ratios={ratios}）===")
         print(f"{'轨':16s} {'structure':>9s} {'accuracy':>9s} {'tradeoff':>9s} {'feasibility':>10s} {'clarity':>8s} {'TOTAL':>7s} {'cut':>6s}")
         all_tot = {}
-        for label, tr, rt in ([(f"full", "full", ratios[0])] +
+        for label, tr, rt in ([("full", "full", ratios[0])] +
                               [(f"scx r={rt}", "scx", rt) for rt in ratios]):
             row = [label]
             for d in dims:
@@ -1462,7 +1457,7 @@ def code_answer(raw: str) -> str:
 
 def check_ans(raw: str, gold: str) -> bool:
     a_raw = code_answer(raw)
-    ans = norm(a_raw)
+    ans = norm_ans(a_raw)
     if not ans:
         return False
     # 候选答案：gold 主句 + 括号内内容（"（寄存器/局部内存）" → 答其一即对）
@@ -1471,7 +1466,7 @@ def check_ans(raw: str, gold: str) -> bool:
         for sub in re.split(r"[/\s]+", c):
             if not sub:
                 continue
-            sn = norm(sub)
+            sn = norm_ans(sub)
             if not sn:
                 continue
             if sn == ans or sn in ans or ans in sn:
@@ -2017,8 +2012,6 @@ RATIOS = [("lossless", 1.0), ("r0.3", 0.3), ("r0.2", 0.2)]
 
 
 def run_once(path, ratio):
-    with open(path, "rb") as f:
-        data = f.read()
     t0 = time.perf_counter()
     out = subprocess.run([str(BIN), "--query", "fn compress", "--ratio", str(ratio),
                           "--trim", "1", "--trim-ratio", str(ratio),
@@ -2137,6 +2130,13 @@ def _top_idents(code: str, k: int = 4) -> list[str]:
         if w not in stop and not w.isdigit():
             cnt[w] = cnt.get(w, 0) + 1
     return [w for w, _ in sorted(cnt.items(), key=lambda kv: -kv[1])[:k]]
+
+
+# unit（bench_long 工程语料题）→ 源文件扩展名；代码围栏语言由扩展名派生
+EXT = {"c_pool": "c", "c_sched": "c", "cpp_matrix": "cpp", "java_queue": "java",
+       "py_config": "py", "rust_cache": "rs", "scx_trim": "rs"}
+_FENCE_BY_EXT = {"c": "c", "cpp": "cpp", "java": "java", "py": "python", "rs": "rust"}
+FENCE = {u: _FENCE_BY_EXT[ext] for u, ext in EXT.items()}
 
 
 def load_prompts(units_dir: Path, qa: list[dict]) -> list[tuple[str, str, str]]:
@@ -2346,7 +2346,7 @@ def default_corpus():
         samples.append("数据库连接超时 连接池耗尽 磁盘空间不足 errno=28")
         samples.append("short")
         samples.append("hello world")
-    for i in range(40):
+    for _ in range(40):
         samples.append(
             "fn main() {\n    let x = 1 + 2;\n    println!(\"{}\", x);\n}\n"
         )
@@ -2387,11 +2387,11 @@ def cmd_calibrate() -> int:
         print("无真值（tiktoken 不可用）：无法定安全系数。%s" % exc)
         return 1
 
-    ratios = [y / heuristic_estimate(s) for s, y in zip(samples, ys)]
+    ratios = [y / heuristic_estimate(s) for s, y in zip(samples, ys, strict=True)]
     qs = [0.50, 0.90, 0.95, 0.99, 1.00]
     vals = quantiles(ratios, qs)
     print("样本数=%d  比率（真值 / 启发式）分位数：" % len(samples))
-    for q, v in zip(qs, vals):
+    for q, v in zip(qs, vals, strict=True):
         print("  P%-4d = %.3f" % (int(q * 100), v))
     p95, p99 = vals[2], vals[3]
     print("\n建议 BUDGET_SAFETY_FACTOR = %.3f  （P95；更保守可改用 P99 = %.3f）" % (p95, p99))
@@ -2745,7 +2745,6 @@ GC_add("""以下代码中，warp-level reduce 相比 block reduce 的优势是�
 # ===== gold 执行验证（纯 C 内核题）=====
 def GC_validate() -> tuple[int, int]:
     """静态语义题 count；可执行题 clang 验证通过数。"""
-    exec_ok = 0
     exec_total = 0
     for q, gold, verify in GC_T:
         assert len(q) > 20 and len(gold) > 0, "空题"
@@ -3306,7 +3305,7 @@ GL_add("L3", "config", """生产级配置系统的推荐分层结构是什么？
 
 def GL_validate() -> tuple[int, int]:
     ok = 0
-    for layer, theme, q, gold, src in GL_T:
+    for _, _, q, gold, src in GL_T:
         assert len(q) > 10 and len(gold) > 0, "空题"
         if src is not None:
             if src.startswith("import") or src.startswith("print"):
@@ -3331,7 +3330,7 @@ def GL_main() -> None:
     with open(GL_OUT, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["question", "answer"])
-        for layer, theme, q, gold, _ in GL_T:
+        for layer, _, q, gold, _ in GL_T:
             w.writerow([f"【{layer}】{q}", gold])
     print(f"written {GL_OUT}: {n} 题（5 组 × L1/L2/L3，工具验证 {ok}）")
 # -*- coding: utf-8 -*-
@@ -3680,7 +3679,7 @@ def DO_call_teacher(t: dict, prompt: str, max_new: int = 1500) -> str:
             return r["choices"][0]["message"]["content"] or ""
         except Exception as e:
             if attempt == 3:
-                raise RuntimeError(f"{t['name']}: {e}")
+                raise RuntimeError(f"{t['name']}: {e}") from e
             time.sleep(2 * attempt)
     raise RuntimeError(f"{t['name']}: unreachable")
 
@@ -4002,8 +4001,8 @@ def DO_fit(X: list[list[float]], y: list[int], lr: float = 0.05, epochs: int = 1
     w = [0.0] * d
     for _ in range(epochs):
         grad = [0.0] * d
-        for xi, yi in zip(X, y):
-            p = DO_sigmoid(sum(wi * xj for wi, xj in zip(w, xi)))
+        for xi, yi in zip(X, y, strict=True):
+            p = DO_sigmoid(sum(wi * xj for wi, xj in zip(w, xi, strict=True)))
             err = p - yi
             for j in range(d):
                 grad[j] += err * xi[j]
@@ -4373,8 +4372,8 @@ def FW_fit(X: list[list[float]], y: list[int], lr: float = 0.05, epochs: int = 1
     w = [0.0] * d
     for _ in range(epochs):
         grad = [0.0] * d
-        for xi, yi in zip(X, y):
-            p = FW_sigmoid(sum(wi * xj for wi, xj in zip(w, xi)))
+        for xi, yi in zip(X, y, strict=True):
+            p = FW_sigmoid(sum(wi * xj for wi, xj in zip(w, xi, strict=True)))
             err = p - yi
             for j in range(d):
                 grad[j] += err * xi[j]
@@ -4460,7 +4459,7 @@ def MC_fit_linear(X, y):
     n = len(X)
     for _ in range(150):
         grad = [0.0] * MC_DIM
-        for xi, yi in zip(X, y):
+        for xi, yi in zip(X, y, strict=True):
             p = MC_SIG(sum(w[d] * xi[d] for d in range(MC_DIM)))
             err = p - yi
             for d in range(MC_DIM):
@@ -4477,7 +4476,7 @@ def MC_fit_mlp(X, y, h=16):
     w2 = [random.uniform(-0.3, 0.3) for _ in range(h)]
     b2 = 0.0
     n = len(X)
-    for epoch in range(150):
+    for _ in range(150):
         for i in range(n):
             a = [MC_SIG(sum(w1[j][d] * X[i][d] for d in range(MC_DIM)) + b1[j]) for j in range(h)]
             z = sum(w2[j] * a[j] for j in range(h)) + b2
@@ -4497,7 +4496,7 @@ def MC_fit_mlp(X, y, h=16):
 
 def MC_auc_ap(scores, y):
     """AUC（ROC）+ AP（PR-AUC）标准实现。"""
-    pairs = sorted(zip(scores, y), key=lambda p: -p[0])
+    pairs = sorted(zip(scores, y, strict=True), key=lambda p: -p[0])
     npos = sum(y)
     nneg = len(y) - npos
     tp = fp = 0
@@ -4515,7 +4514,7 @@ def MC_auc_ap(scores, y):
     tp = fp = 0
     ap = 0.0
     last_rec = 0.0
-    for s, yi in pairs:
+    for _, yi in pairs:
         if yi:
             tp += 1
         else:

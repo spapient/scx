@@ -17,7 +17,6 @@ from __future__ import annotations
 import csv
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -692,7 +691,7 @@ def GF_db_large(idx: int) -> dict:
         t = 3 + i * 4
         lines.append(f"[2026-10-26T09:{t // 60:02d}:{t % 60:02d}Z] ERROR {msg}")
         lines.append(f"[2026-10-26T09:{t // 60:02d}:{(t + 2) % 60:02d}Z] WARN  {extra}")
-    lines.append(f"[2026-10-26T09:02:00Z] ERROR supervisor gave up after 20 alerts")
+    lines.append("[2026-10-26T09:02:00Z] ERROR supervisor gave up after 20 alerts")
     lines.append("[2026-10-26T09:02:01Z] INFO  entering read-only fallback mode")
     ev = [f"[2026-10-26T09:00:03Z] ERROR {msg}"]
     return {
@@ -710,9 +709,9 @@ def GF_network_large(idx: int) -> dict:
     if tool == "dns":
         blocks += [f"dig @10.0.0.53 {target}",
                    "; <<>> DiG 9.18 <<>> @10.0.0.53 {target}",
-                   f"; (1 server found)", f";; ->>HEADER<<- opcode: QUERY, status: {err.split(':')[0].strip()}",
-                   f";; QUESTION SECTION:", f";{target}.\tIN\tA", f";; ANSWER SECTION:",
-                   f";; AUTHORITY SECTION:", f"internal.\t3600\tIN\tSOA\tns1.internal.", f";; query time: 5023 msec"]
+                   "; (1 server found)", f";; ->>HEADER<<- opcode: QUERY, status: {err.split(':')[0].strip()}",
+                   ";; QUESTION SECTION:", f";{target}.\tIN\tA", ";; ANSWER SECTION:",
+                   ";; AUTHORITY SECTION:", "internal.\t3600\tIN\tSOA\tns1.internal.", ";; query time: 5023 msec"]
         blocks += [f";; {err}" for _ in range(20)]
     elif tool == "tcp":
         blocks += [f"traceroute to {target} ({target}), 30 hops max, 60 byte packets",
