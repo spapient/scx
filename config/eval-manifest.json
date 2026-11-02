@@ -2,7 +2,7 @@
  "note": "frozen evaluation inputs; CI asserts hashes are stable",
  "files": {
   "config/gauge.corpus.json": "714ba0eefaaa445cab2a59ff0a1641505d03c772d22204fd31f94d305ac9d65e",
-  "config/fidelity.corpus.json": "32194397471d91fff574123b44b857be8981eab68099793e606755773d09f997",
+  "config/fidelity.corpus.json": "8848d02661c6d0383c466c7d9bfba145a1bf6befdcb2412e875ad1db03779ce3",
   "config/gauge.policy.labels.json": "1a4fabcff0df1e0ed1d65eda7355818914239d8828c30963491e5aa17d3474f6",
   "config/gauge.ai.labels.json": "97c4580fc25f77bc1fab6032262420fa24e7584a2d7f4bf72ef31465a9930726",
   "config/gauge.human.labels.json": "43c5976bc91872b4ba049ab8e08cc6c43de8103687c3818e90cbcac3ca992f87",
