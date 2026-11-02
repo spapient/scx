@@ -197,8 +197,8 @@ Apple M5 Pro、release、零第三方依赖，2026-10-25 本机采样：
 复现：
 
 ```bash
-cargo run --release --locked --example bench
-cargo run --release --locked --example bench -- memory
+cargo run --release --locked --features eval --bin xtask -- bench compress
+cargo run --release --locked --features eval --bin xtask -- bench memory
 ```
 
 数字用于同机回归，不是跨机器承诺。与同一会话中的 HEAD 基线交错测量：压缩
@@ -207,7 +207,7 @@ cargo run --release --locked --example bench -- memory
 冷启动线性首查 1.01–1.03 s → 0.95–0.97 s。
 稀疏提速来自“先部分选择 top-k，再只排序 3k 候选窗口”；冷启动收益来自 case 读取
 不再克隆整棵 JSON；宽查询仍以逐候选打分为主。
-冷启动线性首查受系统负载与页缓存影响明显，表中给出三轮实测跨度。`bench -- memory`
+冷启动线性首查受系统负载与页缓存影响明显，表中给出三轮实测跨度。`xtask bench memory`
 单独报告索引首次加载，并同时测量线性冷启动、稳态倒排召回与全候选宽查询，
 避免把索引 I/O 混入查询分布。基准库由 200 条种子复制为 1 万条，用于稳定测量
 实现开销，不代表真实事故的规模与分布。

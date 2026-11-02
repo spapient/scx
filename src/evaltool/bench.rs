@@ -3,7 +3,9 @@
 //! 迁移自 `tools/bench.py` 的离线部分：
 //! - `real`：real-dump 压缩指标矩阵（ctx × gate × scoped）；
 //! - `perf`：压缩吞吐基线冻结；
-//! - `budget`：同预算对照（--budget vs SuperCompress 官方口径）。
+//! - `budget`：同预算对照（--budget vs SuperCompress 官方口径）；
+//! - `compress` / `memory`：50k 行压缩路径与 10k case 召回基准；
+//! - `minhash-mrr`：对 stdin 查询输出融合召回排名，供 MRR 机械核算。
 //!
 //! 在线模型相关子命令（gsm8k/arch/code/kernel/long/fidelity）不在此迁移。
 //! 解析/格式化分支是线性映射，认知复杂度门禁针对压缩内核，故本模块局部关闭。
@@ -14,6 +16,9 @@ use super::contain;
 use super::io::{self, J};
 use super::{fail, Fail};
 use crate::json::Json;
+#[cfg(feature = "memory")]
+use crate::memory::{rebuild, save, search, Input, Stats};
+use crate::Config;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -30,6 +35,9 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
         "perf" => perf(&args[1..]),
         "budget" => budget(&args[1..]),
         "ablate" => ablate(&args[1..]),
+        "compress" => compress_bench(&args[1..]),
+        "memory" => memory_bench(&args[1..]),
+        "minhash-mrr" => minhash_mrr(&args[1..]),
         "-h" | "--help" => {
             print!("{}", bench_usage());
             Ok(())
@@ -47,6 +55,9 @@ commands:
   perf    compression throughput baseline
   budget  same-budget comparison (--budget vs SuperCompress)
   ablate  signal ablation matrix (+ --combo semantic interaction)
+  compress  50k-line compression paths (default/structure/max-tokens/policy)
+  memory    10k-case memory recall benchmark and performance gate
+  minhash-mrr  read queries from stdin and print fused top-10 ids
 "
     .to_string()
 }
@@ -1078,6 +1089,459 @@ fn write_ablate_csv(path: &str, rows: &[AblateRow]) -> Result<(), Fail> {
         })
         .collect();
     io::write_csv_with(path, &fields, &values, "\r\n").map_err(fail)
+}
+
+// ---------------------------------------------------------------------------
+// compression / memory regression benchmarks
+// ---------------------------------------------------------------------------
+
+/// 压缩基准：默认语料、结构感知、硬上限与 policy 字段覆盖四条路径。
+fn compress_bench(_args: &[String]) -> Result<(), Fail> {
+    let lines: Vec<String> = (0..50_000)
+        .map(|i| {
+            if i % 100 == 0 {
+                format!("ERROR db timeout conn_id={} pool exhausted", i)
+            } else {
+                format!("INFO heartbeat seq={} ok pool=3 latency=1ms", i)
+            }
+        })
+        .collect();
+    let text = lines.join("\n");
+    let cfg = Config::default();
+    let query = "timeout conn_id pool";
+    let repeats = bench_repeats();
+
+    bench_median(&text, query, &cfg, "compress", repeats);
+    structure_bench(repeats);
+    max_tokens_bench(&text, query, repeats);
+    policy_bench(&text, query, repeats)?;
+    Ok(())
+}
+
+/// 单路径中位耗时：预热一次后采样，报告 p50 与全样本。
+fn bench_median(text: &str, query: &str, cfg: &Config, label: &str, repeats: usize) {
+    let _ = crate::compress(text, query, cfg);
+    let mut samples: Vec<u128> = Vec::with_capacity(repeats);
+    for _ in 0..repeats {
+        let t = Instant::now();
+        let outcome = crate::compress(text, query, cfg);
+        samples.push(t.elapsed().as_micros());
+        assert!(outcome.seeds > 0, "benchmark corpus must hit a seed");
+    }
+    samples.sort_unstable();
+    println!(
+        "{label}: 50k lines ({} chars) median {} us | samples {:?} us | kept={}",
+        text.chars().count(),
+        samples[samples.len() / 2],
+        samples,
+        crate::compress(text, query, cfg).kept,
+    );
+}
+
+/// 结构感知路径：结构富语料在 `structure=false` 与 `true` 下分别计时。
+fn structure_bench(repeats: usize) {
+    let text = structure_text();
+    let query = "compute module";
+    let off = Config {
+        structure: false,
+        ..Config::default()
+    };
+    let on = Config {
+        structure: true,
+        ..Config::default()
+    };
+    bench_median(&text, query, &off, "structure:off", repeats);
+    bench_median(&text, query, &on, "structure:on", repeats);
+}
+
+/// `--max-tokens` 路径：默认语料 + `limit=2000`。
+fn max_tokens_bench(text: &str, query: &str, repeats: usize) {
+    let cfg = Config {
+        limit: Some(2000),
+        ..Config::default()
+    };
+    let _ = crate::compress(text, query, &cfg);
+    let mut samples: Vec<u128> = Vec::with_capacity(repeats);
+    for _ in 0..repeats {
+        let t = Instant::now();
+        let outcome = crate::compress(text, query, &cfg);
+        samples.push(t.elapsed().as_micros());
+        assert!(outcome.seeds > 0);
+    }
+    samples.sort_unstable();
+    let out = crate::compress(text, query, &cfg);
+    println!(
+        "max-tokens: 50k lines median {} us | samples {:?} us | kept={} mode={}",
+        samples[samples.len() / 2],
+        samples,
+        out.kept,
+        out.mode,
+    );
+}
+
+/// `--policy-file` 路径：TOML 解析一次性计时，字段覆盖后的稳态压缩单独报告。
+fn policy_bench(text: &str, query: &str, repeats: usize) -> Result<(), Fail> {
+    let body = "ratio = 0.5\ncontext = 1\nmax_tokens = 4000\nstructure = 1\n";
+    let t = Instant::now();
+    let entries = crate::toml::parse(body.lines());
+    let parse_us = t.elapsed().as_micros();
+    let mut cfg = Config::default();
+    for e in &entries {
+        match e.key {
+            "ratio" => {
+                cfg.ratio = e
+                    .value
+                    .parse()
+                    .map_err(|_| fail(format!("bench policy ratio: {}", e.value)))?
+            }
+            "context" => {
+                cfg.context = e
+                    .value
+                    .parse()
+                    .map_err(|_| fail(format!("bench policy context: {}", e.value)))?
+            }
+            "max_tokens" => cfg.limit = e.value.parse().ok(),
+            "structure" => {
+                cfg.structure = e
+                    .value
+                    .parse::<usize>()
+                    .map_err(|_| fail(format!("bench policy structure: {}", e.value)))?
+                    > 0
+            }
+            _ => {}
+        }
+    }
+    let mut samples: Vec<u128> = Vec::with_capacity(repeats);
+    for _ in 0..repeats {
+        let t = Instant::now();
+        let outcome = crate::compress(text, query, &cfg);
+        samples.push(t.elapsed().as_micros());
+        assert!(outcome.seeds > 0);
+    }
+    samples.sort_unstable();
+    let out = crate::compress(text, query, &cfg);
+    println!(
+        "policy: toml parse {} us (one-shot, per-invocation) | compress median {} us | samples {:?} us | kept={} mode={}",
+        parse_us,
+        samples[samples.len() / 2],
+        samples,
+        out.kept,
+        out.mode,
+    );
+    Ok(())
+}
+
+/// 结构富语料：每 50 行一个 import 块、stack 链、fence 块与噪声行交替。
+fn structure_text() -> String {
+    let mut v: Vec<String> = Vec::with_capacity(50_000);
+    for i in 0..50_000 {
+        match i % 50 {
+            0..=9 => v.push(format!("import com.svc.module{};", i % 10)),
+            10..=19 => v.push(format!(
+                "  at com.svc.Class{}.method{}() line {}",
+                i % 10,
+                i % 20,
+                100 + i
+            )),
+            20 => v.push("```rust".to_string()),
+            21 => v.push(format!("let x = compute({});", i)),
+            22 => v.push("```".to_string()),
+            _ => v.push(format!("INFO heartbeat seq={} ok", i)),
+        }
+    }
+    v.join("\n")
+}
+
+fn bench_repeats() -> usize {
+    std::env::var("SCX_BENCH_REPEAT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(9)
+}
+
+#[cfg(feature = "memory")]
+fn memory_bench(_args: &[String]) -> Result<(), Fail> {
+    let root = std::env::temp_dir().join(format!("scx-mem-bench-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let root = root
+        .to_str()
+        .ok_or_else(|| fail("bench: memory root is not valid UTF-8"))?
+        .to_string();
+    let result = memory_bench_at(&root);
+    let _ = fs::remove_dir_all(&root);
+    result
+}
+
+#[cfg(feature = "memory")]
+fn memory_bench_at(root: &str) -> Result<(), Fail> {
+    let stats = Stats {
+        kept: 5,
+        total: 100,
+        cut: 95.0,
+        risk: "HIGH".to_string(),
+    };
+
+    let t = Instant::now();
+    for seed in 0..200 {
+        let query = format!("issue fam{}", letters(seed));
+        let text = bench_case(seed);
+        save(Input::new(root, &query, &text, &stats))
+            .map_err(|e| fail(format!("bench save failed: {e}")))?;
+    }
+    println!("store: 200 seeds in {} ms", t.elapsed().as_millis());
+
+    let t = Instant::now();
+    let cases_dir = Path::new(root).join("cases");
+    let base: Vec<String> = fs::read_dir(&cases_dir)
+        .map_err(|e| fail(format!("{}: {e}", cases_dir.display())))?
+        .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+        .collect();
+    for copy in 1..50 {
+        for id in &base {
+            let new_id = format!("{id}_{copy:02}");
+            let src = cases_dir.join(id);
+            let dst = cases_dir.join(&new_id);
+            fs::create_dir(&dst).map_err(|e| fail(format!("{}: {e}", dst.display())))?;
+            let path = dst.join("case.json");
+            fs::copy(src.join("case.json"), &path)
+                .map_err(|e| fail(format!("{}: {e}", path.display())))?;
+            let body =
+                fs::read_to_string(&path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
+            fs::write(
+                &path,
+                body.replace(&format!("\"id\":\"{id}\""), &format!("\"id\":\"{new_id}\"")),
+            )
+            .map_err(|e| fail(format!("{}: {e}", path.display())))?;
+        }
+    }
+    println!(
+        "replicate: 200 -> 10000 cases in {} ms",
+        t.elapsed().as_millis()
+    );
+
+    let mut cold = Vec::new();
+    for i in 0..5 {
+        let query = bench_query(i);
+        let t = Instant::now();
+        let hits = search(root, &query, 5, true)
+            .map_err(|e| fail(format!("bench cold recall failed: {e}")))?;
+        cold.push(t.elapsed().as_micros());
+        assert!(!hits.is_empty(), "benchmark query must recall");
+    }
+    cold.sort_unstable();
+    let (c50, c95, c99) = percentiles(&cold);
+    println!("cold (no index, linear): p50={c50} p95={c95} p99={c99} us");
+
+    let t = Instant::now();
+    let (n_docs, n_terms) = rebuild(root).map_err(|e| fail(format!("bench rebuild: {e}")))?;
+    println!(
+        "rebuild: docs={n_docs} terms={n_terms} in {} ms",
+        t.elapsed().as_millis()
+    );
+
+    // 单独报告索引首次加载，后续样本只衡量稳态召回。
+    let t = Instant::now();
+    let warm = search(root, &bench_query(99), 5, true)
+        .map_err(|e| fail(format!("bench index warm failed: {e}")))?;
+    assert!(!warm.is_empty(), "index warm query must recall");
+    println!("index warm: {} us", t.elapsed().as_micros());
+
+    let recall_repeats = std::env::var("SCX_BENCH_RECALL_REPEAT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(21);
+    let mut recall = Vec::new();
+    for i in 0..recall_repeats {
+        let query = bench_query(i);
+        let t = Instant::now();
+        let hits =
+            search(root, &query, 5, true).map_err(|e| fail(format!("bench recall failed: {e}")))?;
+        recall.push(t.elapsed().as_micros());
+        assert!(!hits.is_empty(), "benchmark query must recall");
+    }
+    recall.sort_unstable();
+    let (p50, p95, p99) = percentiles(&recall);
+    let top = search(
+        root,
+        &format!("fam{} cid{}", letters(42), letters(42)),
+        1,
+        true,
+    )
+    .map_err(|e| fail(format!("bench top1 recall failed: {e}")))?;
+    let top1 = top
+        .first()
+        .ok_or_else(|| fail("bench top1 recall returned no hits"))?
+        .sim;
+    println!("recall: p50={p50} p95={p95} p99={p99} us | samples={recall:?} us | top1 sim={top1}");
+    // 5ms 是当前 ~0.2ms p50 的 25 倍：拦截数量级回归，不把 CI 抖动判红。
+    if p50 >= 5_000 {
+        return Err(Fail {
+            msg: format!("bench: FAIL (10k recall p50 {p50} us >= 5ms)"),
+            code: 2,
+        });
+    }
+    println!("gate: PASS (10k recall p50 < 5ms)");
+
+    let mut broad = Vec::new();
+    for i in 0..7 {
+        let query = format!("ERROR timeout pool {}", letters(i));
+        let t = Instant::now();
+        let hits = search(root, &query, 5, true)
+            .map_err(|e| fail(format!("bench broad recall failed: {e}")))?;
+        broad.push(t.elapsed().as_micros());
+        assert!(!hits.is_empty());
+    }
+    broad.sort_unstable();
+    let (b50, b95, b99) = percentiles(&broad);
+    println!("broad recall: p50={b50} p95={b95} p99={b99} us | samples={broad:?} us");
+
+    Ok(())
+}
+
+#[cfg(not(feature = "memory"))]
+fn memory_bench(_args: &[String]) -> Result<(), Fail> {
+    Err(usage("memory mode requires the memory feature"))
+}
+
+#[cfg(feature = "memory")]
+fn bench_case(seed: usize) -> String {
+    if seed % 4 == 0 {
+        let mut text = format!(
+            "FATAL fam{} cid{} stack overflow alpha beta gamma theta",
+            letters(seed),
+            letters(seed)
+        );
+        for frame in 0..8 {
+            text.push_str(&format!(
+                " at com.svc.{}() called from {}() line {}",
+                letters((seed * 31 + frame * 7) % 26),
+                letters((seed * 13 + frame) % 26),
+                100 + (seed * 3 + frame) % 900
+            ));
+        }
+        text
+    } else {
+        format!(
+            "ERROR fam{} cid{} conn timeout pool exhausted retry=3 delta={}",
+            letters(seed),
+            letters(seed),
+            (seed * 7) % 1000
+        )
+    }
+}
+
+#[cfg(feature = "memory")]
+fn bench_query(sample: usize) -> String {
+    format!(
+        "fam{} cid{} tail{}",
+        letters(42),
+        letters(42),
+        letters(sample)
+    )
+}
+
+#[cfg(feature = "memory")]
+/// 数字 → 全字母串（base26，避免 norm 数字折叠导致指纹去重）。
+fn letters(mut n: usize) -> String {
+    let mut out = String::new();
+    loop {
+        out.insert(0, (b'a' + (n % 26) as u8) as char);
+        n /= 26;
+        if n == 0 {
+            return out;
+        }
+    }
+}
+
+#[cfg(feature = "memory")]
+fn percentiles(sorted: &[u128]) -> (u128, u128, u128) {
+    fn pct(values: &[u128], q: usize) -> u128 {
+        if values.is_empty() {
+            return 0;
+        }
+        let index = ((values.len() - 1) * q / 100).min(values.len() - 1);
+        values[index]
+    }
+    (pct(sorted, 50), pct(sorted, 95), pct(sorted, 99))
+}
+
+#[cfg(feature = "memory")]
+fn minhash_mrr(args: &[String]) -> Result<(), Fail> {
+    use std::io::{BufRead, Write};
+
+    let (mem_dir, weight) = minhash_args(args)?;
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    for line in stdin.lock().lines() {
+        let query = line.map_err(|e| fail(format!("read query line: {e}")))?;
+        if query.trim().is_empty() {
+            continue;
+        }
+        let hits = crate::memory::search_fused(
+            &mem_dir,
+            &query,
+            10,
+            true,
+            crate::memory::FuseOpts {
+                embed_cmd: None,
+                embed_weight: 0.0,
+                minhash_weight: weight,
+                embed_vec: None,
+                embed_cache: None,
+            },
+        )
+        .map_err(|e| fail(format!("recall error for {query:?}: {e}")))?;
+        for h in &hits {
+            let tail = h.id.rsplit('_').next().unwrap_or(&h.id);
+            writeln!(out, "{tail}").map_err(|e| fail(format!("write hit: {e}")))?;
+        }
+        writeln!(out).map_err(|e| fail(format!("write separator: {e}")))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "memory"))]
+fn minhash_mrr(_args: &[String]) -> Result<(), Fail> {
+    Err(usage("minhash-mrr requires the memory feature"))
+}
+
+#[cfg(feature = "memory")]
+fn minhash_args(args: &[String]) -> Result<(String, f64), Fail> {
+    let mut mem_dir = None;
+    let mut weight = 0.0f64;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--mem-dir" => {
+                mem_dir = Some(
+                    iter.next()
+                        .cloned()
+                        .ok_or_else(|| usage("--mem-dir expects a value"))?,
+                );
+            }
+            "--minhash-weight" => {
+                let text = iter
+                    .next()
+                    .ok_or_else(|| usage("--minhash-weight expects a value"))?;
+                weight = text
+                    .parse()
+                    .map_err(|_| usage(format!("invalid minhash weight: {text}")))?;
+            }
+            other => return Err(usage(format!("unknown argument: {other}"))),
+        }
+    }
+    let mem_dir = mem_dir.filter(|s| !s.is_empty()).ok_or_else(|| {
+        usage("usage: xtask bench minhash-mrr --mem-dir DIR [--minhash-weight F]")
+    })?;
+    if !weight.is_finite() || weight < 0.0 {
+        return Err(usage(
+            "--minhash-weight must be a finite non-negative number",
+        ));
+    }
+    Ok((mem_dir, weight))
 }
 
 #[cfg(test)]

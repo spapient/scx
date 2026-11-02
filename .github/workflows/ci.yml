@@ -50,10 +50,10 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo run --release --locked --features eval --bin xtask -- selftest
       - name: Bench (compress 50k lines)
-        run: cargo run --release --locked --example bench
+        run: cargo run --release --locked --features eval --bin xtask -- bench compress
       - name: Bench gate (10k memory recall)
         if: runner.os == 'Linux'
-        run: cargo run --release --locked --example bench -- memory
+        run: cargo run --release --locked --features eval --bin xtask -- bench memory
       - name: CLI smoke (Unix)
         if: runner.os != 'Windows'
         run: ./target/release/scx --version

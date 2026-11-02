@@ -969,4 +969,55 @@ mod tests {
         assert!(s.contains("\"est_cost_saved_usd\":null"));
         assert!(s.ends_with("}"));
     }
+
+    #[test]
+    fn ledger_workflow_with_custom_bucket_and_budget() {
+        let mut lines: Vec<String> = (0..200)
+            .map(|i| format!("filler alpha beta line {i}"))
+            .collect();
+        lines[100] = "ERROR db timeout conn_id=9f2a".to_string();
+        lines[150] = "Root cause: connection pool exhausted".to_string();
+        let text = lines.join("\n");
+        let parts = vec![
+            (ContentType::StaticContract, text.as_str()),
+            (ContentType::SystemDefinition, text.as_str()),
+            (ContentType::SessionMessage, text.as_str()),
+            (ContentType::ToolOutput, text.as_str()),
+            (
+                ContentType::ToolOutput,
+                "skill: db pool tuning\nretry: 3\nbackoff: 1s",
+            ),
+        ];
+        let budget = BudgetSpec {
+            cap: Some(5000),
+            warn: 0.7,
+            over: 1.0,
+            quotas: vec![(ContentType::ToolOutput, 400)],
+        };
+
+        let first = measure(1, &parts, "db timeout", &Config::default(), Some(&budget));
+        let second = measure(
+            2,
+            &parts,
+            "db timeout pool",
+            &Config::default(),
+            Some(&budget),
+        );
+        let first_id = first.id.clone();
+        let second_id = second.id.clone();
+        let mut ledger = Ledger::default();
+        ledger.push(first);
+        ledger.push(second);
+
+        let shares: Vec<f64> = ledger.snaps[0]
+            .by_share()
+            .into_iter()
+            .map(|bucket| bucket.tokens_in)
+            .collect();
+        assert!(shares.windows(2).all(|pair| pair[0] >= pair[1]));
+        assert!(ledger.diff(&first_id, &second_id).is_some());
+        let summary = summarize(&ledger);
+        assert!(summary.contains("\"kind\":\"tool-output\""));
+        assert!(summary.contains("\"calls\":2"));
+    }
 }

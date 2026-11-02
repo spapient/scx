@@ -251,7 +251,7 @@ golden 2（37 例，1 ignored 重冻）/ force_regex 4 / policy_file 5 / concurr
 | 子项 | 状态 | 证据 |
 |---|---|---|
 | 4.1 发布基建 | 完成 | `cargo package --locked` dry-run 196 文件 1.9MiB（压缩 350.5KiB）verify 通过；`tools/scx install` 实测 RC=0；`docs/release-checklist.md` |
-| 4.2 性能矩阵 | 完成 | `examples/bench.rs` 四路径（默认 / structure off+on / max-tokens / policy）+ `docs/benchmarks.md` 跨机基准表；structure 开 +12~13%、max-tokens 12029–12449µs overflow:evidence、policy parse 13.3–13.5ms 一次性 |
+| 4.2 性能矩阵 | 完成 | `xtask bench compress`（`src/evaltool/bench.rs`）四路径（默认 / structure off+on / max-tokens / policy）+ `docs/benchmarks.md` 跨机基准表；structure 开 +12~13%、max-tokens 12029–12449µs overflow:evidence、policy parse 13.3–13.5ms 一次性 |
 | 4.3 RFC 多租户 | 完成 | `docs/rfc-multi-tenant.md`（设计 only，未实现；禁 publish/push/merge 纪律内） |
 | 4.4 存量复杂度清理 | 完成 | `memory/*` 18 个 lizard 候选全部人工核算；**recall_inner 19→8、score_pass 42→9**、index build 12→1 / parse 23→4、ranking expand 21→6、query_cache append 13→3 / merge 11→4、gate check_mode 23→4 / adjudication_checks 26→4、eval parse_baseline 35→8、annotate judge 25→8 / annotate_report 13→4、meta load_meta 18→9 / bump_word_w 18→5、feedback rate 13→4、json write_into 15→8、util parse_utc_secs 20→7、ingest persist 11→2；辅助函数全部 <10 |
 | 记忆库协议演进 | 完成 | L1 直答评测协议（fix 覆盖率 / 直答触发率 / 直答命中率 / MRR 下界）入 `docs/memory.md`；多进程写实测沿用 P2 `memory_concurrency` 压测 + `docs/locking.md`；内核/记忆库解耦复核：无跨模块引用（仅 ops 编排层调 memory） |
@@ -1438,9 +1438,8 @@ memory;`。消费面 cfg 化（照 semantic 先例）：
   消费者，随 feature cfg。
 - 测试：`tests/golden.rs` golden_gate/update_baselines、ops/redact/terms/
   analysis 的 memory 相关测试全部 `#[cfg(feature="memory")]`。
-- `examples/minhash_mrr.rs`：Cargo 官方 `[[example]] required-features =
-  ["memory"]`（缺 feature 跳过编译）；`examples/bench.rs` memory 模式分支
-  cfg + 无 feature 时明确报错。
+- `xtask bench minhash-mrr` / `xtask bench memory`：按 `memory` feature
+  cfg 编译，缺 feature 时明确报错。
 
 **门禁证据（双矩阵）**：default——lib 341、semantic 350、golden 2 passed
 零漂移、clippy 全 targets 零告警、fmt 干净；`--no-default-features`——
@@ -2739,7 +2738,7 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 
 用户拍板"架构优化 + 废代码清理 + 复用架构/质量优化"。盘点基线：build/clippy 双 0 warning、lib 397 测试全过（仓库维护质量已高，此前多轮审查修复见效）。本轮交付：
 - **FuseOpts 参数收拢**：`search_fused` 9 参数（B 线 embed 3 参 + minhash + weight 超 clippy 阈值 7）→ 打包 `FuseOpts` struct，签名 5 参，消 `too_many_arguments` 警告；生产调用（ops.rs×2）与测试/示例全量更新。
-- **死代码删除**：`meter.rs save_jsonl`（src/ 内 0 调用，唯一确定死代码）；`by_share` 保留（examples 在用）。
+- **死代码删除**：`meter.rs save_jsonl`（src/ 内 0 调用，唯一确定死代码）；`by_share` 保留（meter 工作流测试在用）。
 - **复用收拢**：新增 `testsupport::tmpdir`（cfg(test) 专用唯一临时路径 helper），收拢 store.rs×3 + input.rs×1 重复的 `SystemTime→as_nanos` 手写；顺带修 lib.rs 重复 `#[cfg(test)]`。
 - 静态死代码全扫（pub+私有 fn 调用点统计）确认 parse.rs 的 annotation/actions/gates 为 CHECKS 表驱动校验器（非死代码）、meter from_bucket/mode_of 为函数指针引用（非死代码）。
 - 验证：build/clippy 0 warning；lib 397 + bin 4 全过；cli 16 passed + 1 pre-existing FAILED（并发 gen 竞争，HEAD 复现与本次无关；2026-11-02 已修复，当前 17 passed）。

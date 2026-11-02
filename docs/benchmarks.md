@@ -11,8 +11,8 @@
 - 编译：`cargo build --release --locked`（profile.release opt-level=3 / lto / strip）
 - 方法：预热 1 次后采样 N 次取中位；N 默认 9（压缩）/ 21（召回），可用
   `SCX_BENCH_REPEAT` 覆盖；与同一会话中历史基线交错测量避免漂移。
-- 命令：`cargo run --release --locked --example bench`（压缩四路径）/
-  `-- memory`（记忆库）
+- 命令：`cargo run --release --locked --features eval --bin xtask -- bench compress`
+  （压缩四路径）/ `bench memory`（记忆库）
 
 ## 压缩路径（50k 行）
 
@@ -60,8 +60,8 @@
 ## 复现
 
 ```bash
-cargo run --release --locked --example bench            # 压缩四路径
-cargo run --release --locked --example bench -- memory  # 记忆库（含性能门）
+cargo run --release --locked --features eval --bin xtask -- bench compress  # 压缩四路径
+cargo run --release --locked --features eval --bin xtask -- bench memory    # 记忆库（含性能门）
 export SCX_BENCH_REPEAT=21                              # 自定义采样数
 ```
 

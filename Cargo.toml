@@ -21,7 +21,6 @@ include = [
     "src/**",
     "docs/**",
     "!docs/comparison-v051.md",
-    "examples/**",
     "tests/**",
     "config/**",
     "!config/bench/**",
@@ -58,11 +57,6 @@ path = "src/main.rs"
 name = "xtask"
 path = "src/main.rs"
 required-features = ["eval"]
-
-[[example]]
-name = "minhash_mrr"
-# 纯 memory 召回演示：无 memory feature 时跳过编译（Cargo 官方机制）。
-required-features = ["memory"]
 
 [profile.release]
 opt-level = 3
