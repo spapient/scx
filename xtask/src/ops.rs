@@ -17,7 +17,7 @@ use std::process::{Command, Stdio};
 use std::time::Instant;
 
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+use scx::VERSION;
 
 pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     let argv: Vec<String> = if args.is_empty() {
