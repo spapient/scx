@@ -6,10 +6,7 @@ use std::io::{self, Read};
 pub(crate) const MAX_INPUT_BYTES: u64 = 64 * 1024 * 1024;
 
 pub(crate) fn decode(bytes: Vec<u8>) -> String {
-    match String::from_utf8(bytes) {
-        Ok(s) => s,
-        Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
-    }
+    String::from_utf8(bytes).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
 }
 
 pub(crate) fn read<R: Read>(reader: R, limit: u64) -> io::Result<Vec<u8>> {
@@ -87,11 +84,11 @@ mod tests {
 
     #[test]
     fn capped_reader_detects_one_byte_over_limit() {
-        let exact = read(std::io::Cursor::new(b"12345678"), 8).unwrap();
+        let exact = read(io::Cursor::new(b"12345678"), 8).unwrap();
         assert_eq!(exact, b"12345678");
         assert!(!large(exact.len(), 8));
 
-        let over = read(std::io::Cursor::new(b"123456789"), 8).unwrap();
+        let over = read(io::Cursor::new(b"123456789"), 8).unwrap();
         assert_eq!(over, b"123456789");
         assert!(large(over.len(), 8));
     }

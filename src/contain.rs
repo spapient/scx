@@ -55,7 +55,7 @@ pub fn judge(output: &str, evidence: &[&str]) -> (usize, Vec<String>) {
 
 /// 运行单切片：`cfg` 由调用方提供（工具侧默认 ratio=0.35 / context=1）。
 pub fn run(case: &Slice, cfg: &Config) -> Report {
-    let o: Outcome = compress::compress(case.full_text, case.query, cfg);
+    let o: Outcome = compress(case.full_text, case.query, cfg);
     let (kept, miss) = judge(&o.text, case.evidence);
     Report {
         id: case.id.to_string(),

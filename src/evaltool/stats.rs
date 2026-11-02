@@ -808,14 +808,14 @@ mod tests {
         let got = strata_from_csv(&path, 2).unwrap();
         assert_eq!(got, vec!["easy", "hard"]);
         assert!(strata_from_csv(&path, 3).is_err());
-        let _ = std::fs::remove_file(&path);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn verbose_parses_ranked_ids() {
         let dir = crate::testsupport::tmpdir("verbose");
         let path = format!("{dir}.txt");
-        std::fs::write(
+        fs::write(
             &path,
             "case 1/2 q=\"q1\"\n  A: 1) aaa sim=0.9 score=2.0 [hit] | 2) bbb sim=0.1 score=1.0 [miss]\n  B: 1) bbb sim=0.8 score=2.0 [miss]\ncase 2/2 q=\"q2\"\n  A: \n  B: 1) ccc sim=0.5 score=1.0 [miss]\n",
         )
@@ -824,7 +824,7 @@ mod tests {
         assert_eq!(rows[0].a.as_ref().unwrap(), &["aaa", "bbb"]);
         assert_eq!(rows[0].b.as_ref().unwrap(), &["bbb"]);
         assert!(rows[1].a.as_ref().unwrap().is_empty());
-        let _ = std::fs::remove_file(&path);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]

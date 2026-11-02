@@ -1,7 +1,7 @@
 # golden 用例清单（37 例）
 #
 # 每例只声明名称与 CLI 参数；输入由 tests/golden.rs 的生成器按名称产生，
-# 期望输出是 tests/golden/expected/<name>.{out,err}：
+# 期望输出是 config/tests/golden/expected/<name>.{out,err}：
 #   - .out 必存；.err 仅非空时落盘；退出码缺省为 0（.code 仅非零时落盘）。
 # 参数占位符：
 #   ${mem:<name>}      → 系统临时目录下的 scx-golden-mem-<name>（每次运行前重置）

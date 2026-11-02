@@ -13,8 +13,8 @@
 //! - symbol：帧行内的方法/标识符词面
 //! - num_fp：数字折叠后的行指纹（normalize 后含 `#` 的稳定串，跨日志去噪声）
 
-use crate::analysis::{fails, frame, lineref};
-use crate::analysis::{lowercase, normalize};
+use crate::diff::{fails, frame, lineref};
+use crate::diff::{lowercase, normalize};
 use crate::memory::store::Fields;
 
 pub(crate) const CAP: usize = 16;
@@ -562,7 +562,7 @@ fn fold(s: &str) -> String {
         }
     }
     let mut out = String::new();
-    crate::analysis::lowercase(&cleaned, &mut out);
+    lowercase(&cleaned, &mut out);
     out
 }
 

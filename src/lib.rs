@@ -10,7 +10,7 @@
 //! 扩展，间隔 <= window*3 合并；种子为零回退全图）；邻域权重只排序；context=0 完全跳过可选填充（针尖模式）；无信号 fail-open；
 //! `gate` 在风险 HIGH 时保护失败级错误行(warn/警告 级除外)与事故标记行(root cause / fix hint / mitigation / recommendation / action / assertionerror)。只删不改、保留行逐字原文；省略以单行 "..." 标记；`lineno` 可为保留行附加原文行号前缀。
 //!
-//! 模块划分：`terms` 负责词面与估算，`analysis` 负责归一化与结构分类，
+//! 模块划分：`terms` 负责词面与估算，`diff` 负责归一化与结构分类，
 //! `compress` 是算法主体。三者均为纯函数层；本文件只保留公共类型、模块声明和
 //! 跨模块行为测试。
 //!
@@ -18,10 +18,10 @@
 //! 字符串格式：`passthrough:small` / `failopen:zero-signal` / `LOW` / `HIGH` 等）。
 
 use std::fmt;
-pub mod analysis;
 pub mod cli;
 mod compress;
 pub mod contain;
+pub mod diff;
 mod fold;
 /// 阶段计时器（feature = "perf" 可选诊断；默认零代码）。
 mod perf;
@@ -287,7 +287,7 @@ pub struct Config {
     /// 语义增强权重（`--semantic <weights.json>`，feature=semantic 下可用）；
     /// `None` = 不启用，默认路径逐字节不变。
     #[cfg(feature = "semantic")]
-    pub semantic: Option<crate::semantic::Weights>,
+    pub semantic: Option<semantic::Weights>,
     /// 相似度注入权重（`--sim-weight`，默认 1.0）；仅在 `sims` 存在时参与打分。
     pub sim_weight: f64,
     /// semantic 加分缩放（`--sem-weight`，默认 1.0；feature=semantic 且
@@ -302,7 +302,7 @@ pub struct Config {
     /// 下生效）。cpu = 确定性并行实现（逐位一致）；gpu = 可选加速通道，
     /// 调用自研内核（`SCX_GPU_BIN`），不可用自动回落 cpu。
     #[cfg(feature = "semantic")]
-    pub sem_backend: crate::sem::Backend,
+    pub sem_backend: sem::Backend,
     /// 语义批量打分工作内存预算上限（`--max-mem`，MB，默认 64）。cpu/gpu
     /// 后端均按此预算分块，控制峰值内存；默认路径（semantic 关）不受影响。
     pub max_mem: usize,
@@ -395,7 +395,7 @@ impl Default for Config {
             #[cfg(feature = "semantic")]
             semantic: None,
             #[cfg(feature = "semantic")]
-            sem_backend: crate::sem::Backend::Cpu,
+            sem_backend: sem::Backend::Cpu,
             max_mem: 256,
             sim_weight: 1.0,
             sem_weight: 1.0,
@@ -404,19 +404,19 @@ impl Default for Config {
             evidence: Vec::new(),
             structure_anchors: Vec::new(),
             kind: ContentType::ToolOutput,
-            fill_floor: crate::policy::DEFAULT_FILL_FLOOR,
-            trim: crate::policy::DEFAULT_TRIM,
-            fold: crate::policy::DEFAULT_FOLD,
-            entropy: crate::policy::DEFAULT_ENTROPY,
-            auto_anchor: crate::policy::DEFAULT_AUTO_ANCHOR,
-            cluster: crate::policy::DEFAULT_CLUSTER,
-            trim_ratio: crate::policy::DEFAULT_TRIM_RATIO,
-            trim_op_keep: crate::policy::DEFAULT_TRIM_OP_KEEP,
-            code_keep: crate::policy::DEFAULT_CODE_KEEP,
-            num_line_keep: crate::policy::DEFAULT_NUM_LINE_KEEP,
-            sym_line_keep: crate::policy::DEFAULT_SYM_LINE_KEEP,
-            zh_keep: crate::policy::DEFAULT_ZH_KEEP,
-            list_keep: crate::policy::DEFAULT_LIST_KEEP,
+            fill_floor: policy::DEFAULT_FILL_FLOOR,
+            trim: policy::DEFAULT_TRIM,
+            fold: policy::DEFAULT_FOLD,
+            entropy: policy::DEFAULT_ENTROPY,
+            auto_anchor: policy::DEFAULT_AUTO_ANCHOR,
+            cluster: policy::DEFAULT_CLUSTER,
+            trim_ratio: policy::DEFAULT_TRIM_RATIO,
+            trim_op_keep: policy::DEFAULT_TRIM_OP_KEEP,
+            code_keep: policy::DEFAULT_CODE_KEEP,
+            num_line_keep: policy::DEFAULT_NUM_LINE_KEEP,
+            sym_line_keep: policy::DEFAULT_SYM_LINE_KEEP,
+            zh_keep: policy::DEFAULT_ZH_KEEP,
+            list_keep: policy::DEFAULT_LIST_KEEP,
         }
     }
 }
@@ -676,4 +676,5 @@ pub(crate) fn prefix(out: &mut String, n: usize) {
 }
 
 #[cfg(test)]
+#[path = "../tests/mod.rs"]
 mod testsupport;

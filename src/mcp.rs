@@ -266,13 +266,13 @@ fn apply_kind(cfg: &mut crate::Config, args: &Json, text: &str) {
 
 /// 解析可选 `evidence` 数组（元素：正整数 = 原始行号，字符串 = 必须出现的子串）。
 fn evidence(cfg: &mut crate::Config, args: &Json) {
-    if let Some(crate::json::Json::Arr(evs)) = args.get("evidence") {
+    if let Some(Json::Arr(evs)) = args.get("evidence") {
         for e in evs {
             match e {
-                crate::json::Json::Num(n) if *n >= 1.0 => {
+                Json::Num(n) if *n >= 1.0 => {
                     cfg.evidence.push(crate::Evidence::Line(*n as usize));
                 }
-                crate::json::Json::Str(s) => {
+                Json::Str(s) => {
                     cfg.evidence.push(crate::Evidence::Substr(s.clone()));
                 }
                 _ => {}
@@ -394,7 +394,7 @@ fn read_bounded(reader: &mut dyn BufRead, max: usize) -> Frame {
     let n = {
         // UFCS：`take` 要求 Sized 接收者，`&mut dyn BufRead` 通过 `Read for &mut R`
         // 的转发实现生效。
-        let mut limited = std::io::Read::take(&mut *reader, max as u64 + 1);
+        let mut limited = io::Read::take(&mut *reader, max as u64 + 1);
         match limited.read_until(b'\n', &mut buf) {
             Ok(n) => n,
             Err(_) => return Frame::Eof,

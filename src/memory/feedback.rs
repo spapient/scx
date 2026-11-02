@@ -54,7 +54,7 @@ pub(crate) fn rate(root: &str, id: &str, good: bool) -> std::io::Result<Case> {
     }
     // 写回 case（原子写；save 内部 bump gen，qmap/缓存随之失效）。
     // 分层晋升：good 累计达线且 quality 达标 → L1 候选晋升 L2 可信。
-    let m = crate::memory::meta::load(root)?;
+    let m = meta::load(root)?;
     crate::memory::tier::promote(&m, &mut c, fb.good);
     store::save(root, &c)?;
     // L1 自适应：基于 [l1] 历史重算 l1_base。
@@ -117,7 +117,7 @@ mod tests {
     use std::fs;
 
     fn stats() -> Stats {
-        crate::memory::store::sample()
+        store::sample()
     }
 
     #[test]
@@ -139,7 +139,7 @@ mod tests {
         assert_eq!(c.feedback.good, 1);
         assert_eq!(c.quality, 1.0);
         // 词环已写：timeout / conn / error 应有词权重。
-        let m = crate::memory::meta::load(&root).unwrap();
+        let m = meta::load(&root).unwrap();
         assert!(
             m.word_w.iter().any(|(k, v)| k == "timeout" && *v > 0.0),
             "good 词应有正权重: {:?}",
@@ -187,9 +187,9 @@ mod tests {
             .unwrap();
             let id = store::list(&r).unwrap()[0].clone();
             rate(&r, &id, true).unwrap();
-            let after1 = crate::memory::meta::load(&r).unwrap().word_w.clone();
+            let after1 = meta::load(&r).unwrap().word_w.clone();
             let _c2 = rate(&r, &id, true).unwrap();
-            let after2 = crate::memory::meta::load(&r).unwrap().word_w.clone();
+            let after2 = meta::load(&r).unwrap().word_w.clone();
             let _ = fs::remove_dir_all(&r);
             (after1, after2)
         };
@@ -234,7 +234,7 @@ mod tests {
         }
         let id = store::list(&root).unwrap()[0].clone();
         rate(&root, &id, true).unwrap();
-        let m = crate::memory::meta::load(&root).unwrap();
+        let m = meta::load(&root).unwrap();
         let (base, _) = params(&m);
         assert!(
             (base - 0.85).abs() < 0.01,
@@ -262,7 +262,7 @@ mod tests {
         }
         let id = store::list(&root).unwrap()[0].clone();
         rate(&root, &id, true).unwrap();
-        let m = crate::memory::meta::load(&root).unwrap();
+        let m = meta::load(&root).unwrap();
         let (base, _) = params(&m);
         assert!((base - 0.80).abs() < 1e-9, "上限应来自配置: {base}");
         let _ = fs::remove_dir_all(&root);

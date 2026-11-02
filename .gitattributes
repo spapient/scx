@@ -7,6 +7,6 @@ tools/scx text eol=lf
 *.toml text eol=lf
 Cargo.lock text eol=lf
 *.tsv text eol=lf whitespace=-blank-at-eol
-tests/golden/** text eol=lf
-tests/fixtures/eval/** text eol=lf
-tests/fixtures/bench/** text eol=lf
+config/tests/golden/** text eol=lf
+config/tests/fixtures/eval/** text eol=lf
+config/tests/fixtures/bench/** text eol=lf

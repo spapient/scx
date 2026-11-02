@@ -1,13 +1,13 @@
 //! golden 差分门：与冻结基线逐字节对比（stdout / stderr / 退出码）。
 //!
-//! 用例清单在 `tests/golden.toml`（名称 + CLI 参数），输入由本文件的生成器
-//! 按名称产生；期望输出是 `tests/golden/expected/<name>.out` 与（非空时）
-//! `<name>.err`，退出码缺省为 0（仅非零时落 `<name>.code`）。
+//! 用例清单在 `config/tests/golden/manifest.toml`（名称 + CLI 参数），输入由
+//! 本文件的生成器按名称产生；期望输出是 `config/tests/golden/expected/<name>.out`
+//! 与（非空时）`<name>.err`，退出码缺省为 0（仅非零时落 `<name>.code`）。
 //!
 //! 流程：
 //! 1) 首次或有意变更语义时重冻基线：
 //!    `cargo test --test golden update_baselines -- --ignored --nocapture`，
-//!    生成 tests/golden/expected/<case>.{out,err,code}。
+//!    生成 config/tests/golden/expected/<case>.{out,err,code}。
 //! 2) 常规回归（CI 执行）：`cargo test --test golden`。
 //!
 //! 语义约束：本测试只对比当前实现与冻结基线的字节一致性，不判断对错；
@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 #[cfg(feature = "memory")]
-const MANIFEST: &str = include_str!("golden.toml");
+const MANIFEST: &str = include_str!("../config/tests/golden/manifest.toml");
 
 #[cfg(feature = "memory")]
 const SEED_LOG: &str = "INFO start service\nERROR db timeout conn_id=9f2a pool exhausted\nat com.ingest.Pool.acquire(Pool.java:214)\nINFO end\n";
@@ -33,7 +33,7 @@ const SEED_DISK: &str =
 
 #[cfg(feature = "memory")]
 fn expected_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/expected")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("config/tests/golden/expected")
 }
 
 #[cfg(feature = "memory")]

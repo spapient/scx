@@ -624,8 +624,8 @@ mod tests {
             cut: 0.0,
             risk: "LOW".to_string(),
         };
-        let mut obj = match crate::memory::store::encode(&c) {
-            crate::memory::json::Val::Obj(kvs) => kvs,
+        let mut obj = match encode(&c) {
+            Val::Obj(kvs) => kvs,
             _ => unreachable!("encode 必产出 Obj"),
         };
         obj.retain(|(k, _)| {
@@ -641,11 +641,7 @@ mod tests {
         });
         let case_path = path(&root, id);
         fs::create_dir_all(case_path.parent().unwrap()).unwrap();
-        fs::write(
-            case_path,
-            crate::memory::json::write(&crate::memory::json::Val::Obj(obj)),
-        )
-        .unwrap();
+        fs::write(case_path, json::write(&Val::Obj(obj))).unwrap();
         let loaded = load(&root, id).unwrap();
         assert_eq!(loaded.version, 1, "缺 version 键回退 1");
         assert_eq!(loaded.life, "active", "缺 life 键回退 active");

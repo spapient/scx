@@ -30,9 +30,9 @@ const FP_LOCK: &str = "index/fingerprints.lock";
 /// 这修复了旧实现"query 数字也被折叠 → 不同端口事故互相去重"的问题。
 pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut q = String::new();
-    crate::analysis::canonical(query, &mut q);
+    crate::diff::canonical(query, &mut q);
     let mut t = String::new();
-    crate::analysis::normalize(text, &mut t);
+    crate::diff::normalize(text, &mut t);
     let h = store::parts(&[q.as_bytes(), b"\0", t.as_bytes()]);
     format!("{:016x}", h)
 }
@@ -165,7 +165,7 @@ pub(crate) struct Payload<'a> {
     pub revise: Option<&'a str>,
 }
 
-pub(crate) fn persist(input: Payload<'_>) -> std::io::Result<(bool, String)> {
+pub(crate) fn persist(input: Payload<'_>) -> io::Result<(bool, String)> {
     store::ensure(input.root)?;
     check(
         input.root,
@@ -199,7 +199,7 @@ fn update(
     fix: &str,
     evidence_lno: &[usize],
     evidence: &[String],
-) -> std::io::Result<(bool, String)> {
+) -> io::Result<(bool, String)> {
     let _case_lock = store::lock(root, existing)?;
     let mut c = store::load(root, existing)?;
     let now = store::stamp();
@@ -213,7 +213,7 @@ fn update(
     Ok((false, existing.to_string()))
 }
 
-fn insert(fields: Payload<'_>, fp: &str) -> std::io::Result<String> {
+fn insert(fields: Payload<'_>, fp: &str) -> io::Result<String> {
     let Payload {
         root,
         query,
@@ -252,8 +252,8 @@ fn insert(fields: Payload<'_>, fp: &str) -> std::io::Result<String> {
     if let Some(old_id) = revise {
         let old = store::load(root, old_id)?;
         if old.life == "retired" {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
                 format!("cannot revise retired case: {old_id}"),
             ));
         }
@@ -281,18 +281,18 @@ fn check(
     fix: &str,
     evidence_lno: &[usize],
     evidence: &[String],
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     if let Some(max) = max_bytes {
         let total = store::bytes(root)?;
         if total > max {
-            return Err(std::io::Error::other(format!(
+            return Err(io::Error::other(format!(
                 "memory quota exceeded: {total} bytes > --max-bytes {max}"
             )));
         }
     }
     if text.len() > MAX_CASE_TEXT {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
             format!(
                 "case text too large: {} bytes > {} (scx-memory MAX_CASE_TEXT)",
                 text.len(),
@@ -301,8 +301,8 @@ fn check(
         ));
     }
     if fix.len() > MAX_FIX_LEN {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
             format!(
                 "case fix too long: {} bytes > {} (scx-memory MAX_FIX_LEN)",
                 fix.len(),
@@ -311,8 +311,8 @@ fn check(
         ));
     }
     if evidence_lno.len() != evidence.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
             "evidence_lno/evidence length mismatch",
         ));
     }
@@ -340,7 +340,7 @@ pub(crate) fn ingest(
     source: Vec<String>,
     stats: &Stats,
     forces: Vec<String>,
-) -> std::io::Result<(bool, String)> {
+) -> io::Result<(bool, String)> {
     fix(root, query, terms, text, source, stats, forces, "")
 }
 
@@ -356,7 +356,7 @@ pub(crate) fn fix(
     stats: &Stats,
     forces: Vec<String>,
     fix: &str,
-) -> std::io::Result<(bool, String)> {
+) -> io::Result<(bool, String)> {
     evidence(
         root,
         query,
@@ -385,7 +385,7 @@ pub(crate) fn evidence(
     fix: &str,
     evidence_lno: &[usize],
     evidence: &[String],
-) -> std::io::Result<(bool, String)> {
+) -> io::Result<(bool, String)> {
     persist(Payload {
         revise: None,
         root,
@@ -404,7 +404,7 @@ pub(crate) fn evidence(
 
 /// 按 id 删除一个 case，并让派生索引按库代际自动失效。
 #[cfg(test)]
-pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
+pub(crate) fn delete(root: &str, id: &str) -> io::Result<bool> {
     crate::memory::maintenance::delete(root, id)
 }
 

@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn validates_seed_fixture() {
-        let path = Path::new(ROOT).join("tests/fixtures/eval/seed/corpus.json");
+        let path = Path::new(ROOT).join("config/tests/fixtures/eval/seed/corpus.json");
         let value = load(&path).unwrap();
         assert_eq!(validate_corpus(&value).unwrap(), [1, 1, 0]);
     }

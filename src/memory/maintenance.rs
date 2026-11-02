@@ -21,7 +21,7 @@ use std::io;
 use std::path::Path;
 
 /// 全量重建索引 + qmap 合并 + df 快照。返回 (n_docs, n_terms)。
-pub(crate) fn rebuild(root: &str) -> std::io::Result<(usize, usize)> {
+pub(crate) fn rebuild(root: &str) -> io::Result<(usize, usize)> {
     store::ensure(root)?;
     // 1) 倒排索引全量重建（确定性：case id 排序 + term 字典序）；df 快照随建随取。
     let (n_docs, n_terms, df) = index::build(root)?;
@@ -33,7 +33,7 @@ pub(crate) fn rebuild(root: &str) -> std::io::Result<(usize, usize)> {
 }
 
 /// 过期清理：删除满足 expire 双条件的 case。返回删除数。
-pub(crate) fn gc(root: &str) -> std::io::Result<usize> {
+pub(crate) fn gc(root: &str) -> io::Result<usize> {
     let meta = crate::memory::meta::load(root)?;
     let ttl_regressed = meta.param("gc_ttl_regressed");
     let ttl_stale = meta.param("gc_ttl_stale");
@@ -60,12 +60,12 @@ fn expired(c: &store::Case, now_s: u64, ttl_regressed: f64, ttl_stale: f64) -> b
 /// 删除一个 case（物理删除 + 惰性作废索引 + 库代际前进）。
 /// id 先过白名单校验，禁止 `..` 与路径分隔符逃逸。
 /// 返回是否存在。
-pub(crate) fn delete(root: &str, id: &str) -> std::io::Result<bool> {
+pub(crate) fn delete(root: &str, id: &str) -> io::Result<bool> {
     // id 白名单必须先于取锁：锁名 `cases/{id}.lock` 与目录 `cases/{id}` 都以
     // 用户输入拼接，`Path::join` 遇绝对路径会整段替换、遇 `../` 会逃逸目录。
     if !store::valid(id) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
             format!("invalid case id: {id}"),
         ));
     }
@@ -214,7 +214,7 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
 
 /// 冲突仲裁记录数（conflicts.log 非空行）。
 fn conflict_count(root: &str) -> usize {
-    std::fs::read_to_string(std::path::Path::new(root).join(crate::memory::conflict::CONFLICT_LOG))
+    fs::read_to_string(Path::new(root).join(crate::memory::conflict::CONFLICT_LOG))
         .map(|b| b.lines().filter(|l| !l.trim().is_empty()).count())
         .unwrap_or(0)
 }
@@ -253,7 +253,7 @@ fn sample(root: &str, id: &str, t: &mut Tally) -> io::Result<()> {
     if c.tier < 3 {
         t.tiers[c.tier as usize] += 1;
     }
-    let li = crate::memory::store::life_u8(&c.life) as usize;
+    let li = store::life_u8(&c.life) as usize;
     if li < 3 {
         t.lives[li] += 1;
     }
@@ -289,7 +289,7 @@ mod tests {
     use std::fs;
 
     fn stats() -> Stats {
-        crate::memory::store::sample()
+        store::sample()
     }
 
     #[test]
@@ -352,7 +352,7 @@ mod tests {
         let ids = store::list(&root).unwrap();
         let mut c = store::load(&root, &ids[0]).unwrap();
         c.status = "regressed".to_string();
-        let now = store::stamp();
+        let now = stamp();
         let older = format!("2020-01-01{}", &now[10..]);
         c.updated_at = older;
         store::save(&root, &c).unwrap();
@@ -371,7 +371,7 @@ mod tests {
         let s = stats();
         let mut c = ingest_fix_direct(&root, &s);
         c.quality = 0.0; // 从未反馈
-        let now = store::stamp();
+        let now = stamp();
         let older = format!("2020-01-01{}", &now[10..]);
         c.updated_at = older; // 远超 gc_ttl_stale=365
         store::save(&root, &c).unwrap();
@@ -387,7 +387,7 @@ mod tests {
     }
 
     /// 直接落一个带 fix 的 case（经 ingest_with_fix，目录/指纹/写盘齐全）。
-    fn ingest_fix_direct(root: &str, s: &store::Stats) -> store::Case {
+    fn ingest_fix_direct(root: &str, s: &Stats) -> store::Case {
         fix(
             root,
             "磁盘满",
@@ -437,7 +437,7 @@ mod tests {
         // 绝对路径：`Path::join` 遇绝对路径整段替换，白名单必须先拦。
         let abs = victim.to_string_lossy().into_owned();
         let err = delete(&root, &abs).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
         assert!(
             victim.join("keep.txt").exists(),
             "绝对路径 id 不得删除外部目录"
@@ -445,7 +445,7 @@ mod tests {
 
         // 相对逃逸：`cases/../victim` 会逃逸出 cases 目录。
         let err = delete(&root, "../victim").unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
         assert!(
             victim.join("keep.txt").exists(),
             ".. 逃逸 id 不得删除外部目录"

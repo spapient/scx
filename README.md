@@ -487,7 +487,7 @@ fn main() {
 | `src/compress/plan.rs` | 规划阶段：切行统计、折叠判定（fence 感知）、权重打分、种子与结构区域识别 |
 | `src/compress/score.rs` | 选择与守卫阶段：邻域/锚点/围栏/符号行标记、填充预算、风险审计与守卫（`Ctx` 共享上下文） |
 | `src/compress/render.rs` | 渲染阶段：保留/裁剪区间落地、行内 trim、原因注释、输出截断 |
-| `src/analysis.rs`, `src/terms.rs` | 归一化、结构分类（含 fence/import/stack 判定）、切词与 token 估算 |
+| `src/diff.rs`, `src/terms.rs` | 归一化、结构分类（含 fence/import/stack 判定）、切词与 token 估算 |
 | `src/policy.rs` | 默认策略数据表（`ScoreTable`/`RiskTable`/`RegionCfg`/硬常量），不落独立硬编码文件 |
 | `src/toml.rs` | TOML 子集解析（`Entry`/`parse`/`float`/`size`），供 `--policy-file` 与记忆库 `meta.toml` 复用 |
 | `src/pipeline.rs` | 压缩管线配置（`--pipeline`）：JSON 声明式装配 plan/trim/anchor，三层优先级 CLI > 文件 > DEFAULT，未知键/越界 fail-loud |
@@ -500,9 +500,9 @@ fn main() {
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
 | `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
-| `src/bin/xtask.rs` | 开发/CI 评估工具（`feature = "eval"`）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现，与原 Python 输出逐字节对拍；不进发布二进制 |
+| `src/main.rs`（xtask 目标） | 开发/CI 评估工具（`feature = "eval"`）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现，与原 Python 输出逐字节对拍；不进发布二进制 |
 | `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
-| `tests/golden.rs`, `tests/golden.toml` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例；`.err`/`.code` 仅非空/非零时落盘） |
+| `tests/golden.rs`, `config/tests/golden/manifest.toml` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例；`.err`/`.code` 仅非空/非零时落盘） |
 | `config/` | 可重建语料、冻结标签、盲审包与语义权重（`Gauge.*`/`contain5.*`/`real.*`/`v2.*`） |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
 
@@ -519,7 +519,7 @@ cargo test \
   --test golden update_baselines -- --ignored --nocapture
 ```
 
-用例参数在 `tests/golden.toml`，输入生成器与记忆库预置在 `tests/golden.rs`；新增用例两处都要登记。
+用例参数在 `config/tests/golden/manifest.toml`，输入生成器与记忆库预置在 `tests/golden.rs`；新增用例两处都要登记。
 
 ## 质量与证据
 

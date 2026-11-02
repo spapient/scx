@@ -80,14 +80,14 @@ fn cached(root: &str) -> std::io::Result<Arc<Edges>> {
 /// 桥 case 的召回上下文（与 recall::Doc 同构，由调用方转写）。
 pub(crate) struct Bridge {
     pub id: String,
-    pub terms: std::sync::Arc<[String]>,
-    pub query_terms: std::sync::Arc<[String]>,
-    pub fields: std::sync::Arc<store::Fields>,
-    pub status: std::sync::Arc<str>,
+    pub terms: Arc<[String]>,
+    pub query_terms: Arc<[String]>,
+    pub fields: Arc<store::Fields>,
+    pub status: Arc<str>,
     pub quality: f64,
     /// 记忆分层（0/1/2），随 case 快照；召回按 tier 先验加权。
     pub tier: u8,
-    pub updated_at: std::sync::Arc<str>,
+    pub updated_at: Arc<str>,
     pub edge_shared: usize,
 }
 
@@ -126,7 +126,7 @@ pub(crate) fn bridge(
             id,
             terms: terms.into(),
             query_terms: query_terms.into(),
-            fields: std::sync::Arc::new(c.fields),
+            fields: Arc::new(c.fields),
             status: c.status.into(),
             quality: c.quality,
             tier: c.tier,

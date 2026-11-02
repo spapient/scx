@@ -41,6 +41,12 @@ fn version(a: &str) -> bool {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // scx 与 xtask 共用本入口（Cargo.toml 两个 bin 目标指向同一文件），
+    // 按编译期目标名分派；未启用 eval 特性时不存在 xtask 目标。
+    #[cfg(feature = "eval")]
+    if option_env!("CARGO_BIN_NAME") == Some("xtask") {
+        std::process::exit(scx::evaltool::run(&args));
+    }
     let failure = match run(&args) {
         Ok(()) => return,
         Err(failure) => failure,

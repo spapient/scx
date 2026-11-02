@@ -51,8 +51,12 @@ perf = []
 eval = ["semantic"]
 
 [[bin]]
+name = "scx"
+path = "src/main.rs"
+
+[[bin]]
 name = "xtask"
-path = "src/bin/xtask.rs"
+path = "src/main.rs"
 required-features = ["eval"]
 
 [[example]]

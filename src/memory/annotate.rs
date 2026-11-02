@@ -121,7 +121,7 @@ pub(crate) fn report(root: &str, seed: u64, max_cases: usize, raw: bool) -> io::
 struct Ctx<'a> {
     root: &'a str,
     ann_now_s: u64,
-    meta: &'a crate::memory::store::Meta,
+    meta: &'a store::Meta,
     out: &'a mut Vec<Annotated>,
     dropped: &'a mut Vec<(&'static str, String)>,
 }
@@ -357,7 +357,7 @@ fn check(
     target: &Case,
     k: usize,
     now_s: u64,
-    meta: &crate::memory::store::Meta,
+    meta: &store::Meta,
 ) -> Option<Check> {
     let target_tail = hash(target);
     let hits = recall::clock(root, query, k, now_s, meta).ok()?;
@@ -377,7 +377,7 @@ fn check(
 /// JSON 字符串引号（复用 json::escape 最小转义集）。
 fn quote(s: &str) -> String {
     let mut out = String::from("\"");
-    crate::memory::json::escape(s, &mut out);
+    json::escape(s, &mut out);
     out.push('"');
     out
 }
@@ -532,7 +532,7 @@ fn adjudicate(
     item: &mut Val,
     i: usize,
     total: usize,
-    lines: &mut std::io::Lines<std::io::StdinLock<'_>>,
+    lines: &mut io::Lines<io::StdinLock<'_>>,
     by: &str,
 ) -> io::Result<Option<String>> {
     let kvs = match item {
@@ -751,7 +751,7 @@ mod tests {
         seed_lib(&root);
         let cases = annotate(&root, 0, 16).unwrap();
         let text = baseline(&cases);
-        let parsed = eval::baseline(&crate::memory::json::parse(&text).unwrap()).unwrap();
+        let parsed = eval::baseline(&json::parse(&text).unwrap()).unwrap();
         assert_eq!(parsed.len(), cases.len(), "roundtrip 组数一致");
         let _ = fs::remove_dir_all(&root);
     }

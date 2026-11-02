@@ -515,17 +515,17 @@ mod tests {
     #[test]
     fn commented_section_header_is_updated_in_place() {
         // 段头带行尾注释时也必须原位更新，不得追加第二个同名段（TOML 重复表会损坏配置）。
-        let dir = std::env::temp_dir().join(format!("scx-setup-hdr-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = env::temp_dir().join(format!("scx-setup-hdr-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
         let cfg = dir.join("config.toml");
-        std::fs::write(
+        fs::write(
             &cfg,
             "[mcp_servers.scx] # keep this note\ncommand = \"/old/bin\"\nargs = [\"mcp\"]\n",
         )
         .unwrap();
         toml_reg(&cfg, Path::new("/new/bin")).unwrap();
-        let text = std::fs::read_to_string(&cfg).unwrap();
+        let text = fs::read_to_string(&cfg).unwrap();
         assert_eq!(
             text.matches("[mcp_servers.scx]").count(),
             1,
@@ -536,7 +536,7 @@ mod tests {
             "应原位更新: {text}"
         );
         assert!(text.contains("# keep this note"), "段头注释保留: {text}");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -569,7 +569,7 @@ mod tests {
     #[test]
     fn write_atomic_preserves_file_permissions() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!(
+        let dir = env::temp_dir().join(format!(
             "scx-setup-perm-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()

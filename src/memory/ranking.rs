@@ -271,7 +271,7 @@ mod tests {
     use std::fs;
 
     fn stats() -> Stats {
-        crate::memory::store::sample()
+        store::sample()
     }
 
     #[test]

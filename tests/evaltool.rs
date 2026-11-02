@@ -13,7 +13,7 @@ fn bin() -> &'static str {
 
 fn fixture(name: &str) -> String {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/eval")
+        .join("config/tests/fixtures/eval")
         .join(name)
         .to_string_lossy()
         .to_string()
@@ -120,7 +120,7 @@ fn corpus() -> String {
 
 fn fixtures(name: &str) -> String {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures")
+        .join("config/tests/fixtures")
         .join(name)
         .to_string_lossy()
         .to_string()
@@ -357,13 +357,13 @@ fn report_check_passes() {
         .args([
             "report",
             "--stats",
-            &fixtures("eval/report/ci-stats.csv"),
+            &fixtures("eval/report/stats.csv"),
             "--stats-recall3",
-            &fixtures("eval/report/ci-stats-recall3.csv"),
+            &fixtures("eval/report/stats-recall3.csv"),
             "--loo-json",
-            &fixtures("eval/report/ci-stats-loo.loo.json"),
+            &fixtures("eval/report/stats-loo.json"),
             "--fidelity",
-            &fixtures("eval/report/ci-fidelity.json"),
+            &fixtures("eval/report/fidelity.json"),
             "--check",
             &fixtures("eval/report/expected.md"),
         ])

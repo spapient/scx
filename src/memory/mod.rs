@@ -87,14 +87,10 @@ impl<'a> Input<'a> {
 /// 所有文本在同一存储边界脱敏；query 词表由门面生成，保证指纹、索引和召回
 /// 使用同一口径。返回 `(added, case_id)`。
 pub fn save(input: Input<'_>) -> std::io::Result<(bool, String)> {
-    let query = crate::memory::util::sanitize(input.query);
-    let text = crate::memory::util::sanitize(input.text);
-    let fix = crate::memory::util::sanitize(input.fix);
-    let evidence: Vec<String> = input
-        .evidence
-        .iter()
-        .map(|e| crate::memory::util::sanitize(e))
-        .collect();
+    let query = sanitize(input.query);
+    let text = sanitize(input.text);
+    let fix = sanitize(input.fix);
+    let evidence: Vec<String> = input.evidence.iter().map(|e| sanitize(e)).collect();
     let terms = crate::terms::memory(&query);
     let (added, id) = ingest::persist(ingest::Payload {
         root: input.root,
@@ -149,7 +145,7 @@ pub fn retire(root: &str, id: &str, reason: &str) -> std::io::Result<Case> {
     let mut c = store::load(root, id)?;
     if c.life != "retired" {
         c.life = "retired".to_string();
-        c.retire_reason = crate::memory::util::sanitize(reason).to_string();
+        c.retire_reason = sanitize(reason).to_string();
         c.updated_at = store::stamp();
         store::save(root, &c)?;
     }
@@ -183,7 +179,7 @@ pub fn search(root: &str, query: &str, k: usize, read_only: bool) -> std::io::Re
     if k == 0 {
         return Ok(Vec::new());
     }
-    let meta = crate::memory::meta::load(root)?;
+    let meta = meta::load(root)?;
     // 会话缓存命中直接返回快照（含 score/sim，L1 过滤可复用）。
     let cache_window = (meta.param("session_cache_minutes").max(0.0) * 60.0) as u64;
     if let Some(out) = session(root, query, &meta, cache_window, k) {
@@ -261,7 +257,7 @@ pub fn search_fused(
     // 融合快照会话缓存：结果只依赖 (query, 融合配置, 库代际)，与基础 BM25
     // 快照同窗口复用；键含配置盐，不同 embed/minhash 权重不串快照。命中则
     // 跳过全库重载 + 签名重算（该步与基础 search 的会话缓存相互独立）。
-    let meta = crate::memory::meta::load(root)?;
+    let meta = meta::load(root)?;
     let salt = fuse_salt(
         fuse.embed_vec.or(fuse.embed_cmd),
         fuse.embed_weight,
@@ -275,7 +271,7 @@ pub fn search_fused(
     if ids.is_empty() {
         return Ok(bm25);
     }
-    let cases: Vec<store::Case> = ids
+    let cases: Vec<Case> = ids
         .iter()
         .map(|id| store::load(root, id))
         .collect::<std::io::Result<_>>()?;
@@ -314,11 +310,11 @@ pub fn search_fused(
     // 字段/实体秩（P4）：query 侧结构化字段（错误码/位置/符号/数字指纹）与
     // case 侧字段键的交集数构成一路秩；全库零命中时整路不启用，避免 0 分
     // 伪秩污染融合。
-    let qkeys = crate::memory::classify::keys(&crate::memory::classify::extract(query));
+    let qkeys = classify::keys(&classify::extract(query));
     let field_scores: Vec<f64> = cases
         .iter()
         .map(|c| {
-            crate::memory::classify::keys(&c.fields)
+            classify::keys(&c.fields)
                 .iter()
                 .filter(|k| qkeys.contains(k))
                 .count() as f64
@@ -458,18 +454,15 @@ fn writeback(root: &str, query: &str, hits: &[Hit], meta: &store::Meta, read_onl
 
 /// 门面：反馈标注（状态机 + 质量分 + 词级调权 + L1 自适应基线）。
 /// 返回更新后的 case，供 CLI 输出核对。
-pub fn rate(root: &str, id: &str, good: bool) -> std::io::Result<store::Case> {
+pub fn rate(root: &str, id: &str, good: bool) -> std::io::Result<Case> {
     feedback::rate(root, id, good)
 }
 
 /// 门面：meta 中 L1 参数；缺省值由 `meta::DEFAULT_PARAMS` 单一来源提供。
 pub fn params(root: &str) -> (f64, f64) {
-    match crate::memory::meta::load(root) {
+    match meta::load(root) {
         Ok(m) => feedback::params(&m),
-        Err(_) => (
-            crate::memory::meta::fallback("l1_base"),
-            crate::memory::meta::fallback("l1_margin_min"),
-        ),
+        Err(_) => (meta::fallback("l1_base"), meta::fallback("l1_margin_min")),
     }
 }
 
@@ -541,7 +534,7 @@ pub fn annotate(
 ) -> std::io::Result<Vec<String>> {
     let report = annotate::report(root, seed, max_cases, raw)?;
     let body = annotate::baseline(&report.cases);
-    lock::atomic(std::path::Path::new(path), body.as_bytes())?;
+    lock::atomic(Path::new(path), body.as_bytes())?;
     Ok(annotate::summary(&report))
 }
 
@@ -720,9 +713,9 @@ mod tests {
             }]
         );
         // retire 后非 active 恒剔除。
-        let mut c = crate::memory::store::load(&root, &exp).unwrap();
+        let mut c = store::load(&root, &exp).unwrap();
         c.life = "retired".to_string();
-        crate::memory::store::save(&root, &c).unwrap();
+        store::save(&root, &c).unwrap();
         let after = filter_kind(&root, &hits, Some("experience")).unwrap();
         assert!(after.is_empty(), "retired case 不得再被 kind 召回");
         let _ = std::fs::remove_dir_all(&root);
@@ -904,11 +897,11 @@ fix: enlarge pool",
         assert!(added, "revise 必须先新增替换者");
         assert_ne!(new, old, "替换者必须新 id");
 
-        let old_c = crate::memory::store::load(&root, &old).unwrap();
+        let old_c = store::load(&root, &old).unwrap();
         assert_eq!(old_c.life, "revised", "旧 case 标记 revised");
         assert_eq!(old_c.superseded_by, new, "旧 case 指向替换者");
         assert_eq!(old_c.version, 1, "旧 case 版本保持 1");
-        let new_c = crate::memory::store::load(&root, &new).unwrap();
+        let new_c = store::load(&root, &new).unwrap();
         assert_eq!(new_c.version, 2, "替换者版本继承 +1");
         assert_eq!(new_c.supersedes, old, "替换者记录被替换者");
 
@@ -930,7 +923,7 @@ fix: enlarge pool",
         let (added2, id2) = save(again).unwrap();
         assert!(!added2, "同指纹更新");
         assert_eq!(id2, new, "同指纹命中替换者自身");
-        let old_c2 = crate::memory::store::load(&root, &old).unwrap();
+        let old_c2 = store::load(&root, &old).unwrap();
         assert_eq!(old_c2.superseded_by, new, "幂等：标记不被改写");
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -950,7 +943,7 @@ fix: clean tmp",
         let c = retire(&root, &a, "superseded by disk_full_v2").unwrap();
         assert_eq!(c.life, "retired", "retire 必须置 retired");
         assert_eq!(c.retire_reason, "superseded by disk_full_v2");
-        let loaded = crate::memory::store::load(&root, &a).unwrap();
+        let loaded = store::load(&root, &a).unwrap();
         assert_eq!(loaded.life, "retired");
         assert!(!loaded.retire_reason.is_empty());
 
@@ -982,7 +975,7 @@ fix: clean tmp",
         let (added, same) = save(input).unwrap();
         assert!(!added, "同指纹走 update");
         assert_eq!(same, id);
-        let c = crate::memory::store::load(&root, &id).unwrap();
+        let c = store::load(&root, &id).unwrap();
         assert_eq!(c.life, "active", "同指纹不得自指标记 revised");
         let _ = std::fs::remove_dir_all(&root);
     }

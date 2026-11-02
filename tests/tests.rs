@@ -2,8 +2,8 @@
 //! 类型探测（sample/contract/system/session）、hash 确定性、
 //! 词面归一化与结构识别。作为集成测试通过公开 API 访问。
 
-use scx::analysis::{diff, frame, lineref, marker};
-use scx::analysis::{lowercase, normalize};
+use scx::diff::{diff, frame, lineref, marker};
+use scx::diff::{lowercase, normalize};
 use scx::terms::terms;
 use scx::*;
 
@@ -381,12 +381,12 @@ fn cjk_stop_and_tail_terms() {
 
 #[test]
 fn runaway_token_is_dropped() {
-    let long = "x".repeat(scx::terms::MAX_TERM_BYTES + 1);
+    let long = "x".repeat(terms::MAX_TERM_BYTES + 1);
     assert!(
         terms(&long).is_empty(),
         "超长 token 不得进入索引词表（u8 长度字段会截断）"
     );
-    let max = "x".repeat(scx::terms::MAX_TERM_BYTES);
+    let max = "x".repeat(terms::MAX_TERM_BYTES);
     assert_eq!(terms(&max), vec![max], "上限内 token 保持可用");
 }
 
@@ -519,7 +519,7 @@ fn max_tokens_conservative_bound_caps_fill() {
     assert_eq!(o.mode, Mode::Sieve);
     assert!(o.text.contains("target conn"));
     assert!(
-        o.tokens <= 300.0 / scx::terms::BUDGET_SAFETY_FACTOR + 1e-6,
+        o.tokens <= 300.0 / terms::BUDGET_SAFETY_FACTOR + 1e-6,
         "可选填充应被保守上界封顶于 limit/factor，got tokens={:.1}",
         o.tokens
     );
@@ -601,8 +601,8 @@ fn ev_retention_explicit_evidence_all_kept() {
     let text = lines.join("\n");
     let mut c = cfg();
     c.evidence = vec![
-        scx::Evidence::Line(101), // 命中行（1-based）
-        scx::Evidence::Substr("conn_id=9f2a".to_string()),
+        Evidence::Line(101), // 命中行（1-based）
+        Evidence::Substr("conn_id=9f2a".to_string()),
     ];
     let o = compress(&text, "db timeout", &c);
     assert_eq!(o.mode, Mode::Sieve);
@@ -622,8 +622,8 @@ fn ev_retention_explicit_evidence_forced_kept() {
     let mut c = cfg();
     c.context = 0; // 针尖模式：只留 seed + 守卫 + 证据，纯 filler 必删。
     c.evidence = vec![
-        scx::Evidence::Line(101), // seed 行保留
-        scx::Evidence::Line(51),  // 纯 filler，但声明即强制保留
+        Evidence::Line(101), // seed 行保留
+        Evidence::Line(51),  // 纯 filler，但声明即强制保留
     ];
     let o = compress(&text, "db timeout", &c);
     assert_eq!(o.mode, Mode::Sieve);
@@ -643,7 +643,7 @@ fn structure_anchors_preserve_json_boundaries() {
     let text = lines.join("\n");
 
     let mut c = cfg();
-    c.structure_anchors = vec![scx::AnchorKind::Json];
+    c.structure_anchors = vec![AnchorKind::Json];
     let o = compress(&text, "db timeout conn_id", &c);
     assert_eq!(o.mode, Mode::Sieve);
     assert!(o.text.contains("db timeout conn_id=9f2a"), "证据行保留");
@@ -669,7 +669,7 @@ fn structure_anchors_preserve_xml_tags() {
     let text = lines.join("\n");
 
     let mut c = cfg();
-    c.structure_anchors = vec![scx::AnchorKind::Xml];
+    c.structure_anchors = vec![AnchorKind::Xml];
     let o = compress(&text, "db timeout conn_id", &c);
     assert!(o.text.contains("db timeout conn_id=9f2a"), "证据行保留");
     assert!(o.text.lines().any(|l| l == "<root>"), "<root> 保留");
@@ -688,7 +688,7 @@ fn structure_anchors_default_off_no_anchor_reason() {
     let o = compress(&text, "db timeout conn_id", &cfg());
     assert_eq!(o.mode, Mode::Sieve);
     assert!(
-        !o.explain.contains(&scx::Explain::Anchor),
+        !o.explain.contains(&Explain::Anchor),
         "默认 off 不产生 anchor 原因"
     );
 }

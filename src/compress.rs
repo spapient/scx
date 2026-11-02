@@ -6,7 +6,7 @@
 //! 各阶段函数圈复杂度 < 10；可调参数与加分权重全部声明于 `policy` 表，
 //! 不在函数体内硬编码。独立成文件以维持 crate 根 <500 行门禁。
 
-use crate::analysis::error_line;
+use crate::diff::error_line;
 use crate::policy::{DEFAULT_RISK, DEFAULT_SCORES};
 use crate::terms::terms;
 use crate::{prefix, Config, Mode, Outcome, Risk};
@@ -399,11 +399,11 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     #[allow(unused_variables)]
     let sem_scores = semantic(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
     // P17-C 熵近似评分（--entropy 1，默认关=零影响）。
-    crate::compress::plan::entropy_signal(cfg, &lines, &dup, &mut scores);
+    entropy_signal(cfg, &lines, &dup, &mut scores);
     apply_sims(cfg, &mut scores, &dup, total);
     let mut boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
     // P17-E 证据簇密度加权（--cluster 1，默认关=零影响）。
-    crate::compress::plan::cluster_signal(
+    cluster_signal(
         cfg,
         &scores,
         &dup,
@@ -804,8 +804,8 @@ fn last(final_tok: f64, limit: Option<usize>) -> Option<Mode> {
 mod tests {
     use super::*;
     #[allow(unused_imports)] // clippy 对 test 内 use 误报（is_import 被 870-873 调用）
-    use crate::analysis::import as is_import;
-    use crate::analysis::normalize;
+    use crate::diff::import as is_import;
+    use crate::diff::normalize;
 
     #[allow(dead_code)] // clippy 对 test 参考实现误报
     fn sample_lines<'a>(v: &[&'a str]) -> Vec<&'a str> {
@@ -856,7 +856,7 @@ mod tests {
             "背景知识行：共享内存是块内线程共享的高速存储区域。",
         ]
         .join("\n");
-        let cfg = crate::Config {
+        let cfg = Config {
             trim: true,
             trim_ratio: 0.3,
             zh_keep: true,
@@ -886,7 +886,7 @@ mod tests {
             .join("\n");
         let q = "问题：kernel<<<4,32>>> 启动后第 2 号块 blockIdx.x=2 内 threadIdx.x=5 的全局线性线程 ID 是多少？请用答案是 69 #### 69 格式作答。";
         let text = format!("{ctx}\n{q}");
-        let cfg = crate::Config {
+        let cfg = Config {
             trim: true,
             trim_ratio: 0.3,
             zh_keep: false,
@@ -898,7 +898,7 @@ mod tests {
             "zh-keep=0 时问句行应被 trim 摘碎（对照行为）: {}",
             out.text
         );
-        let cfg2 = crate::Config {
+        let cfg2 = Config {
             trim: true,
             trim_ratio: 0.3,
             zh_keep: true,
@@ -1115,9 +1115,9 @@ mod tests {
             .map(|i| format!("line {i}: conn pool timeout db error 9f2a"))
             .collect::<Vec<_>>()
             .join("\n");
-        let cfg = crate::Config {
+        let cfg = Config {
             sims: Some(vec![f64::NAN; 200]),
-            ..crate::Config::default()
+            ..Config::default()
         };
         let out = compress(&text, "conn timeout", &cfg);
         assert!(out.kept >= 1, "NaN 相似度不应破坏压缩结果");
@@ -1328,14 +1328,14 @@ mod tests {
     #[test]
     fn auto_anchor_off_is_noop_on_masks_terms() {
         // --auto-anchor 默认关：锚词表=原词表，命中行为与现状一致。
-        let mut cfg = crate::Config::default();
+        let mut cfg = Config::default();
         let lines = [
             "worker running to server",
             "worker runs the server",
             "idle line here",
         ];
         let q = "running";
-        let uniq = crate::terms::terms(q);
+        let uniq = terms(q);
         let anchor = anchor_terms(&cfg, &uniq);
         assert_eq!(anchor, uniq, "默认关时锚词表=原词表");
         cfg.auto_anchor = true;
@@ -1448,7 +1448,7 @@ mod tests {
             "[x] done",
             "-中文列表项",
         ] {
-            assert!(crate::compress::score::list_line(hit), "应命中: {hit}");
+            assert!(list_line(hit), "应命中: {hit}");
         }
         // 拒绝：代码/数学表达式（标记后无空白或数字字面量）。
         for miss in [
@@ -1467,7 +1467,7 @@ mod tests {
             "// - comment",
             "return -1",
         ] {
-            assert!(!crate::compress::score::list_line(miss), "不应命中: {miss}");
+            assert!(!list_line(miss), "不应命中: {miss}");
         }
     }
 
@@ -1479,19 +1479,12 @@ mod tests {
         let mut kept = 0;
         let mut reason = vec![0u8; 4];
         let mut raw = vec![false; 4];
-        crate::compress::score::mark_list_lines(
-            &lines,
-            &dup,
-            &mut keep,
-            &mut kept,
-            &mut reason,
-            &mut raw,
-        );
+        mark_list_lines(&lines, &dup, &mut keep, &mut kept, &mut reason, &mut raw);
         assert!(keep[0] && keep[2], "列表行整行保留");
         assert!(raw[0] && raw[2], "列表行跳过行内 trim");
         assert!(!keep[1] && !keep[3], "普通行与代码行不受影响");
         assert_eq!(kept, 2);
-        assert_eq!(reason[0], crate::compress::score::R_LIST_LINE);
+        assert_eq!(reason[0], R_LIST_LINE);
     }
 
     #[test]
@@ -1503,19 +1496,12 @@ mod tests {
         let mut reason = vec![0u8; 3];
         let mut raw = vec![false; 3];
         let ev = vec![crate::Evidence::Substr("UNIQUE_EVIDENCE_XYZ".into())];
-        crate::compress::score::mark_evidence_lines(
-            &lines,
-            &ev,
-            &mut keep,
-            &mut kept,
-            &mut reason,
-            &mut raw,
-        );
+        mark_evidence_lines(&lines, &ev, &mut keep, &mut kept, &mut reason, &mut raw);
         assert!(keep[1], "Substr 命中行整行保留");
         assert!(raw[1], "Substr 命中行跳过行内 trim");
         assert!(!keep[0] && !keep[2], "未命中行不受影响");
         assert_eq!(kept, 1);
-        assert_eq!(reason[1], crate::compress::score::R_EVIDENCE);
+        assert_eq!(reason[1], R_EVIDENCE);
 
         // Line 证据：行号命中整行保留（1-based）。
         let mut keep2 = vec![false; 3];
@@ -1523,7 +1509,7 @@ mod tests {
         let mut reason2 = vec![0u8; 3];
         let mut raw2 = vec![false; 3];
         let ev2 = vec![crate::Evidence::Line(3)];
-        crate::compress::score::mark_evidence_lines(
+        mark_evidence_lines(
             &lines,
             &ev2,
             &mut keep2,
@@ -1540,7 +1526,7 @@ mod tests {
         let mut reason3 = vec![0u8; 3];
         let mut raw3 = vec![false; 3];
         let ev3 = vec![crate::Evidence::Line(99)];
-        crate::compress::score::mark_evidence_lines(
+        mark_evidence_lines(
             &lines,
             &ev3,
             &mut keep3,
@@ -1591,9 +1577,9 @@ mod tests {
     fn budget_flag_deterministic_and_off_by_default() {
         // 默认路径逐字节一致：budget=0 时压缩输出与无 flag 完全一致。
         let text = "line one has alpha beta\nline two took 42ms id=7\nline three gamma delta\n";
-        let cfg = crate::Config::default();
+        let cfg = Config::default();
         let out = compress(text, "alpha", &cfg);
-        let cfg_b = crate::Config {
+        let cfg_b = Config {
             budget: 0.0,
             ..cfg.clone()
         };
@@ -1601,7 +1587,7 @@ mod tests {
         assert_eq!(out.text, out_b.text, "budget=0 与默认逐字节一致");
         // 硬预算下 kept token 占比受控：重复结构文本 + 紧预算。
         let big = "error: timeout on host A\n".repeat(40) + "summary: all ok\n";
-        let cfg35 = crate::Config {
+        let cfg35 = Config {
             budget: 0.35,
             ..cfg.clone()
         };

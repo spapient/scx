@@ -2,8 +2,8 @@
 //! 种子与结构区域识别。纯函数、无 I/O；全部 `pub(crate)` 供管线阶段互调。
 
 use super::*;
-use crate::analysis::lowercase;
-use crate::analysis::{
+use crate::diff::lowercase;
+use crate::diff::{
     closes, diff, fence, flags, frame, heading, import, lineref, marker, meta, stack,
 };
 use crate::policy::Weights;
@@ -235,7 +235,7 @@ pub(crate) fn masks(
 // 旧实现为每行 `normalize` 物化完整归一化 String 作 HashMap 键，并在唯一行
 // 插入时 `clone`（P12 后 p30m 实测 dedup 占 44-52%，为第一热点）。本实现改为
 // 边扫描原文边滚动更新两条独立 64 位哈希（合计 128 位）+ 归一化长度，
-// 不物化字符串，键为 `(h1, h2, len)`。折叠语义与 `analysis::normalize`
+// 不物化字符串，键为 `(h1, h2, len)`。折叠语义与 `diff::normalize`
 // 逐字节一致（`norm_hash_matches_normalize_fingerprint` 差分测试守门）；
 // 128 位指纹 + 长度下不同归一化串碰撞概率 ~2^-128，确定性不受影响。
 // ---------------------------------------------------------------------------
@@ -300,7 +300,7 @@ fn norm_hash(s: &str) -> (u64, u64, u32) {
     }
 }
 
-/// ASCII 快路径：与 `analysis::normalize::ascii` 的折叠语义逐字节一致。
+/// ASCII 快路径：与 `diff::normalize::ascii` 的折叠语义逐字节一致。
 fn norm_hash_ascii(s: &str) -> (u64, u64, u32) {
     let bytes = s.as_bytes();
     let mut f = Finger::new();
@@ -331,7 +331,7 @@ fn norm_hash_ascii(s: &str) -> (u64, u64, u32) {
     (a, b, n_out)
 }
 
-/// 连续空白 run 终点（与 `analysis::normalize::ascii` 的跳过语义一致）。
+/// 连续空白 run 终点（与 `diff::normalize::ascii` 的跳过语义一致）。
 fn blank_run_end(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() && blank_byte(bytes[i]) {
         i += 1;
@@ -339,7 +339,7 @@ fn blank_run_end(bytes: &[u8], mut i: usize) -> usize {
     i
 }
 
-/// 连续十六进制 run 终点（与 `analysis::normalize::ascii` 一致）。
+/// 连续十六进制 run 终点（与 `diff::normalize::ascii` 一致）。
 fn hex_run_end(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() && bytes[i].is_ascii_hexdigit() {
         i += 1;
@@ -356,7 +356,7 @@ fn emit_space(pending: &mut bool, has: &mut bool, f: &mut Finger, n: &mut u32) {
     *pending = false;
 }
 
-/// 十六进制 run 折叠（ASCII 字节版本；与 `analysis::normalize::bytes` 逐字节一致）。
+/// 十六进制 run 折叠（ASCII 字节版本；与 `diff::normalize::bytes` 逐字节一致）。
 fn hex_run(run: &[u8], f: &mut Finger, n: &mut u32) {
     if run.len() >= 8 && run.iter().any(|b| b.is_ascii_digit()) {
         f.push(b'#');
@@ -379,12 +379,12 @@ fn hex_run(run: &[u8], f: &mut Finger, n: &mut u32) {
     }
 }
 
-/// 与 `analysis::normalize::blank` 一致（含垂直制表 U+000B）。
+/// 与 `diff::normalize::blank` 一致（含垂直制表 U+000B）。
 fn blank_byte(b: u8) -> bool {
     b == b'\x0b' || b.is_ascii_whitespace()
 }
 
-/// Unicode 路径：与 `analysis::normalize::unicode` 的折叠语义逐字符一致。
+/// Unicode 路径：与 `diff::normalize::unicode` 的折叠语义逐字符一致。
 fn norm_hash_unicode(s: &str) -> (u64, u64, u32) {
     let mut f = Finger::new();
     let mut n_out = 0u32;
@@ -441,7 +441,7 @@ fn emit_plain(run: &str, f: &mut Finger, n: &mut u32) {
     }
 }
 
-/// 跳过连续数字字符（与 `analysis::normalize::skip` 一致）。
+/// 跳过连续数字字符（与 `diff::normalize::skip` 一致）。
 fn skip_digits(it: &mut Cursor) {
     while it.peek().is_some_and(|&(_, n)| n.is_ascii_digit()) {
         it.next();
@@ -455,7 +455,7 @@ fn skip_ws(it: &mut Cursor) {
     }
 }
 
-/// 连续十六进制 run 的终点（首字符已消费；与 `analysis::normalize::hex` 一致）。
+/// 连续十六进制 run 的终点（首字符已消费；与 `diff::normalize::hex` 一致）。
 fn hex_end(it: &mut Cursor, start: usize, first: char) -> usize {
     let mut end = start + first.len_utf8();
     while let Some(&(j, n)) = it.peek() {
@@ -468,7 +468,7 @@ fn hex_end(it: &mut Cursor, start: usize, first: char) -> usize {
     end
 }
 
-/// 普通字符 run 的终点（非十六进制/空白；与 `analysis::normalize::plain` 一致）。
+/// 普通字符 run 的终点（非十六进制/空白；与 `diff::normalize::plain` 一致）。
 fn plain_end(it: &mut Cursor, start: usize, first: char) -> usize {
     let mut end = start + first.len_utf8();
     while let Some(&(j, d)) = it.peek() {
@@ -482,7 +482,7 @@ fn plain_end(it: &mut Cursor, start: usize, first: char) -> usize {
 }
 
 /// 十六进制 run 折叠：>=8 位且含数字 → `#`；否则数字段 → `#`、其余保留。
-/// 与 `analysis::normalize::fold` 逐字节一致。
+/// 与 `diff::normalize::fold` 逐字节一致。
 fn fold_run(run: &str, f: &mut Finger, n_out: &mut u32) {
     if run.len() >= 8 && run.bytes().any(|b| b.is_ascii_digit()) {
         f.push(b'#');
@@ -508,7 +508,7 @@ fn fold_run(run: &str, f: &mut Finger, n_out: &mut u32) {
     }
 }
 
-/// 归一化扫描游标（与 `analysis::normalize` 同型）。
+/// 归一化扫描游标（与 `diff::normalize` 同型）。
 type Cursor<'a> = std::iter::Peekable<std::str::CharIndices<'a>>;
 
 /// 并行扫描段产物：每行归一化指纹 + 与上一行原文相等标记。
@@ -1307,8 +1307,8 @@ mod tests {
 
     fn assert_fp(s: &str) {
         let mut key = String::new();
-        crate::analysis::normalize(s, &mut key);
-        let mut h = super::super::hash::Hasher::default();
+        crate::diff::normalize(s, &mut key);
+        let mut h = hash::Hasher::default();
         h.write(key.as_bytes());
         let want_len = if key.is_ascii() {
             key.len()
@@ -1349,7 +1349,7 @@ mod tests {
     fn entropy_signal_off_is_noop() {
         let lines = ["alpha beta", "gamma delta", "epsilon zeta"];
         let dup = [false, false, false];
-        let mut cfg = crate::Config::default();
+        let mut cfg = Config::default();
         let mut sc = vec![1.0f64; 3];
         let before = sc.clone();
         entropy_signal(&cfg, &lines, &dup, &mut sc);
@@ -1365,9 +1365,9 @@ mod tests {
         // 熵加分整体挤掉数字证据行，log 档 num_cov 0.74→0.67）。
         let lines = ["alpha beta", "took 42ms id=7", "alpha beta"];
         let dup = [false, false, false];
-        let cfg = crate::Config {
+        let cfg = Config {
             entropy: true,
-            ..crate::Config::default()
+            ..Config::default()
         };
         let mut sc = vec![1.0f64; 3];
         entropy_signal(&cfg, &lines, &dup, &mut sc);
@@ -1378,12 +1378,12 @@ mod tests {
 
     #[test]
     fn cluster_off_is_noop_and_on_weights_dense_evidence() {
-        let mut cfg = crate::Config::default();
+        let mut cfg = Config::default();
         // 两处证据簇：行 1-2 密集（≥2 高分行），行 9 孤立高分行。
         let scores = [1.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 0.0, 0.0, 0.0];
         let dup = [false; 12];
-        let tbl = &crate::policy::DEFAULT_SCORES;
-        let mut boost = crate::compress::plan::boost(&scores, &dup, 1, tbl);
+        let tbl = &DEFAULT_SCORES;
+        let mut boost = boost(&scores, &dup, 1, tbl);
         let before = boost.clone();
         cluster_signal(&cfg, &scores, &dup, &mut boost, 1, tbl);
         assert_eq!(boost, before, "默认关 = 零影响");

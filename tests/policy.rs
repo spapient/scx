@@ -2,6 +2,7 @@
 //! 验证：文本策略覆盖 DEFAULT；优先级 CLI 显式参数 > 文件 > DEFAULT；
 //! 非法文件报错含行号；不传时默认路径逐字节不变（golden 37 已覆盖）。
 
+#[path = "mod.rs"]
 mod common;
 use common::run;
 

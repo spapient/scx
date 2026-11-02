@@ -6,6 +6,7 @@
 
 use std::fs;
 
+#[path = "mod.rs"]
 mod common;
 use common::run;
 

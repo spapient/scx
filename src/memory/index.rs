@@ -114,7 +114,7 @@ pub(crate) struct Record {
     /// 多标签场景桶（query/正文任一命中）；过滤用交集，stats 仍用主 bucket。
     pub buckets: Vec<String>,
     pub bucket: String,
-    pub fields: Arc<crate::memory::store::Fields>,
+    pub fields: Arc<store::Fields>,
     pub status: Arc<str>,
     pub quality: f64,
     /// 记忆分层（0/1/2），随 case 快照；召回按 tier 先验加权。
@@ -224,7 +224,7 @@ fn records(root: &str, ids: &[String]) -> std::io::Result<(Vec<(String, Record)>
                 status: c.status.into(),
                 quality: c.quality,
                 tier: c.tier,
-                life: crate::memory::store::life_u8(&c.life),
+                life: store::life_u8(&c.life),
                 updated_at: c.updated_at.into(),
                 updated_s,
             },
@@ -544,8 +544,8 @@ fn split(body: &[u8], i: &mut usize) -> std::io::Result<Terms> {
     Ok((id, terms, query_terms, buckets))
 }
 
-fn values(body: &[u8], i: &mut usize) -> std::io::Result<crate::memory::store::Fields> {
-    Ok(crate::memory::store::Fields {
+fn values(body: &[u8], i: &mut usize) -> std::io::Result<store::Fields> {
+    Ok(store::Fields {
         error_code: list(body, i)?,
         file_loc: list(body, i)?,
         symbol: list(body, i)?,
@@ -714,7 +714,7 @@ mod tests {
     use std::fs;
 
     fn stats() -> Stats {
-        crate::memory::store::sample()
+        store::sample()
     }
 
     #[test]

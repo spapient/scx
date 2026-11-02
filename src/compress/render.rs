@@ -157,7 +157,7 @@ fn compute_trimmed(
     let total = keep.len();
     let mut trimmed = vec![None; total];
     let idxs: Vec<usize> = (0..total).filter(|&i| keep[i] && !raw[i]).collect();
-    if idxs.len() < crate::compress::plan::PAR_MIN_REF {
+    if idxs.len() < PAR_MIN_REF {
         for &i in &idxs {
             let mut buf = String::new();
             crate::trim::trim_line_into(

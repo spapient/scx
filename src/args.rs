@@ -983,7 +983,7 @@ mod tests {
     /// 不得被 path() 误判为 --delete。
     #[test]
     fn p4_recall_kind_parses_into_recall_kind() {
-        let opts = super::parse(&[
+        let opts = parse(&[
             "--query".to_string(),
             "q".to_string(),
             "--recall".to_string(),

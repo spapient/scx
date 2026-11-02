@@ -1065,7 +1065,7 @@ fn embed_sims(job: &Compress, text: &str) -> Result<Option<Vec<f64>>, Failure> {
         return Ok(None);
     };
     let mut buf: Option<String> = None;
-    let lines = crate::compress::lines(text, &mut buf);
+    let lines = compress::lines(text, &mut buf);
     let sims = crate::sim::compute(Some(cmd), &job.query, &lines).map_err(Failure::message)?;
     Ok(Some(sims))
 }

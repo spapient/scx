@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(got.len(), 3);
         assert_eq!(got[1]["b"], "line\nbreak");
         assert_eq!(got[2]["b"], "say \"hi\"");
-        let _ = std::fs::remove_file(&path);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]

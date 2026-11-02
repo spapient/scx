@@ -56,19 +56,19 @@ pub(crate) fn path(root: &str) -> PathBuf {
 fn check(q: &str, hits: &[(String, f64, f64)]) -> Result<(), std::io::Error> {
     if q.len() > u16::MAX as usize {
         return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
+            ErrorKind::InvalidInput,
             format!("qmap query too long: {} bytes > {}", q.len(), u16::MAX),
         ));
     }
     if hits.len() > u16::MAX as usize {
         return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
+            ErrorKind::InvalidInput,
             format!("qmap hit count too large: {}", hits.len()),
         ));
     }
     if let Some((id, _, _)) = hits.iter().find(|(id, _, _)| id.len() > u8::MAX as usize) {
         return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
+            ErrorKind::InvalidInput,
             format!("qmap case id too long: {}", id.len()),
         ));
     }
@@ -208,14 +208,14 @@ fn compact(
     write_sorted(p, entries)
 }
 
-fn parent(p: &std::path::Path) -> std::io::Result<()> {
+fn parent(p: &Path) -> std::io::Result<()> {
     if let Some(dir) = p.parent() {
         crate::memory::lock::mkdir(dir)?;
     }
     Ok(())
 }
 
-fn prepare(p: &std::path::Path) -> std::io::Result<(fs::File, Decoded)> {
+fn prepare(p: &Path) -> std::io::Result<(fs::File, Decoded)> {
     let mut f = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -382,7 +382,7 @@ impl Reader<'_> {
 /// 归一化 query（保留数字：qmap 是精确键，8080/9090 不能共用快照）。
 fn normalize(query: &str) -> String {
     let mut out = String::new();
-    crate::analysis::canonical(query, &mut out);
+    crate::diff::canonical(query, &mut out);
     out
 }
 
@@ -431,8 +431,8 @@ pub(crate) fn lookup(
 }
 
 /// 同归一化 query 去重：保留最新写入；同一秒内后写者（文件顺序）覆盖先写者。
-fn dedup(entries: Vec<Entry>) -> std::collections::HashMap<String, Entry> {
-    let mut best: std::collections::HashMap<String, Entry> = std::collections::HashMap::new();
+fn dedup(entries: Vec<Entry>) -> HashMap<String, Entry> {
+    let mut best: HashMap<String, Entry> = HashMap::new();
     for e in entries {
         match best.get_mut(&e.q) {
             // 同一秒内 recency 相等时，文件顺序更精确：后写者在后，必须覆盖先写者，

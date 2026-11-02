@@ -893,7 +893,7 @@ mod tests {
     fn dcg_matches_standard() {
         // rel [2,1]：2/1 + 1/log2(3) = 2 + 0.6309
         let d = dcg(&[2.0, 1.0]);
-        assert!((d - (2.0 + 1.0 / (3.0f64).log2())).abs() < 1e-9);
+        assert!((d - (2.0 + 1.0 / 3.0f64.log2())).abs() < 1e-9);
         assert_eq!(dcg(&[]), 0.0);
     }
 
@@ -1163,8 +1163,8 @@ mod tests {
         plain.df = df;
         let hits = plain.minhash("build error borrow moved value", 2);
         assert_eq!(hits.len(), 2, "top-k 截断");
-        assert!(
-            hits[0].id == "d2",
+        assert_eq!(
+            hits[0].id, "d2",
             "语义命中 build error 语料: {:?}",
             hits[0].id
         );

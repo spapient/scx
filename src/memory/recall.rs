@@ -28,7 +28,7 @@ struct Doc {
     terms: Arc<[String]>,
     /// 原始 case query 词表（线性/索引/实体桥路径同口径；query-field 重排）。
     query_terms: Arc<[String]>,
-    fields: Arc<super::store::Fields>,
+    fields: Arc<store::Fields>,
     status: Arc<str>,
     quality: f64,
     /// 记忆分层（0/1/2）；score 按 tier 先验加权（L2/L1 加分，L0 不加）。
@@ -78,7 +78,7 @@ struct Ctx<'a> {
 struct Plan {
     terms: Vec<String>,
     original_len: usize,
-    fields: super::store::Fields,
+    fields: store::Fields,
     entities: Vec<String>,
 }
 
@@ -901,7 +901,7 @@ fn decay(dctx: &Doc, now_s: u64, tau_solved: f64, tau_regressed: f64, tau: f64) 
         "regressed" => tau_regressed,
         _ => tau,
     };
-    let age_days = (now_s.saturating_sub(dctx.updated_s)) as f64 / 86_400.0;
+    let age_days = now_s.saturating_sub(dctx.updated_s) as f64 / 86_400.0;
     let decay = 1.0 / (1.0 + age_days / tau_eff);
     let qsign = if &*dctx.status == "regressed" {
         -1.0
@@ -1039,7 +1039,7 @@ mod tests {
     use std::fs;
 
     fn stats() -> Stats {
-        crate::memory::store::sample()
+        store::sample()
     }
 
     fn recall_test(root: &str, query: &str, k: usize) -> std::io::Result<Vec<Hit>> {
