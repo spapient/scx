@@ -492,7 +492,7 @@ fn render(
     let mut lines = vec![
         "# 评测实测指标（自动生成）".to_string(),
         String::new(),
-        "> 由 `python tools/scx.py report` 生成；CI 断言与本文件逐字节一致，文档数字一律以本文件为准。".to_string(),
+        "> 由 `xtask report` 生成；CI 断言与本文件逐字节一致，文档数字一律以本文件为准。".to_string(),
         String::new(),
         "## Gauge（150 查询，seed 20261023，tier:hard）".to_string(),
         String::new(),

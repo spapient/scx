@@ -41,7 +41,7 @@ cargo build --release --locked
 cargo build --release --locked --features eval --bin xtask
 ./target/release/xtask fidelity config/fidelity.corpus.json --out /tmp/fidelity-detail.json
 ./target/release/xtask fidelity config/fidelity.corpus.json --gate
-# 或经 Python 包装（委托同一 Rust 实现）：./tools/scx.py fidelity ...
+# 或经 Python 包装（委托同一 Rust 实现）：xtask fidelity ...
 ```
 
 `--gate` 冻结门禁（CI 强制执行）。实测数字统一以

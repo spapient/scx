@@ -91,7 +91,7 @@ AI 标签 `config/gauge.ai.labels.json`（`per-item-ai-v1`，384/384）只通过
 复现入口：
 
 ```bash
-./tools/scx.py seed config/gauge.corpus.json \
+xtask seed config/gauge.corpus.json \
   --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
 ./tools/scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge
@@ -118,7 +118,7 @@ v2 有 30 起公开事故、150 条查询（60/60/30），最终标签
 hard 数值达到门槛，但 v2 参与调参，不能写成独立确认。复现：
 
 ```bash
-./tools/scx.py seed config/v2.corpus.json \
+xtask seed config/v2.corpus.json \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
 ./tools/scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
 ```
@@ -135,7 +135,7 @@ hard 数值达到门槛，但 v2 参与调参，不能写成独立确认。复�
 不是指标回归。复现：
 
 ```bash
-./tools/scx.py seed config/real.corpus.json \
+xtask seed config/real.corpus.json \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
 ./tools/scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
 ```
