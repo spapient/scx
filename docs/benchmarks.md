@@ -3,12 +3,13 @@
 > 本表只做量级参考与回归对照，不是跨机器性能承诺。数据来自本机 release 构建，
 > 每行标注机器型号、日期、编译 profile 与测量方法；不同行**口径不同，不可直接
 > 跨行比较**（例如结构语料与默认语料内容不同，max-tokens 路径受证据地板交互影响）。
-> 日期：2026-10-25（P4 新增路径首次记录）。
+> 最近实测：2026-11-02（当前 `0.11.0`）。更早小节保留为历史记录。
 
-## 环境与方法（2026-10-25）
+## 环境与方法（2026-11-02）
 
 - 机器：Apple M5 Pro（Mac17,9），macOS 27.0.1，arm64
-- 编译：`cargo build --release --locked`（profile.release opt-level=3 / lto / strip）
+- 编译：`cargo build --release --locked`（profile.release `opt-level=3` / `lto=true` /
+  `codegen-units=1` / `debug=1`；未启用 strip）
 - 方法：预热 1 次后采样 N 次取中位；N 默认 9（压缩）/ 21（召回），可用
   `SCX_BENCH_REPEAT` 覆盖；与同一会话中历史基线交错测量避免漂移。
 - 命令：`cargo run --release --locked --features eval --bin xtask -- bench compress`
@@ -18,15 +19,15 @@
 
 | 路径 | 语料 | 中位 | 样本（µs） | kept | 备注 |
 |---|---:|---|---:|---:|---|
-| 默认 | 心跳+每百行 ERROR（2,338,389 字符） | 14,757 µs | 13190–22113 | 2498 | 本轮单轮采样负载偏高；历史快照 11.7–12.0 ms（三轮交错中位）为基准值 |
-| `--structure 1` 关 | 结构富语料（import/stack/fence+噪声，1,438,623 字符） | 7,888 µs | 7750–8539 | 3002 | 与开启同语料对比用 |
-| `--structure 1` 开 | 同上 | 8,813 µs | 8654–12581 | 3002 | 相对关闭 +12% 增量开销；kept 不变（结构并入不改变证据地板） |
-| `--max-tokens 2000` | 默认语料 | 12,029 µs | 11655–12181 | 1499 | `mode=overflow:evidence`（证据地板 > 2000，全部证据保留并如实报告） |
-| `--policy-file` 字段覆盖 | 默认语料 | 15,345 µs（压缩） | 14958–15610 | 1499 | TOML 解析 <1 µs（4 行，per-invocation）；稳态压缩延迟与字段覆盖等价 |
+| 默认 | 心跳+每百行 ERROR（2,338,389 字符） | 6,268 µs | 5981–6558 | 2498 | 含 50ms 回归门，实测 PASS |
+| `--structure 1` 关 | 结构富语料（import/stack/fence+噪声，1,438,623 字符） | 4,367 µs | 4142–4654 | 3002 | 与开启同语料对比用 |
+| `--structure 1` 开 | 同上 | 6,266 µs | 6128–6480 | 3002 | 相对关闭 +1,899 µs（+43.5%）；kept 不变 |
+| `--max-tokens 2000` | 默认语料 | 6,306 µs | 5724–6609 | 1499 | `mode=overflow:evidence`（证据地板 > 2000，全部证据保留并如实报告） |
+| `--policy-file` 字段覆盖 | 默认语料 | 9,549 µs（压缩） | 9387–9898 | 1499 | TOML 解析 25 µs（4 行，per-invocation） |
 
 口径说明：
 - `--policy-file` 的 TOML 解析是 **CLI 一次性开销**（读文件 + TOML 子集解析），
-  实测 <1 µs，不进入每次压缩的热路径；完整 CLI 映射在 `args::parse_policy_file`，
+  实测 25 µs，不进入每次压缩的热路径；完整 CLI 映射在 `args::parse_policy_file`，
   本表为字段级近似（ratio/context/max_tokens/structure 代表字段）。
   2026-10-27 修正：此前本节把「首次冷压缩」误标为 TOML 解析（13–15 ms），
   基准计时已改为只覆盖解析本身。
@@ -34,24 +35,22 @@
   全部证据行（证据地板最高优先），不做静默裁剪。
 - 结构语料行更短（1.44M vs 2.34M 字符），绝对值不与默认语料横向比较；两行
   structure 之间同语料可直接比较增量。
-- 2026-10-27：`structures()` 的大括号计数由「每行两次 `matches().count()`」改为单趟
-  字节扫描；同轮 `structure:on − off` 增量中位 1635 → 1461 µs（5 轮交错，波动约 ±300 µs），
-  输出逐字节一致。
+- 2026-11-02：`structure:on − off` 增量实测 1,899 µs；`kept` 不变，输出逐字节一致。
 
 ## 记忆库（10k case）
 
 | 工作负载 | 本轮 | 历史快照（README） | 条件 |
 |---|---:|---:|---|
-| store（200 seeds） | 297 ms | — | 一次性 |
-| replicate 200→10000 | 2,700 ms | — | 一次性 |
-| 冷启动线性首查（no index） | p50 1.021 s | 0.95–0.97 s | 受系统负载与页缓存影响 |
-| 全量重建索引 | 385 ms | 373–388 ms | 三轮 |
-| 索引首次加载 | 10,721 µs | 11.6–11.8 ms | 每轮单独预热 |
-| 稳态倒排召回（稀疏） | p50 63 µs | 71–73 µs | 21 采样 |
-| 全候选宽查询 | p50 1.118 ms | 1.11–1.15 ms | 7 采样 |
+| store（200 seeds） | 1,530 ms | — | 一次性 |
+| replicate 200→10000 | 4,160 ms | — | 一次性 |
+| 冷启动线性首查（no index） | p50 1.801 s | 0.95–0.97 s | 受系统负载与页缓存影响 |
+| 全量重建索引 | 732 ms | 373–388 ms | 三轮 |
+| 索引首次加载 | 17,613 µs | 11.6–11.8 ms | 每轮单独预热 |
+| 稳态倒排召回（稀疏） | p50 106 µs | 71–73 µs | 21 采样 |
+| 全候选宽查询 | p50 2.774 ms | 1.11–1.15 ms | 7 采样 |
 | 性能门 | PASS（p50 < 5 ms） | — | 10k recall |
 
-## 历史快照（README「性能快照」，Apple M5 Pro，三轮 × 21 采样交错）
+## 历史快照（2026-10-25，Apple M5 Pro，三轮 × 21 采样交错）
 
 - 50k 行压缩中位 11.7–12.0 ms（与 HEAD 基线交错，约 6–8% 提升后数值）。
 - 稀疏召回 p50 71–73 µs（先部分选择 top-k、只排序候选窗口）。
@@ -81,9 +80,9 @@ scx 列为子进程端到端 wall-clock（含进程启动），两基线为进�
 
 ## 真实转储：`--scoped` 收益（2026-10-27）
 
-语料：本仓库 Claude Code 会话转储中工具输出最大的 3 份（`tools/extract_dumps.py
---extract 3`，17.6k–26.4k 行 / 1.1–1.4 MB）。命令：`tools/bench_real.py
---binary target/release/scx`（query 默认 `compress dedup evidence`，ratio 0.35）。
+语料：本仓库 Claude Code 会话转储中工具输出最大的 3 份（`xtask extract --extract 3`，
+17.6k–26.4k 行 / 1.1–1.4 MB）。命令：`xtask bench real --binary target/release/scx`
+（query 默认 `compress dedup evidence`，ratio 0.35）。
 
 `--scoped 1` 只在 `--risk-gate 1` 且风险 HIGH 时生效：HIGH 风险下风险守卫会把
 **全文所有**错误/标记行都保留，区域门控则只保留证据邻域内的，远处无关错误行照常裁剪。

@@ -618,7 +618,7 @@ mod tests {
     }
 
     fn render(value: &Json) -> String {
-        // 测试用极简 JSON 渲染：优先复用 evaltool io 的缩进器。
+        // 测试用极简 JSON 渲染：优先复用 tooling io 的缩进器。
         fn to_j(value: &Json) -> io::J {
             match value {
                 Json::Null => io::J::Null,

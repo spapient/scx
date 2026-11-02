@@ -11,7 +11,7 @@ xtask --help          # macOS / Linux
 xtask --help     # Windows
 ```
 
-评测器为 Rust 实现（`src/evaltool`，feature=eval），负责语料播种、基线构造、
+评测器为 Rust 实现（`src/tooling`，feature=eval），负责语料播种、基线构造、
 盲审编排与统计；检索和证据门仍有且只有一份 Rust 实现，位于 `src/`。
 
 ## 目录
@@ -100,14 +100,14 @@ xtask baseline --csv /tmp/scx-gauge.csv \
   --out /tmp/scx-gauge-mechanical.json \
   --judge-by mechanical-target-gauge-v1 \
   --judge-date 2026-10-23T00:00:00Z
-./tools/scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
+scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
   --mem-dir /tmp/scx-gauge
 ```
 
 配对统计与预注册断言（与 CI `Enforce pre-registered advantage` 一致）：
 
 ```bash
-./tools/scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
+scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
   --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-verbose.txt
 xtask stats --baseline /tmp/scx-gauge-mechanical.json \
   --verbose /tmp/scx-gauge-verbose.txt --mem-dir /tmp/scx-gauge \
@@ -167,10 +167,10 @@ common=384、raw=0.344、**κ=0.017**——AI 逐项盲审与人工盲审一致�
 人工、AI 与 policy 门禁复用同一记忆库：
 
 ```bash
-./tools/scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge
-./tools/scx --eval config/gauge.ai.labels.json --gate-items --mem-dir /tmp/scx-gauge
-./tools/scx --eval config/gauge.policy.labels.json --gate-human --mem-dir /tmp/scx-gauge
+scx --eval config/gauge.ai.labels.json --gate-items --mem-dir /tmp/scx-gauge
+scx --eval config/gauge.policy.labels.json --gate-human --mem-dir /tmp/scx-gauge
 ```
 
 预期：human `PASS / exit 0`；AI 只通过 `--gate-items`，`--gate-human` 必须
@@ -184,7 +184,7 @@ common=384、raw=0.344、**κ=0.017**——AI 逐项盲审与人工盲审一致�
 都会被拒绝，避免静默漏算 hard 层。
 
 ```bash
-./tools/scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-hao.txt
 xtask stats \
   --baseline config/gauge.human.labels.json \
@@ -231,11 +231,11 @@ CRLF 文件与 LF 文件等价；`verify` 仍校验冻结文件的原始字节�
 ```bash
 xtask seed config/v2.corpus.json \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
-./tools/scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
+scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
 
 xtask seed config/real.corpus.json \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
-./tools/scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
+scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
 ```
 
 v2 参与调参，且标签由 AI 预填后人工采纳，因此不是独立 holdout。`real` 只有案例级

@@ -220,125 +220,168 @@ fn apply_budget(
     keep.iter().filter(|&&k| k).count()
 }
 
-pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
-    let mut prof = crate::perf::T::start();
-    let (ratio, context, window) = config(cfg);
-    let kind = cfg.kind;
-    // --max-tokens 保守上界：可选填充预算按「用户上限 ÷ 安全系数」计（宁高估勿超预算）；
-    // 证据地板/守卫溢出诊断仍按诚实上限（cfg.limit），不翻转模式标签。
-    let budget_limit = cfg
-        .limit
-        .map(|m| m as f64 / crate::terms::BUDGET_SAFETY_FACTOR);
-    // 分析使用 LF 归一化文本；passthrough/fail-open 返回输入原文，保持“原样保留”语义。
-    let original = text;
-    // 零拷贝快路径：无 CR 时直接借用原文本；行以 &str 切片保存，避免整文复制与逐行分配。
-    let mut nl_buf: Option<String> = None;
-    let lines = lines(original, &mut nl_buf);
-    let uniq_terms = terms(query);
-    // P17-D 自动锚（--auto-anchor 1，默认关 = 现状逐字节一致）：query 词形
-    // 变体（去 s/es/ed/ing/ly/er，双写辅音还原）自动加入命中锚，无需手写
-    // --evidence。与 P13-B stem_expand 同语义的轻量规则版（非门控，默认
-    // 构建可用）。仅扩展 hits 判定词表，terms 计数/语义打分口径不变。
-    let anchor_terms = anchor_terms(cfg, &uniq_terms);
-    let force_pats = forces(&cfg.forces);
-    let total = lines.len();
-    // token 估算只服务小输入直通与可选预算；针尖档大盘无需整份扫描。
-    // 小输入先算一次即可（随后可能直接 passthrough）；大输入把估算并入
-    // 逐行分析循环，避免为同一批行再走一趟缓存。
-    let small_tok = survey(&lines, total);
-    let evidence = &cfg.evidence;
-    // 输入测量一趟完成：字符数 + token 估算（原 chars + estimate 两趟全扫
-    // 合一，CJK 输入上 estimate 是整篇 O(n) 扫描，合一趟省一次全扫）。
-    let (chars_a, tokens_in) = crate::terms::measure(original);
-    prof.mark("lines+terms");
+/// Outcome 的跨路径只读元信息：早退与正常路径共用同一套记账口径。
+struct Report<'a> {
+    kind: crate::ContentType,
+    evidence: &'a [crate::Evidence],
+    force_count: usize,
+    terms: usize,
+    total: usize,
+    input: usize,
+    tokens_in: f64,
+    window: i64,
+    limit: Option<usize>,
+}
 
-    let mk = |text_owned: String,
-              kept: usize,
-              chars_b: usize,
-              cut: f64,
-              dup: usize,
-              seeds: usize,
-              risk: Risk,
-              guarded: u8,
-              regions: usize,
-              numbers: Vec<usize>,
-              mode: Mode,
-              limit: Option<usize>,
-              tokens: f64,
-              dropped: Vec<crate::Dropped>|
-     -> Outcome {
-        let ev = ev_retention(evidence, &numbers, &text_owned, kept, total);
-        let tokens_out = crate::terms::estimate(&text_owned);
+/// 单次结果的可变字段；与 `Report` 的只读元信息分离，避免 13 参数闭包。
+struct OutcomeFields {
+    kept: usize,
+    chars_b: usize,
+    cut: f64,
+    dup: usize,
+    seeds: usize,
+    risk: Risk,
+    guarded: u8,
+    regions: usize,
+    numbers: Vec<usize>,
+    mode: Mode,
+    tokens: f64,
+    dropped: Vec<crate::Dropped>,
+}
+
+impl Report<'_> {
+    fn make(&self, text: String, f: OutcomeFields) -> Outcome {
+        let ev = ev_retention(self.evidence, &f.numbers, &text, f.kept, self.total);
+        let tokens_out = crate::terms::estimate(&text);
         Outcome {
-            text: text_owned,
-            numbers,
-            kept,
-            total,
-            input: chars_a,
-            output: chars_b,
-            cut,
-            dup,
-            seeds,
-            evidence: seeds,
-            risk,
-            guarded,
-            regions,
-            window,
-            terms: uniq_terms.len(),
-            forced: force_pats.len(),
-            mode,
-            limit,
-            tokens,
-            tokens_in,
-            dropped,
+            text,
+            numbers: f.numbers,
+            kept: f.kept,
+            total: self.total,
+            input: self.input,
+            output: f.chars_b,
+            cut: f.cut,
+            dup: f.dup,
+            seeds: f.seeds,
+            evidence: f.seeds,
+            risk: f.risk,
+            guarded: f.guarded,
+            regions: f.regions,
+            window: self.window,
+            terms: self.terms,
+            forced: self.force_count,
+            mode: f.mode,
+            limit: self.limit,
+            tokens: f.tokens,
+            tokens_in: self.tokens_in,
+            dropped: f.dropped,
             budget_used_pct: 0.0,
             ev_retention: ev,
-            ev_total: evidence.len(),
+            ev_total: self.evidence.len(),
             buckets: vec![crate::BucketStat {
-                kind,
-                tokens_in,
+                kind: self.kind,
+                tokens_in: self.tokens_in,
                 tokens_out,
-                kept,
-                total,
-                mode,
+                kept: f.kept,
+                total: self.total,
+                mode: f.mode,
             }],
             explain: Vec::new(),
         }
-    };
-
-    // 直通早退：小输入 / 超长行（无查询参与，原样返回）。
-    if let Some(mode) = shape(total, small_tok, &lines) {
-        prof.finish("compress");
-        return mk(
-            original.to_string(),
-            total,
-            chars_a,
-            0.0,
-            0,
-            0,
-            Risk::Low,
-            0,
-            0,
-            Vec::new(),
-            mode,
-            cfg.limit,
-            0.0,
-            Vec::new(),
-        );
     }
 
+    fn passthrough(&self, text: &str, mode: Mode) -> Outcome {
+        self.make(
+            text.to_string(),
+            OutcomeFields {
+                kept: self.total,
+                chars_b: self.input,
+                cut: 0.0,
+                dup: 0,
+                seeds: 0,
+                risk: Risk::Low,
+                guarded: 0,
+                regions: 0,
+                numbers: Vec::new(),
+                mode,
+                tokens: 0.0,
+                dropped: Vec::new(),
+            },
+        )
+    }
+
+    fn fail_open(&self, text: &str, folds: usize, seeds: usize) -> Outcome {
+        self.make(
+            text.to_string(),
+            OutcomeFields {
+                kept: self.total,
+                chars_b: self.input,
+                cut: 0.0,
+                dup: folds,
+                seeds,
+                risk: Risk::Low,
+                guarded: 0,
+                regions: 0,
+                numbers: Vec::new(),
+                mode: Mode::FailOpenZeroSignal,
+                tokens: 0.0,
+                dropped: Vec::new(),
+            },
+        )
+    }
+
+    fn no_kept(
+        &self,
+        text: &str,
+        folds: usize,
+        seeds: usize,
+        risk: Risk,
+        regions: usize,
+    ) -> Outcome {
+        self.make(
+            text.to_string(),
+            OutcomeFields {
+                kept: self.total,
+                chars_b: self.input,
+                cut: 0.0,
+                dup: folds,
+                seeds,
+                risk,
+                guarded: 0,
+                regions,
+                numbers: Vec::new(),
+                mode: Mode::PassNoKept,
+                tokens: 0.0,
+                dropped: Vec::new(),
+            },
+        )
+    }
+}
+
+/// 分析阶段产物：掩码、折叠、权重与种子。
+struct Analysis {
+    masks: Mask,
+    dup: Vec<bool>,
+    folds: usize,
+    seeds: Seed,
+    seeds_total: usize,
+}
+
+fn analyze(
+    lines: &[&str],
+    terms: &[String],
+    forces: &[Force],
+    small_tok: f64,
+    context: i64,
+    cfg: &Config,
+    prof: &mut crate::perf::T,
+) -> Analysis {
+    let total = lines.len();
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
-    let masks = masks(
-        &lines,
-        &anchor_terms,
-        &force_pats,
-        small_tok,
-        do_tok,
-        cfg.strict,
-    );
+    let masks = masks(lines, terms, forces, small_tok, do_tok, cfg.strict);
     prof.mark("masks");
     let (dup, folds) = dedup(
-        &lines,
+        lines,
         &masks.mask,
         masks.words,
         &masks.errs,
@@ -346,7 +389,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         cfg.code_keep,
     );
     prof.mark("dedup");
-    let stat = weights(&masks.mask, masks.words, &dup, uniq_terms.len(), folds);
+    let stat = weights(&masks.mask, masks.words, &dup, terms.len(), folds);
     let seeds = marks(
         &masks.mask,
         masks.words,
@@ -358,90 +401,127 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     );
     let seeds_total = (0..total).filter(|&i| seeds.seed[i]).count();
     prof.mark("weights+seeds");
-
-    // 无信号 fail-open：零命中且无 --force 命中 => 原样保留。
-    if failopen(seeds.hit_lines, seeds.force_any) {
-        prof.finish("compress");
-        return mk(
-            original.to_string(),
-            total,
-            chars_a,
-            0.0,
-            folds,
-            seeds_total,
-            Risk::Low,
-            0,
-            0,
-            Vec::new(),
-            Mode::FailOpenZeroSignal,
-            cfg.limit,
-            0.0,
-            Vec::new(),
-        );
+    Analysis {
+        masks,
+        dup,
+        folds,
+        seeds,
+        seeds_total,
     }
+}
 
-    // 结构感知邻域（--structure 1）：fence/import/堆栈区域整段并入种子区域。
-    let regions = spans(cfg, &seeds.seed, window as usize, total, &lines);
+/// 排序阶段产物：结构区域、基础分与增强分。
+struct Ranked {
+    regions: Region,
+    scores: Vec<f64>,
+    boost: Vec<f64>,
+    #[cfg(feature = "semantic")]
+    sem_scores: Option<Vec<f64>>,
+}
+
+fn rank(
+    cfg: &Config,
+    lines: &[&str],
+    terms: &[String],
+    analysis: &Analysis,
+    window: usize,
+) -> Ranked {
+    let total = lines.len();
+    let regions = spans(cfg, &analysis.seeds.seed, window, total, lines);
     #[cfg_attr(not(feature = "semantic"), allow(unused_mut))]
     let mut scores = scores(
-        &lines,
-        &dup,
-        &seeds.hits,
-        &seeds.sumw,
-        &masks.errs,
-        &masks.pinned,
+        lines,
+        &analysis.dup,
+        &analysis.seeds.hits,
+        &analysis.seeds.sumw,
+        &analysis.masks.errs,
+        &analysis.masks.pinned,
         &DEFAULT_SCORES,
     );
-    // 语义增强（可选）：feature=semantic 且显式加载权重时，对非 dup 候选行
-    // 叠加 sigmoid 打分作为排序加分；不启用时与 v0.4.1 逐字节一致。
-    // 返回批量居中分数（复用给 --sem-gate 门控，避免二次计算）。
-    // 默认轨（feature=semantic 关）stub 返回 None，变量仅 semantic 轨使用。
+    // 语义增强（可选）：返回批量居中分数，复用给 --sem-gate 门控。
     #[allow(unused_variables)]
-    let sem_scores = semantic(cfg, &lines, &uniq_terms, total, &dup, &mut scores);
-    // P17-C 熵近似评分（--entropy 1，默认关=零影响）。
-    entropy_signal(cfg, &lines, &dup, &mut scores);
-    apply_sims(cfg, &mut scores, &dup, total);
-    let mut boost = boost(&scores, &dup, window as usize, &DEFAULT_SCORES);
-    // P17-E 证据簇密度加权（--cluster 1，默认关=零影响）。
+    let sem_scores = semantic(cfg, lines, terms, total, &analysis.dup, &mut scores);
+    entropy_signal(cfg, lines, &analysis.dup, &mut scores);
+    apply_sims(cfg, &mut scores, &analysis.dup, total);
+    let mut boost = boost(&scores, &analysis.dup, window, &DEFAULT_SCORES);
     cluster_signal(
         cfg,
         &scores,
-        &dup,
+        &analysis.dup,
         &mut boost,
-        window as usize,
+        window,
         &DEFAULT_SCORES,
     );
-    prof.mark("spans+scores");
-    // 逐行保留原因（--explain 用）：0=删除，其余见 R_* 常量。
+    Ranked {
+        regions,
+        scores,
+        boost,
+        #[cfg(feature = "semantic")]
+        sem_scores,
+    }
+}
+
+/// 选择阶段产物：最终 keep/原因/raw 与审计状态。
+struct Selection {
+    keep: Vec<bool>,
+    kept: usize,
+    reason: Vec<u8>,
+    raw: Vec<bool>,
+    final_tok: f64,
+    overflow: Option<Mode>,
+    budget_used_pct: f64,
+    risk: Risk,
+    guarded: u8,
+}
+
+struct ChoiceIn<'a> {
+    cfg: &'a Config,
+    lines: &'a [&'a str],
+    analysis: &'a Analysis,
+    ranked: &'a Ranked,
+    ratio: f64,
+    context: i64,
+    budget_limit: Option<f64>,
+}
+
+/// 保留标记阶段的产物：证据/锚点/策略行已落地，尚未做预算与风险守卫。
+struct Marks {
+    keep: Vec<bool>,
+    kept: usize,
+    reason: Vec<u8>,
+    raw: Vec<bool>,
+    tok_floor: f64,
+}
+
+fn mark_keep(input: &ChoiceIn<'_>, prof: &mut crate::perf::T) -> Marks {
+    let cfg = input.cfg;
+    let lines = input.lines;
+    let analysis = input.analysis;
+    let ranked = input.ranked;
+    let context = input.context;
+    let total = lines.len();
+    let dup = &analysis.dup;
+    let masks = &analysis.masks;
     let mut reason = vec![0u8; total];
     let (mut keep, mut kept) = floor(
-        &seeds.seed,
+        &analysis.seeds.seed,
         context,
         total,
-        &scores,
+        &ranked.scores,
         cfg.fill_floor,
         &mut reason,
     );
-
-    // 结构锚点（P6 骨架保护）：结构边界行无条件保留，优先级低于证据（seed/context）、
-    // 高于可选填充。默认空 kinds 时为空操作，与现状逐字节一致。
-    mark_structure_anchors(cfg, &lines, &mut keep, &mut kept, &mut reason);
-
-    // 语义锚（#65 --sem-gate，默认 0 = 关）：语义居中分数 ≥ 阈值的非重复行
-    // 直接整行保留（独立于 optional 预算裁剪的语义高价值通道）。默认关 = 空操作。
+    mark_structure_anchors(cfg, lines, &mut keep, &mut kept, &mut reason);
     #[cfg(feature = "semantic")]
     sem_anchors(
-        &dup,
+        dup,
         &mut keep,
         &mut kept,
         total,
         cfg,
-        sem_scores.as_deref(),
+        ranked.sem_scores.as_deref(),
     );
 
-    // 行保护策略（--code-keep / --num-line-keep / --sym-line-keep / --zh-keep /
-    // --list-keep / --evidence）：整行保留并标记 raw（render 跳过行内 trim）。
-    // 默认全 0 且无证据时为空操作，与现状逐字节一致。
     let mut raw = vec![false; total];
     if cfg.code_keep
         || cfg.num_line_keep
@@ -450,37 +530,50 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         || cfg.list_keep
         || !cfg.evidence.is_empty()
     {
-        apply_keep_policies(
-            cfg,
-            &lines,
-            &dup,
-            &mut keep,
-            &mut kept,
-            &mut reason,
-            &mut raw,
-        );
+        apply_keep_policies(cfg, lines, dup, &mut keep, &mut kept, &mut reason, &mut raw);
     }
 
-    // --max-tokens 硬上限：证据地板最高优先。证据 + 最小邻域先落，其 token
-    // 估算超限时直接进入 OverflowEvidence（保留全部证据，如实报告），不再
-    // 填充可选内容；未超限时可选填充受 `min(budget, max - floor)` 双重约束。
-    let tok_floor = tokens(&lines, &keep, &masks.tok);
+    let tok_floor = tokens(lines, &keep, &masks.tok);
     prof.mark("floor");
-    let mut overflow = cap(tok_floor, cfg.limit);
+    Marks {
+        keep,
+        kept,
+        reason,
+        raw,
+        tok_floor,
+    }
+}
 
-    // --context 0（针尖模式）：完全跳过可选预算填充，只保留证据行与守卫行。
+fn settle(input: &ChoiceIn<'_>, marks: Marks, prof: &mut crate::perf::T) -> Selection {
+    let cfg = input.cfg;
+    let lines = input.lines;
+    let analysis = input.analysis;
+    let ranked = input.ranked;
+    let ratio = input.ratio;
+    let context = input.context;
+    let budget_limit = input.budget_limit;
+    let Marks {
+        mut keep,
+        mut kept,
+        mut reason,
+        raw,
+        tok_floor,
+    } = marks;
+    let masks = &analysis.masks;
+    let dup = &analysis.dup;
+    let mut overflow = cap(tok_floor, cfg.limit);
     let used_optional = optional(
         &Select {
-            lines: &lines,
-            scores: &scores,
-            boost: &boost,
-            dup: &dup,
-            in_region: &regions.in_region,
-            struct_region: &regions.struct_region,
+            lines,
+            scores: &ranked.scores,
+            boost: &ranked.boost,
+            dup,
+            in_region: &ranked.regions.in_region,
+            struct_region: &ranked.regions.struct_region,
             tok: &masks.tok,
         },
         &Fill {
-            region_gate: regions.gate,
+            region_gate: ranked.regions.gate,
             total_tok: masks.total_tok,
             ratio,
             edge_head: DEFAULT_SCORES.edge_head,
@@ -493,19 +586,16 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         &mut kept,
         &mut reason,
     );
-    // 可选预算利用率（%）：实际填充 ÷ 预算上限，展示 `--ratio` 的实际作用。
-    // 与 fill 同口径（budget = max(total_tok × ratio, BUDGET_MIN)）。
     let budget_used_pct = budget_used(used_optional, masks.total_tok, ratio);
-
-    let risk = audit(&keep, &masks.errs, &seeds.hits, &DEFAULT_RISK);
+    let risk = audit(&keep, &masks.errs, &analysis.seeds.hits, &DEFAULT_RISK);
     prof.mark("budget");
     let mut guarded = 0u8;
     if active(risk, cfg) {
-        let scoped = cfg.scoped.then_some(regions.in_region.as_slice());
+        let scoped = cfg.scoped.then_some(ranked.regions.in_region.as_slice());
         guarded = guard(
             &mut keep,
             &mut kept,
-            &dup,
+            dup,
             &masks.guards,
             &masks.marked,
             scoped,
@@ -513,70 +603,137 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         );
     }
     prof.mark("guard");
-
-    // 守卫后最终检查：填充受上限约束，但风险守卫可能追加证据性行；如实报告 OverflowFill。
-    let final_tok = tokens(&lines, &keep, &masks.tok);
+    let final_tok = tokens(lines, &keep, &masks.tok);
     if overflow.is_none() {
         overflow = last(final_tok, cfg.limit);
     }
-
-    // --budget 硬 kept 上限（P18 SuperCompress 同预算对照路径）：超预算行按
-    // reason 保真优先级（可选填充 → 保真锚 → 证据）反向裁剪；0 = 现状逐字节一致。
     let kept = apply_budget(
         &mut keep,
         &mut reason,
         cfg.budget,
         masks.total_tok,
         BudgetIn {
-            lines: &lines,
-            scores: &scores,
-            boost: &boost,
+            lines,
+            scores: &ranked.scores,
+            boost: &ranked.boost,
             tok: &masks.tok,
         },
     );
-
-    // 预算过紧或只有高频单查询命中时可能选不出任何行；此时回退原文，不返回静默空结果。
-    if kept == 0 {
-        prof.finish("compress");
-        return mk(
-            original.to_string(),
-            total,
-            chars_a,
-            0.0,
-            folds,
-            seeds_total,
-            risk,
-            0,
-            regions.count,
-            Vec::new(),
-            Mode::PassNoKept,
-            cfg.limit,
-            0.0,
-            Vec::new(),
-        );
-    }
-
-    let (out_text, numbers) = render(&lines, &keep, cfg, &raw, &uniq_terms);
-    prof.mark("render");
-    let (chars_b, cut) = cut(&out_text, chars_a);
-    let mut o = mk(
-        out_text,
+    Selection {
+        keep,
         kept,
-        chars_b,
-        cut,
-        folds,
-        seeds_total,
+        reason,
+        raw,
+        final_tok,
+        overflow,
+        budget_used_pct,
         risk,
         guarded,
-        regions.count,
-        numbers,
-        overflow.unwrap_or(Mode::Sieve),
-        cfg.limit,
-        final_tok,
-        runs(&keep, &dup, overflow.is_some()),
+    }
+}
+
+fn choose(input: ChoiceIn<'_>, prof: &mut crate::perf::T) -> Selection {
+    let marks = mark_keep(&input, prof);
+    settle(&input, marks, prof)
+}
+
+pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
+    let mut prof = crate::perf::T::start();
+    let (ratio, context, window) = config(cfg);
+    // --max-tokens 保守上界：可选填充预算按「用户上限 ÷ 安全系数」计；
+    // 证据溢出诊断仍按诚实上限（cfg.limit）。
+    let budget_limit = cfg
+        .limit
+        .map(|m| m as f64 / crate::terms::BUDGET_SAFETY_FACTOR);
+    // 零拷贝快路径：无 CR 时直接借用原文本。
+    let mut nl_buf: Option<String> = None;
+    let lines = lines(text, &mut nl_buf);
+    let uniq_terms = terms(query);
+    // --auto-anchor 只扩展命中词表，不改变 terms 计数/语义打分口径。
+    let anchor_terms = anchor_terms(cfg, &uniq_terms);
+    let force_pats = forces(&cfg.forces);
+    let total = lines.len();
+    let small_tok = survey(&lines, total);
+    let (chars_a, tokens_in) = crate::terms::measure(text);
+    let report = Report {
+        kind: cfg.kind,
+        evidence: &cfg.evidence,
+        force_count: force_pats.len(),
+        terms: uniq_terms.len(),
+        total,
+        input: chars_a,
+        tokens_in,
+        window,
+        limit: cfg.limit,
+    };
+    prof.mark("lines+terms");
+
+    // 直通早退：小输入 / 超长行（无查询参与，原样返回）。
+    if let Some(mode) = shape(total, small_tok, &lines) {
+        prof.finish("compress");
+        return report.passthrough(text, mode);
+    }
+    let analysis = analyze(
+        &lines,
+        &anchor_terms,
+        &force_pats,
+        small_tok,
+        context,
+        cfg,
+        &mut prof,
     );
-    o.budget_used_pct = budget_used_pct;
-    o.explain = explain(&reason, &dup);
+    // 无信号 fail-open：零命中且无 --force 命中 => 原样保留。
+    if failopen(analysis.seeds.hit_lines, analysis.seeds.force_any) {
+        prof.finish("compress");
+        return report.fail_open(text, analysis.folds, analysis.seeds_total);
+    }
+    let ranked = rank(cfg, &lines, &uniq_terms, &analysis, window as usize);
+    prof.mark("spans+scores");
+    let selection = choose(
+        ChoiceIn {
+            cfg,
+            lines: &lines,
+            analysis: &analysis,
+            ranked: &ranked,
+            ratio,
+            context,
+            budget_limit,
+        },
+        &mut prof,
+    );
+    // 预算过紧时可能选不出任何行；回退原文，不返回静默空结果。
+    if selection.kept == 0 {
+        prof.finish("compress");
+        return report.no_kept(
+            text,
+            analysis.folds,
+            analysis.seeds_total,
+            selection.risk,
+            ranked.regions.count,
+        );
+    }
+    let (out_text, numbers) = render(&lines, &selection.keep, cfg, &selection.raw, &uniq_terms);
+    prof.mark("render");
+    let (chars_b, cut) = cut(&out_text, chars_a);
+    let mut o = report.make(
+        out_text,
+        OutcomeFields {
+            kept: selection.kept,
+            chars_b,
+            cut,
+            dup: analysis.folds,
+            seeds: analysis.seeds_total,
+            risk: selection.risk,
+            guarded: selection.guarded,
+            regions: ranked.regions.count,
+            numbers,
+            mode: selection.overflow.unwrap_or(Mode::Sieve),
+            tokens: selection.final_tok,
+            dropped: runs(&selection.keep, &analysis.dup, selection.overflow.is_some()),
+        },
+    );
+    o.budget_used_pct = selection.budget_used_pct;
+    o.explain = explain(&selection.reason, &analysis.dup);
     prof.finish("compress");
     o
 }

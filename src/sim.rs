@@ -30,7 +30,8 @@ use crate::hash::{hex, sha256};
 /// 计算 `query` 与每个候选文本的相似度。
 ///
 /// `cmd: None` → 返回全 0（默认路径，无副作用、无 I/O）。
-/// `cmd: Some(program)` → 以 `sh -c <program>` 启动 provider，按上述协议批式计算。
+/// `cmd: Some(program)` → Unix 用 `sh -c <program>`，Windows 用
+/// `cmd /C <program>` 启动 provider，按上述协议批式计算。
 pub fn compute(cmd: Option<&str>, query: &str, texts: &[&str]) -> Result<Vec<f64>, String> {
     let Some(program) = cmd else {
         return Ok(vec![0.0; texts.len()]);
@@ -40,9 +41,7 @@ pub fn compute(cmd: Option<&str>, query: &str, texts: &[&str]) -> Result<Vec<f64
         return Err("--embed-cmd requires a non-empty command".to_string());
     }
 
-    let mut child = Command::new("sh")
-        .arg("-c")
-        .arg(program)
+    let mut child = shell(program)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -93,6 +92,22 @@ pub fn compute(cmd: Option<&str>, query: &str, texts: &[&str]) -> Result<Vec<f64
         return Err(format!("--embed-cmd: provider exited with {status}"));
     }
     Ok(sims)
+}
+
+/// 按平台选择 shell；`program` 由调用方提供，语义与平台原生 shell 一致。
+fn shell(program: &str) -> Command {
+    #[cfg(windows)]
+    {
+        let mut command = Command::new("cmd");
+        command.arg("/C").arg(program);
+        command
+    }
+    #[cfg(not(windows))]
+    {
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(program);
+        command
+    }
 }
 
 /// 去除换行/回车，避免破坏 `Q\t`/`L\t` 单行协议（text 为已切行切片，通常无需处理）。
@@ -180,9 +195,7 @@ pub fn compute_vec(
 /// 启动向量 provider：stdin 写 `Q\t<query>` 与 `L\t<text>` 行，stdout 每个输入
 /// 行一个向量（空格分隔 dim 个 f32，首行为 query 向量、随后为 text 向量）。
 fn spawn_vec(program: &str, query: &str, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
-    let mut child = Command::new("sh")
-        .arg("-c")
-        .arg(program)
+    let mut child = shell(program)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -316,8 +329,12 @@ mod tests {
 
     #[test]
     fn subprocess_scores_are_parsed_in_order() {
-        // 用 printf 模拟 provider：读入后输出固定两个分数（批式，先读后写）。
-        let cmd = "printf '0.25\\n0.75\\n'";
+        // 模拟 provider：读入后输出固定两个分数（批式，先读后写）。
+        let cmd = if cfg!(windows) {
+            "echo 0.25& echo 0.75"
+        } else {
+            "printf '0.25\\n0.75\\n'"
+        };
         let got = compute(Some(cmd), "query", &["line a", "line b"]).unwrap();
         assert_eq!(got.len(), 2);
         assert!((got[0] - 0.25).abs() < 1e-9);
@@ -326,7 +343,11 @@ mod tests {
 
     #[test]
     fn short_output_is_rejected() {
-        let cmd = "printf '0.5\\n'"; // 只输出 1 个，但请求 2 个
+        let cmd = if cfg!(windows) {
+            "echo 0.5"
+        } else {
+            "printf '0.5\\n'"
+        }; // 只输出 1 个，但请求 2 个
         assert!(compute(Some(cmd), "q", &["a", "b"]).is_err());
     }
 }

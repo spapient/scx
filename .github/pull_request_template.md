@@ -10,7 +10,8 @@
 - [ ] `cargo clippy --locked --all-targets -- -D warnings`
 - [ ] `cargo test --locked`
 - [ ] `cargo build --release --locked`
-- [ ] `./tools/scx.py selftest`（Windows: `python tools/scx.py selftest`；涉及评测工具或语料时）
+- [ ] `cargo run --release --locked --features eval --bin xtask -- selftest`（涉及开发工具或语料时）
+- [ ] `cargo package --locked`（涉及发布元数据时）
 - [ ] 新增/修改行为有对应测试
 
 ## 风险与回滚

@@ -1,4 +1,4 @@
-//! `xtask` 评估核心的 Python 参考输出回归测试（feature = "eval"）。
+//! `xtask` 开发工具的 Python 参考输出回归测试（feature = "eval"）。
 //! fixture 由 `tools/scx.py` 生成；本测试锁定 Rust 迁移后的逐字节一致性。
 
 #![cfg(feature = "eval")]

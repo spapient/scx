@@ -93,7 +93,7 @@ AI 标签 `config/gauge.ai.labels.json`（`per-item-ai-v1`，384/384）只通过
 ```bash
 xtask seed config/gauge.corpus.json \
   --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
-./tools/scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge
 ```
 
@@ -120,7 +120,7 @@ hard 数值达到门槛，但 v2 参与调参，不能写成独立确认。复�
 ```bash
 xtask seed config/v2.corpus.json \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
-./tools/scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
+scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
 ```
 
 ## 4. real：真实事故案例级证据
@@ -137,7 +137,7 @@ xtask seed config/v2.corpus.json \
 ```bash
 xtask seed config/real.corpus.json \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
-./tools/scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
+scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
 ```
 
 ### 4.1 公开事故来源

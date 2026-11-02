@@ -1,4 +1,4 @@
-//! `xtask`：评估工具（feature = "eval"）。
+//! `xtask`：开发工具（feature = "eval"）。
 //!
 //! 迁移自 `tools/scx.py` 的 `baseline`/`stats`。契约保持不变：
 //! - 同一 baseline/verbose/memory 输入 → 同一 CSV/控制台输出；

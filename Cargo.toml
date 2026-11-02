@@ -16,7 +16,8 @@ categories = ["command-line-utilities", "development-tools", "text-processing"]
 include = [
     "Cargo.toml",
     "README.md",
-    "LICENSE",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
     "SKILL.md",
     "src/**",
     "docs/**",

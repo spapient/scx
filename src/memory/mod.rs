@@ -547,6 +547,26 @@ pub fn judge(path: &str, by: &str) -> std::io::Result<Vec<String>> {
 mod tests {
     use super::*;
 
+    /// 时间衰减使用 wall clock；跨秒调用允许极小分数漂移，但排序与 id 必须一致。
+    fn assert_same_hits(left: &[Hit], right: &[Hit], context: &str) {
+        assert_eq!(left.len(), right.len(), "{context}: hit count");
+        for (l, r) in left.iter().zip(right) {
+            assert_eq!(l.id, r.id, "{context}: id");
+            assert!(
+                (l.score - r.score).abs() < 1e-5,
+                "{context}: score drift {} vs {}",
+                l.score,
+                r.score
+            );
+            assert!(
+                (l.sim - r.sim).abs() < 1e-5,
+                "{context}: sim drift {} vs {}",
+                l.sim,
+                r.sim
+            );
+        }
+    }
+
     fn tmp(tag: &str) -> String {
         let root = std::env::temp_dir().join(format!("scx-fused-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -582,7 +602,7 @@ mod tests {
     }
 
     #[test]
-    fn search_fused_none_equals_search() {
+    fn fused_without_side_signals_matches_search() {
         let root = tmp("none");
         seed(
             &root,
@@ -605,7 +625,24 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(plain, fused, "embed_cmd=None 必须与 search 逐字节一致");
+        // search 使用 wall clock 计算时间衰减；两次调用的秒边界可能不同。
+        // 排序与 id 必须一致，分数允许一个极小的时钟跨度容差。
+        assert_eq!(plain.len(), fused.len());
+        for (left, right) in plain.iter().zip(&fused) {
+            assert_eq!(left.id, right.id);
+            assert!(
+                (left.score - right.score).abs() < 1e-5,
+                "score drift: {} vs {}",
+                left.score,
+                right.score
+            );
+            assert!(
+                (left.sim - right.sim).abs() < 1e-5,
+                "sim drift: {} vs {}",
+                left.sim,
+                right.sim
+            );
+        }
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -763,7 +800,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(fused, again, "同配置融合必须确定");
+        assert_same_hits(&fused, &again, "同配置融合必须确定");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -804,7 +841,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(a, b, "窗口内二次融合召回必须逐字段一致（快照命中）");
+        assert_same_hits(&a, &b, "窗口内二次融合召回必须一致（快照命中）");
         let c = search_fused(
             &root,
             "db timeout",
@@ -819,7 +856,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(a, c, "read_only 路径结果必须与可写路径一致");
+        assert_same_hits(&a, &c, "read_only 路径结果必须与可写路径一致");
         let _ = std::fs::remove_dir_all(&root);
     }
 

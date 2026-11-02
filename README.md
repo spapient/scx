@@ -22,7 +22,7 @@
 
 - **证据优先**：查询命中的证据行及其最小可读邻域无条件保留，`--ratio` 只能约束可选内容，不能挤掉证据。
 - **原文可追溯**：筛选模式只删整行；`--lineno 1` 为保留行附加原始行号，`--force` 可锁定必须保留的片段。
-- **本地且确定**：无网络请求、无随机源、无第三方运行时依赖；相同输入、查询和配置产生相同输出。
+- **本地且确定**：压缩主链无网络请求、无随机源、无第三方运行时依赖；相同输入、查询和配置产生相同输出。记忆召回包含时间衰减，固定时钟下才具备逐字节确定性。
 - **面向 Agent 工作流**：同时提供 CLI、Rust 库、JSON 统计和跨平台自举入口，便于接到脚本、Agent 或本地工具链。
 - **失效可解释**：小输入、无查询信号或无可用内容时回退原文，并明确报告 `mode`，不会静默返回空结果。
 - **可选经验复用**：内置可关闭的本地 case memory，通过 `--store`、`--recall`、`--rate` 沉淀并召回排障经验。
@@ -482,7 +482,7 @@ fn main() {
 | 路径 | 职责 |
 |---|---|
 | `src/lib.rs` | 公共 API、`Config`、`Outcome`、`Mode`/`Risk` 枚举 |
-| `tests/unit/lib_tests.rs` | crate 根单元测试（Config/Outcome/类型探测/hash 确定性，经 `#[path]` 以 `cfg(test)` 子模块编译） |
+| `src/lib.rs`（`#[cfg(test)]`） | crate 根类型测试，以及跨模块行为测试 |
 | `src/compress.rs` | sieve 内核门面：单趟压缩主链 `compress`/`compress_bucketed`、行保护策略、预算利用率、`hash` 子模块；拆分为 `compress/` 子模块（plan/score/render） |
 | `src/compress/plan.rs` | 规划阶段：切行统计、折叠判定（fence 感知）、权重打分、种子与结构区域识别 |
 | `src/compress/score.rs` | 选择与守卫阶段：邻域/锚点/围栏/符号行标记、填充预算、风险审计与守卫（`Ctx` 共享上下文） |
@@ -500,7 +500,7 @@ fn main() {
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
 | `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
-| `src/main.rs`（xtask 目标） | 开发/CI 评估工具（`feature = "eval"`）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate/compress/memory/minhash-mrr）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现，与原 Python 输出逐字节对拍；不进发布二进制 |
+| `src/tooling/` | 开发/CI 工具实现（`feature = "eval"`）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate/compress/memory/minhash-mrr）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现；`xtask` 目标仍复用 `src/main.rs` 入口，不进发布二进制 |
 | `tests/golden.rs`, `config/tests/golden/manifest.toml` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例；`.err`/`.code` 仅非空/非零时落盘） |
 | `config/` | 可重建语料、冻结标签、盲审包与语义权重（`Gauge.*`/`contain5.*`/`real.*`/`v2.*`） |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
@@ -622,6 +622,7 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 - **单机本地工具**：记忆库是本地目录，不是多租户服务或分布式数据库。
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。
 - **输入有上限**：CLI 单次输入总计 64 MiB；更大的输入需要分段。
+- **外部相似度后端依赖平台 shell**：Unix 使用 `sh -c`，Windows 使用 `cmd /C` 执行 `--embed-cmd` 指定的命令。
 - **pre-1.0 状态**：当前版本 `0.11.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
 
 ## 贡献与安全

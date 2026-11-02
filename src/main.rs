@@ -45,7 +45,7 @@ fn main() {
     // 按编译期目标名分派；未启用 eval 特性时不存在 xtask 目标。
     #[cfg(feature = "eval")]
     if option_env!("CARGO_BIN_NAME") == Some("xtask") {
-        std::process::exit(scx::evaltool::run(&args));
+        std::process::exit(scx::tooling::run(&args));
     }
     let failure = match run(&args) {
         Ok(()) => return,

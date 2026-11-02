@@ -234,3 +234,20 @@ jobs:
           cargo check --locked --all-targets
           cargo check --locked --all-targets --all-features
           cargo check --locked --all-targets --no-default-features
+
+  package:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - name: Verify package contents
+        run: |
+          cargo package --locked
+          cargo package --list > /tmp/scx-package-list.txt
+          grep -qx 'LICENSE-MIT' /tmp/scx-package-list.txt
+          grep -qx 'LICENSE-APACHE' /tmp/scx-package-list.txt
+          ! grep -qx 'LICENSE' /tmp/scx-package-list.txt
+          ! grep -q '^examples/' /tmp/scx-package-list.txt

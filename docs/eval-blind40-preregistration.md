@@ -9,7 +9,7 @@
 > git commit `5ada90d` 恢复。源基线为 `config/gauge.policy.labels.json`，盲审包为
 > `config/gauge.blind40.packet.tsv`，人工/AI 标签为
 > `config/gauge.human.labels.json` / `config/gauge.ai.labels.json`；工具为
-> `./tools/scx.py blind`。包哈希 `b8eebf2f...` 可由 `blind make`
+> `xtask blind`。包哈希 `b8eebf2f...` 可由 `blind make`
 > 从当前语料确定性重建。
 
 ## 1. 要解决的问题
@@ -53,14 +53,14 @@ Gauge 现有两套标签都不能证明“人工弱相关/负例闭环”：
 只看 `query` 与候选摘要（候选 query + fix）。拿不准时按 1，不按 2。
 
 **机器可判的不变量**：literal 层的 query 与目标 case 原文逐字相同，目标必须判 2。
-导入时若出现 0/1，`tools/scx.py blind import` 直接拒绝，不写文件；`--gate-human`
+导入时若出现 0/1，`xtask blind import` 直接拒绝，不写文件；`--gate-human`
 也会输出 `human literal self-match rel=2 bad=N` 并 FAIL。这条不替代人工，
 只拦截“分数与行错位 / 整包乱填”。
 
 ## 4. 验收条件
 
 1. 384 行全部填 0/1/2，无空行；
-2. `tools/scx.py blind import` 输出 `cases=40 items=384`，`check` 报 `incomplete=0`；
+2. `xtask blind import` 输出 `cases=40 items=384`，`check` 报 `incomplete=0`；
 3. `--gate-human` exit 0，且出现
    `human per-item provenance items=384/384 cases=40/40`；
 4. 报告主指标用这 40 例配对比较（bootstrap 10,000 次，seed 20261023），
@@ -70,20 +70,20 @@ Gauge 现有两套标签都不能证明“人工弱相关/负例闭环”：
 
 ```bash
 # 1a) 逐行提示（推荐：按回车逐条，避免表格批量粘贴错位）
-./tools/scx.py blind review --packet config/gauge.blind40.packet.tsv
+xtask blind review --packet config/gauge.blind40.packet.tsv
 
 # 1b) 或直接在表格里填 grade 列（0/1/2），随时看进度
-./tools/scx.py blind progress --packet config/gauge.blind40.packet.tsv
+xtask blind progress --packet config/gauge.blind40.packet.tsv
 
 # 2) 导入（date 用真实 UTC 时间）
-./tools/scx.py blind import \
+xtask blind import \
   --baseline config/gauge.policy.labels.json \
   --packet config/gauge.blind40.packet.tsv \
   --out /tmp/gauge-blind40-human.json \
   --judge <你的名字> --date 2026-10-24T12:00:00Z
 
 # 3) 门禁
-./tools/scx --eval /tmp/gauge-blind40-human.json --gate-human \
+scx --eval /tmp/gauge-blind40-human.json --gate-human \
   --mem-dir /tmp/scx-gauge
 ```
 
@@ -103,7 +103,7 @@ Gauge 现有两套标签都不能证明“人工弱相关/负例闭环”：
 - 分级：rel2=176 / rel1=38 / rel0=170；literal 自匹配 0/14 违规；
 - `--gate-items` PASS / exit 0；`--gate-human` FAIL / exit 2；
 - 产物：`config/gauge.ai.labels.json`；填写版 TSV 是派生视图，不单独入库，
-  gate 输出与统计 CSV 可由 `--gate-items` 与 `tools/scx.py stats` 重建。
+  gate 输出与统计 CSV 可由 `--gate-items` 与 `xtask stats` 重建。
 
 边界：同一模型自评、非独立、非人工，证据等级 E3。AI 结果不能单独满足第 4 节
 的“人工”验收条件；人工结果见下一节。
@@ -126,7 +126,7 @@ Gauge 现有两套标签都不能证明“人工弱相关/负例闭环”：
 重建填写视图并校验历史哈希：
 
 ```bash
-./tools/scx.py blind check \
+xtask blind check \
   --baseline config/gauge.human.labels.json \
   --packet config/gauge.blind40.packet.tsv --out /tmp/Gauge-hao.tsv
 ```

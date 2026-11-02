@@ -7,9 +7,9 @@ Date: 2026-10-23.
 > frozen preregistration are unchanged; only artifact paths/commands were
 > updated. Historical `eval-real/` files remain recoverable from git commit
 > `5ada90d`. Current equivalents: corpus `config/gauge.corpus.json`, seed command
-> `./tools/scx.py seed ...`, baseline
-> `./tools/scx.py baseline ...`, and statistics
-> `./tools/scx.py stats ...`. The frozen input hashes below are
+> `xtask seed ...`, baseline
+> `xtask baseline ...`, and statistics
+> `xtask stats ...`. The frozen input hashes below are
 > historical; current hashes are in `docs/evaluation-results.md`.
 
 ## Question
@@ -68,7 +68,7 @@ Corpus files:
 
 - `config/gauge.corpus.json` (current normalized corpus; historical incident JSON
   SHA256 `E12FDD3C62E6E5C4B192BE423DC6F3070097DE033D41D0426E95E6E543765704`)
-- Seed via `./tools/scx.py seed config/gauge.corpus.json ...`
+- Seed via `xtask seed config/gauge.corpus.json ...`
   (historical `seed-Gauge.ps1` SHA256
   `AA7D90BDA0251E8E1D34AE8E7B8834310481785690E3297B64F16DE830792BDC`)
 
@@ -118,7 +118,7 @@ Pre-freeze verification evidence:
 
 ## Pre-registered decision rule
 
-- Primary stratum: `tier:hard` as computed by `tools/scx.py stats`
+- Primary stratum: `tier:hard` as computed by `xtask stats`
   (token Jaccard of evaluation query vs target case-query less than 0.2).
 - Primary metric: paired MRR@10 difference `Delta = MRR_A - MRR_B`.
 - `MDE=0.05`.
@@ -140,18 +140,18 @@ Pre-freeze verification evidence:
 3. Run A/B with:
 
    ```bash
-   ./tools/scx.py seed config/gauge.corpus.json \
+   xtask seed config/gauge.corpus.json \
      --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
-   ./tools/scx.py baseline --csv /tmp/scx-gauge.csv \
+   xtask baseline --csv /tmp/scx-gauge.csv \
      --out /tmp/scx-gauge-mechanical.json \
      --judge-by mechanical-target-gauge-v1 \
      --judge-date 2026-10-23T00:00:00Z
-   ./tools/scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
+   scx --eval /tmp/scx-gauge-mechanical.json --gate --eval-verbose \
      --mem-dir /tmp/scx-gauge
    ```
 
 4. Derive rank-diff and strata from that single verbose run.
-5. Run `./tools/scx.py stats` with 10,000 bootstrap and permutation
+5. Run `xtask stats` with 10,000 bootstrap and permutation
    samples and `--cluster-size 5`.
 6. Archive gate output, significance CSV, rank-diff CSV, strata CSV, and verbose
    output. Do not rerun after changing any frozen input.

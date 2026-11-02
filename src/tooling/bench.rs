@@ -1111,7 +1111,16 @@ fn compress_bench(_args: &[String]) -> Result<(), Fail> {
     let query = "timeout conn_id pool";
     let repeats = bench_repeats();
 
-    bench_median(&text, query, &cfg, "compress", repeats);
+    let median = bench_median(&text, query, &cfg, "compress", repeats);
+    // 50ms 约为当前 6-12ms 的 4-8 倍，专门拦截数量级回归，不把 CI 抖动判红。
+    const GATE_US: u128 = 50_000;
+    if median >= GATE_US {
+        return Err(Fail {
+            msg: format!("bench: FAIL (50k compress median {median} us >= 50ms)"),
+            code: 2,
+        });
+    }
+    println!("gate: PASS (50k compress median < 50ms)");
     structure_bench(repeats);
     max_tokens_bench(&text, query, repeats);
     policy_bench(&text, query, repeats)?;
@@ -1119,7 +1128,7 @@ fn compress_bench(_args: &[String]) -> Result<(), Fail> {
 }
 
 /// 单路径中位耗时：预热一次后采样，报告 p50 与全样本。
-fn bench_median(text: &str, query: &str, cfg: &Config, label: &str, repeats: usize) {
+fn bench_median(text: &str, query: &str, cfg: &Config, label: &str, repeats: usize) -> u128 {
     let _ = crate::compress(text, query, cfg);
     let mut samples: Vec<u128> = Vec::with_capacity(repeats);
     for _ in 0..repeats {
@@ -1129,13 +1138,15 @@ fn bench_median(text: &str, query: &str, cfg: &Config, label: &str, repeats: usi
         assert!(outcome.seeds > 0, "benchmark corpus must hit a seed");
     }
     samples.sort_unstable();
+    let median = samples[samples.len() / 2];
     println!(
         "{label}: 50k lines ({} chars) median {} us | samples {:?} us | kept={}",
         text.chars().count(),
-        samples[samples.len() / 2],
+        median,
         samples,
         crate::compress(text, query, cfg).kept,
     );
+    median
 }
 
 /// 结构感知路径：结构富语料在 `structure=false` 与 `true` 下分别计时。

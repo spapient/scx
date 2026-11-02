@@ -3,6 +3,13 @@
 > 范围：P18 全部 + task #51 + P17 遗留偏差 + 能力上限提升路径。
 > 红线不变：零第三方 crate / 零模型 / 确定性 / golden 零漂移 / 新能力默认关 / 默认路径逐字节一致。
 > 每条方案均为「可落地工程方案」而非观察笔记——含落点、收益口径、风险与门禁。
+>
+> **2026-11-02 复核**：本文是历史方案，不再是当前待办清单。已确认完成或过期的项：
+> - P18 版本 bump 已完成，当前 `Cargo.toml` 为 `0.11.0`。
+> - `xtask bench ablate` / `bench budget` 已落地，整合评测与同预算对照不再“未实现”。
+> - `scores()` 已按 `PAR_MIN` 分块并行，串行热点结论过期。
+> - `check_bench.sh` 已删除，门禁入口是 `xtask ops check` / CI；相关命令引用仅为历史。
+> - 下文 unwrap/panic 计数与文件路径未在本轮重新审计，引用前必须重跑 `xtask audit`。
 
 ---
 
@@ -12,8 +19,8 @@
 |---|---|---|---|
 | 1 | P18-整合评测（组合矩阵） | 计划强制 | plan.md P18 :2292「semantic on/off × fold/熵/锚/簇 全组合」 |
 | 2 | P18-SuperCompress 同预算对照 | 计划强制 | plan.md :2294「官方 mean cut 64.1% 同预算 35% kept」 |
-| 3 | P18-版本 bump 0.11.0 | 计划强制 | Cargo.toml version=0.10.0；plan :2295 |
-| 4 | P18-文档/门禁扩展 | 计划强制 | check_bench.sh 未含新 flag 组合；README 缺 --fold/--entropy/--auto-anchor/--cluster |
+| 3 | P18-版本 bump 0.11.0 | 已完成 | Cargo.toml version=0.11.0（2026-11-02 复核） |
+| 4 | P18-文档/门禁扩展 | 部分完成 | `check_bench.sh` 已删除；门禁改为 `xtask ops check`/CI；README 新 flag 说明需按当前 CLI 补全 |
 | 5 | #51 unwrap→expect + 大端 try_into | 遗留 | 全库审查：生产代码 105 处 unwrap/expect、11 处 panic/unreachable；`index.rs`/`cache.rs` 大端数组拷贝 |
 | 6 | P17-A 可逆模板折叠（原案偏差） | 遗留偏差 | 已实现为骨架+标记行（不可逆）；原案=minhash+参数表可逆重建 round-trip 100% |
 | 7 | P17-F compress 侧权重联动 | 计划增量 | feedback.rs 词环仅记忆库侧；compress 权重表 DEFAULT_SCORES 静态 |
@@ -26,7 +33,7 @@
 
 ### 1.1 P18-整合评测（组合矩阵）
 
-**现状**：bench.py 已具备 cut 分档（<2%/2-10%/10-35%/>35%）与 manifest 冻结闭环；A2 fidelity 门禁按分档阈值断言。但 `--fold/--entropy/--auto-anchor/--cluster` 四新开关从未在冻结集上评测过——它们的正确性只有单测 + golden 默认关，**开启路径无端到端证据**。
+**现状（历史）**：当时 bench.py 已具备 cut 分档与 manifest 冻结闭环；`--fold/--entropy/--auto-anchor/--cluster` 四新开关缺少冻结集端到端证据。当前 `xtask bench ablate` / `bench budget` 已实现，详见 `docs/plan.md` P18 完成记录。
 
 **差距**：32 组合（2^5）全跑约 32×48 文件——成本可控（压缩是 ms 级），但结果必须能解释"每个信号独立贡献 + 叠加不互斥"。
 
@@ -49,7 +56,7 @@
 - 固定预算 = kept 35%（对齐官方 kept≈36%），用 `--trim-ratio` 档位（已有 P6c 扫描机制）把 scx 拉齐到 35% 预算。
 - 在同一 35% kept 下比较**fidelity 而非 cut**：cut 对齐后谁保真高谁赢——这才是压缩器的真实赛道（SuperCompress 官方论文口径也是按预算比答案保持率）。
 - 结果标注：`官方自报（SuperCompress v2, 24/24）vs scx 冻结实测（本地 judge, 同预算）`——口径分离，不虚构同场。
-- 落点：`tools/bench.py` 加 `--budget 0.35` 模式（二分 trim-ratio 找档），产出对照表。
+- 落点（已实现）：`xtask bench budget --budgets 0.35,0.5,0.65`，产出同预算对照表。
 
 **收益**：把"竞品对比"从论文数字变成**同预算可复算对照**——这是求职/CNAS/Linux 基金会背书时最硬的证据。
 **风险**：预算校准需二分搜索 5-8 次压缩/文件——成本可接受。
@@ -57,15 +64,15 @@
 
 ### 1.3 P18-版本 bump 0.11.0
 
-**现状**：Cargo.toml 0.10.0。历史惯例：版本唯一来源 `CARGO_PKG_VERSION`，bump 时同步 README/memory.md 引用 + Cargo.lock。
+**现状（已完成）**：Cargo.toml 已 bump 到 0.11.0；版本唯一来源 `CARGO_PKG_VERSION`。
 
-**方案**：照 P12-E 惯例：`chore(version): 0.10.0 → 0.11.0` + 四新 flag 文档同步 + plan.md 版本行。零风险。
+**方案**：已按 P12-E 惯例完成版本同步；后续发布时只需核验 tag/README/SKILL 一致性。
 
 ### 1.4 P18-文档/门禁扩展
 
-**现状**：check_bench.sh 覆盖 lib/semantic/golden/clippy/fmt/manifest/A2，但不含 P17 新开关的开启路径；README/SKILL 未列 `--fold/--entropy/--auto-anchor/--cluster`。
+**现状（已变化）**：`check_bench.sh` 已删除，门禁入口为 `xtask ops check` 与 CI；README/SKILL 对新 flag 的覆盖仍需按当前 CLI 复核。
 
-**方案**：check_bench.sh 加一段「新开关冒烟」：`--fold 1`、`--entropy 1`、`--auto-anchor 1`、`--cluster 1` 各在 golden 样例上跑一次压缩断言退出码 0 + 输出非空 + 与默认关输出 diff 非空（证明开关生效）；README/SKILL 补 4 行 flag 说明 + 各一行使用示例。
+**方案**：保留 `xtask ops check` 的新开关冒烟覆盖；README/SKILL 补 4 行 flag 说明 + 各一行使用示例。
 
 ### 1.5 #51 unwrap→expect 语义化 + 大端 try_into
 
@@ -111,7 +118,7 @@
 
 ### 1.8 scores() 串行热点
 
-**现状**：plan.rs :1098 串行打分，30MB 语料 20~30ms；P14 证明并行基建有效（dedup 并行 -36%）。
+**现状（已完成）**：`scores()` 已按 `PAR_MIN` 分块并行（`src/compress/plan.rs`），小输入保持串行；历史串行热点结论过期。
 
 **顶级方案**：`scores()` 按 P14 `scan_fp` 模板并行化——每行打分独立（sumw/state/region/entropy 全是行局部），天然可并行；`std::thread::scope` + PAR_MIN 20k 分块，行数 < 阈值走串行（零开销小输入）。
 **门禁**：bench_perf.py 对比 HEAD；大语料加速断言（如 ≥2MB 语料 ≤ 串行 60% 时间），小语料噪声内允许持平。

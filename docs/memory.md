@@ -1,6 +1,7 @@
 # 本地记忆库
 
-状态：已实现（`scx 0.6.0`）。本文件同时承担设计、运维与变更记录，替代早期
+状态：已实现（当前 `scx 0.11.0`；记忆库自 `0.6.0` 起可用）。本文件同时承担设计、
+运维与变更记录，替代早期
 `memory-design.md` / `memory-plan.md` / `memory-log.md` 三份阶段性文档。
 
 记忆库是压缩引擎的旁路能力：`scx::compress` 仍是零 I/O 纯函数；记忆只影响
@@ -290,11 +291,11 @@ l1_margin_min, ext_hit=1.0)` —— `top1_sim ≥ l1_base && (top1_sim - top2_si
 
 ```bash
 # 1) 建库并灌入 Gauge 语料（fix 标签在 corpus 内，随 case 入库）
-./tools/scx.py seed config/gauge.corpus.json --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
+xtask seed config/gauge.corpus.json --mem-dir /tmp/scx-l1   --csv /tmp/l1.csv --force
 # 2) 机械 hard 层目标基线（judge-by 由确认轮次决定，照抄 eval.md 写法）
-./tools/scx.py baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-gauge-v1
+xtask baseline --csv /tmp/l1.csv   --out /tmp/l1-mechanical.json   --judge-by mechanical-target-gauge-v1
 # 3) 显著性统计（mrr 为主指标；--mem-dir 用于分层）
-./tools/scx.py stats --baseline /tmp/l1-mechanical.json   --verbose /tmp/l1-verbose.csv --out /tmp/l1-stats.csv
+xtask stats --baseline /tmp/l1-mechanical.json   --verbose /tmp/l1-verbose.csv --out /tmp/l1-stats.csv
 # 4) fix 覆盖率：库内 fix 非空 case 占比（scx --stats 或直接统计 mem-dir）
 # 5) 直答触发/命中：对 Gauge 查询逐条跑 --recall 并核对 top1 tail16
 ```
