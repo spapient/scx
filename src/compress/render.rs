@@ -248,7 +248,7 @@ pub(crate) fn semantic(
     if let Some(w) = &cfg.semantic {
         // 批量打分（后端抽象）：cpu 并行逐位一致（golden 安全）；gpu 为
         // 可选自研内核加速，不可用自动回落 cpu。按 --max-mem 分块控内存。
-        let s = crate::sem_backend::centered_batch(
+        let s = crate::sem::centered_batch(
             w,
             lines,
             uniq_terms,

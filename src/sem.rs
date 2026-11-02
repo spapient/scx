@@ -324,6 +324,7 @@ mod tests {
 
     /// 写一个 mock 自研 GPU 内核（sh，不解析 JSON）：读一行请求 → 输出
     /// 4 行分数 + done 确认。用于验证 JSON lines 协议端到端契约。
+    #[cfg(unix)]
     fn mock_kernel(ok: bool) -> String {
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

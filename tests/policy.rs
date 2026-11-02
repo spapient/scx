@@ -2,12 +2,8 @@
 //! 验证：文本策略覆盖 DEFAULT；优先级 CLI 显式参数 > 文件 > DEFAULT；
 //! 非法文件报错含行号；不传时默认路径逐字节不变（golden 37 已覆盖）。
 
-use std::io::Write;
-use std::process::{Command, Stdio};
-
-fn scx() -> &'static str {
-    env!("CARGO_BIN_EXE_scx")
-}
+mod common;
+use common::{run, scx};
 
 fn tmp(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("scx-p34-{}-{}", name, std::process::id()))
@@ -26,28 +22,6 @@ fn corpus() -> String {
     }
     out.push("ERROR conn9f2a broken db crash".to_string());
     out.join("\n")
-}
-
-fn run(args: &[&str], stdin_txt: &str) -> (bool, String, String) {
-    let mut child = Command::new(scx())
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn scx");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin_txt.as_bytes())
-        .unwrap();
-    let out = child.wait_with_output().expect("wait");
-    (
-        out.status.success(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
-    )
 }
 
 /// 统计行字段提取（compressed:/scxjson: 两形态）。

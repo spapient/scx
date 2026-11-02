@@ -132,7 +132,7 @@ pub(crate) fn fails(ll: &str) -> bool {
     flags(ll).0
 }
 // 事故诊断标记行(行首、大小写不敏感):risk HIGH 且 gate 时与错误行一同受守卫;不参与种子判定。
-pub(crate) fn marker(ll: &str) -> bool {
+pub fn marker(ll: &str) -> bool {
     // 首字节闸门：事故标记全部以 root/fix/mitigation/recommendation/action/
     // assertionerror 开头，其余首字母直接排除，省掉 6 次 starts_with。
     let t = ll.trim_start();
@@ -216,13 +216,13 @@ pub(crate) fn meta(s: &str) -> bool {
         || s.starts_with("diff --git")
         || s.starts_with("index ")
 }
-pub(crate) fn diff(s: &str) -> bool {
+pub fn diff(s: &str) -> bool {
     // 统一 diff 的正文行是 "+code" / "-code"，而不是只有第二个字符为空白才成立；
     // 三个相同前缀分别是文件头，交给 is_diffmeta 处理。
     (s.starts_with('+') && !s.starts_with("+++")) || (s.starts_with('-') && !s.starts_with("---"))
 }
 // 带前导空白的行且形如堆栈帧：at ...／File "／#N ／含 path.ext:line。
-pub(crate) fn frame(s: &str) -> bool {
+pub fn frame(s: &str) -> bool {
     let t = s.trim_start();
     if t.len() == s.len() {
         return false;
@@ -286,7 +286,7 @@ fn dot(t: &str, i: usize) -> bool {
         None => false,
     }
 }
-pub(crate) fn lineref(s: &str) -> bool {
+pub fn lineref(s: &str) -> bool {
     let mut it = s.chars().rev();
     let mut cur = it.next();
     if cur == Some(')') {
@@ -302,7 +302,7 @@ pub(crate) fn lineref(s: &str) -> bool {
 
 // 单趟归一化：8+ 位十六进制串折叠为 '#'；其余数字段折叠为 '#'；空白段折叠为单空格；首尾去空。
 // run 为复用的十六进制串中转缓冲。
-pub(crate) fn normalize(s: &str, out: &mut String) {
+pub fn normalize(s: &str, out: &mut String) {
     if s.is_ascii() {
         ascii(s, out);
         return;
@@ -526,7 +526,7 @@ fn uncased(c: char) -> bool {
     )
 }
 
-pub(crate) fn lowercase(s: &str, out: &mut String) {
+pub fn lowercase(s: &str, out: &mut String) {
     // 日志分析最常见的是无控制符 ASCII 行。按字节小写可跳过 Unicode
     // 大小写迭代与 ESC/CR 状态机；输出语义与通用路径完全一致。
     // 单趟同时确认 ASCII 与无 ESC/CR；避免先 is_ascii 再 any 扫两遍。

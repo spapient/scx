@@ -5,11 +5,9 @@
 #![cfg(feature = "semantic")]
 
 use std::fs;
-use std::process::{Command, Stdio};
 
-fn scx() -> &'static str {
-    env!("CARGO_BIN_EXE_scx")
-}
+mod common;
+use common::{run, scx};
 
 fn sample_weights() -> String {
     format!(
@@ -29,27 +27,6 @@ fn corpus() -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-fn run(args: &[&str], stdin_txt: &str) -> (bool, String, String) {
-    let mut child = Command::new(scx())
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn scx");
-    use std::io::Write;
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin_txt.as_bytes())
-        .unwrap();
-    let out = child.wait_with_output().expect("wait");
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-    (out.status.success(), stdout, stderr)
 }
 
 #[test]

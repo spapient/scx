@@ -9,7 +9,7 @@ pub(crate) const MAX_QUERY_TERMS: usize = 256;
 /// 单 token 上限（字节）。记忆索引的 doc 词表长度字段为 u8；超长 token
 /// 不能静默截断，否则索引会错位。线性与索引路径共用本切词器，在入口统一
 /// 丢弃超长 token，保持两条路径同口径。
-pub(crate) const MAX_TERM_BYTES: usize = u8::MAX as usize;
+pub const MAX_TERM_BYTES: usize = u8::MAX as usize;
 pub(crate) const STOP: &[&str] = &[
     "the",
     "and",
@@ -222,7 +222,7 @@ fn part(terms: &mut Vec<String>, seen: &mut HashSet<String>, segment: &[char], m
 }
 
 /// 压缩引擎词表（CJK 整段/6 字块，不展开滑动 n-gram）。
-pub(crate) fn terms(query: &str) -> Vec<String> {
+pub fn terms(query: &str) -> Vec<String> {
     scan(query, false)
 }
 
@@ -421,7 +421,7 @@ const OTHER_CHARS_PER_TOKEN: f64 = 2.5;
 /// 低估导致超预算。⚠ 当前为临时保守值 2.0：cl100k 对 CJK ≈1 token/字而启发式按 0.6，
 /// 低估 ~1.67×，故取 2.0 覆盖 CJK（emoji ~2.5–7.5× 仍可能超）；未经留出分位数校准，
 /// tiktoken 可用时重跑 `tools/calibrate.py` 冻结真实 P95 比率后再收紧。
-pub(crate) const BUDGET_SAFETY_FACTOR: f64 = 2.0;
+pub const BUDGET_SAFETY_FACTOR: f64 = 2.0;
 
 pub(crate) fn estimate(s: &str) -> f64 {
     if s.is_ascii() {

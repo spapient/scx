@@ -2,12 +2,8 @@
 //! 验证：`re:` 前缀进入手写有限正则（交替/字符类/量词/转义），命中即证据；
 //! 非法正则 CLI 层报错（含支持子集提示）；字面子串行为与既有 golden 一致。
 
-use std::io::Write;
-use std::process::{Command, Stdio};
-
-fn scx() -> &'static str {
-    env!("CARGO_BIN_EXE_scx")
-}
+mod common;
+use common::{run, scx};
 
 /// 300 行噪音 + 两个信号行（conn9f2a 数字连接 / connX 非数字）。
 fn corpus() -> String {
@@ -18,28 +14,6 @@ fn corpus() -> String {
     out.push("ERROR conn9f2a broken db crash".to_string());
     out.push("ERROR connX broken db crash".to_string());
     out.join("\n")
-}
-
-fn run(args: &[&str], stdin_txt: &str) -> (bool, String, String) {
-    let mut child = Command::new(scx())
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn scx");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin_txt.as_bytes())
-        .unwrap();
-    let out = child.wait_with_output().expect("wait");
-    (
-        out.status.success(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
-    )
 }
 
 fn forced(out: &str) -> usize {

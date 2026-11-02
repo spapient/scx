@@ -18,7 +18,7 @@
 //! 字符串格式：`passthrough:small` / `failopen:zero-signal` / `LOW` / `HIGH` 等）。
 
 use std::fmt;
-mod analysis;
+pub mod analysis;
 mod compress;
 pub mod contain;
 mod fold;
@@ -28,7 +28,7 @@ mod perf;
 /// 三层优先级 CLI > pipeline.json > policy 常量；未知键/越界 fail-loud。
 pub mod pipeline;
 mod policy;
-mod terms;
+pub mod terms;
 /// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。
 pub mod toml;
 mod trim;
@@ -57,7 +57,7 @@ pub mod wrap;
 pub mod semantic;
 
 #[cfg(feature = "semantic")]
-pub mod sem_backend;
+pub mod sem;
 
 /// 类型路由 + 计量桶 + 前后快照（P1 治理层，复用 `compress` 内核）。
 pub mod bucket;
@@ -300,7 +300,7 @@ pub struct Config {
     /// 下生效）。cpu = 确定性并行实现（逐位一致）；gpu = 可选加速通道，
     /// 调用自研内核（`SCX_GPU_BIN`），不可用自动回落 cpu。
     #[cfg(feature = "semantic")]
-    pub sem_backend: crate::sem_backend::Backend,
+    pub sem_backend: crate::sem::Backend,
     /// 语义批量打分工作内存预算上限（`--max-mem`，MB，默认 64）。cpu/gpu
     /// 后端均按此预算分块，控制峰值内存；默认路径（semantic 关）不受影响。
     pub max_mem: usize,
@@ -393,7 +393,7 @@ impl Default for Config {
             #[cfg(feature = "semantic")]
             semantic: None,
             #[cfg(feature = "semantic")]
-            sem_backend: crate::sem_backend::Backend::Cpu,
+            sem_backend: crate::sem::Backend::Cpu,
             max_mem: 256,
             sim_weight: 1.0,
             sem_weight: 1.0,
@@ -675,9 +675,3 @@ pub(crate) fn prefix(out: &mut String, n: usize) {
 
 #[cfg(test)]
 mod testsupport;
-
-// tests/unit 下的文件不会被 Cargo 自动注册为集成测试目标；用 #[path]
-// 将其作为 crate 根子模块编译，保留对私有字段与私有函数的访问。
-#[cfg(test)]
-#[path = "../tests/unit/lib_tests.rs"]
-mod lib_tests;

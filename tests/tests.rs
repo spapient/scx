@@ -1,12 +1,11 @@
-//! crate 根单元测试（lib.rs 门面 <500 行门禁）：Config/Outcome 默认值、
-//! ContentType 解析、类型探测（sample/contract/system/session）、hash 确定性。
-//! 文件位于 tests/unit，经 `#[path]` 作为 crate 根子模块编译以保留私有访问
-//!（同输入同输出承诺由 golden 集成测试守门）。
+//! crate 根单元测试：Config/Outcome 默认值、ContentType 解析、
+//! 类型探测（sample/contract/system/session）、hash 确定性、
+//! 词面归一化与结构识别。作为集成测试通过公开 API 访问。
 
-use super::*;
-use crate::analysis::{diff, frame, lineref, marker};
-use crate::analysis::{lowercase, normalize};
-use crate::terms::terms;
+use scx::analysis::{diff, frame, lineref, marker};
+use scx::analysis::{lowercase, normalize};
+use scx::terms::terms;
+use scx::*;
 
 fn cfg() -> Config {
     Config {
@@ -382,12 +381,12 @@ fn cjk_stop_and_tail_terms() {
 
 #[test]
 fn runaway_token_is_dropped() {
-    let long = "x".repeat(crate::terms::MAX_TERM_BYTES + 1);
+    let long = "x".repeat(scx::terms::MAX_TERM_BYTES + 1);
     assert!(
         terms(&long).is_empty(),
         "超长 token 不得进入索引词表（u8 长度字段会截断）"
     );
-    let max = "x".repeat(crate::terms::MAX_TERM_BYTES);
+    let max = "x".repeat(scx::terms::MAX_TERM_BYTES);
     assert_eq!(terms(&max), vec![max], "上限内 token 保持可用");
 }
 
@@ -520,7 +519,7 @@ fn max_tokens_conservative_bound_caps_fill() {
     assert_eq!(o.mode, Mode::Sieve);
     assert!(o.text.contains("target conn"));
     assert!(
-        o.tokens <= 300.0 / crate::terms::BUDGET_SAFETY_FACTOR + 1e-6,
+        o.tokens <= 300.0 / scx::terms::BUDGET_SAFETY_FACTOR + 1e-6,
         "可选填充应被保守上界封顶于 limit/factor，got tokens={:.1}",
         o.tokens
     );
@@ -602,8 +601,8 @@ fn ev_retention_explicit_evidence_all_kept() {
     let text = lines.join("\n");
     let mut c = cfg();
     c.evidence = vec![
-        crate::Evidence::Line(101), // 命中行（1-based）
-        crate::Evidence::Substr("conn_id=9f2a".to_string()),
+        scx::Evidence::Line(101), // 命中行（1-based）
+        scx::Evidence::Substr("conn_id=9f2a".to_string()),
     ];
     let o = compress(&text, "db timeout", &c);
     assert_eq!(o.mode, Mode::Sieve);
@@ -623,8 +622,8 @@ fn ev_retention_explicit_evidence_forced_kept() {
     let mut c = cfg();
     c.context = 0; // 针尖模式：只留 seed + 守卫 + 证据，纯 filler 必删。
     c.evidence = vec![
-        crate::Evidence::Line(101), // seed 行保留
-        crate::Evidence::Line(51),  // 纯 filler，但声明即强制保留
+        scx::Evidence::Line(101), // seed 行保留
+        scx::Evidence::Line(51),  // 纯 filler，但声明即强制保留
     ];
     let o = compress(&text, "db timeout", &c);
     assert_eq!(o.mode, Mode::Sieve);
@@ -644,7 +643,7 @@ fn structure_anchors_preserve_json_boundaries() {
     let text = lines.join("\n");
 
     let mut c = cfg();
-    c.structure_anchors = vec![crate::AnchorKind::Json];
+    c.structure_anchors = vec![scx::AnchorKind::Json];
     let o = compress(&text, "db timeout conn_id", &c);
     assert_eq!(o.mode, Mode::Sieve);
     assert!(o.text.contains("db timeout conn_id=9f2a"), "证据行保留");
@@ -670,7 +669,7 @@ fn structure_anchors_preserve_xml_tags() {
     let text = lines.join("\n");
 
     let mut c = cfg();
-    c.structure_anchors = vec![crate::AnchorKind::Xml];
+    c.structure_anchors = vec![scx::AnchorKind::Xml];
     let o = compress(&text, "db timeout conn_id", &c);
     assert!(o.text.contains("db timeout conn_id=9f2a"), "证据行保留");
     assert!(o.text.lines().any(|l| l == "<root>"), "<root> 保留");
@@ -689,7 +688,7 @@ fn structure_anchors_default_off_no_anchor_reason() {
     let o = compress(&text, "db timeout conn_id", &cfg());
     assert_eq!(o.mode, Mode::Sieve);
     assert!(
-        !o.explain.contains(&crate::Explain::Anchor),
+        !o.explain.contains(&scx::Explain::Anchor),
         "默认 off 不产生 anchor 原因"
     );
 }
@@ -769,7 +768,7 @@ fn config_kind_labels_single_bucket() {
 /// 度量 `ContentType::infer` 的启发式在此采样上的精度，不是真实分布上的
 /// 准确率声明。标签为内容类型的客观类别，非人工相关性判断。
 fn content_type_corpus() -> Vec<(&'static str, ContentType)> {
-    use ContentType::*;
+    use scx::ContentType::*;
     vec![
             // —— StaticContract：JSON Schema / 工具定义 ——
             ("{\n  \"type\": \"object\",\n  \"properties\": {\"a\": {\"type\": \"string\"}}\n}", StaticContract),
