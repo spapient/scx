@@ -676,5 +676,8 @@ pub(crate) fn prefix(out: &mut String, n: usize) {
 #[cfg(test)]
 mod testsupport;
 
+// tests/unit 下的文件不会被 Cargo 自动注册为集成测试目标；用 #[path]
+// 将其作为 crate 根子模块编译，保留对私有字段与私有函数的访问。
 #[cfg(test)]
+#[path = "../tests/unit/lib_tests.rs"]
 mod lib_tests;

@@ -1375,9 +1375,10 @@ fmt 干净；README 模块表 +2 行（args/parse）。commit 见 P7-B 提交 2�
 ### P7-B 大文件拆分（lib 完成）
 
 **交付**：`src/lib.rs`（1470 行 → 611 行门面）测试段迁出至
-`src/lib_tests.rs`（863 行，crate 根子模块 `#[cfg(test)] mod lib_tests;` 保留
-私有访问：Config 私有字段、类型探测 fn、hash::Hasher）。lib.rs 只留 pub API、
-模块声明、`Config`/`Outcome`/`Evidence`/`ContentType` 等核心类型。
+`tests/unit/lib_tests.rs`（crate 根子模块经 `#[path]` + `#[cfg(test)] mod
+lib_tests;` 编译，保留私有访问：Config 私有字段、类型探测 fn、hash::Hasher）。
+lib.rs 只留 pub API、模块声明、`Config`/`Outcome`/`Evidence`/`ContentType`
+等核心类型。
 
 **门禁证据**：lib 341 全绿；350 全绿（semantic）；golden 2 passed 零漂移；
 clippy 全 targets 零告警；fmt 干净；README 模块表 +1 行（lib_tests）。
@@ -2693,7 +2694,7 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 - 数值等价：新旧余弦 max|diff| = 1.19e-06 / 1.36e-06（f32 python 全链路 vs scx f64，f64 归一化+点积更稳）。
 - **30 真实 QA 召回对拍**（5 episode × 6 题）：新旧后端 case_id 序列 **100% 一致**（mismatch=0），sim 数值差 <1e-3——召回等价 ⇒ 判分输入不变 ⇒ **0.5349 冻结分数不受影响**。
 - 缓存冷热：ep_0 100 cases 冷（全量编码）10.49s → 热（仅 query）4.46s/4.68s，**-57%**；模型加载 ~1.2–4.5s 仍残留（下一步可选：provider 常驻守护进程消除重载）。
-- 测试：lib 397 + bin 4 全过；`concurrent_store_processes_keep_all_cases_and_meta_updates` FAILED 为 pre-existing（HEAD 复现，gen 竞争，与 B 线无关）。
+- 测试：lib 397 + bin 4 全过；`concurrent_store_processes_keep_all_cases_and_meta_updates` FAILED 为 pre-existing（HEAD 复现，gen 竞争，与 B 线无关；2026-11-02 已修复断言口径）。
 
 **结论**：B 线工程闭环（持久化缓存 + scx 内 f64 余弦，等价且提速）；P24-B-2 门禁（acc ≥ 0.55 / F1 ≥ 0.68 / 超 bm25 ≥ 5 点）终态仍待用户拍板：per-type（D 走 raw）/ 升级 embedding 模型（bge 系列）/ 接受 0.5349 作融合正式基线转 P24-C。
 
@@ -2711,7 +2712,7 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 **收尾状态（P24-B-2 终态）**：
 - 融合正式基线：**acc 0.5349 / F1 0.6623**（correct 1,335/2,496；by_type A 0.4923/B 0.7299/C 0.4420/D 0.4855；zero_hit 1.6%），超 bm25 +1.73 点。
 - 门禁三项全未达（差 acc 1.51 点 / F1 1.77 点 / 超 bm25 需 +5 点）——**P24-B-2 未过门，如实记录**；超 bm25 ≥5 点为结构性缺口（turn 级证据 vs 轨迹整体，词面任务上 embedding 增益有限）。
-- B 线基础设施（`--embed-vec/--embed-cache` 持久化缓存）保留在 `b4af5d8`（代码）+ `1bc83a1`（docs），**未 push**；功能复验：cargo test 16 passed / 1 pre-existing FAILED（`concurrent_store_processes_…`，HEAD 复现，与 B 线无关）无回归。
+- B 线基础设施（`--embed-vec/--embed-cache` 持久化缓存）保留在 `b4af5d8`（代码）+ `1bc83a1`（docs），**未 push**；功能复验：cargo test 16 passed / 1 pre-existing FAILED（`concurrent_store_processes_…`，HEAD 复现，与 B 线无关；2026-11-02 已修复，当前 17 passed）无回归。
 - 转 **P24-C 治理线复跑确认**（费用低，先动）。
 
 ## P24-C 治理线复跑确认（2026-11-01 深夜，抽样确认无回归，commit 待填）
@@ -2741,7 +2742,7 @@ P24-B（低成本，先动）→ P24-C（复跑确认）→ P24-D（体系加固
 - **死代码删除**：`meter.rs save_jsonl`（src/ 内 0 调用，唯一确定死代码）；`by_share` 保留（examples 在用）。
 - **复用收拢**：新增 `testsupport::tmpdir`（cfg(test) 专用唯一临时路径 helper），收拢 store.rs×3 + input.rs×1 重复的 `SystemTime→as_nanos` 手写；顺带修 lib.rs 重复 `#[cfg(test)]`。
 - 静态死代码全扫（pub+私有 fn 调用点统计）确认 parse.rs 的 annotation/actions/gates 为 CHECKS 表驱动校验器（非死代码）、meter from_bucket/mode_of 为函数指针引用（非死代码）。
-- 验证：build/clippy 0 warning；lib 397 + bin 4 全过；cli 16 passed + 1 pre-existing FAILED（并发 gen 竞争，HEAD 复现与本次无关）。
+- 验证：build/clippy 0 warning；lib 397 + bin 4 全过；cli 16 passed + 1 pre-existing FAILED（并发 gen 竞争，HEAD 复现与本次无关；2026-11-02 已修复，当前 17 passed）。
 
 ## tools/ 合并轮（2026-11-02，接管并行会话后完成）
 

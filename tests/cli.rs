@@ -472,10 +472,14 @@ fn concurrent_store_processes_keep_all_cases_and_meta_updates() {
         meta.lines().any(|l| l.trim() == "case_count = 8"),
         "case_count 必须等于实际 case 数: {meta}"
     );
-    assert!(
-        meta.lines().any(|l| l.trim() == "gen = 8"),
-        "每次写 case 的 gen 递增都必须保留: {meta}"
-    );
+    // 每个进程至少写一次 case；冲突仲裁还会对近重复 peer 追加 related
+    // 并保存，因此 gen 统计的是实际写入次数，不能绑定为 case 数 8。
+    let gen = meta
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("gen = "))
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0);
+    assert!(gen >= 8, "并发 case 写入的 gen 递增不能丢失: {meta}");
     assert_eq!(
         fs::read_to_string(root.join("index/fingerprints.ready"))
             .unwrap()

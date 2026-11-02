@@ -1,6 +1,7 @@
 //! crate 根单元测试（lib.rs 门面 <500 行门禁）：Config/Outcome 默认值、
 //! ContentType 解析、类型探测（sample/contract/system/session）、hash 确定性。
-//! 作为 crate 根子模块保留私有访问（同输入同输出承诺由 golden 集成测试守门）。
+//! 文件位于 tests/unit，经 `#[path]` 作为 crate 根子模块编译以保留私有访问
+//!（同输入同输出承诺由 golden 集成测试守门）。
 
 use super::*;
 use crate::analysis::{diff, frame, lineref, marker};
