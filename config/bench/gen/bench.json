@@ -1,0 +1,1212 @@
+{
+ "c": [
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 7;\n    int *p = &x;\n    printf(\"%d\\n\", *p + 1);\n}\n```",
+   "answer": "解引用加 1，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[3] = {10, 20, 30};\n    int *p = a + 1;\n    printf(\"%d\\n\", *p);\n}\n```",
+   "answer": "指针偏移取元素，20。答案是 20 #### 20"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[] = {1, 2, 3};\n    int s = 0;\n    for (int i = 0; i < 3; i++) s += a[i];\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "遍历累加，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[5];\n    printf(\"%zu\\n\", sizeof(a) / sizeof(a[0]));\n}\n```",
+   "answer": "元素个数，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nstruct P { int x; int y; };\nint main() {\n    struct P p = {3, 4};\n    printf(\"%d\\n\", p.x * p.y);\n}\n```",
+   "answer": "成员相乘，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\ntypedef struct { int v; } S;\nint main() {\n    S s = {5};\n    printf(\"%d\\n\", s.v + 1);\n}\n```",
+   "answer": "typedef 结构体，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint f(int x) { return x * 2; }\nint main() {\n    printf(\"%d\\n\", f(4));\n}\n```",
+   "answer": "函数翻倍，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint f(int n) { return n <= 1 ? 1 : n * f(n - 1); }\nint main() {\n    printf(\"%d\\n\", f(5));\n}\n```",
+   "answer": "5 的阶乘，120。答案是 120 #### 120"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    printf(\"%d\\n\", (6 & 3) | (8 >> 2));\n}\n```",
+   "answer": "与或移位，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    printf(\"%d\\n\", (3 > 2) && (1 < 4));\n}\n```",
+   "answer": "两条件成立记 1，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 7;\n    printf(\"%d\\n\", x > 5 ? 1 : 0);\n}\n```",
+   "answer": "条件为真取 1，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int i = 1; i <= 5; i++) s += i;\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "1 到 5 累加，15。答案是 15 #### 15"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int i = 0; i < 3; i++)\n        for (int j = 0; j < 4; j++) s++;\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "3 乘 4 次，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 2, y = 0;\n    switch (x) {\n        case 1: y = 10; break;\n        case 2: y = 20; break;\n        default: y = 0;\n    }\n    printf(\"%d\\n\", y);\n}\n```",
+   "answer": "命中 case 2，20。答案是 20 #### 20"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nenum Color { RED = 2, GREEN = 5 };\nint main() {\n    printf(\"%d\\n\", GREEN + RED);\n}\n```",
+   "answer": "枚举值相加，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\n#define DOUBLE(x) ((x) * 2)\nint main() {\n    printf(\"%d\\n\", DOUBLE(4));\n}\n```",
+   "answer": "宏展开翻倍，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\n#include <string.h>\nint main() {\n    char s[] = \"hello\";\n    printf(\"%zu\\n\", strlen(s));\n}\n```",
+   "answer": "字符串长度，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\n#include <string.h>\nint main() {\n    printf(\"%d\\n\", strcmp(\"abc\", \"abd\") < 0);\n}\n```",
+   "answer": "字典序比较，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    char s[] = \"ab\";\n    printf(\"%d\\n\", s[1] - 'a' + 1);\n}\n```",
+   "answer": "字符差，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[2] = {1, 2};\n    int *p = a;\n    int *q = a + 1;\n    printf(\"%ld\\n\", q - p);\n}\n```",
+   "answer": "指针距离，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint f(int x) { return x * 2; }\nint main() {\n    int (*g)(int) = f;\n    printf(\"%d\\n\", g(4));\n}\n```",
+   "answer": "函数指针调用，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint sum(int a[], int n) {\n    int s = 0;\n    for (int i = 0; i < n; i++) s += a[i];\n    return s;\n}\nint main() {\n    int a[] = {1, 2, 3};\n    printf(\"%d\\n\", sum(a, 3));\n}\n```",
+   "answer": "传数组求和，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[2][3] = {{1, 2, 3}, {4, 5, 6}};\n    int s = 0;\n    for (int i = 0; i < 2; i++)\n        for (int j = 0; j < 3; j++) s += a[i][j];\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "二维累加，21。答案是 21 #### 21"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 5;\n    int a = x++;\n    int b = ++x;\n    printf(\"%d\\n\", a + b);\n}\n```",
+   "answer": "后置取 5，前置后 x=7 取 7，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 8;\n    int *p = &x;\n    *p += 2;\n    printf(\"%d\\n\", x);\n}\n```",
+   "answer": "指针修改原值，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint f() {\n    static int c = 0;\n    return ++c;\n}\nint main() {\n    f();\n    printf(\"%d\\n\", f());\n}\n```",
+   "answer": "静态变量第二次为 2，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint g = 3;\nint main() {\n    g += 4;\n    printf(\"%d\\n\", g);\n}\n```",
+   "answer": "全局加 4，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    double d = 7.9;\n    printf(\"%d\\n\", (int)d);\n}\n```",
+   "answer": "强转截断，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    printf(\"%d\\n\", 17 % 5);\n}\n```",
+   "answer": "余数，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    printf(\"%d\\n\", 17 / 5);\n}\n```",
+   "answer": "整数商，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = (1, 2, 3);\n    printf(\"%d\\n\", x);\n}\n```",
+   "answer": "逗号取末值，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nunion U { int i; char c; };\nint main() {\n    union U u;\n    u.i = 65;\n    printf(\"%d\\n\", (int)u.c);\n}\n```",
+   "answer": "union 共享内存，65。答案是 65 #### 65"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[] = {1, 2, 3};\n    int *p[3];\n    for (int i = 0; i < 3; i++) p[i] = &a[i];\n    printf(\"%d\\n\", *p[1]);\n}\n```",
+   "answer": "指针数组取元素，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\n#include <string.h>\nint main() {\n    char s[16] = \"ab\";\n    strcat(s, \"cd\");\n    printf(\"%zu\\n\", strlen(s));\n}\n```",
+   "answer": "拼接后长度，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\n#include <string.h>\nint main() {\n    char a[] = \"xyz\";\n    char b[16];\n    strcpy(b, a);\n    printf(\"%zu\\n\", strlen(b));\n}\n```",
+   "answer": "复制后长度，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int i = 1; i <= 10; i++)\n        if (i % 2 == 0) s += i;\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "偶数累加，30。答案是 30 #### 30"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int r = 1;\n    for (int i = 0; i < 3; i++) r *= 2;\n    printf(\"%d\\n\", r);\n}\n```",
+   "answer": "2 的 3 次方，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint gcd(int a, int b) { return b ? gcd(b, a % b) : a; }\nint main() {\n    printf(\"%d\\n\", gcd(12, 8));\n}\n```",
+   "answer": "最大公约数，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }\nint main() {\n    printf(\"%d\\n\", f(7));\n}\n```",
+   "answer": "第 7 项，13。答案是 13 #### 13"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int n = 17, c = 0;\n    for (int i = 2; i * i <= n; i++)\n        if (n % i == 0) c++;\n    printf(\"%d\\n\", c == 0);\n}\n```",
+   "answer": "17 是素数，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int n = 123, r = 0;\n    while (n) { r = r * 10 + n % 10; n /= 10; }\n    printf(\"%d\\n\", r);\n}\n```",
+   "answer": "123 反转为 321，321。答案是 321 #### 321"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 7, c = 0;\n    while (x) { c += x & 1; x >>= 1; }\n    printf(\"%d\\n\", c);\n}\n```",
+   "answer": "7 二进制有 3 个 1，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nvoid swap(int *a, int *b) {\n    int t = *a; *a = *b; *b = t;\n}\nint main() {\n    int x = 2, y = 5;\n    swap(&x, &y);\n    printf(\"%d\\n\", x - y);\n}\n```",
+   "answer": "交换后 5-2，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[] = {3, 7, 2, 9};\n    int m = a[0];\n    for (int i = 1; i < 4; i++)\n        if (a[i] > m) m = a[i];\n    printf(\"%d\\n\", m);\n}\n```",
+   "answer": "最大值 9，9。答案是 9 #### 9"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[2][2] = {{1, 2}, {3, 4}};\n    int s = 0;\n    for (int i = 0; i < 2; i++)\n        for (int j = 0; j < 2; j++) s += a[i][j];\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "全部元素和，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    char s[] = \"hello\";\n    int c = 0;\n    for (int i = 0; s[i]; i++) c++;\n    printf(\"%d\\n\", c);\n}\n```",
+   "answer": "遍历计数，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int j = 1; j <= 9; j++) s += 3 * j;\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "3 的乘法表求和，135。答案是 135 #### 135"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 0, s = 0;\n    do { s += x; x++; } while (x < 3);\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "先执行再判断，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    printf(\"%d\\n\", 5 << 1);\n}\n```",
+   "answer": "左移一位翻倍，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 0x0F;\n    printf(\"%d\\n\", (x & 0x0C) >> 2);\n}\n```",
+   "answer": "掩码取位，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nstruct P { int x; };\nint main() {\n    struct P p = {6};\n    struct P *q = &p;\n    q->x += 2;\n    printf(\"%d\\n\", p.x);\n}\n```",
+   "answer": "指针改成员，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\n#include <string.h>\nint main() {\n    char *a[] = {\"a\", \"b\", \"c\"};\n    int s = 0;\n    for (int i = 0; i < 3; i++) s += (int)strlen(a[i]);\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "各字符串长度和，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[3] = {5, 6, 7};\n    int *p = a + 1;\n    printf(\"%d\\n\", *p);\n}\n```",
+   "answer": "指针偏移取 6，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[] = {1, 2, 3};\n    a[0] += 3;\n    printf(\"%d\\n\", a[0]);\n}\n```",
+   "answer": "下标修改，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int s = 0;\n    for (int i = 0; i < 5; i++) {\n        if (i == 3) break;\n        s += i;\n    }\n    printf(\"%d\\n\", s);\n}\n```",
+   "answer": "i=3 中断，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\n#include <string.h>\nint main() {\n    char a[] = \"hello\";\n    char b[] = \"hi\";\n    printf(\"%d\\n\", (int)(strlen(a) - strlen(b)));\n}\n```",
+   "answer": "5 减 2，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int x = 0x0F;\n    x &= ~0x0C;\n    printf(\"%d\\n\", x);\n}\n```",
+   "answer": "清除两位，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\n#define SQUARE(x) ((x) * (x))\nint main() {\n    printf(\"%d\\n\", SQUARE(3) + 1);\n}\n```",
+   "answer": "宏平方加 1，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nstruct P { int v; };\nint main() {\n    struct P arr[2] = {{3}, {5}};\n    printf(\"%d\\n\", arr[1].v);\n}\n```",
+   "answer": "第二元素，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 C 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```c\n#include <stdio.h>\nint main() {\n    int a[4] = {0, 0, 0, 0};\n    int *p = a;\n    p += 3;\n    printf(\"%ld\\n\", p - a);\n}\n```",
+   "answer": "指针距离 3，3。答案是 3 #### 3"
+  }
+ ],
+ "py": [
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef g():\n    yield 1\n    yield 2\nit = g()\nprint(next(it) + next(it))\n```",
+   "answer": "生成器依次产出 1、2，next 两次相加得，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef deco(f):\n    return lambda: f() + 1\n@deco\ndef f():\n    return 1\nprint(f())\n```",
+   "answer": "deco 包装后返回值加 1，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef outer():\n    x = 0\n    def inner():\n        nonlocal x\n        x += 1\n        return x\n    return inner\nf = outer()\nf()\nprint(f())\n```",
+   "answer": "inner 闭包引用 x，调用两次后 x=2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass A:\n    def m(self):\n        return \"A\"\nclass B(A):\n    pass\nclass C(A):\n    def m(self):\n        return \"C\"\nclass D(B, C):\n    pass\nprint(D().m())\n```",
+   "answer": "D(B,C) 的 MRO 中 C 先于 A，取 C 的实现，输出，C。答案是 C #### C"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass A:\n    def m(self):\n        return \"A\"\nclass B(A):\n    def m(self):\n        return \"B\" + super().m()\nclass C(B):\n    pass\nprint(C().m())\n```",
+   "answer": "C 继承 B，B.m 拼接 B 与 A 的结果，输出，BA。答案是 BA #### BA"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ntry:\n    x = 1 // 0\nexcept ZeroDivisionError:\n    x = 5\nfinally:\n    x += 1\nprint(x)\n```",
+   "answer": "除零触发异常 x=5，finally 加 1，，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass E(Exception):\n    pass\ntry:\n    raise E(\"x\")\nexcept E as e:\n    print(len(str(e)))\n```",
+   "answer": "异常消息 x 长度 1，，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint(sum(x for x in range(10) if x % 3 == 0))\n```",
+   "answer": "0 到 9 中 3 的倍数 0+3+6+9=18，，18。答案是 18 #### 18"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nd = {i: i * i for i in range(3)}\nprint(d[2])\n```",
+   "answer": "字典推导 {0:0,1:1,2:4}，d[2]=4，，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\narr = [\"bb\", \"a\", \"ccc\"]\nprint(len(sorted(arr, key=len)[-1]))\n```",
+   "answer": "按长度排序最长 ccc 长度 3，，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef f(x, L=[]):\n    L.append(x)\n    return L\nprint(len(f(1)))\n```",
+   "answer": "默认列表 L 共享但只调一次，len=1，，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef f(**kw):\n    return len(kw)\nprint(f(a=1, b=2, c=3))\n```",
+   "answer": "3 个关键字参数，，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef f(*a):\n    return sum(a)\nprint(f(1, 2, 3))\n```",
+   "answer": "1+2+3=6，，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\na, b = (1, 2)\nprint(a * 10 + b)\n```",
+   "answer": "a=1、b=2，1*10+2=12，，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ns = \"0123456789\"\nprint(s[1:8:2])\n```",
+   "answer": "索引 1、3、5、7 取字符拼成，输出，1357。答案是 1357 #### 1357"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ns = \"abcde\"\nprint(s[-1] + s[-3])\n```",
+   "answer": "s[-1]=e、s[-3]=c 拼接，输出，ec。答案是 ec #### ec"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint(\"  abc  \".strip().upper())\n```",
+   "answer": "strip 去空白再 upper，输出，ABC。答案是 ABC #### ABC"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nb = b\"ab\"\nprint(len(b) + b[0])\n```",
+   "answer": "len=2，b[0]=97，2+97=99，，99。答案是 99 #### 99"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\na = {1, 2, 3}\nb = {2, 3, 4}\nprint(len(a & b))\n```",
+   "answer": "交集 {2,3} 长度 2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint((6 & 3) | (8 >> 2))\n```",
+   "answer": "6&3=2，8>>2=2，2|2=2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef f():\n    return 0\ndef g():\n    return 1\nprint(f() and g() or 5)\n```",
+   "answer": "f()=0 为假 and 短路，or 取 5，，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nx = 5\nprint(1 < x < 10 and x > 4)\n```",
+   "answer": "1<5<10 且 5>4 都成立，输出，True。答案是 True #### True"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nx = 7\nprint(\"A\" if x > 9 else \"B\" if x > 5 else \"C\")\n```",
+   "answer": "7>5 取中间分支，输出，B。答案是 B #### B"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\na = [1]\nb = a\nb.append(2)\nprint(len(a))\n```",
+   "answer": "b 与 a 指向同一列表，len=2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef f(x):\n    x.append(1)\na = []\nf(a)\nprint(len(a))\n```",
+   "answer": "函数内修改同一列表，len=1，，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nt = (1, [2])\nt[1].append(3)\nprint(len(t[1]))\n```",
+   "answer": "元组内列表可变，append 后 len=2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nx = 4\nprint(f\"{x * 3}\")\n```",
+   "answer": "4*3=12，，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ns = \"a,b,c\"\nprint(len(s.split(\",\")))\n```",
+   "answer": "按逗号拆成 3 段，，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nit = iter([1, 2, 3])\nnext(it)\nprint(next(it))\n```",
+   "answer": "next 跳过 1 后取 2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef g():\n    yield from range(2)\n    yield 5\nprint(sum(g()))\n```",
+   "answer": "0+1+5=6，，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass C:\n    def __enter__(self):\n        return 3\n    def __exit__(self, *a):\n        pass\nwith C() as v:\n    print(v * 2)\n```",
+   "answer": "__enter__ 返回 3，3*2=6，，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass A:\n    x = 1\nobj = A()\nobj.x = 2\nprint(A.x + obj.x)\n```",
+   "answer": "类属性 1 + 实例属性 2 = 3，，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass C:\n    @property\n    def v(self):\n        return 7\nprint(C().v)\n```",
+   "answer": "property 访问返回 7，，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass C:\n    @staticmethod\n    def f(x):\n        return x * 2\nprint(C.f(4))\n```",
+   "answer": "静态方法 4*2=8，，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass A:\n    def m(self):\n        return 1\nclass B(A):\n    def m(self):\n        return super().m() + 1\nprint(B().m())\n```",
+   "answer": "B.m 调 A.m 加 1，1+1=2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nclass C:\n    def __str__(self):\n        return \"hi\"\nprint(len(str(C())))\n```",
+   "answer": "str 返回 hi 长度 2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\na, b = 1, 2\na, b = b, a\nprint(a - b)\n```",
+   "answer": "交换后 a=2、b=1，2-1=1，，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nn = 0\nwhile (m := n + 1) < 5:\n    n = m\nprint(n)\n```",
+   "answer": "m 递增到 4 后 5 不满足循环，n=4，，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ns = 0\nfor i, v in enumerate([3, 4]):\n    s += i + v\nprint(s)\n```",
+   "answer": "(0+3)+(1+4)=8，，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\na = [1, 2]\nb = [3, 4]\nprint(sum(x + y for x, y in zip(a, b)))\n```",
+   "answer": "(1+3)+(2+4)=10，，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint(any([False, True]) + all([1, 2]))\n```",
+   "answer": "any 为 True 记 1，all 为 True 记 1，共 2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nfrom functools import reduce\nprint(reduce(lambda a, b: a * b, [2, 3, 4]))\n```",
+   "answer": "2*3*4=24，，24。答案是 24 #### 24"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nfrom collections import Counter\nprint(Counter(\"aab\").most_common(1)[0][1])\n```",
+   "answer": "a 出现次数最多为 2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nfrom collections import defaultdict\nd = defaultdict(int)\nd['k'] += 2\nprint(d['k'])\n```",
+   "answer": "默认 int 0 再加 2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nfrom collections import deque\nq = deque([1])\nq.appendleft(2)\nprint(q[0])\n```",
+   "answer": "头部插入 2，q[0]=2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nimport heapq\nh = [3, 1]\nheapq.heapify(h)\nprint(heapq.heappop(h))\n```",
+   "answer": "堆弹出最小元素 1，，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\narr = [(\"a\", 2), (\"b\", 1)]\nprint(sorted(arr, key=lambda t: t[1])[0][0])\n```",
+   "answer": "按第二元素升序首个 b，输出，b。答案是 b #### b"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef f(n):\n    return 1 if n < 2 else f(n - 1) + f(n - 2)\nprint(f(6))\n```",
+   "answer": "斐波那契 f(6)=13，，13。答案是 13 #### 13"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef gen():\n    for i in range(4):\n        yield i * 2\nprint(sum(gen()))\n```",
+   "answer": "0+2+4+6=12，，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef g():\n    v = yield 1\n    yield v + 1\nx = g()\nnext(x)\nprint(x.send(5))\n```",
+   "answer": "send(5) 使 v=5，5+1=6，，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nx = 1\ndef f():\n    x = 2\n    return x\nprint(f() + x)\n```",
+   "answer": "函数内 2 + 全局 1 = 3，，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ndef f():\n    x = 0\n    def g():\n        nonlocal x\n        x = 2\n    g()\n    return x\nprint(f())\n```",
+   "answer": "g 修改外层 x 为 2，，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nx = 0\ndef f():\n    global x\n    x = 3\nf()\nprint(x)\n```",
+   "answer": "f 修改全局 x 为 3，，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint(len(\"中文\".encode(\"utf-8\")))\n```",
+   "answer": "中文 utf-8 每字 3 字节共 6，，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint(int(\"ff\", 16))\n```",
+   "answer": "十六进制 ff 等于 255，，255。答案是 255 #### 255"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nq, r = divmod(17, 5)\nprint(q * 10 + r)\n```",
+   "answer": "17//5=3、17%5=2，3*10+2=32，，32。答案是 32 #### 32"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint(pow(3, 4, 5))\n```",
+   "answer": "3^4=81，81 mod 5 = 1，，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint(round(3.14159, 2))\n```",
+   "answer": "保留两位小数得 3.14，，3.14。答案是 3.14 #### 3.14"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\ns = \"ab\"\nprint(len(s * 2) * 2)\n```",
+   "answer": "ab 重复 2 次长 4，4*2=8，，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Python 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```python\nprint(sum(i * i for i in range(1, 4)))\n```",
+   "answer": "1+4+9=14，，14。答案是 14 #### 14"
+  }
+ ],
+ "rs": [
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s = String::from(\"ab\");\n    let t = s;\n    println!(\"{}\", t.len());\n}\n```",
+   "answer": "所有权转移给 t，长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut v = vec![1];\n    let r = &mut v;\n    r.push(2);\n    println!(\"{}\", v.len());\n}\n```",
+   "answer": "可变借用 push 后长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let a = vec![1];\n    let b = a.clone();\n    println!(\"{}\", b.len());\n}\n```",
+   "answer": "克隆副本长度，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s: i32 = (1..=4).sum();\n    println!(\"{}\", s);\n}\n```",
+   "answer": "1 到 4 求和，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let x = 3;\n    let f = || x * 2;\n    println!(\"{}\", f());\n}\n```",
+   "answer": "闭包捕获 x 翻倍，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s: i32 = (0..10).filter(|x| x % 2 == 0).map(|x| x * 2).sum();\n    println!(\"{}\", s);\n}\n```",
+   "answer": "偶数翻倍后求和，40。答案是 40 #### 40"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let x: Option<i32> = Some(5);\n    println!(\"{}\", x.unwrap() + 1);\n}\n```",
+   "answer": "解包后加 1，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let r: Result<i32, String> = Ok(7);\n    println!(\"{}\", r.unwrap());\n}\n```",
+   "answer": "Ok 直接解包，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let x = 2;\n    let y = match x { 1 => 10, 2 => 20, _ => 0 };\n    println!(\"{}\", y);\n}\n```",
+   "answer": "x=2 命中 20，20。答案是 20 #### 20"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let x = Some(4);\n    if let Some(v) = x {\n        println!(\"{}\", v * 2);\n    }\n}\n```",
+   "answer": "解构 Some 翻倍，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nenum E { A(i32), B }\nfn main() {\n    let e = E::A(3);\n    let v = match e { E::A(n) => n, _ => 0 };\n    println!(\"{}\", v);\n}\n```",
+   "answer": "枚举携带数据 3，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\ntrait T { fn f(&self) -> i32; }\nstruct S;\nimpl T for S {\n    fn f(&self) -> i32 { 5 }\n}\nfn main() {\n    println!(\"{}\", S.f());\n}\n```",
+   "answer": "trait 实现返回 5，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\ntrait T { fn f(&self) -> i32 { 1 } }\nstruct S;\nimpl T for S {}\nfn main() {\n    println!(\"{}\", S.f());\n}\n```",
+   "answer": "默认方法返回 1，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nstruct S { x: i32 }\nimpl S {\n    fn f(&self) -> i32 { self.x * 2 }\n}\nfn main() {\n    println!(\"{}\", S { x: 3 }.f());\n}\n```",
+   "answer": "方法翻倍字段，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nstruct S;\nimpl S {\n    fn val() -> i32 { 9 }\n}\nfn main() {\n    println!(\"{}\", S::val());\n}\n```",
+   "answer": "关联函数返回 9，9。答案是 9 #### 9"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nstruct P(i32, i32);\nfn main() {\n    let p = P(3, 4);\n    println!(\"{}\", p.0 + p.1);\n}\n```",
+   "answer": "元组字段相加，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut s = String::from(\"ab\");\n    s.push_str(\"cd\");\n    println!(\"{}\", s.len());\n}\n```",
+   "answer": "追加后长度，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s = format!(\"{}{}\", 1, 2);\n    println!(\"{}\", s.len());\n}\n```",
+   "answer": "拼接串长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let v = [1, 2, 3, 4];\n    let s = &v[1..3];\n    println!(\"{}\", s.len());\n}\n```",
+   "answer": "切片含 2 元素，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut v = Vec::new();\n    v.push(1);\n    v.push(2);\n    println!(\"{}\", v.len());\n}\n```",
+   "answer": "两次 push 长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let v = vec![5, 6, 7];\n    println!(\"{}\", v[1]);\n}\n```",
+   "answer": "索引 1 元素，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s: i32 = (0..10).step_by(3).sum();\n    println!(\"{}\", s);\n}\n```",
+   "answer": "步长 3 求和，18。答案是 18 #### 18"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut v = vec![1, 2];\n    let mut s = 0;\n    while let Some(x) = v.pop() { s += x; }\n    println!(\"{}\", s);\n}\n```",
+   "answer": "弹栈累加，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nuse std::rc::Rc;\nfn main() {\n    let a = Rc::new(5);\n    let b = a.clone();\n    println!(\"{}\", Rc::strong_count(&a));\n}\n```",
+   "answer": "克隆后强引用数 2，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn f<T: std::ops::Add<Output = T>>(a: T, b: T) -> T { a + b }\nfn main() {\n    println!(\"{}\", f(3, 4));\n}\n```",
+   "answer": "泛型加法，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nstruct P<T> { x: T }\nfn main() {\n    let p = P { x: 3 };\n    println!(\"{}\", p.x * 2);\n}\n```",
+   "answer": "泛型字段翻倍，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\n#[derive(Clone)]\nstruct S { x: i32 }\nfn main() {\n    let a = S { x: 2 };\n    let b = a.clone();\n    println!(\"{}\", b.x + 1);\n}\n```",
+   "answer": "派生 Clone 副本加 1，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let x = 3;\n    let y = match x { 1 | 2 => 0, 3..=5 => 1, _ => 2 };\n    println!(\"{}\", y);\n}\n```",
+   "answer": "3 落在范围命中 1，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let a = [1, 2, 3];\n    println!(\"{}\", a.len());\n}\n```",
+   "answer": "数组长度 3，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let (a, b) = (3, 4);\n    println!(\"{}\", a + b);\n}\n```",
+   "answer": "解构后相加，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn f(x: i32) -> i32 { x * 2 }\nfn main() {\n    let g: fn(i32) -> i32 = f;\n    println!(\"{}\", g(4));\n}\n```",
+   "answer": "函数指针调用，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut s = 0;\n    for (i, v) in vec![3, 4].iter().enumerate() { s += i + v; }\n    println!(\"{}\", s);\n}\n```",
+   "answer": "索引与值累加，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let v: Vec<i32> = (1..4).map(|x| x * x).collect();\n    println!(\"{}\", v[1]);\n}\n```",
+   "answer": "平方收集后索引 1，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s = \"abc\";\n    println!(\"{}\", s.chars().count());\n}\n```",
+   "answer": "字符数 3，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let c = '5';\n    println!(\"{}\", c.to_digit(10).unwrap());\n}\n```",
+   "answer": "字符 5 转数字，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", (3 > 2) && (1 < 4));\n}\n```",
+   "answer": "两个条件都成立，true。答案是 true #### true"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", (6 & 3) | (8 >> 2));\n}\n```",
+   "answer": "6&3=2、8>>2=2 相或，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", 255u8.wrapping_add(1));\n}\n```",
+   "answer": "u8 溢出环绕，0。答案是 0 #### 0"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", 7u32 as i32 - 2);\n}\n```",
+   "answer": "转换后减 2，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", 17 / 5 + 17 % 5);\n}\n```",
+   "answer": "商 3 加余 2，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", 3i32.pow(2) + 1);\n}\n```",
+   "answer": "3 的平方加 1，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut v = vec![3, 1, 2];\n    v.sort();\n    println!(\"{}\", v[0]);\n}\n```",
+   "answer": "升序最小，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut v = vec![1, 1, 2];\n    v.dedup();\n    println!(\"{}\", v.len());\n}\n```",
+   "answer": "相邻去重后长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s = \"a,b,c\";\n    println!(\"{}\", s.split(',').count());\n}\n```",
+   "answer": "逗号分 3 段，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s = \"  ab  \";\n    println!(\"{}\", s.trim().len());\n}\n```",
+   "answer": "去空白后长度 2，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nuse std::collections::HashMap;\nfn main() {\n    let mut m = HashMap::new();\n    m.insert(\"k\", 3);\n    println!(\"{}\", m[\"k\"]);\n}\n```",
+   "answer": "键 k 的值，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nuse std::collections::HashMap;\nfn main() {\n    let mut m = HashMap::new();\n    *m.entry(\"k\").or_insert(0) += 2;\n    println!(\"{}\", m[\"k\"]);\n}\n```",
+   "answer": "不存在则插入加 2，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut v = vec![1, 2];\n    v.reverse();\n    println!(\"{}\", v[0]);\n}\n```",
+   "answer": "反转后首元素，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s: i32 = vec![1, 2].into_iter().chain(vec![3]).sum();\n    println!(\"{}\", s);\n}\n```",
+   "answer": "串联迭代求和，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let x = 1;\n    let x = x + 2;\n    println!(\"{}\", x);\n}\n```",
+   "answer": "遮蔽后新值，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let x = 5;\n    { let x = 10; }\n    println!(\"{}\", x);\n}\n```",
+   "answer": "内层遮蔽不影响外层，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    const N: i32 = 6;\n    println!(\"{}\", N * N);\n}\n```",
+   "answer": "常量平方，36。答案是 36 #### 36"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", (1, 2) < (1, 3));\n}\n```",
+   "answer": "元组字典序，true。答案是 true #### true"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let x = Some(3);\n    println!(\"{}\", x.map(|v| v * 2).unwrap());\n}\n```",
+   "answer": "map 翻倍解包，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let c = (0..10).filter(|x| x % 2 == 0).count();\n    println!(\"{}\", c);\n}\n```",
+   "answer": "偶数个数 5，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", (1..4).any(|x| x > 2));\n}\n```",
+   "answer": "存在大于 2，true。答案是 true #### true"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s: i32 = (1..4).map(|x| x * x).sum();\n    println!(\"{}\", s);\n}\n```",
+   "answer": "1+4+9 平方和，14。答案是 14 #### 14"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let mut s = 0;\n    'outer: for i in 0..3 {\n        for j in 0..3 {\n            if j == 2 { break 'outer; }\n            s += 1;\n        }\n    }\n    println!(\"{}\", s);\n}\n```",
+   "answer": "j=2 时跳出外层，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    println!(\"{}\", 3.min(5) + 2.max(1));\n}\n```",
+   "answer": "取小加取大，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Rust 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```rust\nfn main() {\n    let s = \"ab\".repeat(3);\n    println!(\"{}\", s.len());\n}\n```",
+   "answer": "重复 3 次长度，6。答案是 6 #### 6"
+  }
+ ],
+ "cpp": [
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int x = 3;\n    int &r = x;\n    r = 5;\n    std::cout << x << \"\\n\";\n}\n```",
+   "answer": "引用修改原变量，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int x = 7;\n    int *p = &x;\n    std::cout << *p + 1 << \"\\n\";\n}\n```",
+   "answer": "解引用加 1，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v;\n    v.push_back(1);\n    v.push_back(2);\n    std::cout << v.size() << \"\\n\";\n}\n```",
+   "answer": "两次 push 后大小，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\nint main() {\n    std::string s = \"ab\";\n    s += \"cd\";\n    std::cout << s.size() << \"\\n\";\n}\n```",
+   "answer": "拼接后长度，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint f(int x) { return x * 2; }\ndouble f(double x) { return x + 0.5; }\nint main() {\n    std::cout << f(3) << \"\\n\";\n}\n```",
+   "answer": "int 重载翻倍，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint f(int x, int y = 3) { return x + y; }\nint main() {\n    std::cout << f(2) << \"\\n\";\n}\n```",
+   "answer": "缺省参数 3，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\ntemplate <typename T> T f(T a, T b) { return a + b; }\nint main() {\n    std::cout << f(3, 4) << \"\\n\";\n}\n```",
+   "answer": "模板实例化求和，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nstruct S {\n    int x;\n    S(int v) : x(v) {}\n};\nint main() {\n    S s(4);\n    std::cout << s.x * 2 << \"\\n\";\n}\n```",
+   "answer": "构造初始化翻倍，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nstruct S {\n    static int cnt;\n};\nint S::cnt = 5;\nint main() {\n    std::cout << S::cnt + 1 << \"\\n\";\n}\n```",
+   "answer": "静态成员加 1，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nstruct A { int v = 3; };\nstruct B : A {};\nint main() {\n    B b;\n    std::cout << b.v * 2 << \"\\n\";\n}\n```",
+   "answer": "继承字段翻倍，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nstruct A { virtual int f() { return 1; } };\nstruct B : A { int f() override { return 2; } };\nint main() {\n    A *p = new B();\n    std::cout << p->f() << \"\\n\";\n    delete p;\n}\n```",
+   "answer": "虚分派取 B 实现，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nstruct P { int x; };\nP operator+(P a, P b) { return {a.x + b.x}; }\nint main() {\n    P a{2}, b{3};\n    std::cout << (a + b).x << \"\\n\";\n}\n```",
+   "answer": "重载加法，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int x = 3;\n    auto f = [x] { return x * 2; };\n    std::cout << f() << \"\\n\";\n}\n```",
+   "answer": "按值捕获翻倍，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\n#include <algorithm>\nint main() {\n    std::vector<int> v{3, 1, 2};\n    std::sort(v.begin(), v.end());\n    std::cout << v[0] << \"\\n\";\n}\n```",
+   "answer": "升序最小，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <map>\nint main() {\n    std::map<std::string, int> m;\n    m[\"k\"] = 4;\n    std::cout << m[\"k\"] << \"\\n\";\n}\n```",
+   "answer": "键 k 的值，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <set>\nint main() {\n    std::set<int> s{1, 1, 2};\n    std::cout << s.size() << \"\\n\";\n}\n```",
+   "answer": "去重后大小，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    auto x = 4;\n    auto y = x * 2.0;\n    std::cout << (int)y << \"\\n\";\n}\n```",
+   "answer": "auto 推断 double 转 int，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int s = 0;\n    for (int v : {1, 2, 3}) s += v;\n    std::cout << s << \"\\n\";\n}\n```",
+   "answer": "范围 for 累加，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\nint main() {\n    std::string s = \"abc\";\n    std::string t = std::move(s);\n    std::cout << t.size() << \"\\n\";\n}\n```",
+   "answer": "移动后目标长度，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <memory>\nint main() {\n    std::shared_ptr<int> a = std::make_shared<int>(3);\n    auto b = a;\n    std::cout << a.use_count() << \"\\n\";\n}\n```",
+   "answer": "两个共享引用，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <utility>\nint main() {\n    std::pair<int, int> p{3, 4};\n    std::cout << p.first + p.second << \"\\n\";\n}\n```",
+   "answer": "pair 字段相加，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <tuple>\nint main() {\n    auto t = std::make_tuple(2, 3);\n    std::cout << std::get<0>(t) * std::get<1>(t) << \"\\n\";\n}\n```",
+   "answer": "元组字段相乘，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\nint main() {\n    std::string s = \"hello\";\n    std::cout << s.find(\"l\") << \"\\n\";\n}\n```",
+   "answer": "首个 l 索引，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\nint main() {\n    std::string s = \"abcde\";\n    std::cout << s.substr(1, 2).size() << \"\\n\";\n}\n```",
+   "answer": "子串长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\nint main() {\n    std::string s = \"42\";\n    std::cout << std::stoi(s) + 1 << \"\\n\";\n}\n```",
+   "answer": "字符串转 int 加 1，43。答案是 43 #### 43"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int a[4];\n    std::cout << sizeof(a) / sizeof(a[0]) << \"\\n\";\n}\n```",
+   "answer": "数组元素个数，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nvoid f(int &x) { x += 3; }\nint main() {\n    int v = 2;\n    f(v);\n    std::cout << v << \"\\n\";\n}\n```",
+   "answer": "引用修改原值，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int x = 5;\n    const int &r = x;\n    std::cout << r * 2 << \"\\n\";\n}\n```",
+   "answer": "常量引用翻倍，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nenum Color { RED = 2, GREEN = 5 };\nint main() {\n    std::cout << GREEN + RED << \"\\n\";\n}\n```",
+   "answer": "枚举值相加，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int x = 2;\n    int y = 0;\n    switch (x) {\n        case 1: y = 10; break;\n        case 2: y = 20; break;\n        default: y = 0;\n    }\n    std::cout << y << \"\\n\";\n}\n```",
+   "answer": "命中 case 2，20。答案是 20 #### 20"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    std::cout << ((6 & 3) | (8 >> 2)) << \"\\n\";\n}\n```",
+   "answer": "与或移位，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int x = 7;\n    std::cout << (x > 5 ? 1 : 0) << \"\\n\";\n}\n```",
+   "answer": "条件为真取 1，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int x = 0;\n    bool r = (x != 0) && (10 / x > 0);\n    std::cout << r << \"\\n\";\n}\n```",
+   "answer": "短路不触发除零，0。答案是 0 #### 0"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int s = 0;\n    for (int i = 1; i <= 5; i++) s += i;\n    std::cout << s << \"\\n\";\n}\n```",
+   "answer": "1 到 5 累加，15。答案是 15 #### 15"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int s = 0;\n    for (int i = 0; i < 3; i++)\n        for (int j = 0; j < 4; j++) s++;\n    std::cout << s << \"\\n\";\n}\n```",
+   "answer": "3 乘 4 次，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int s = 0;\n    for (int i = 1; i <= 5; i++) {\n        if (i % 2 == 0) continue;\n        s += i;\n    }\n    std::cout << s << \"\\n\";\n}\n```",
+   "answer": "跳过偶数累加，9。答案是 9 #### 9"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int x = 0, s = 0;\n    do { s += x; x++; } while (x < 3);\n    std::cout << s << \"\\n\";\n}\n```",
+   "answer": "先执行再判断，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    int a[3] = {10, 20, 30};\n    int *p = a + 1;\n    std::cout << *p << \"\\n\";\n}\n```",
+   "answer": "指针偏移取元素，20。答案是 20 #### 20"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nstruct P { int x; int y; };\nint main() {\n    P p{3, 4};\n    std::cout << p.x * p.y << \"\\n\";\n}\n```",
+   "answer": "成员相乘，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint f(int x) { return x * 2; }\nint main() {\n    int (*g)(int) = f;\n    std::cout << g(4) << \"\\n\";\n}\n```",
+   "answer": "函数指针调用，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint f(int n) { return n <= 1 ? 1 : n * f(n - 1); }\nint main() {\n    std::cout << f(5) << \"\\n\";\n}\n```",
+   "answer": "5 的阶乘，120。答案是 120 #### 120"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }\nint main() {\n    std::cout << f(7) << \"\\n\";\n}\n```",
+   "answer": "第 7 项斐波那契，13。答案是 13 #### 13"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\n#include <algorithm>\nint main() {\n    std::string s = \"abc\";\n    std::reverse(s.begin(), s.end());\n    std::cout << s.size() << \"\\n\";\n}\n```",
+   "answer": "反转后长度不变，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\n#include <algorithm>\nint main() {\n    std::vector<int> v{1, 2, 3, 4};\n    int c = std::count_if(v.begin(), v.end(), [](int x) { return x % 2 == 0; });\n    std::cout << c << \"\\n\";\n}\n```",
+   "answer": "偶数个数，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\n#include <numeric>\nint main() {\n    std::vector<int> v{1, 2, 3, 4};\n    std::cout << std::accumulate(v.begin(), v.end(), 0) << \"\\n\";\n}\n```",
+   "answer": "全量累加，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\n#include <algorithm>\nint main() {\n    std::vector<int> v{5, 1, 3};\n    std::sort(v.begin(), v.end());\n    std::cout << v[v.size() / 2] << \"\\n\";\n}\n```",
+   "answer": "排序后中位，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v{2, 4};\n    int s = 0;\n    for (auto it = v.begin(); it != v.end(); ++it) s += *it;\n    std::cout << s << \"\\n\";\n}\n```",
+   "answer": "迭代器累加，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v{1, 2, 3};\n    v.erase(v.begin() + 1);\n    std::cout << v.size() << \"\\n\";\n}\n```",
+   "answer": "删一个元素后大小，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v{1, 3};\n    v.insert(v.begin() + 1, 2);\n    std::cout << v[1] << \"\\n\";\n}\n```",
+   "answer": "中间插入元素，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <map>\nint main() {\n    std::map<int, int> m;\n    m[1] = 10;\n    m[1] += 5;\n    std::cout << m[1] << \"\\n\";\n}\n```",
+   "answer": "下标更新值，15。答案是 15 #### 15"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <set>\nint main() {\n    std::multiset<int> s{1, 1, 2};\n    std::cout << s.count(1) << \"\\n\";\n}\n```",
+   "answer": "1 出现次数，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <queue>\nint main() {\n    std::priority_queue<int> q;\n    q.push(3);\n    q.push(1);\n    std::cout << q.top() << \"\\n\";\n}\n```",
+   "answer": "最大堆顶，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <deque>\nint main() {\n    std::deque<int> q;\n    q.push_front(2);\n    q.push_back(3);\n    std::cout << q.front() << \"\\n\";\n}\n```",
+   "answer": "头插后首元素，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <list>\nint main() {\n    std::list<int> l{1, 2, 3};\n    std::cout << l.size() << \"\\n\";\n}\n```",
+   "answer": "链表大小，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\nint main() {\n    double d = 7.9;\n    int i = static_cast<int>(d);\n    std::cout << i << \"\\n\";\n}\n```",
+   "answer": "强转截断，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <sstream>\n#include <string>\nint main() {\n    std::stringstream ss(\"42\");\n    int v;\n    ss >> v;\n    std::cout << v / 2 << \"\\n\";\n}\n```",
+   "answer": "流解析整数，21。答案是 21 #### 21"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\nint main() {\n    std::string s = \"ababa\";\n    std::cout << s.rfind(\"ba\") << \"\\n\";\n}\n```",
+   "answer": "反向查找首个 ba，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <vector>\nint main() {\n    std::vector<int> v;\n    v.reserve(8);\n    std::cout << v.capacity() << \"\\n\";\n}\n```",
+   "answer": "预留容量，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\nint main() {\n    std::string s = \"ab\";\n    std::cout << (s == \"ab\" ? 1 : 0) << \"\\n\";\n}\n```",
+   "answer": "内容相等记 1，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 C++ 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```cpp\n#include <iostream>\n#include <string>\nint main() {\n    std::string s = \"abc\";\n    std::cout << s.back() - 'a' + 1 << \"\\n\";\n}\n```",
+   "answer": "尾字符序号，3。答案是 3 #### 3"
+  }
+ ],
+ "java": [
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String s = \"abc\";\n        s.toUpperCase();\n        System.out.println(s.length());\n    }\n}\n```",
+   "answer": "toUpperCase 不改原串，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        StringBuilder b = new StringBuilder(\"ab\");\n        b.append(\"cd\");\n        System.out.println(b.length());\n    }\n}\n```",
+   "answer": "追加后长度，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String s = \"abcde\";\n        System.out.println(s.substring(1, 3).length());\n    }\n}\n```",
+   "answer": "子串长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String s = \"hello\";\n        System.out.println(s.indexOf(\"l\"));\n    }\n}\n```",
+   "answer": "首个 l 索引，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        int[] x = new int[3];\n        System.out.println(x.length);\n    }\n}\n```",
+   "answer": "数组长度，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<Integer> l = new ArrayList<>();\n        l.add(1);\n        l.add(2);\n        System.out.println(l.size());\n    }\n}\n```",
+   "answer": "两次添加后大小，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<Integer> l = new ArrayList<>(Arrays.asList(5, 6, 7));\n        System.out.println(l.get(1));\n    }\n}\n```",
+   "answer": "索引 1 元素，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        Map<String, Integer> m = new HashMap<>();\n        m.put(\"k\", 3);\n        System.out.println(m.get(\"k\"));\n    }\n}\n```",
+   "answer": "键 k 的值，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        Set<Integer> s = new HashSet<>();\n        s.add(1);\n        s.add(1);\n        s.add(2);\n        System.out.println(s.size());\n    }\n}\n```",
+   "answer": "去重后大小，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        Integer x = 5;\n        int y = x + 2;\n        System.out.println(y);\n    }\n}\n```",
+   "answer": "拆箱相加，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        Integer x = 100;\n        Integer y = 100;\n        System.out.println(x == y ? 1 : 0);\n    }\n}\n```",
+   "answer": "缓存范围内同一对象，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<String> l = new ArrayList<>();\n        l.add(\"ab\");\n        System.out.println(l.get(0).length());\n    }\n}\n```",
+   "answer": "泛型元素长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass A { int v = 3; }\nclass B extends A {}\npublic class M {\n    public static void main(String[] args) {\n        B b = new B();\n        System.out.println(b.v * 2);\n    }\n}\n```",
+   "answer": "继承字段翻倍，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass A { int f() { return 1; } }\nclass B extends A { int f() { return 2; } }\npublic class M {\n    public static void main(String[] args) {\n        A x = new B();\n        System.out.println(x.f());\n    }\n}\n```",
+   "answer": "多态取 B 实现，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass A { int f() { return 3; } }\nclass B extends A { int f() { return super.f() + 1; } }\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(new B().f());\n    }\n}\n```",
+   "answer": "父类加 1，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass S {\n    int x;\n    S() { x = 1; }\n    S(int v) { x = v; }\n}\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(new S(5).x);\n    }\n}\n```",
+   "answer": "参数构造 5，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass S {\n    static int f(int x) { return x * 2; }\n}\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(S.f(4));\n    }\n}\n```",
+   "answer": "静态方法调用，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass S {\n    static int c = 0;\n    static int f() { return ++c; }\n}\npublic class M {\n    public static void main(String[] args) {\n        S.f();\n        System.out.println(S.f());\n    }\n}\n```",
+   "answer": "静态计数第二次 2，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        final int x = 4;\n        System.out.println(x * 2);\n    }\n}\n```",
+   "answer": "常量翻倍，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\ninterface I {\n    default int f() { return 6; }\n}\nclass S implements I {}\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(new S().f());\n    }\n}\n```",
+   "answer": "默认实现 6，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    interface F { int run(int x); }\n    public static void main(String[] args) {\n        F f = x -> x * 2;\n        System.out.println(f.run(4));\n    }\n}\n```",
+   "answer": "lambda 翻倍，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\nimport java.util.stream.*;\npublic class M {\n    public static void main(String[] args) {\n        int s = Stream.of(1, 2, 3).mapToInt(x -> x * 2).sum();\n        System.out.println(s);\n    }\n}\n```",
+   "answer": "翻倍求和，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\nimport java.util.stream.*;\npublic class M {\n    public static void main(String[] args) {\n        long c = Stream.of(1, 2, 3, 4).filter(x -> x % 2 == 0).count();\n        System.out.println(c);\n    }\n}\n```",
+   "answer": "偶数个数，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\nimport java.util.stream.*;\npublic class M {\n    public static void main(String[] args) {\n        int s = Stream.of(1, 2, 3, 4).reduce(0, (x, y) -> x + y);\n        System.out.println(s);\n    }\n}\n```",
+   "answer": "归约求和，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String s = \"ab\" + \"cd\";\n        System.out.println(s.length());\n    }\n}\n```",
+   "answer": "拼接长度，4。答案是 4 #### 4"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String a = new String(\"x\");\n        String b = new String(\"x\");\n        System.out.println(a.equals(b) ? 1 : 0);\n    }\n}\n```",
+   "answer": "值相等，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        int x = 7;\n        System.out.println(x > 5 ? 1 : 0);\n    }\n}\n```",
+   "answer": "条件为真取 1，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        int x = 2, y = 0;\n        switch (x) {\n            case 1: y = 10; break;\n            case 2: y = 20; break;\n            default: y = 0;\n        }\n        System.out.println(y);\n    }\n}\n```",
+   "answer": "命中 case 2，20。答案是 20 #### 20"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        int s = 0;\n        for (int i = 1; i <= 5; i++) s += i;\n        System.out.println(s);\n    }\n}\n```",
+   "answer": "1 到 5 累加，15。答案是 15 #### 15"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        int s = 0;\n        for (int i = 0; i < 3; i++)\n            for (int j = 0; j < 4; j++) s++;\n        System.out.println(s);\n    }\n}\n```",
+   "answer": "3 乘 4 次，12。答案是 12 #### 12"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        int s = 0;\n        for (int i = 1; i <= 5; i++) {\n            if (i % 2 == 0) continue;\n            s += i;\n        }\n        System.out.println(s);\n    }\n}\n```",
+   "answer": "跳过偶数累加，9。答案是 9 #### 9"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        int[] x = {3, 1, 2};\n        Arrays.sort(x);\n        System.out.println(x[0]);\n    }\n}\n```",
+   "answer": "升序最小，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        int[] x = {1, 3, 5};\n        System.out.println(Arrays.binarySearch(x, 5));\n    }\n}\n```",
+   "answer": "命中索引 2，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        char c = 'b';\n        System.out.println(c - 'a' + 1);\n    }\n}\n```",
+   "answer": "字符差，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(17 % 5);\n    }\n}\n```",
+   "answer": "余数，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(17 / 5);\n    }\n}\n```",
+   "answer": "整数商，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        System.out.println((6 & 3) | (8 >> 2));\n    }\n}\n```",
+   "answer": "与或移位，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        System.out.println((int)Math.pow(2, 3));\n    }\n}\n```",
+   "answer": "2 的 3 次方，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(Math.max(3, 7) + Math.min(3, 7));\n    }\n}\n```",
+   "answer": "最大加最小，10。答案是 10 #### 10"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    static int f(int n) { return n <= 1 ? 1 : n * f(n - 1); }\n    public static void main(String[] args) {\n        System.out.println(f(5));\n    }\n}\n```",
+   "answer": "5 的阶乘，120。答案是 120 #### 120"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    static int f(int n) { return n < 2 ? n : f(n - 1) + f(n - 2); }\n    public static void main(String[] args) {\n        System.out.println(f(7));\n    }\n}\n```",
+   "answer": "第 7 项，13。答案是 13 #### 13"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass A {}\nclass B extends A {}\npublic class M {\n    public static void main(String[] args) {\n        A x = new B();\n        System.out.println(x instanceof B ? 1 : 0);\n    }\n}\n```",
+   "answer": "运行时类型判断，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass A {}\nclass B extends A {}\npublic class M {\n    public static void main(String[] args) {\n        A x = new A();\n        System.out.println(x instanceof B ? 1 : 0);\n    }\n}\n```",
+   "answer": "不是 B 类型，0。答案是 0 #### 0"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nabstract class A { abstract int f(); }\nclass B extends A { int f() { return 4; } }\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(new B().f() * 2);\n    }\n}\n```",
+   "answer": "实现抽象方法翻倍，8。答案是 8 #### 8"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    enum C { A(2), B(5); int v; C(int v) { this.v = v; } }\n    public static void main(String[] args) {\n        System.out.println(C.B.v + C.A.v);\n    }\n}\n```",
+   "answer": "枚举字段相加，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String s = String.format(\"%d%d\", 1, 2);\n        System.out.println(s.length());\n    }\n}\n```",
+   "answer": "格式化长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String s = \"abc\";\n        System.out.println(s.charAt(1) - 'a');\n    }\n}\n```",
+   "answer": "字符差，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<Integer> l = new ArrayList<>(Arrays.asList(1, 2, 3));\n        l.remove(1);\n        System.out.println(l.get(1));\n    }\n}\n```",
+   "answer": "删除后取 3，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        Map<String, Integer> m = new HashMap<>();\n        System.out.println(m.getOrDefault(\"k\", 9));\n    }\n}\n```",
+   "answer": "缺省值 9，9。答案是 9 #### 9"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        List<Integer> l = Arrays.asList(2, 3);\n        int s = 0;\n        Iterator<Integer> it = l.iterator();\n        while (it.hasNext()) s += it.next();\n        System.out.println(s);\n    }\n}\n```",
+   "answer": "迭代累加，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(Integer.parseInt(\"42\") + 1);\n    }\n}\n```",
+   "answer": "解析加 1，43。答案是 43 #### 43"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        int x = 0;\n        try { int y = 1 / 0; } catch (ArithmeticException e) { x = 5; }\n        System.out.println(x);\n    }\n}\n```",
+   "answer": "捕获后 x=5，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        int x = 0;\n        try { int y = 1 / 0; } catch (ArithmeticException e) { x = 5; } finally { x++; }\n        System.out.println(x);\n    }\n}\n```",
+   "answer": "finally 加 1，6。答案是 6 #### 6"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        StringBuilder b = new StringBuilder(\"abc\");\n        System.out.println(b.reverse().length());\n    }\n}\n```",
+   "answer": "反转后长度不变，3。答案是 3 #### 3"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nimport java.util.*;\npublic class M {\n    public static void main(String[] args) {\n        char[] c = {'b', 'a'};\n        Arrays.sort(c);\n        System.out.println(c[0] - 'a' + 1);\n    }\n}\n```",
+   "answer": "升序最小 a，1。答案是 1 #### 1"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String s = \"  ab  \";\n        System.out.println(s.trim().length());\n    }\n}\n```",
+   "answer": "去空白后长度，2。答案是 2 #### 2"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\nclass S {\n    static int v;\n    static { v = 6; }\n}\npublic class M {\n    public static void main(String[] args) {\n        System.out.println(S.v + 1);\n    }\n}\n```",
+   "answer": "静态块赋值，7。答案是 7 #### 7"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\ninterface I1 { default int a() { return 2; } }\ninterface I2 { default int b() { return 3; } }\nclass S implements I1, I2 {}\npublic class M {\n    public static void main(String[] args) {\n        S s = new S();\n        System.out.println(s.a() + s.b());\n    }\n}\n```",
+   "answer": "两接口方法相加，5。答案是 5 #### 5"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    static <T> T id(T x) { return x; }\n    public static void main(String[] args) {\n        System.out.println(id(7) * 2);\n    }\n}\n```",
+   "answer": "泛型恒等翻倍，14。答案是 14 #### 14"
+  },
+  {
+   "question": "以下 Java 代码输出什么？请用 \"答案是 X #### X\" 格式作答。\n```java\npublic class M {\n    public static void main(String[] args) {\n        String s = \"aXbXc\";\n        System.out.println(s.replace(\"X\", \"\").length());\n    }\n}\n```",
+   "answer": "去掉 X 后长度，3。答案是 3 #### 3"
+  }
+ ]
+}

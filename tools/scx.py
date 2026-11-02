@@ -167,6 +167,19 @@ def default_binary():
     return ""
 
 
+def xtask_binary():
+    """迁移期：baseline/stats 的确定性核心已由 Rust xtask 承接。
+
+    优先委托 `target/{release,debug}/xtask`；未构建时回退 Python 实现，
+    保证开发者无需先构建也能继续工作。"""
+    for profile in ("release", "debug"):
+        for name in ("xtask.exe", "xtask"):
+            path = ROOT / "target" / profile / name
+            if path.is_file():
+                return str(path)
+    return None
+
+
 def _inside(path, parent):
     try:
         Path(path).resolve().relative_to(Path(parent).resolve())
@@ -2638,6 +2651,60 @@ def cmd_extract(args) -> None:
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    if args.cmd in ("baseline", "stats", "contain", "fidelity"):
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, args.cmd, *sys.argv[2:]]).returncode
+        print(
+            f"{args.cmd}: xtask not built; using Python fallback "
+            "(cargo build --features eval --bin xtask)",
+            file=sys.stderr,
+        )
+    if args.cmd == "audit":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "audit"]).returncode
+    if args.cmd == "check" and getattr(args, "check_cmd", None) == "a2":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "a2"]).returncode
+    if args.cmd in ("manifest", "report"):
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, args.cmd, *sys.argv[2:]]).returncode
+    if args.cmd == "freeze":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "freeze", *sys.argv[2:]]).returncode
+    if args.cmd == "check" and getattr(args, "check_cmd", None) == "subset":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "subset", *sys.argv[3:]]).returncode
+    if args.cmd == "seed":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "seed", *sys.argv[2:]]).returncode
+    if args.cmd == "selftest":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "selftest"]).returncode
+    if args.cmd == "verify":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "verify", *sys.argv[2:]]).returncode
+    if args.cmd == "blind":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "blind", *sys.argv[2:]]).returncode
+    if args.cmd == "extract":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "extract", *sys.argv[2:]]).returncode
+        print(
+            f"{args.cmd}: xtask not built; using Python fallback "
+            "(cargo build --features eval --bin xtask)",
+            file=sys.stderr,
+        )
     if args.cmd == "blind" and args.blind_cmd == "make":
         args.per_layer = {
             key: int(value)

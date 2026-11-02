@@ -9,17 +9,20 @@
 ```bash
 # 0. 构建 release 二进制（零依赖，--locked）
 cargo build --release --locked
+cargo build --release --locked --features eval --bin xtask
 
 # 1. 跑 containment 评测（stdout 表格 + 聚合；--out 写逐片 detail JSON）
-./tools/scx.py contain config/contain5.corpus.json --out /tmp/contain5-detail.json
+./target/release/xtask contain config/contain5.corpus.json --out /tmp/contain5-detail.json
+# 或经 Python 包装（会委托同一 Rust 实现）：./tools/scx.py contain ...
 
 # 可选参数（默认即本次实测口径）：
 #   --ratio 0.35 --context 1 --binary target/release/scx
 ```
 
-评测器只用 Python 标准库，无随机源；对同一语料连跑两次输出逐字节一致。
-Python 侧不复刻 scx 排序——压缩由 `target/release/scx`（Rust 唯一实现）完成，
-`scx.py contain` 只负责写临时输入、调用二进制、解析 `scxjson:` 统计行并核对证据。
+评测器无随机源（随机基线由固定 seed 的 CPython 兼容 MT19937 生成）；对同一
+语料连跑两次，除 wall 时间外输出逐字节一致。压缩由 `target/release/scx`
+（Rust 唯一实现）完成，`xtask contain`（`scx.py` 委托）负责写临时输入、调用
+二进制、解析 `scxjson:` 统计行并核对证据。
 
 ## 口径定义
 
@@ -105,13 +108,13 @@ Python 侧不复刻 scx 排序——压缩由 `target/release/scx`（Rust 唯一
 | log | 10/10 | 85.8% | 86.7% |
 | test | 17/17 | 89.0% | 88.5% |
 
-## 判定实现双轨（工具侧 / Rust 协议侧）
+## 判定实现（单一事实源）
 
-- **工具侧（`tools/scx.py contain`）**：把证据行原文与压缩正文做 **substring
-  包含**判定（`ev in body_text`）。宽松、快，适合编排统计。
-- **协议侧（`scx::contain` + `tests/contain.rs`）**：做 **整行逐字节等值**
-  判定（证据行原文必须作为一行存活于输出行集），更严格；红黄蓝断言批
-  （blue 全保留 / red 硬上限守卫 / amber failopen 与汇总自洽）是判定语义的
+- **编排侧（`xtask contain`；`tools/scx.py contain` 委托）**：调用 `scx`
+  二进制解析 `scxjson:` 统计行，并调用 `scx::contain::judge` 判定证据。
+- **判定侧（`scx::contain` + `tests/contain.rs`）**：证据行原文与压缩正文做
+  **substring 包含**判定（`ev in body_text`），与 Python 版逐字节一致；红黄蓝
+  断言批（blue 全保留 / red 硬上限守卫 / amber failopen 与汇总自洽）是判定语义的
   可执行规格，任何实现改动都必须先过它。
 - 两者在 contain5 全 25 片上结果一致（70/70 = 100%）；协议侧更严，今后
   以 `scx::contain` 为判定唯一事实源。

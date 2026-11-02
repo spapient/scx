@@ -506,11 +506,12 @@ fn main() {
 | `src/contain.rs` | 证据保留（Containment）评测协议实现 |
 | `src/memory/` | 本地 case 存储、召回、反馈、索引与评估（`locks` 固定锁序） |
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
-| `src/args/parse.rs` | CLI 参数解析处理器（值解析分派、policy 文件应用链、终局校验），`args` 拆分子模块 |
 | `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
-| `tools/ops.py` | 运维六合一入口（run/install/setup/doctor/check/perf，配置表驱动） |
-| `tools/scx.py` | 评测语料回放、盲审与配对统计（仅标准库；含 `contain` 证据保留子命令） |
+| `tools/ops.py` | 运维六合一入口（run/install/setup/doctor/check/perf；委托 `xtask ops`，未构建时回退 Python） |
+| `src/bin/xtask.rs` | 开发/CI 评估工具（`feature = "eval"`）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现，与原 Python 输出逐字节对拍；不进发布二进制 |
+| `tools/scx.py` | 评测语料回放、盲审与配对统计（仅标准库；`baseline`/`stats`/`contain`/`fidelity`/`audit`/`check a2`/`manifest`/`report`/`freeze`/`check subset`/`seed`/`selftest`/`verify`/`blind`/`extract` 委托 `xtask`；`calibrate` 的语料/分位数/报告由 `xtask` 承担，tiktoken 真值仍由 Python 适配；`distill online` 仍保留 Python（在线教师 API），tiktoken 真值仍由 Python 适配，未构建时回退 Python） |
+| `tools/bench.py` | 在线/离线统一评测入口（离线 `budget`/`ablate`/`metrics real\|perf`/`gen` 委托 `xtask`；在线模型评测保留 Python） |
 | `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
 | `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门（37 例） |
 | `config/` | 可重建语料、冻结标签、盲审包与语义权重（`Gauge.*`/`contain5.*`/`real.*`/`v2.*`） |

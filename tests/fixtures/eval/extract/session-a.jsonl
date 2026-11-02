@@ -1,0 +1,6 @@
+{"type":"assistant","message":{"content":[{"type":"tool_use","input":{"command":"ls -la /tmp"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"line one"},{"type":"text","text":"line two"}]}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","input":{"foo":"bar","n":2}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"plain result"}]}}
+not json at all
+{"type":"api-request-blob","message":{"content":[{"type":"tool_use","input":{"command":"ignored"}}]}}

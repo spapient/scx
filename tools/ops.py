@@ -30,6 +30,16 @@ SCX_PY = os.path.join(ROOT, "tools", "scx.py")
 VERSION = "0.11.0"
 
 
+def xtask_binary():
+    """运维命令已由 Rust xtask 承接；未构建时回退 Python。"""
+    for profile in ("release", "debug"):
+        for name in ("xtask.exe", "xtask"):
+            path = os.path.join(ROOT, "target", profile, name)
+            if os.path.isfile(path):
+                return path
+    return None
+
+
 def proc(cmd, **kw):
     return subprocess.run(cmd, text=True, **kw)
 
@@ -219,6 +229,9 @@ def usage(err=None):
 
 def main():
     argv = sys.argv[1:]
+    xtask = xtask_binary()
+    if xtask:
+        os.execv(xtask, [xtask, "ops", *argv])
     name = argv[0] if argv else "run"
     if name in ("-h", "--help"):
         usage()

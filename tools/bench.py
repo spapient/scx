@@ -47,6 +47,16 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 
+def xtask_binary():
+    """离线子命令已由 Rust xtask 承接；未构建时回退 Python。"""
+    for profile in ("release", "debug"):
+        for name in ("xtask.exe", "xtask"):
+            path = ROOT / "target" / profile / name
+            if path.is_file():
+                return str(path)
+    return None
+
+
 
 def chat(cfg, prompt, max_new, retries=3, sleep_base=2.0, timeout=240,
          reason_off=False, strict_content=False):
@@ -647,7 +657,7 @@ def corpus_zh(seed: int = 42) -> str:
 def compress_ablate(bin_: str, text: str, query: str, extra: list[str]) -> str:
     """调用 scx 压缩；失败/小输入直通返回原文；截断 `compressed:` 装饰块。
     query 必须命中语料高频词，否则 scx「无命中保护」直通（cut 恒 0 会误判）。"""
-    return common.compress(bin_, text, query, extra=extra, timeout=300)
+    return compress(bin_, text, query, extra=extra, timeout=300)
 
 
 def rebuild_folded(out: str) -> str:
@@ -1130,7 +1140,7 @@ def judge_answer(task: dict, answer: str, api_run, judge: str) -> tuple[dict, st
 
 def arch_call(prompt: str, max_new: int, judge: str) -> str:
     """OpenAI 兼容调用（公共 _api.chat 封装，网络超时重试 3 次）。"""
-    return common.chat(ARCH_CFG[judge], prompt, max_new, retries=3, sleep_base=2.0)
+    return chat(ARCH_CFG[judge], prompt, max_new, retries=3, sleep_base=2.0)
 
 
 def cmd_arch() -> None:
@@ -1431,7 +1441,7 @@ def code_call(prompt: str, model: str, max_new: int = 0) -> str:
         max_new = 2048 if model == "deepseek" else 1024
     # 公共 _api.chat：5 次重试、退避 3s、关 reasoning（deepseek-flash 思考会吃光
     # max_tokens 致空响应，关后 1.2s 返回同等质量答案）、空 content 视为失败最终返回 ""。
-    return common.chat(
+    return chat(
         CODE_CFG[model], prompt, max_new,
         retries=5, sleep_base=3.0, reason_off=(model == "deepseek"), strict_content=True,
     )
@@ -1778,7 +1788,7 @@ def kernel_call(prompt: str, max_new: int = 640) -> str:
         "model": "deepseek-flash",
         "env": "DEEPSEEK_API_KEY",
     }
-    return common.chat(cfg, prompt, max_new, retries=1, timeout=180)
+    return chat(cfg, prompt, max_new, retries=1, timeout=180)
 
 
 def cmd_kernel() -> None:
@@ -2450,6 +2460,19 @@ def cmd_calibrate() -> int:
         print("无真值（tiktoken 不可用）：无法定安全系数。%s" % exc)
         return 1
 
+    xtask = xtask_binary()
+    if xtask:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                         encoding="utf-8") as fh:
+            json.dump(ys, fh)
+            truth = fh.name
+        try:
+            cmd = [xtask, "calibrate", "--truth", truth]
+            if corpus_path:
+                cmd += ["--corpus", corpus_path]
+            return subprocess.run(cmd).returncode
+        finally:
+            os.unlink(truth)
     ratios = [y / heuristic_estimate(s) for s, y in zip(samples, ys, strict=True)]
     qs = [0.50, 0.90, 0.95, 0.99, 1.00]
     vals = quantiles(ratios, qs)
@@ -4176,7 +4199,7 @@ def DW_write_weights(tmp: Path, ws: list[float]) -> Path:
     w6 = [round(v, 6) for v in ws]
     # sha256 与 Rust verify_v2 严格一致：SHA256(weights 大端 8 字节拼接 ||
     # 每个特征名接 \n)。只哈希 weights 会与加载器不匹配，导致 --semantic 拒载。
-    payload = DW_encode(w6) + b"".join(n.DW_encode() + b"\n" for n in DW_FEATURES)
+    payload = DW_encode(w6) + b"".join(n.encode() + b"\n" for n in DW_FEATURES)
     p.write_text(json.dumps({
         "schema": "scx-sem-2",
         "features": DW_FEATURES,
@@ -4289,7 +4312,7 @@ def DW_main() -> int:
                   f"({b['num_cov']:.4f}/{b['token_cov']:.4f}) {flag}")
     # 写入 config/semantic/weights.json（随仓权重），非仓库根目录。
     DW_write_weights(DW_OUT.parent, cur)
-    final = DW_encode(cur) + b"".join(n.DW_encode() + b"\n" for n in DW_FEATURES)
+    final = DW_encode(cur) + b"".join(n.encode() + b"\n" for n in DW_FEATURES)
     print(f"写入 {DW_OUT.relative_to(ROOT)} (sha256={hashlib.sha256(final).hexdigest()[:16]}…)")
     with open(ROOT / "config" / "bench" / "results" / "distill_log.csv", "w",
               encoding="utf-8", newline="") as fh:
@@ -4311,7 +4334,7 @@ def FW_tokens(lower: str) -> list[str]:
     out: list[str] = []
     cur: list[str] = []
     i = 0
-    b = lower.FW_encode()
+    b = lower.encode()
     n = len(b)
     while i < n:
         c = b[i]
@@ -5666,6 +5689,31 @@ def main() -> None:
         print("可用子命令: " + ", ".join(SUB))
         sys.exit(0 if len(sys.argv) < 2 else 1)
     sub = sys.argv[1]
+    # 离线子命令委托 Rust xtask；未构建时回退 Python 实现。
+    if sub in ("budget", "ablate"):
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "bench", sub, *sys.argv[2:]]).returncode
+    if sub == "gen":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "gen", *sys.argv[2:]]).returncode
+    if sub == "metrics" and len(sys.argv) > 2 and sys.argv[2] in ("real", "perf"):
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "bench", *sys.argv[2:]]).returncode
+    if sub == "fit":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "fit", *sys.argv[2:]]).returncode
+    if sub == "mlp":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "mlp", *sys.argv[2:]]).returncode
+    if sub == "distill" and len(sys.argv) > 2 and sys.argv[2] == "weights":
+        xtask = xtask_binary()
+        if xtask:
+            return subprocess.run([xtask, "distill", "weights", *sys.argv[3:]]).returncode
     # 子命令参数：去掉子命令名后透传（保留其自身 argparse）
     sys.argv = [sys.argv[0], *sys.argv[2:]]
     rc = SUB[sub]()

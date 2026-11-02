@@ -1,0 +1,242 @@
+[
+ {
+  "question": "以下 CUDA kernel 启动后，每个线程块内的线程总数是多少？\n```cuda\ndim3 block(16, 4);\nkernel<<<8, block>>>();\n```",
+  "answer": "64"
+ },
+ {
+  "question": "以下 kernel 启动的线程块总数是多少？\n```cuda\nkernel<<<dim3(2, 3), 8>>>();\n```",
+  "answer": "6"
+ },
+ {
+  "question": "以下 kernel 中，blockIdx.x 的取值范围是多少（块总数）？\n```cuda\nkernel<<<5, 16>>>();\n```",
+  "answer": "0-4"
+ },
+ {
+  "question": "kernel<<<2, 32>>> 启动后，线程 threadIdx.x 的取值范围是多少？",
+  "answer": "0-31"
+ },
+ {
+  "question": "以下 CUDA 代码中，第 0 号块内第 0 号线程的全局线性线程 ID 是多少？\n```cuda\n__global__ void k() {\n    int t = blockIdx.x * blockDim.x + threadIdx.x;\n}\nk<<<1, 64>>>();\n```",
+  "answer": "0"
+ },
+ {
+  "question": "kernel<<<4, 32>>> 启动后，第 2 号块（blockIdx.x=2）内 threadIdx.x=5 的全局线性线程 ID 是多少？",
+  "answer": "69"
+ },
+ {
+  "question": "以下 kernel 启动的线程总数是多少？\n```cuda\ndim3 grid(3, 2);\ndim3 block(4, 4);\nkernel<<<grid, block>>>();\n```",
+  "answer": "96"
+ },
+ {
+  "question": "kernel<<<1, 1024>>> 启动后，blockDim.x 的值是多少？",
+  "answer": "1024"
+ },
+ {
+  "question": "以下 CUDA 代码中，gird 维度写错的编译错误类型是？\n```cuda\ndim3 grid(2, 2);\nkernel<<<grid, grid>>>();\n```（kernel 的形参为 block 维度）",
+  "answer": "类型不匹配（grid 用于 gridDim 维度）"
+ },
+ {
+  "question": "kernel<<<8, 128>>> 启动后，gridDim.x 的值是多少？",
+  "answer": "8"
+ },
+ {
+  "question": "以下 kernel 中，数组 a 位于什么内存空间？\n```cuda\n__global__ void k(float* a) { a[0] = 1.0f; }\n```",
+  "answer": "全局内存（global memory）"
+ },
+ {
+  "question": "以下代码中，变量 s 位于什么内存空间？\n```cuda\n__global__ void k() {\n    __shared__ float s[64];\n    s[threadIdx.x] = 1.0f;\n}\n```",
+  "answer": "共享内存（shared memory）"
+ },
+ {
+  "question": "以下代码中，__constant__ 数组 c 默认被谁访问最快？\n```cuda\n__constant__ float c[16];\n```",
+  "answer": "所有线程（常量缓存广播）"
+ },
+ {
+  "question": "以下代码存在什么问题？\n```cuda\n__global__ void k() {\n    __shared__ int s;\n    if (threadIdx.x == 0) s = 42;\n    int v = s;  // 所有线程读\n}\n```",
+  "answer": "缺少 __syncthreads() 同步（数据竞争）"
+ },
+ {
+  "question": "以下 kernel 中，动态共享内存大小由谁指定？\n```cuda\n__global__ void k() {\n    extern __shared__ float sm[];\n}\nk<<<1, 32, 128>>>();\n```",
+  "answer": "启动配置第三参数（128 字节）"
+ },
+ {
+  "question": "以下代码，cudaMemcpy 的方向是？\n```cuda\ncudaMemcpy(d_a, h_a, n * sizeof(float), cudaMemcpyHostToDevice);\n```",
+  "answer": "主机到设备（HostToDevice）"
+ },
+ {
+  "question": "以下代码中，变量 v 存放在哪个空间？\n```cuda\n__global__ void k() {\n    float v = 3.14f;\n    v += 1.0f;\n}\n```",
+  "answer": "线程私有局部变量（寄存器/局部内存）"
+ },
+ {
+  "question": "以下代码有什么内存问题？\n```cuda\n__global__ void k(float* d) {\n    float* p = new float[16];  // 设备端\n    p[0] = 1.0f;\n}\n```",
+  "answer": "没有释放（设备端 new 无配对 delete 即泄漏）"
+ },
+ {
+  "question": "以下 CUDA 代码中，d_a 初始化后 h_a 的内容是什么？\n```cuda\nfloat h_a[4] = {1, 2, 3, 4};\nfloat* d_a; cudaMalloc(&d_a, 16);\ncudaMemcpy(d_a, h_a, 16, cudaMemcpyHostToDevice);\ncudaMemset(d_a, 0, 16);\ncudaMemcpy(h_a, d_a, 16, cudaMemcpyDeviceToHost);\n```",
+  "answer": "全 0（Memset 覆盖）"
+ },
+ {
+  "question": "以下代码中，texture 读取的默认寻址模式是？\n```cuda\ntexture<float, 1, cudaReadModeElementType> tex;\n```",
+  "answer": "归一化坐标（若绑定为 normalized）否则元素索引"
+ },
+ {
+  "question": "以下 kernel 中，所有块都执行到 __syncthreads() 后，全局内存可见性如何？\n```cuda\n__global__ void k(float* g) {\n    __shared__ float s[1];\n    s[0] = g[0];\n    __syncthreads();\n    g[0] = s[0] + 1;\n}\n```",
+  "answer": "仅块内线程同步；不同块的写无跨块同步保证"
+ },
+ {
+  "question": "以下代码中，atomicAdd 的返回值是什么？\n```cuda\n__global__ void k(int* counter) {\n    int old = atomicAdd(counter, 1);\n}\n```",
+  "answer": "加操作前的旧值"
+ },
+ {
+  "question": "以下代码执行后，g 的值是多少（假设 g 初始为 0，单块 32 线程各 atomicAdd(g, 1)）？\n```cuda\n__global__ void k(int* g) {\n    atomicAdd(g, 1);\n}\nk<<<1, 32>>>();\n```",
+  "answer": "32"
+ },
+ {
+  "question": "以下代码中，__threadfence() 的作用是？",
+  "answer": "确保当前线程先前的写对其他线程可见（内存栅栏）"
+ },
+ {
+  "question": "以下代码存在什么问题？\n```cuda\n__global__ void k(int* g) {\n    if (threadIdx.x < 16) { g[0] = 1; }\n    __syncthreads();\n    if (threadIdx.x >= 16) { g[1] = g[0]; }\n}\n```",
+  "answer": "块内非全线程到达 __syncthreads 是未定义行为（若 divergent）"
+ },
+ {
+  "question": "以下代码中，cudaDeviceSynchronize() 的作用是？",
+  "answer": "阻塞主机直到设备上所有流任务完成"
+ },
+ {
+  "question": "以下代码中，第二个 kernel 何时执行？\n```cuda\nkernel<<<1, 32>>>();\ncudaStreamSynchronize(stream);\nkernel2<<<1, 32>>>();\n```",
+  "answer": "在 stream 上第一个 kernel 完成后"
+ },
+ {
+  "question": "以下代码中，atomicExch(&g, 7) 的返回值是？",
+  "answer": "交换前的旧值"
+ },
+ {
+  "question": "以下 CUDA 代码中，g[0] 的最终值是多少？\n```cuda\n__global__ void k(int* g) {\n    __shared__ int s;\n    if (threadIdx.x == 0) { s = 5; }\n    __syncthreads();\n    if (threadIdx.x == 1) { s += 2; }\n    __syncthreads();\n    if (threadIdx.x == 0) { g[0] = s; }\n}\nk<<<1, 32>>>();\n```",
+  "answer": "7"
+ },
+ {
+  "question": "以下代码中，atomicCAS 的作用是？",
+  "answer": "比较并交换（compare-and-swap，返回旧值）"
+ },
+ {
+  "question": "CUDA 中一个 warp 包含多少个线程？",
+  "answer": "32"
+ },
+ {
+  "question": "以下代码中，两个分支的线程数各是多少（warp divergence）？\n```cuda\nif (threadIdx.x % 2 == 0) { a(); } else { b(); }\n```",
+  "answer": "各 16（半个 warp）"
+ },
+ {
+  "question": "以下共享内存访问是否产生 bank conflict？\n```cuda\n__shared__ float s[32];\nfloat v = s[threadIdx.x * 2];\n```",
+  "answer": "是（线程 0/16 冲突，stride 2）"
+ },
+ {
+  "question": "以下共享内存访问是否产生 bank conflict？\n```cuda\n__shared__ float s[32];\nfloat v = s[threadIdx.x];\n```",
+  "answer": "否（每线程不同 bank）"
+ },
+ {
+  "question": "以下全局内存访问是否合并（coalesced）？\n```cuda\nfloat v = d[threadIdx.x];\n```",
+  "answer": "是（连续线程访问连续地址）"
+ },
+ {
+  "question": "以下全局内存访问是否合并？\n```cuda\nfloat v = d[threadIdx.x * 8];\n```",
+  "answer": "否（stride 8，非合并）"
+ },
+ {
+  "question": "以下代码中，__shfl_sync 的作用是？",
+  "answer": "warp 内线程间交换数据（lane shuffle）"
+ },
+ {
+  "question": "以下代码中，occupancy 主要受什么限制？\n```cuda\n__global__ void k() { __shared__ float s[2048]; }\n```",
+  "answer": "共享内存容量"
+ },
+ {
+  "question": "以下代码中，使用 __launch_bounds__(128, 8) 的含义是？",
+  "answer": "每块最多 128 线程，至少 8 块/SM（指导寄存器分配）"
+ },
+ {
+  "question": "以下代码中，unroll 指令 #pragma unroll 4 的含义是？",
+  "answer": "循环展开 4 次（编译器提示）"
+ },
+ {
+  "question": "以下代码中，cudaStreamCreate 返回什么表示成功？",
+  "answer": "cudaSuccess（0）"
+ },
+ {
+  "question": "以下代码中，cudaGetLastError() 的作用是？",
+  "answer": "返回最近一次运行时调用的错误码"
+ },
+ {
+  "question": "以下代码中，cudaEventRecord 的作用是？",
+  "answer": "在指定流上记录事件（用于计时/同步）"
+ },
+ {
+  "question": "以下代码中，使用 cudaMemcpyAsync 需要什么前提？",
+  "answer": "页锁定（pinned）主机内存 + 指定流"
+ },
+ {
+  "question": "以下代码中，cudaHostAlloc 分配的内存特点是什么？",
+  "answer": "页锁定主机内存（可被设备直接访问）"
+ },
+ {
+  "question": "以下代码中，cudaMallocManaged 分配的内存特点是什么？",
+  "answer": "统一内存（CPU/GPU 自动迁移）"
+ },
+ {
+  "question": "以下代码中，cudaDeviceReset() 的作用是？",
+  "answer": "重置设备上下文（释放所有资源）"
+ },
+ {
+  "question": "以下代码中，cudaOccupancyMaxActiveBlocksPerMultiprocessor 返回什么？",
+  "answer": "每个 SM 上最大活跃块数（按 kernel 和块大小）"
+ },
+ {
+  "question": "以下代码中，cudaPeekAtLastError 与 cudaGetLastError 的区别是什么？",
+  "answer": "Peek 不清除错误标志，Get 清除"
+ },
+ {
+  "question": "以下代码中，使用 -arch=sm_80 编译的含义是什么？",
+  "answer": "为 Ampere 架构（sm_80）生成 SASS"
+ },
+ {
+  "question": "以下规约（reduce）代码中，最后结果 g[0] 是多少（d 为 0..31 的平方和）？\n```cuda\n__global__ void k(int* g, int* d) {\n    __shared__ int s[32];\n    s[threadIdx.x] = d[threadIdx.x] * d[threadIdx.x];\n    __syncthreads();\n    if (threadIdx.x == 0) {\n        int sum = 0;\n        for (int i = 0; i < 32; i++) sum += s[i];\n        g[0] = sum;\n    }\n}\n```",
+  "answer": "10416"
+ },
+ {
+  "question": "以下代码中，使用 cudaGraphLaunch 的好处是什么？",
+  "answer": "减少 kernel 启动开销（图捕获重放）"
+ },
+ {
+  "question": "以下代码中，half2 数据类型的特点是什么？",
+  "answer": "2 个 half 打包（16 位浮点×2）"
+ },
+ {
+  "question": "以下代码中，使用 __restrict__ 修饰指针的作用是什么？",
+  "answer": "提示编译器无别名（允许更激进的优化）"
+ },
+ {
+  "question": "以下代码中，动态并行（Dynamic Parallelism）指的是什么？",
+  "answer": "设备端 kernel 可启动子 kernel"
+ },
+ {
+  "question": "以下代码中，使用 cudaMemPrefetchAsync 的作用是什么？",
+  "answer": "异步预取统一内存到指定设备"
+ },
+ {
+  "question": "以下代码中，纹理内存相比全局内存的优势是什么？",
+  "answer": "缓存 + 硬件插值/边界处理"
+ },
+ {
+  "question": "以下代码中，用 shared memory 做矩阵分块（tiling）的主要目的？",
+  "answer": "减少全局内存访问次数（数据复用）"
+ },
+ {
+  "question": "以下代码中，使用 vectorized load（float4）访问的效果是什么？",
+  "answer": "减少指令数、提高内存带宽利用率"
+ },
+ {
+  "question": "以下代码中，warp-level reduce 相比 block reduce 的优势是什么？",
+  "answer": "无需 __syncthreads（warp 内天然同步）"
+ }
+]

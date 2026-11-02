@@ -1,0 +1,242 @@
+[
+ {
+  "question": "以下 JS 代码输出什么？\n```js\nvar a = 1;\nfunction f() { console.log(a); var a = 2; }\nf();\n```",
+  "answer": "undefined"
+ },
+ {
+  "question": "以下 JS 代码输出什么？\n```js\nlet x = 10;\nconst f = () => { console.log(x); x = 20; };\nf(); console.log(x);\n```",
+  "answer": "10 然后 20"
+ },
+ {
+  "question": "以下 JS 代码输出什么（闭包）？\n```js\nfunction make() {\n  let n = 0;\n  return () => ++n;\n}\nconst a = make(); const b = make();\nconsole.log(a(), a(), b());\n```",
+  "answer": "1 2 1"
+ },
+ {
+  "question": "以下 JS 代码输出什么（var 循环捕获）？\n```js\nconst fns = [];\nfor (var i = 0; i < 3; i++) fns.push(() => console.log(i));\nfns[0]();\n```",
+  "answer": "3"
+ },
+ {
+  "question": "以下 JS 代码输出什么（let 循环捕获）？\n```js\nconst fns = [];\nfor (let i = 0; i < 3; i++) fns.push(() => console.log(i));\nfns[1]();\n```",
+  "answer": "1"
+ },
+ {
+  "question": "以下 JS 代码输出什么（严格模式 this）？\n```js\n'use strict';\nfunction f() { console.log(this); }\nf();\n```",
+  "answer": "undefined"
+ },
+ {
+  "question": "以下 JS 代码输出什么（对象方法 this）？\n```js\nconst o = { v: 5, get() { return this.v; } };\nconsole.log(o.get());\nconst g = o.get;\nconsole.log(g());\n```",
+  "answer": "5 然后 undefined"
+ },
+ {
+  "question": "以下 JS 代码输出什么（字符串拼接）？\n```js\nconsole.log('3' + 4, '3' - 4);\n```",
+  "answer": "34 -1"
+ },
+ {
+  "question": "以下 JS 代码输出什么（== vs ===）？\n```js\nconsole.log(0 == false, 0 === false);\n```",
+  "answer": "true false"
+ },
+ {
+  "question": "以下 JS 代码输出什么（NaN）？\n```js\nconsole.log(NaN === NaN, Number.isNaN(NaN));\n```",
+  "answer": "false 然后 true"
+ },
+ {
+  "question": "以下 JS 代码输出什么（原型链）？\n```js\nfunction A() {}\nA.prototype.x = 1;\nconst a = new A();\nconsole.log(a.x, a.hasOwnProperty('x'));\n```",
+  "answer": "1 然后 false"
+ },
+ {
+  "question": "以下 JS 代码输出什么（class 继承）？\n```js\nclass A { constructor() { this.v = 'a'; } }\nclass B extends A { constructor() { super(); this.v += 'b'; } }\nconsole.log(new B().v);\n```",
+  "answer": "ab"
+ },
+ {
+  "question": "以下 JS 代码中，instanceof 判断什么？",
+  "answer": "对象是否属于某构造器原型链"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Object.create）？\n```js\nconst base = { greet() { return 'hi'; } };\nconst o = Object.create(base);\nconsole.log(o.greet(), o.hasOwnProperty('greet'));\n```",
+  "answer": "hi 然后 false"
+ },
+ {
+  "question": "以下 JS 代码输出什么（getter）？\n```js\nconst o = { get v() { return 7; } };\nconsole.log(o.v);\n```",
+  "answer": "7"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Symbol.iterator）？\n```js\nconst o = { [Symbol.iterator]: function* () { yield 1; yield 2; } };\nconsole.log([...o].length);\n```",
+  "answer": "2"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Object.assign 浅拷贝）？\n```js\nconst a = { x: { y: 1 } };\nconst b = Object.assign({}, a);\nb.x.y = 9;\nconsole.log(a.x.y);\n```",
+  "answer": "9（浅拷贝共享嵌套对象）"
+ },
+ {
+  "question": "以下 JS 代码输出什么（静态方法）？\n```js\nclass A { static s() { return 's'; } }\nconsole.log(A.s());\n```",
+  "answer": "s"
+ },
+ {
+  "question": "以下 JS 代码中，Object.freeze 的作用是什么？",
+  "answer": "对象不可扩展且属性不可改（只读）"
+ },
+ {
+  "question": "以下 JS 代码输出什么（instanceof 跨原型）？\n```js\nfunction A() {}\nconst a = new A();\nconsole.log(a instanceof A, a instanceof Object);\n```",
+  "answer": "true 然后 true"
+ },
+ {
+  "question": "以下 JS 代码输出顺序是什么（microtask 优先）？\n```js\nconsole.log(1);\nPromise.resolve().then(() => console.log(2));\nsetTimeout(() => console.log(3), 0);\nconsole.log(4);\n```",
+  "answer": "1 4 2 3"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Promise 链）？\n```js\nPromise.resolve(1).then(v => v + 1).then(v => console.log(v));\n```",
+  "answer": "2"
+ },
+ {
+  "question": "以下 JS 代码输出什么（async/await）？\n```js\nasync function f() { return 42; }\nf().then(v => console.log(v));\n```",
+  "answer": "42"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Promise.all 失败）？\n```js\nPromise.all([Promise.resolve(1), Promise.reject(2)]).catch(e => console.log(e));\n```",
+  "answer": "2"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Promise.race）？\n```js\nPromise.race([Promise.resolve('a'), Promise.resolve('b')]).then(v => console.log(v));\n```",
+  "answer": "a"
+ },
+ {
+  "question": "以下 JS 代码输出什么（catch 后继续）？\n```js\nPromise.reject('e').catch(e => 'ok').then(v => console.log(v));\n```",
+  "answer": "ok"
+ },
+ {
+  "question": "以下 JS 代码中，await 的作用是什么？",
+  "answer": "暂停 async 函数直到 Promise 完成"
+ },
+ {
+  "question": "以下 JS 代码输出什么（async 内 throw）？\n```js\nasync function f() { throw new Error('boom'); }\nf().catch(e => console.log(e.message));\n```",
+  "answer": "boom"
+ },
+ {
+  "question": "以下 JS 代码输出什么（微任务嵌套）？\n```js\nPromise.resolve().then(() => console.log(1))\n  .then(() => console.log(2));\nPromise.resolve().then(() => console.log(3));\n```",
+  "answer": "1 3 2"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Promise 构造函数立即执行）？\n```js\nnew Promise(res => { console.log('a'); res(); });\nconsole.log('b');\n```",
+  "answer": "a 然后 b"
+ },
+ {
+  "question": "以下 JS 代码输出什么（reduce）？\n```js\nconsole.log([1, 2, 3].reduce((a, b) => a + b, 0));\n```",
+  "answer": "6"
+ },
+ {
+  "question": "以下 JS 代码输出什么（filter+map）？\n```js\nconsole.log([1, 2, 3, 4].filter(x => x % 2 === 0).map(x => x * 10));\n```",
+  "answer": "[ 20, 40 ]"
+ },
+ {
+  "question": "以下 JS 代码输出什么（sort 数字）？\n```js\nconsole.log([10, 2, 1].sort());\nconsole.log([10, 2, 1].sort((a, b) => a - b));\n```",
+  "answer": "[ 1, 10, 2 ] 然后 [ 1, 2, 10 ]"
+ },
+ {
+  "question": "以下 JS 代码输出什么（解构）？\n```js\nconst [a, , b] = [1, 2, 3];\nconsole.log(a + b);\n```",
+  "answer": "4"
+ },
+ {
+  "question": "以下 JS 代码输出什么（展开）？\n```js\nconsole.log(Math.max(...[1, 5, 3]));\n```",
+  "answer": "5"
+ },
+ {
+  "question": "以下 JS 代码输出什么（可选链）？\n```js\nconst o = { a: { b: 1 } };\nconsole.log(o.a?.b, o.x?.y);\n```",
+  "answer": "1 undefined"
+ },
+ {
+  "question": "以下 JS 代码输出什么（空值合并）？\n```js\nconsole.log(null ?? 'd', 0 ?? 'd', '' ?? 'd');\n```",
+  "answer": "d 0 空字符串"
+ },
+ {
+  "question": "以下 JS 代码输出什么（flatMap）？\n```js\nconsole.log([[1], [2, 3]].flatMap(x => x));\n```",
+  "answer": "[ 1, 2, 3 ]"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Set 去重）？\n```js\nconsole.log(new Set([1, 1, 2, 3, 3]).size);\n```",
+  "answer": "3"
+ },
+ {
+  "question": "以下 JS 代码输出什么（对象键顺序）？\n```js\nconst o = { 2: 'b', 1: 'a', x: 'c' };\nconsole.log(Object.keys(o).join(','));\n```",
+  "answer": "1,2,x（整数键升序优先）"
+ },
+ {
+  "question": "以下 TS 代码中，x 的类型推断是什么？\n```ts\nlet x = 10;\nx = 'str';  // 报错吗？\n```",
+  "answer": "number；赋 string 报错"
+ },
+ {
+  "question": "以下 TS 代码中，泛型 T 的推断结果是什么？\n```ts\nfunction id<T>(v: T): T { return v; }\nconst a = id(42);\n```",
+  "answer": "number"
+ },
+ {
+  "question": "以下 TS 代码中，联合类型的写法是什么？\n```ts\nlet v: string | number;\n```",
+  "answer": "string 或 number"
+ },
+ {
+  "question": "以下 TS 代码中，keyof 的作用是什么？",
+  "answer": "取类型的所有键的联合"
+ },
+ {
+  "question": "以下 TS 代码中，ReturnType 的作用是什么？",
+  "answer": "取函数类型的返回值类型"
+ },
+ {
+  "question": "以下 TS 代码中，接口与类型别名的关键区别是什么？",
+  "answer": "接口可合并声明，类型别名不可"
+ },
+ {
+  "question": "以下 TS 代码中，Pick<T, K> 的作用是什么？",
+  "answer": "从 T 中挑选键 K 组成新类型"
+ },
+ {
+  "question": "以下 TS 代码中，类型守卫 typeof 的作用是什么？",
+  "answer": "在联合类型中收窄类型分支"
+ },
+ {
+  "question": "以下 TS 代码中，readonly 的作用是什么？",
+  "answer": "属性只读（编译期检查）"
+ },
+ {
+  "question": "以下 TS 代码中，as const 的作用是什么？",
+  "answer": "字面量类型收窄（不可变字面量）"
+ },
+ {
+  "question": "以下 JS 代码输出什么（WeakMap 键）？\n```js\nconst wm = new WeakMap();\nconst k = {};\nwm.set(k, 1);\nconsole.log(wm.get(k));\n```",
+  "answer": "1"
+ },
+ {
+  "question": "以下 JS 代码输出什么（Proxy）？\n```js\nconst p = new Proxy({}, { get(t, k) { return 'proxy'; } });\nconsole.log(p.anything);\n```",
+  "answer": "proxy"
+ },
+ {
+  "question": "以下 JS 代码输出什么（生成器）？\n```js\nfunction* g() { yield 1; yield 2; }\nconst it = g();\nconsole.log(it.next().value, it.next().value);\n```",
+  "answer": "1 2"
+ },
+ {
+  "question": "以下 JS 代码输出什么（JSON 序列化）？\n```js\nconsole.log(JSON.stringify({ a: 1, b: undefined }));\n```",
+  "answer": "{\"a\":1}"
+ },
+ {
+  "question": "以下 JS 代码输出什么（模板字符串）？\n```js\nconst n = 3;\nconsole.log(`v=${n * 2}`);\n```",
+  "answer": "v=6"
+ },
+ {
+  "question": "以下 JS 代码输出什么（for...of vs for...in）？\n```js\nconst o = { a: 1, b: 2 };\nconsole.log([...Object.keys(o)].join(','), [...o].length);\n```",
+  "answer": "a,b 然后 抛 TypeError（对象不可迭代）"
+ },
+ {
+  "question": "以下 JS 代码输出什么（闭包计数器封装）？\n```js\nfunction counter() { let n = 0; return { inc: () => ++n, get: () => n }; }\nconst c = counter();\nc.inc(); c.inc();\nconsole.log(c.get());\n```",
+  "answer": "2"
+ },
+ {
+  "question": "以下 JS 代码输出什么（正则）？\n```js\nconsole.log('a1b2'.replace(/\\d/g, '#'));\n```",
+  "answer": "a#b#"
+ },
+ {
+  "question": "以下 JS 代码中，void 0 的值是什么？",
+  "answer": "undefined"
+ },
+ {
+  "question": "以下 JS 代码输出什么（BigInt）？\n```js\nconsole.log(2n ** 10n);\n```",
+  "answer": "1024n"
+ }
+]

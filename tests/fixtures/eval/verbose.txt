@@ -1,0 +1,27 @@
+case 1/9 q="query 1"
+  A: 1) case_0001 sim=0.8 score=9.0 [hit]
+  B: 1) case_0001 sim=0.8 score=9.0 [hit]
+case 2/9 q="query 2"
+  A: 1) case_0002 sim=0.8 score=9.0 [hit]
+  B: 1) case_0002 sim=0.8 score=9.0 [hit]
+case 3/9 q="query 3"
+  A: 1) case_0003 sim=0.8 score=9.0 [hit]
+  B: 1) case_0003 sim=0.8 score=9.0 [hit]
+case 4/9 q="query 4"
+  A: 1) noise_0004_1 sim=0.8 score=9.0 [miss] | 2) case_0004 sim=0.7 score=8.0 [hit]
+  B: 1) noise_0004_1 sim=0.8 score=9.0 [miss] | 2) noise_0004_2 sim=0.7 score=8.0 [miss] | 3) case_0004 sim=0.6 score=7.0 [hit]
+case 5/9 q="query 5"
+  A: 1) noise_0005_1 sim=0.8 score=9.0 [miss] | 2) case_0005 sim=0.7 score=8.0 [hit]
+  B: 1) noise_0005_1 sim=0.8 score=9.0 [miss] | 2) noise_0005_2 sim=0.7 score=8.0 [miss] | 3) case_0005 sim=0.6 score=7.0 [hit]
+case 6/9 q="query 6"
+  A: 1) noise_0006_1 sim=0.8 score=9.0 [miss] | 2) case_0006 sim=0.7 score=8.0 [hit]
+  B: 1) noise_0006_1 sim=0.8 score=9.0 [miss] | 2) noise_0006_2 sim=0.7 score=8.0 [miss] | 3) case_0006 sim=0.6 score=7.0 [hit]
+case 7/9 q="query 7"
+  A: 1) noise_0007_1 sim=0.8 score=9.0 [miss] | 2) noise_0007_2 sim=0.7 score=8.0 [miss] | 3) noise_0007_3 sim=0.6 score=7.0 [miss] | 4) case_0007 sim=0.5 score=6.0 [hit]
+  B: 
+case 8/9 q="query 8"
+  A: 1) noise_0008_1 sim=0.8 score=9.0 [miss] | 2) noise_0008_2 sim=0.7 score=8.0 [miss] | 3) noise_0008_3 sim=0.6 score=7.0 [miss] | 4) case_0008 sim=0.5 score=6.0 [hit]
+  B: 
+case 9/9 q="query 9"
+  A: 1) noise_0009_1 sim=0.8 score=9.0 [miss] | 2) noise_0009_2 sim=0.7 score=8.0 [miss] | 3) noise_0009_3 sim=0.6 score=7.0 [miss] | 4) case_0009 sim=0.5 score=6.0 [hit]
+  B: 

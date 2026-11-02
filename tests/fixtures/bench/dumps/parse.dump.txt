@@ -1,0 +1,281 @@
+pub fn parse_0(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(1);
+    Ok(tmp)
+}
+pub fn parse_1(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(2);
+    Ok(tmp)
+}
+pub fn parse_2(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(3);
+    Ok(tmp)
+}
+pub fn parse_3(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(4);
+    Ok(tmp)
+}
+pub fn parse_4(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(5);
+    Ok(tmp)
+}
+pub fn parse_5(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(6);
+    Ok(tmp)
+}
+pub fn parse_6(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(7);
+    Ok(tmp)
+}
+pub fn parse_7(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(8);
+    Ok(tmp)
+}
+pub fn parse_8(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(9);
+    Ok(tmp)
+}
+pub fn parse_9(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(10);
+    Ok(tmp)
+}
+pub fn parse_10(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(11);
+    Ok(tmp)
+}
+pub fn parse_11(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(12);
+    Ok(tmp)
+}
+pub fn parse_12(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(13);
+    Ok(tmp)
+}
+pub fn parse_13(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(14);
+    Ok(tmp)
+}
+pub fn parse_14(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(15);
+    Ok(tmp)
+}
+pub fn parse_15(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(16);
+    Ok(tmp)
+}
+pub fn parse_16(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(17);
+    Ok(tmp)
+}
+pub fn parse_17(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(18);
+    Ok(tmp)
+}
+pub fn parse_18(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(19);
+    Ok(tmp)
+}
+pub fn parse_19(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(20);
+    Ok(tmp)
+}
+pub fn parse_20(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(21);
+    Ok(tmp)
+}
+pub fn parse_21(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(22);
+    Ok(tmp)
+}
+pub fn parse_22(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(23);
+    Ok(tmp)
+}
+pub fn parse_23(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(24);
+    Ok(tmp)
+}
+pub fn parse_24(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(25);
+    Ok(tmp)
+}
+pub fn parse_25(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(26);
+    Ok(tmp)
+}
+pub fn parse_26(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(27);
+    Ok(tmp)
+}
+pub fn parse_27(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(28);
+    Ok(tmp)
+}
+pub fn parse_28(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(29);
+    Ok(tmp)
+}
+pub fn parse_29(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(30);
+    Ok(tmp)
+}
+pub fn parse_30(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(31);
+    Ok(tmp)
+}
+pub fn parse_31(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(32);
+    Ok(tmp)
+}
+pub fn parse_32(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(33);
+    Ok(tmp)
+}
+pub fn parse_33(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(34);
+    Ok(tmp)
+}
+pub fn parse_34(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(35);
+    Ok(tmp)
+}
+pub fn parse_35(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(36);
+    Ok(tmp)
+}
+pub fn parse_36(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(37);
+    Ok(tmp)
+}
+pub fn parse_37(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(38);
+    Ok(tmp)
+}
+pub fn parse_38(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(39);
+    Ok(tmp)
+}
+pub fn parse_39(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(40);
+    Ok(tmp)
+}
+pub fn parse_40(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(41);
+    Ok(tmp)
+}
+pub fn parse_41(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(42);
+    Ok(tmp)
+}
+pub fn parse_42(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(43);
+    Ok(tmp)
+}
+pub fn parse_43(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(44);
+    Ok(tmp)
+}
+pub fn parse_44(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(45);
+    Ok(tmp)
+}
+pub fn parse_45(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(46);
+    Ok(tmp)
+}
+pub fn parse_46(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(47);
+    Ok(tmp)
+}
+pub fn parse_47(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(48);
+    Ok(tmp)
+}
+pub fn parse_48(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(49);
+    Ok(tmp)
+}
+pub fn parse_49(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(50);
+    Ok(tmp)
+}
+pub fn parse_50(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(51);
+    Ok(tmp)
+}
+pub fn parse_51(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(52);
+    Ok(tmp)
+}
+pub fn parse_52(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(53);
+    Ok(tmp)
+}
+pub fn parse_53(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(54);
+    Ok(tmp)
+}
+pub fn parse_54(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(55);
+    Ok(tmp)
+}
+pub fn parse_55(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(56);
+    Ok(tmp)
+}
+pub fn parse_56(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(57);
+    Ok(tmp)
+}
+pub fn parse_57(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(58);
+    Ok(tmp)
+}
+pub fn parse_58(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(59);
+    Ok(tmp)
+}
+pub fn parse_59(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(60);
+    Ok(tmp)
+}
+pub fn parse_60(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(61);
+    Ok(tmp)
+}
+pub fn parse_61(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(62);
+    Ok(tmp)
+}
+pub fn parse_62(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(63);
+    Ok(tmp)
+}
+pub fn parse_63(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(64);
+    Ok(tmp)
+}
+pub fn parse_64(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(65);
+    Ok(tmp)
+}
+pub fn parse_65(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(66);
+    Ok(tmp)
+}
+pub fn parse_66(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(67);
+    Ok(tmp)
+}
+pub fn parse_67(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(68);
+    Ok(tmp)
+}
+pub fn parse_68(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(69);
+    Ok(tmp)
+}
+pub fn parse_69(arg: u64) -> Result<u64, Error> {
+    let tmp = arg.wrapping_mul(70);
+    Ok(tmp)
+}
+// error: parse timeout at cache.rs:142

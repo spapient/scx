@@ -2,8 +2,8 @@
 //!
 //! 数据子集：冻结语料 config/contain5.corpus.json 的 5 类代表切片
 //! （build/stack/diff/log/test 各 1），与其逐字一致；全量 25 片编排由
-//! `tools/scx.py contain`（Python，只做编排/统计）承担，本文件是判定语义的
-//! 可执行规格（Rust 侧协议实现，见 scx::contain）。
+//! `xtask contain`（Rust；`tools/scx.py contain` 已委托）承担，本文件是判定
+//! 语义的可执行规格（Rust 侧协议实现，见 scx::contain）。
 //! 口径：evidence containment（证据行原文逐字节存活），作者侧自测，非第三方独立评测。
 
 use scx::contain::{run, summarize, Report, Slice, Summary};

@@ -1,8 +1,8 @@
 //! 内核评测协议：evidence containment（证据保留率）判定。
 //!
 //! 纯函数：给定压缩输出与语料证据行，判定证据行原文是否逐字节存活于输出。
-//! 语料编排与统计由 `tools/scx.py contain`（Python）承担；本模块是判定/计分
-//! 的唯一事实源，两者不得复刻彼此的语义。
+//! 语料编排与统计由 `xtask contain`（Rust，Python 版已委托）承担；本模块是
+//! 判定/计分的唯一事实源，两侧不得复刻彼此的语义。
 //! 口径与 `docs/containment.md` 一致；结果属作者侧自测，非第三方独立评测。
 
 use crate::compress;
@@ -25,7 +25,7 @@ pub struct Report {
     pub input: usize,
     pub output: usize,
     pub cut: f64,
-    /// 证据保留计数（等值判定：输出行集包含证据行原文）。
+    /// 证据保留计数（原文子串存活；与工具侧 `ev in body_text` 一致）。
     pub evidence_kept: usize,
     pub evidence_total: usize,
     /// 未保留的证据行原文（空 = 全保留）。
@@ -41,19 +41,22 @@ pub struct Summary {
     pub miss: Vec<(String, String)>,
 }
 
-/// 运行单切片：`cfg` 由调用方提供（工具侧默认 ratio=0.35 / context=1）。
-pub fn run(case: &Slice, cfg: &Config) -> Report {
-    let o: Outcome = compress::compress(case.full_text, case.query, cfg);
-    let out_lines: Vec<&str> = o.text.split('\n').collect();
-    let mut kept = 0usize;
-    let mut miss: Vec<String> = Vec::new();
-    for ev in case.evidence {
-        if out_lines.contains(ev) {
-            kept += 1;
-        } else {
+/// 判定证据是否原文存活：返回 (保留数, 未保留原文列表)。
+/// 采用子串判定，与 Python 工具侧 `ev in body_text` 逐字节一致。
+pub fn judge(output: &str, evidence: &[&str]) -> (usize, Vec<String>) {
+    let mut miss = Vec::new();
+    for ev in evidence {
+        if !output.contains(ev) {
             miss.push(ev.to_string());
         }
     }
+    (evidence.len() - miss.len(), miss)
+}
+
+/// 运行单切片：`cfg` 由调用方提供（工具侧默认 ratio=0.35 / context=1）。
+pub fn run(case: &Slice, cfg: &Config) -> Report {
+    let o: Outcome = compress::compress(case.full_text, case.query, cfg);
+    let (kept, miss) = judge(&o.text, case.evidence);
     Report {
         id: case.id.to_string(),
         mode: o.mode,

@@ -48,6 +48,14 @@ memory = []
 # 诊断计时（可选）：压缩主链分阶段耗时打印到 stderr；关闭时零代码零开销，
 # 输出与默认构建逐字节一致。仅用于性能定位，不参与任何结果路径。
 perf = []
+# 评估工具（开发/CI 用，不进发布二进制）：承接原 tools/scx.py 的
+# baseline/stats 确定性核心，输出与 Python 版逐字节对齐。
+eval = ["semantic"]
+
+[[bin]]
+name = "xtask"
+path = "src/bin/xtask.rs"
+required-features = ["eval"]
 
 [[example]]
 name = "minhash_mrr"

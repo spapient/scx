@@ -1,0 +1,62 @@
+[
+ {
+  "question": "【L1】以下 CUDA 规约代码中，块 0 的 g[0] 是多少（d[0..15] = 0..15）？\n```cuda\n__global__ void k(int* g, int* d) {\n    __shared__ int s[16];\n    s[threadIdx.x] = d[threadIdx.x];\n    __syncthreads();\n    for (int stride = 8; stride > 0; stride >>= 1) {\n        if (threadIdx.x < stride) s[threadIdx.x] += s[threadIdx.x + stride];\n        __syncthreads();\n    }\n    if (threadIdx.x == 0) g[0] = s[0];\n}\nk<<<1, 16>>>();\n```",
+  "answer": "120"
+ },
+ {
+  "question": "【L2】上述规约代码中，如果 s 数组改为 stride 访问 s[threadIdx.x * 2]（线程访问间隔 2），会引入什么问题？",
+  "answer": "共享内存 bank conflict（性能下降）"
+ },
+ {
+  "question": "【L3】要规约 100 万个 int（超出单块共享内存），最合理的分层架构是什么？",
+  "answer": "每块规约出部分和 → 块间用原子加或二次 kernel 聚合"
+ },
+ {
+  "question": "【L1】以下 JS 代码输出什么？\n```js\nfunction f() { let n = 0; return () => ++n; }\nconst a = f();\nconsole.log(a(), a());\n```",
+  "answer": "1 2"
+ },
+ {
+  "question": "【L2】大量使用闭包捕获大对象时，主要的运行时开销是什么？",
+  "answer": "闭包环境对象保留引用（GC 压力/内存占用）"
+ },
+ {
+  "question": "【L3】在高频调用场景（如每帧创建回调）中，管理闭包状态的更优架构模式是什么？",
+  "answer": "函数复用/对象复用（避免每帧新建闭包）+ 状态外置"
+ },
+ {
+  "question": "【L1】给定表 t(id, v)，以下查询返回几行？\n```sql\nSELECT * FROM t WHERE v = 3;\n```（t: (1,3),(2,3),(3,1)）",
+  "answer": "2"
+ },
+ {
+  "question": "【L2】对 v 列建 B+ 树索引后，WHERE v = 3 的查找复杂度从什么降为什么？",
+  "answer": "全表扫描 O(n) → 索引查找 O(log n)"
+ },
+ {
+  "question": "【L3】高写入表上为每列都建索引，主要权衡是什么？",
+  "answer": "查询加速 vs 写入/存储开销（索引维护成本）"
+ },
+ {
+  "question": "【L1】以下正则对 'aaa' 的匹配结果是什么？\n```python\nimport re\nlen(re.findall(r'a{2}', 'aaa'))\n```",
+  "answer": "1"
+ },
+ {
+  "question": "【L2】正则 (a+)+b 对长串 'aaaa...a'（无 b）会发生什么？",
+  "answer": "灾难性回溯（指数级回退，卡死）"
+ },
+ {
+  "question": "【L3】对不可信输入做解析时，避免灾难性回溯的工程手段是什么？",
+  "answer": "有限状态机（无回溯）+ 超时/长度上限"
+ },
+ {
+  "question": "【L1】以下 TOML 中，[servers] 下 alpha 的 ip 是什么？\n```toml\n[servers.alpha]\nip = \"10.0.0.1\"\n```",
+  "answer": "10.0.0.1"
+ },
+ {
+  "question": "【L2】大型应用启动时重复解析同一配置文件，主要开销是什么？",
+  "answer": "文件 I/O + 解析 CPU 开销（可缓存/懒加载）"
+ },
+ {
+  "question": "【L3】生产级配置系统的推荐分层结构是什么？",
+  "answer": "默认值 → 环境覆盖 → 本地覆盖 → 密钥单独注入（十二因子）"
+ }
+]

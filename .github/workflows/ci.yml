@@ -77,6 +77,8 @@ jobs:
           components: rustfmt, clippy
       - name: Build release
         run: cargo build --release --locked
+      - name: Build eval xtask
+        run: cargo build --release --locked --features eval --bin xtask
       - name: Rustdoc
         env:
           RUSTDOCFLAGS: -D warnings
@@ -85,7 +87,7 @@ jobs:
         run: python tools/scx.py selftest
       - name: Fidelity gate (compression-fidelity eval)
         run: >-
-          python tools/scx.py fidelity config/fidelity.corpus.json
+          .\target\release\xtask.exe fidelity config/fidelity.corpus.json
           --binary target/release/scx.exe --gate
           --domain-boot 10000 --domain-gate-p 0.05
           --out config/ci-fidelity.json
@@ -109,7 +111,7 @@ jobs:
           }
       - name: Build mechanical baseline
         run: >-
-          python tools/scx.py baseline
+          .\target\release\xtask.exe baseline
           --csv config/ci-cases.csv --out config/ci-baseline.json
           --judge-by mechanical-target-gauge-v1
           --judge-date 2026-10-23T00:00:00Z
@@ -163,7 +165,7 @@ jobs:
           }
       - name: Gauge paired statistics
         run: >-
-          python tools/scx.py stats
+          .\target\release\xtask.exe stats
           --baseline config/ci-baseline.json
           --verbose config/ci-verbose.txt
           --mem-dir config/ci-mem
@@ -187,7 +189,7 @@ jobs:
       - name: Gauge recall@3 gate
         shell: pwsh
         run: |
-          python tools/scx.py stats --baseline config/ci-baseline.json --verbose config/ci-verbose.txt --mem-dir config/ci-mem --out config/ci-stats-recall3.csv --metric recall@3 --cluster-size 5 --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
+          .\target\release\xtask.exe stats --baseline config/ci-baseline.json --verbose config/ci-verbose.txt --mem-dir config/ci-mem --out config/ci-stats-recall3.csv --metric recall@3 --cluster-size 5 --boot 10000 --perm 10000 --mde 0.05 --seed 20261023
           $rows = @(Import-Csv .\config\ci-stats-recall3.csv)
           $hard = @($rows | Where-Object { $_.group -eq 'tier:hard' })
           if ($hard.Count -ne 1) { throw "recall@3 hard result missing" }
@@ -198,7 +200,7 @@ jobs:
       - name: Gauge leave-one-incident-out gate
         shell: pwsh
         run: >-
-          python tools/scx.py stats
+          .\target\release\xtask.exe stats
           --baseline config/ci-baseline.json
           --verbose config/ci-verbose.txt
           --mem-dir config/ci-mem

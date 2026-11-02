@@ -29,3 +29,6 @@ config/bench/perf/corpus_p*.txt
 
 # 后台命令残留输出（如 nohup.out），属本地产物，不随仓库分发
 nohup.out
+
+# IDE 本地状态
+.idea/
