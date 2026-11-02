@@ -502,7 +502,7 @@ fn main() {
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
 | `src/bin/xtask.rs` | 开发/CI 评估工具（`feature = "eval"`）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现，与原 Python 输出逐字节对拍；不进发布二进制 |
 | `examples/bench.rs` | 压缩与记忆库的统一性能基准入口 |
-| `tests/golden.rs` | stdout、stderr、退出码的逐字节差分门（37 例） |
+| `tests/golden.rs`, `tests/golden.toml` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例；`.err`/`.code` 仅非空/非零时落盘） |
 | `config/` | 可重建语料、冻结标签、盲审包与语义权重（`Gauge.*`/`contain5.*`/`real.*`/`v2.*`） |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
 
@@ -518,6 +518,8 @@ fn main() {
 cargo test \
   --test golden update_baselines -- --ignored --nocapture
 ```
+
+用例参数在 `tests/golden.toml`，输入生成器与记忆库预置在 `tests/golden.rs`；新增用例两处都要登记。
 
 ## 质量与证据
 
