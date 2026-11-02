@@ -637,6 +637,54 @@ fn choose(input: ChoiceIn<'_>, prof: &mut crate::perf::T) -> Selection {
     settle(&input, marks, prof)
 }
 
+struct AssembleIn<'a> {
+    report: &'a Report<'a>,
+    lines: &'a [&'a str],
+    cfg: &'a Config,
+    terms: &'a [String],
+    analysis: &'a Analysis,
+    ranked: &'a Ranked,
+    selection: &'a Selection,
+    chars_a: usize,
+}
+
+fn assemble(input: AssembleIn<'_>, prof: &mut crate::perf::T) -> Outcome {
+    let AssembleIn {
+        report,
+        lines,
+        cfg,
+        terms,
+        analysis,
+        ranked,
+        selection,
+        chars_a,
+    } = input;
+    let (out_text, numbers) = render(lines, &selection.keep, cfg, &selection.raw, terms);
+    prof.mark("render");
+    let (chars_b, cut) = cut(&out_text, chars_a);
+    let mut outcome = report.make(
+        out_text,
+        OutcomeFields {
+            kept: selection.kept,
+            chars_b,
+            cut,
+            dup: analysis.folds,
+            seeds: analysis.seeds_total,
+            risk: selection.risk,
+            guarded: selection.guarded,
+            regions: ranked.regions.count,
+            numbers,
+            mode: selection.overflow.unwrap_or(Mode::Sieve),
+            tokens: selection.final_tok,
+            dropped: runs(&selection.keep, &analysis.dup, selection.overflow.is_some()),
+        },
+    );
+    outcome.budget_used_pct = selection.budget_used_pct;
+    outcome.explain = explain(&selection.reason, &analysis.dup);
+    prof.finish("compress");
+    outcome
+}
+
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     let mut prof = crate::perf::T::start();
     let (ratio, context, window) = config(cfg);
@@ -712,30 +760,19 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             ranked.regions.count,
         );
     }
-    let (out_text, numbers) = render(&lines, &selection.keep, cfg, &selection.raw, &uniq_terms);
-    prof.mark("render");
-    let (chars_b, cut) = cut(&out_text, chars_a);
-    let mut o = report.make(
-        out_text,
-        OutcomeFields {
-            kept: selection.kept,
-            chars_b,
-            cut,
-            dup: analysis.folds,
-            seeds: analysis.seeds_total,
-            risk: selection.risk,
-            guarded: selection.guarded,
-            regions: ranked.regions.count,
-            numbers,
-            mode: selection.overflow.unwrap_or(Mode::Sieve),
-            tokens: selection.final_tok,
-            dropped: runs(&selection.keep, &analysis.dup, selection.overflow.is_some()),
+    assemble(
+        AssembleIn {
+            report: &report,
+            lines: &lines,
+            cfg,
+            terms: &uniq_terms,
+            analysis: &analysis,
+            ranked: &ranked,
+            selection: &selection,
+            chars_a,
         },
-    );
-    o.budget_used_pct = selection.budget_used_pct;
-    o.explain = explain(&selection.reason, &analysis.dup);
-    prof.finish("compress");
-    o
+        &mut prof,
+    )
 }
 /// 语义锚（#65 --sem-gate，默认 0 = 关）：feature=semantic 且已加载权重时，
 /// 语义居中分数 ≥ 阈值的非重复行直接整行保留（独立于 optional 预算裁剪的
