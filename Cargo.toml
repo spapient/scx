@@ -22,13 +22,9 @@ include = [
     "docs/**",
     "!docs/comparison-v051.md",
     "tests/**",
-    "config/**",
-    "!config/ci-*",
-    "!config/*-mem/**",
-    "!config/*-mem-*/**",
-    "!config/tmp-*/**",
-    "!config/*-ablate/**",
-    "!config/*-replay/**",
+    "config/pipeline.json",
+    "config/semantic.json",
+    "config/evaluation.json",
 ]
 
 [dependencies]
