@@ -1,4 +1,6 @@
-//! `xtask manifest` / `xtask report`：冻结输入哈希与冻结指标文档（feature = "eval"）。
+//! 冻结资产生命周期（feature = "eval"）：`gen` 物化数据集，`manifest` 冻结/
+//! 校验输入哈希，`report` 组合冻结指标，`freeze` 写入结果包，`subset`
+//! 重算可压缩子集。所有读取都校验 `config/` 内的 SHA-256，拒绝手工漂移。
 //!
 //! - `manifest`：对评测输入计算 SHA-256；`--expect` 校验冻结 manifest，漂移退出 2；
 //!   `--files` + `--out` 重建 manifest；`date:` 前缀会把 `YYYY-MM-DD_` 规范化为 `<date>_`。
@@ -10,13 +12,12 @@
 // 报告格式化分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
 #![allow(clippy::cognitive_complexity)]
 
-use super::gen::to_j;
-use super::io::{self, J};
+use super::io::{self, to_j, J};
 use super::{fail, load_json as load, Fail};
 use scx::json::Json;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 const RESULT_BUNDLE: &str = "config/benchmark-results.json";
@@ -1072,9 +1073,185 @@ fn round_rate(part: usize, total: usize) -> f64 {
     }
 }
 
+const DATASET_BUNDLE: &str = "config/datasets.json";
+
+const CSV_KINDS: [(&str, &str); 4] = [
+    ("cuda", "code-cuda-60.csv"),
+    ("js", "code-js-60.csv"),
+    ("layers", "code-layers-15.csv"),
+    ("shape", "code-shape-30.csv"),
+];
+const BENCH_FILES: [(&str, &str); 5] = [
+    ("c", "code-c-60.csv"),
+    ("py", "code-python-60.csv"),
+    ("rs", "code-rust-60.csv"),
+    ("cpp", "code-cpp-60.csv"),
+    ("java", "code-java-60.csv"),
+];
+
+type Dataset = (Vec<String>, Vec<HashMap<String, String>>);
+
+pub(crate) fn gen(args: &[String]) -> Result<(), Fail> {
+    let (kind, out) = parse_gen(args)?;
+    if !out.is_dir() {
+        return Err(fail(format!(
+            "gen: output directory does not exist: {}",
+            out.display()
+        )));
+    }
+    match kind.as_str() {
+        "cuda" | "js" | "layers" | "shape" => csv_kind(&kind, &out),
+        "bench" => bench(&out),
+        other => Err(usage_gen(format!("unknown gen kind: {other}"))),
+    }
+}
+
+fn parse_gen(args: &[String]) -> Result<(String, PathBuf), Fail> {
+    let mut kind = None;
+    let mut out = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--out" => {
+                i += 1;
+                out = Some(
+                    args.get(i)
+                        .cloned()
+                        .ok_or_else(|| usage_gen("--out expects a path"))?,
+                );
+            }
+            "-h" | "--help" => return Err(usage_gen(String::new())),
+            arg if arg.starts_with('-') => {
+                return Err(usage_gen(format!("unrecognized argument: {arg}")))
+            }
+            arg if kind.is_none() => kind = Some(arg.to_string()),
+            arg => return Err(usage_gen(format!("unexpected argument: {arg}"))),
+        }
+        i += 1;
+    }
+    let kind = kind.ok_or_else(|| usage_gen("missing gen kind"))?;
+    let out = out
+        .map(PathBuf::from)
+        .ok_or_else(|| usage_gen("--out is required"))?;
+    Ok((kind, out))
+}
+
+fn usage_gen(message: impl Into<String>) -> Fail {
+    let text = message.into();
+    let body = "usage: xtask gen <cuda|js|layers|shape|bench> --out DIR\n";
+    Fail {
+        msg: if text.is_empty() {
+            body.to_string()
+        } else {
+            format!("{text}\n\n{body}")
+        },
+        code: 2,
+    }
+}
+
+fn data() -> Result<Json, Fail> {
+    let path = Path::new(ROOT).join(DATASET_BUNDLE);
+    let text = fs::read_to_string(&path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
+    scx::json::parse(&text).map_err(|e| fail(format!("{}: {e}", path.display())))
+}
+
+pub(crate) fn dataset_names() -> Result<Vec<String>, Fail> {
+    let data = data()?;
+    let Some(Json::Obj(entries)) = data.get("datasets") else {
+        return Err(fail(format!(
+            "{DATASET_BUNDLE}: datasets must be an object"
+        )));
+    };
+    Ok(entries.iter().map(|(name, _)| name.clone()).collect())
+}
+
+pub(crate) fn dataset_text(name: &str) -> Result<String, Fail> {
+    let data = data()?;
+    let Some(Json::Obj(entries)) = data.get("datasets") else {
+        return Err(fail(format!(
+            "{DATASET_BUNDLE}: datasets must be an object"
+        )));
+    };
+    let text = entries
+        .iter()
+        .find(|(key, _)| key == name)
+        .and_then(|(_, value)| value.str())
+        .ok_or_else(|| fail(format!("{DATASET_BUNDLE}: missing dataset {name}")))?;
+    let want = data
+        .get("sha256")
+        .and_then(|value| value.get(name))
+        .and_then(Json::str)
+        .ok_or_else(|| fail(format!("{DATASET_BUNDLE}: missing sha256 for {name}")))?;
+    let got = scx::hash::hex(&scx::hash::sha256(text.as_bytes()));
+    if got != want {
+        return Err(fail(format!(
+            "{DATASET_BUNDLE}: {name} sha256 mismatch: expected {want}, got {got}"
+        )));
+    }
+    Ok(text.to_string())
+}
+
+pub(crate) fn dataset(name: &str) -> Result<Dataset, Fail> {
+    let text = dataset_text(name)?;
+    io::parse_csv(name, &text).map_err(fail)
+}
+
+pub(crate) fn dataset_records(name: &str) -> Result<Vec<Vec<String>>, Fail> {
+    let text = dataset_text(name)?;
+    io::parse_records(name, &text).map_err(fail)
+}
+
+fn materialize(name: &str, out: &Path) -> Result<usize, Fail> {
+    let text = dataset_text(name)?;
+    let path = out.join(name);
+    io::write_text(&path.to_string_lossy(), &text).map_err(fail)?;
+    let rows = io::parse_records(name, &text).map_err(fail)?.len();
+    println!(
+        "gen: wrote {} ({} rows)",
+        path.display(),
+        rows.saturating_sub(1)
+    );
+    Ok(rows.saturating_sub(1))
+}
+
+fn csv_kind(kind: &str, out: &Path) -> Result<(), Fail> {
+    let (_, file) = CSV_KINDS
+        .iter()
+        .find(|(name, _)| *name == kind)
+        .copied()
+        .ok_or_else(|| usage_gen(format!("unknown gen kind: {kind}")))?;
+    materialize(file, out)?;
+    Ok(())
+}
+
+fn bench(out: &Path) -> Result<(), Fail> {
+    let mut total = 0usize;
+    for (lang, file) in BENCH_FILES {
+        total += materialize(file, out)?;
+        println!("gen bench: {lang}");
+    }
+    println!(
+        "gen bench: wrote {} files ({} rows)",
+        BENCH_FILES.len(),
+        total
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dataset_bundle_contains_all_frozen_entries() {
+        let names = dataset_names().unwrap();
+        assert_eq!(names.len(), 11);
+        for name in names {
+            let (head, rows) = dataset(&name).unwrap();
+            assert_eq!(head, ["question", "answer"], "{name}");
+            assert!(!rows.is_empty(), "{name}");
+        }
+    }
 
     #[test]
     fn normalize_date_matches_python_subset() {

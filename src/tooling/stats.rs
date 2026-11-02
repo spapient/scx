@@ -6,8 +6,8 @@
 //! 不适用于迁移工具，故本模块局部关闭。
 #![allow(clippy::cognitive_complexity)]
 
-use super::io;
 use super::rng::PyRng;
+use super::{case_tail, cjk, io};
 use scx::json::Json;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -71,7 +71,7 @@ fn parse_case(value: &Json, index: usize) -> Result<Case, String> {
         Some(Json::Obj(entries)) => parse_rel(entries),
         _ => Vec::new(),
     };
-    let case_index = value.get("case_index").and_then(as_i64);
+    let case_index = value.get("case_index").and_then(io::as_i64);
     Ok(Case {
         query,
         layer,
@@ -93,14 +93,6 @@ fn parse_rel(entries: &[(String, Json)]) -> Vec<(String, f64)> {
             rel.map(|n| (key.clone(), n))
         })
         .collect()
-}
-
-fn as_i64(value: &Json) -> Option<i64> {
-    match value {
-        Json::Num(n) if n.fract() == 0.0 => Some(*n as i64),
-        Json::Str(s) => s.parse().ok(),
-        _ => None,
-    }
 }
 
 #[derive(Debug, Default)]
@@ -286,7 +278,7 @@ fn strata_from_memory(root: &str, cases: &[Case]) -> Result<Vec<String>, String>
             .unwrap_or_default()
             .to_string();
         let record = (id.clone(), query);
-        by_tail.insert(tail_of(&id).to_string(), record.clone());
+        by_tail.insert(case_tail(&id).to_string(), record.clone());
         by_full.insert(id, record);
     }
     let mut tiers = Vec::with_capacity(cases.len());
@@ -294,15 +286,11 @@ fn strata_from_memory(root: &str, cases: &[Case]) -> Result<Vec<String>, String>
         let target = &case.expected[0];
         let hit = by_full
             .get(target)
-            .or_else(|| by_tail.get(tail_of(target)))
+            .or_else(|| by_tail.get(case_tail(target)))
             .ok_or_else(|| format!("stats: target {target} not found in memory dir {root}"))?;
         tiers.push(tier_of(jaccard(&case.query, &hit.1)).to_string());
     }
     Ok(tiers)
-}
-
-fn tail_of(key: &str) -> &str {
-    key.rsplit('_').next().unwrap_or(key)
 }
 
 fn last8(key: &str) -> String {
@@ -372,10 +360,6 @@ fn word_start(c: char) -> bool {
 
 fn word_part(c: char) -> bool {
     word_start(c) || c == '_' || c == '-' || c == '.'
-}
-
-fn cjk(c: char) -> bool {
-    ('\u{4e00}'..='\u{9fff}').contains(&c)
 }
 
 pub(crate) fn tier_of(value: f64) -> &'static str {
@@ -649,7 +633,7 @@ pub(crate) fn loo(
 }
 
 pub(crate) fn target_rank(ids: &[String], target: &str) -> usize {
-    let tail = tail_of(target);
+    let tail = case_tail(target);
     let tail8 = last8(tail);
     for (index, case_id) in ids.iter().take(10).enumerate() {
         if case_id == target || case_id == tail || last8(case_id) == tail8 {
@@ -704,7 +688,7 @@ fn rel_of(case: &Case, case_id: &str) -> f64 {
     if let Some((_, rel)) = case.rel.iter().find(|(key, _)| key == case_id) {
         return *rel;
     }
-    let tail = tail_of(case_id);
+    let tail = case_tail(case_id);
     if let Some((_, rel)) = case.rel.iter().find(|(key, _)| key == tail) {
         return *rel;
     }
@@ -727,9 +711,9 @@ fn rel_of(case: &Case, case_id: &str) -> f64 {
 }
 
 fn id_matches(expected: &str, case_id: &str) -> bool {
-    let tail = tail_of(case_id);
+    let tail = case_tail(case_id);
     let tail8 = last8(tail);
-    expected == case_id || expected == tail || expected == tail8 || tail_of(expected) == tail
+    expected == case_id || expected == tail || expected == tail8 || case_tail(expected) == tail
 }
 
 #[cfg(test)]

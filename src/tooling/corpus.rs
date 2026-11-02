@@ -1,4 +1,6 @@
-//! `xtask seed`：评测语料 -> 记忆库 cases + eval CSV（feature = "eval"）。
+//! 语料生命周期（feature = "eval"）：`extract` 从 Claude Code JSONL 提取压缩
+//! 语料，`seed` 校验语料并写入记忆库 cases 与 eval CSV。两者共享语料校验、
+//! 二进制定位与原子写入约定。
 //!
 //! 迁移自 `tools/scx.py seed`：语料校验、安全清理记忆目录、并发调用
 //! `scx --store`，按语料顺序输出 CSV。文本以字节写 stdin，保持跨平台逐字节稳定。
@@ -6,9 +8,8 @@
 // 语料校验分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
 #![allow(clippy::cognitive_complexity)]
 
-use super::contain;
 use super::io;
-use super::{fail, load_json as load, Fail};
+use super::{case_tail, default_binary, fail, home, load_json as load, Fail};
 use scx::json::Json;
 use std::fs;
 use std::io::Write;
@@ -21,7 +22,7 @@ const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 const LAYERS: [&str; 3] = ["literal", "paraphrase", "semantic"];
 const MAX_JOBS: usize = 32;
 
-struct Opts {
+struct SeedOpts {
     corpus: String,
     mem_dir: String,
     csv: Option<String>,
@@ -47,20 +48,16 @@ struct Row {
     note: String,
 }
 
-pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
-    let opts = parse(args)?;
+pub(crate) fn seed(args: &[String]) -> Result<(), Fail> {
+    let opts = parse_seed(args)?;
     if opts.jobs < 1 || opts.jobs > MAX_JOBS {
         return Err(fail(format!("seed: --jobs must be in 1..={MAX_JOBS}")));
     }
     let value = load(Path::new(&opts.corpus))?;
     let layers = validate_corpus(&value).map_err(fail)?;
-    let binary = opts
-        .binary
-        .clone()
-        .or_else(contain::default_binary)
-        .ok_or_else(|| {
-            fail("seed: missing release binary; run `cargo build --release --locked` first")
-        })?;
+    let binary = opts.binary.clone().or_else(default_binary).ok_or_else(|| {
+        fail("seed: missing release binary; run `cargo build --release --locked` first")
+    })?;
     if !Path::new(&binary).is_file() {
         return Err(fail(
             "seed: missing release binary; run `cargo build --release --locked` first",
@@ -108,8 +105,8 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     Ok(())
 }
 
-fn parse(args: &[String]) -> Result<Opts, Fail> {
-    let mut opts = Opts {
+fn parse_seed(args: &[String]) -> Result<SeedOpts, Fail> {
+    let mut opts = SeedOpts {
         corpus: String::new(),
         mem_dir: String::new(),
         csv: None,
@@ -126,7 +123,7 @@ fn parse(args: &[String]) -> Result<Opts, Fail> {
                 let value = args
                     .get(i)
                     .cloned()
-                    .ok_or_else(|| usage(format!("{flag} expects a value")))?;
+                    .ok_or_else(|| usage_seed(format!("{flag} expects a value")))?;
                 match flag {
                     "--mem-dir" => opts.mem_dir = value,
                     "--csv" => opts.csv = Some(value),
@@ -134,31 +131,33 @@ fn parse(args: &[String]) -> Result<Opts, Fail> {
                     "--jobs" => {
                         opts.jobs = value
                             .parse()
-                            .map_err(|_| usage(format!("invalid --jobs: {value}")))?
+                            .map_err(|_| usage_seed(format!("invalid --jobs: {value}")))?
                     }
                     _ => {}
                 }
             }
             "--force" => opts.force = true,
-            "-h" | "--help" => return Err(usage(String::new())),
+            "-h" | "--help" => return Err(usage_seed(String::new())),
             other if other.starts_with('-') => {
-                return Err(usage(format!("unrecognized argument: {other}")))
+                return Err(usage_seed(format!("unrecognized argument: {other}")))
             }
             other if opts.corpus.is_empty() => opts.corpus = other.to_string(),
-            other => return Err(usage(format!("unexpected argument: {other}"))),
+            other => return Err(usage_seed(format!("unexpected argument: {other}"))),
         }
         i += 1;
     }
     if opts.corpus.is_empty() {
-        return Err(usage("the following arguments are required: corpus"));
+        return Err(usage_seed("the following arguments are required: corpus"));
     }
     if opts.mem_dir.is_empty() {
-        return Err(usage("the following arguments are required: --mem-dir"));
+        return Err(usage_seed(
+            "the following arguments are required: --mem-dir",
+        ));
     }
     Ok(opts)
 }
 
-fn usage(message: impl Into<String>) -> Fail {
+fn usage_seed(message: impl Into<String>) -> Fail {
     let body = "usage: xtask seed <corpus> --mem-dir DIR [--csv PATH] [--binary PATH] [--jobs N] [--force]\n";
     let message = message.into();
     Fail {
@@ -492,7 +491,7 @@ fn seed_case(binary: &str, mem_dir: &Path, item: &Item) -> Result<Row, String> {
         query: item.eval_query.clone(),
         layer: item.layer.clone(),
         case_id: case_id.clone(),
-        note: format!("target={} source={}", tail_of(&case_id), item.source),
+        note: format!("target={} source={}", case_tail(&case_id), item.source),
     })
 }
 
@@ -508,14 +507,304 @@ fn parse_case_id(output: &str) -> Option<String> {
     Some(case_id.to_string())
 }
 
-fn tail_of(key: &str) -> &str {
-    key.rsplit('_').next().unwrap_or(key)
+struct ExtractOpts {
+    dir: String,
+    out: String,
+    extract: Option<usize>,
+}
+
+struct ExtractStat {
+    path: PathBuf,
+    use_n: usize,
+    res_n: usize,
+    use_c: usize,
+    res_c: usize,
+}
+
+pub(crate) fn extract(args: &[String]) -> Result<(), Fail> {
+    let opts = parse_extract(args)?;
+    let mut files: Vec<PathBuf> = fs::read_dir(&opts.dir)
+        .map_err(|e| fail(format!("{}: {e}", opts.dir)))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "jsonl"))
+        .collect();
+    files.sort();
+    let mut stats = Vec::new();
+    for path in files {
+        let blocks = blocks(&path)?;
+        let mut use_n = 0usize;
+        let mut res_n = 0usize;
+        let mut use_c = 0usize;
+        let mut res_c = 0usize;
+        for (kind, text) in &blocks {
+            if kind == "use" {
+                use_n += 1;
+                use_c += text.chars().count();
+            } else {
+                res_n += 1;
+                res_c += text.chars().count();
+            }
+        }
+        stats.push(ExtractStat {
+            path,
+            use_n,
+            res_n,
+            use_c,
+            res_c,
+        });
+    }
+    stats.sort_by_key(|stat| std::cmp::Reverse(stat.res_c));
+    for stat in &stats {
+        let base: String = basename(&stat.path).chars().take(12).collect();
+        println!(
+            "{base:<14} tool_use={:>4} tool_result={:>4} use_chars={:>9} result_chars={:>9}",
+            stat.use_n, stat.res_n, stat.use_c, stat.res_c
+        );
+    }
+    if let Some(count) = opts.extract.filter(|count| *count > 0) {
+        fs::create_dir_all(&opts.out).map_err(|e| fail(format!("{}: {e}", opts.out)))?;
+        for stat in stats.iter().take(count) {
+            let base = stat
+                .path
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let out = Path::new(&opts.out).join(format!("{base}.dump.txt"));
+            let mut text = String::new();
+            for (_, block) in blocks(&stat.path)? {
+                text.push_str(&block);
+                if !block.is_empty() && !block.ends_with('\n') {
+                    text.push('\n');
+                }
+            }
+            fs::write(&out, &text).map_err(|e| fail(format!("{}: {e}", out.display())))?;
+            let lines = fs::read_to_string(&out)
+                .map(|text| text.lines().count())
+                .unwrap_or(0);
+            println!("  -> {} ({lines} lines)", out.display());
+        }
+    }
+    Ok(())
+}
+
+fn parse_extract(args: &[String]) -> Result<ExtractOpts, Fail> {
+    let mut opts = ExtractOpts {
+        dir: home()
+            .join(".claude/projects/-Users-fei-code-scx")
+            .to_string_lossy()
+            .to_string(),
+        out: std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()),
+        extract: None,
+    };
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dir" | "--out" | "--extract" => {
+                let flag = args[i].as_str();
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| usage_extract(format!("{flag} expects a value")))?;
+                match flag {
+                    "--dir" => opts.dir = value.clone(),
+                    "--out" => opts.out = value.clone(),
+                    "--extract" => {
+                        opts.extract =
+                            Some(value.parse().map_err(|_| {
+                                usage_extract(format!("invalid --extract: {value}"))
+                            })?)
+                    }
+                    _ => {}
+                }
+            }
+            "--scan" => {}
+            "-h" | "--help" => return Err(usage_extract(String::new())),
+            other => return Err(usage_extract(format!("unrecognized argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(opts)
+}
+
+fn usage_extract(message: impl Into<String>) -> Fail {
+    let body = "usage: xtask extract [--dir DIR] [--scan] [--extract N] [--out DIR]\n";
+    let message = message.into();
+    Fail {
+        msg: if message.is_empty() {
+            body.to_string()
+        } else {
+            format!("{message}\n\n{body}")
+        },
+        code: 2,
+    }
+}
+
+fn basename(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+fn blocks(path: &Path) -> Result<Vec<(String, String)>, Fail> {
+    let text = fs::read_to_string(path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Ok(value) = scx::json::parse(line) else {
+            continue;
+        };
+        let Json::Obj(object) = &value else {
+            continue;
+        };
+        let kind = block_field(object, "type");
+        if !matches!(kind.as_str(), "user" | "assistant") {
+            continue;
+        }
+        let message = match object.iter().find(|(key, _)| key == "message") {
+            Some((_, Json::Obj(message))) => message,
+            _ => continue,
+        };
+        let content = match message.iter().find(|(key, _)| key == "content") {
+            Some((_, Json::Arr(content))) => content,
+            _ => continue,
+        };
+        for block in content {
+            let Json::Obj(block) = block else {
+                continue;
+            };
+            match block_field(block, "type").as_str() {
+                "tool_use" => {
+                    let Some(input) = block
+                        .iter()
+                        .find(|(key, _)| key == "input")
+                        .map(|(_, value)| value)
+                    else {
+                        continue;
+                    };
+                    match input {
+                        Json::Obj(entries) => {
+                            if let Some(command) = find_str(entries, "command") {
+                                out.push(("use".to_string(), format!("command: {command}")));
+                            } else if let Some(content) = find_str(entries, "content") {
+                                out.push(("use".to_string(), content.to_string()));
+                            } else {
+                                out.push(("use".to_string(), dumps(input)));
+                            }
+                        }
+                        Json::Str(text) => out.push(("use".to_string(), text.clone())),
+                        _ => {}
+                    }
+                }
+                "tool_result" => {
+                    let Some(inner) = block
+                        .iter()
+                        .find(|(key, _)| key == "content")
+                        .map(|(_, value)| value)
+                    else {
+                        continue;
+                    };
+                    match inner {
+                        Json::Arr(items) => {
+                            let mut parts = Vec::new();
+                            for sub in items {
+                                match sub {
+                                    Json::Obj(entries)
+                                        if find_str(entries, "type") == Some("text") =>
+                                    {
+                                        parts.push(
+                                            find_str(entries, "text").unwrap_or("").to_string(),
+                                        );
+                                    }
+                                    Json::Str(text) => parts.push(text.clone()),
+                                    _ => {}
+                                }
+                            }
+                            out.push(("result".to_string(), parts.join("\n")));
+                        }
+                        Json::Str(text) => out.push(("result".to_string(), text.clone())),
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn block_field(object: &[(String, Json)], key: &str) -> String {
+    find_str(object, key).unwrap_or("").to_string()
+}
+
+fn find_str<'a>(object: &'a [(String, Json)], key: &str) -> Option<&'a str> {
+    object
+        .iter()
+        .find(|(name, _)| name == key)
+        .and_then(|(_, value)| value.str())
+}
+
+/// Python `json.dumps(..., ensure_ascii=False)` 的紧凑格式。
+fn dumps(value: &Json) -> String {
+    match value {
+        Json::Null => "null".to_string(),
+        Json::Bool(flag) => flag.to_string(),
+        Json::Num(number) if number.fract() == 0.0 && number.abs() < 9e15 => {
+            (*number as i64).to_string()
+        }
+        Json::Num(number) => io::repr(*number),
+        Json::Str(text) => io::json_string(text),
+        Json::Arr(items) => {
+            let body = items.iter().map(dumps).collect::<Vec<_>>().join(", ");
+            format!("[{body}]")
+        }
+        Json::Obj(entries) => {
+            let body = entries
+                .iter()
+                .map(|(key, value)| format!("{}: {}", io::json_string(key), dumps(value)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{body}}}")
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
+    fn extract_parses_tool_blocks_and_compact_json() {
+        let dir = crate::testsupport::tmpdir("extract");
+        let path = PathBuf::from(&dir).with_extension("jsonl");
+        fs::write(
+            &path,
+            concat!(
+                "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"input\":{\"command\":\"ls -la\"}}]}}\n",
+                "{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"content\":[{\"type\":\"text\",\"text\":\"a\"},{\"type\":\"text\",\"text\":\"b\"}]}]}}\n",
+                "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"input\":{\"foo\":\"bar\",\"n\":2}}]}}\n",
+                "not json\n"
+            ),
+        )
+        .unwrap();
+        let blocks = blocks(&path).unwrap();
+        assert_eq!(
+            blocks[0],
+            ("use".to_string(), "command: ls -la".to_string())
+        );
+        assert_eq!(blocks[1], ("result".to_string(), "a\nb".to_string()));
+        assert_eq!(
+            blocks[2],
+            (
+                "use".to_string(),
+                "{\"foo\": \"bar\", \"n\": 2}".to_string()
+            )
+        );
+        assert_eq!(
+            dumps(&scx::json::parse("{\"a\":[1,2]}").unwrap()),
+            "{\"a\": [1, 2]}"
+        );
+        let _ = fs::remove_file(path);
+    }
     #[test]
     fn validates_seed_fixture() {
         let assets = scx::json::parse(include_str!("../../config/tests/assets.json")).unwrap();

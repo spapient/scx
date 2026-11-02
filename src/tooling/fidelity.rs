@@ -12,7 +12,7 @@
 use super::contain::{self, Slice, TempDir};
 use super::io::{self, J};
 use super::rng::PyRng;
-use super::{fail, Fail};
+use super::{default_binary, fail, word_part, Fail};
 use scx::json::Json;
 use std::collections::HashSet;
 use std::path::Path;
@@ -118,7 +118,7 @@ struct Opts {
 pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
     let opts = parse(args)?;
     let corpus = load_corpus(&opts.corpus)?;
-    let binary = match opts.binary.clone().or_else(contain::default_binary) {
+    let binary = match opts.binary.clone().or_else(default_binary) {
         Some(path) if Path::new(&path).is_file() => path,
         _ => {
             return Err(fail(
@@ -264,7 +264,7 @@ fn load_corpus(path: &str) -> Result<Corpus, Fail> {
         )));
     }
     let mut kinds: Vec<String> = Vec::new();
-    for kind in strings(&value, "expected_kinds") {
+    for kind in io::strings(&value, "expected_kinds") {
         if !kinds.contains(&kind) {
             kinds.push(kind);
         }
@@ -281,7 +281,7 @@ fn load_corpus(path: &str) -> Result<Corpus, Fail> {
         let query = contain::string(item, "query");
         let full_text = contain::raw(item, "full_text");
         let note = contain::string(item, "note");
-        let evidence = strings(item, "evidence");
+        let evidence = io::strings(item, "evidence");
         if ident.is_empty() || !seen.insert(ident.clone()) {
             return Err(fail(format!("fidelity: bad/duplicate slice id: {ident:?}")));
         }
@@ -334,17 +334,6 @@ fn load_corpus(path: &str) -> Result<Corpus, Fail> {
         kinds,
         counts,
     })
-}
-
-fn strings(value: &Json, key: &str) -> Vec<String> {
-    match value.get(key) {
-        Some(Json::Arr(items)) => items
-            .iter()
-            .filter_map(Json::str)
-            .map(str::to_string)
-            .collect(),
-        _ => Vec::new(),
-    }
 }
 
 fn run_slice(
@@ -428,10 +417,6 @@ fn words(text: &str) -> Vec<String> {
         }
     }
     out
-}
-
-fn word_part(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-')
 }
 
 fn token_set(text: &str) -> HashSet<String> {

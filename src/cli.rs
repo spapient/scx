@@ -124,14 +124,8 @@ fn parse_opts(opts: &[String]) -> Result<(crate::Config, String), String> {
     Ok((config, query))
 }
 
-/// 显式证据解析：正整数 = 原始行号（1-based），其他 = 输出必须出现的子串。
-/// 与 `args.rs` 的 `--evidence` 同口径（wrap 与 args 表解耦，故独立实现）。
 fn evidence(v: &str) -> crate::Evidence {
-    let trimmed = v.trim();
-    match trimmed.parse::<usize>() {
-        Ok(n) if n >= 1 => crate::Evidence::Line(n),
-        _ => crate::Evidence::Substr(trimmed.to_string()),
-    }
+    crate::Evidence::parse(v).unwrap_or_else(|| crate::Evidence::Substr(v.trim().to_string()))
 }
 
 #[cfg(test)]

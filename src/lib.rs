@@ -91,6 +91,20 @@ pub enum Evidence {
     Substr(String),
 }
 
+impl Evidence {
+    /// CLI 统一口径：正整数为行号，其余非空文本为子串；空文本返回 `None`。
+    pub fn parse(text: &str) -> Option<Evidence> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        match trimmed.parse::<usize>() {
+            Ok(line) if line >= 1 => Some(Evidence::Line(line)),
+            _ => Some(Evidence::Substr(trimmed.to_string())),
+        }
+    }
+}
+
 /// 结构锚点种类（P6 骨架保护）：压缩时把对应结构边界行标记为保留锚点。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AnchorKind {
@@ -117,14 +131,14 @@ impl AnchorKind {
         }
     }
 
-    /// 名称 → 枚举（`--structure-anchors` 与 policy 表共用）。
+    /// 名称 → 枚举（`--structure-anchors` 与 pipeline 共用）；`markdown`/`md` 等价。
     pub fn parse(s: &str) -> Option<AnchorKind> {
         match s {
             "json" => Some(AnchorKind::Json),
             "xml" => Some(AnchorKind::Xml),
             "idoc" => Some(AnchorKind::Idoc),
             "yaml" => Some(AnchorKind::Yaml),
-            "md" => Some(AnchorKind::Markdown),
+            "markdown" | "md" => Some(AnchorKind::Markdown),
             _ => None,
         }
     }

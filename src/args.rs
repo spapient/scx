@@ -2291,10 +2291,8 @@ pub(crate) fn evidence(
     if trimmed.is_empty() {
         return Err(format!("{} {}", f.name, f.err_empty));
     }
-    let ev = match trimmed.parse::<usize>() {
-        Ok(n) if n >= 1 => crate::Evidence::Line(n),
-        _ => crate::Evidence::Substr(trimmed.to_string()),
-    };
+    let ev =
+        crate::Evidence::parse(trimmed).ok_or_else(|| format!("{} {}", f.name, f.err_empty))?;
     s.config.evidence.push(ev);
     Ok(())
 }

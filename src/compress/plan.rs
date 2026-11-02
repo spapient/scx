@@ -142,8 +142,9 @@ pub(crate) fn masks(
     // 每行 token 估算表：供填充与记账复用（此前同一批行会被 estimate 2–3 次）。
     // do_tok=false（小输入/针尖档）时为空表，调用方回退现算。
     // 并行分块：行间逐行独立（含 tally），分块写不重叠区间，输出保序零漂移。
-    // 线程数按 18 逻辑核折半，避免能效核与线程切换损耗。
-    let n_t = if total >= PAR_MIN { 6 } else { 1 };
+    // 12 线程：在 18 逻辑核上实测优于 6/8/16（masks 与 dedup 同档），
+    // 留出 1/3 核给系统与能效调度；固定线程数保证跨机输出可复现。
+    let n_t = if total >= PAR_MIN { 12 } else { 1 };
     let chunk = total.div_ceil(n_t);
     let (tok, total_tok) = if n_t > 1 {
         tally_par(lines, total, small_tok, do_tok, n_t, chunk)
@@ -532,10 +533,10 @@ pub(crate) fn dedup(
 /// 并行扫描段：每行单趟归一化指纹 + 与上一行原文相等标记。
 /// 实测（p30m）：旧串行 dedup 117ms 中 74% 是 normalize 扫描本身，
 /// HashMap 插入仅 ~30ms。指纹/相等标记均行间独立，按 masks 同款
-/// 分块并行（6 线程 / PAR_MIN 阈值），串行段只剩共享 HashMap 插入。
+/// 分块并行（12 线程 / PAR_MIN 阈值），串行段只剩共享 HashMap 插入。
 fn scan_fp(lines: &[&str]) -> ScanFp {
     let total = lines.len();
-    let n_t = if total >= PAR_MIN { 6 } else { 1 };
+    let n_t = if total >= PAR_MIN { 12 } else { 1 };
     let chunk = total.div_ceil(n_t);
     let mut fp = vec![(0u64, 0u64, 0u32); total];
     let mut prev_same = vec![false; total];
@@ -1105,11 +1106,11 @@ pub(crate) fn scores(
     tbl: &Weights,
 ) -> Vec<f64> {
     // 逐行打分纯只读（lines/hits/sumw/err/force/tbl 共享读，scores 分块写不重叠）。
-    // ≥ PAR_MIN 行分 6 线程（与 masks/tally 同模板、同阈值）；小输入保持串行零开销。
+    // ≥ PAR_MIN 行分 12 线程（与 masks/tally 同模板、同阈值）；小输入保持串行零开销。
     // 并行与串行逐字节一致：每行独立计算、无全局状态、无排序依赖。
     let total = lines.len();
     let mut scores = vec![0.0f64; total];
-    let n_t = if total >= PAR_MIN { 6 } else { 1 };
+    let n_t = if total >= PAR_MIN { 12 } else { 1 };
     let chunk = total.div_ceil(n_t);
     if n_t > 1 {
         let parts = split_parts(&mut scores, chunk);

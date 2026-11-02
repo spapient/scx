@@ -11,7 +11,7 @@
 // 扫描/门禁分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
 #![allow(clippy::cognitive_complexity)]
 
-use super::{contain, fail, io, load_json as load, meta, seed, stats, Fail};
+use super::{contain, corpus, fail, frozen, io, load_json as load, nanos, stats, Fail};
 use scx::json::Json;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -198,7 +198,7 @@ fn py_repr(text: &str) -> String {
 
 pub(crate) fn a2() -> Result<(), Fail> {
     let thresholds = Path::new(ROOT).join("config/fidelity-thresholds.json");
-    let text = super::meta::result_text("compression-fidelity.json")?;
+    let text = frozen::result_text("compression-fidelity.json")?;
     let res = scx::json::parse(&text).map_err(fail)?;
     let cfg = load(&thresholds)?;
     let table = match res.get("a2_roundtrip") {
@@ -305,17 +305,20 @@ fn selftest_inner(dir: &Path) -> Result<(), String> {
 
 fn memory_checks(dir: &Path) -> Result<(), String> {
     check(
-        !seed::is_memory_dir(Path::new(ROOT)),
+        !corpus::is_memory_dir(Path::new(ROOT)),
         "ROOT must not be a memory dir",
     )?;
     let path = dir.join("memory");
-    check(!seed::is_memory_dir(&path), "empty dir is not memory")?;
+    check(!corpus::is_memory_dir(&path), "empty dir is not memory")?;
     fs::create_dir_all(path.join("cases")).map_err(|e| e.to_string())?;
-    check(!seed::is_memory_dir(&path), "cases dir alone is not memory")?;
+    check(
+        !corpus::is_memory_dir(&path),
+        "cases dir alone is not memory",
+    )?;
     fs::write(path.join("meta.toml"), "schema = 2\n").map_err(|e| e.to_string())?;
-    check(seed::is_memory_dir(&path), "meta+cases is memory")?;
+    check(corpus::is_memory_dir(&path), "meta+cases is memory")?;
     fs::write(path.join("stale"), "remove\n").map_err(|e| e.to_string())?;
-    let prepared = seed::prepare_mem_dir(path.to_str().unwrap_or_default(), true)?;
+    let prepared = corpus::prepare_mem_dir(path.to_str().unwrap_or_default(), true)?;
     check(prepared.is_dir(), "prepared dir exists")?;
     check(
         fs::read_dir(&prepared)
@@ -326,7 +329,7 @@ fn memory_checks(dir: &Path) -> Result<(), String> {
     let foreign = dir.join("foreign");
     fs::create_dir_all(&foreign).map_err(|e| e.to_string())?;
     fs::write(foreign.join("keep"), "keep\n").map_err(|e| e.to_string())?;
-    let error = seed::prepare_mem_dir(foreign.to_str().unwrap_or_default(), true)
+    let error = corpus::prepare_mem_dir(foreign.to_str().unwrap_or_default(), true)
         .expect_err("--force must reject non-memory");
     check(error.contains("non-memory"), "non-memory rejection")?;
     check(
@@ -344,7 +347,7 @@ fn corpus_checks() -> Result<(), String> {
         ("corpus:real", 40),
     ] {
         let value = scx::assets::read_json(selector)?;
-        let layers = seed::validate_corpus(&value)?;
+        let layers = corpus::validate_corpus(&value)?;
         check(
             layers.iter().sum::<usize>() == expected,
             &format!("{selector} corpus cases={expected}"),
@@ -463,17 +466,17 @@ fn manifest_checks(dir: &Path) -> Result<(), String> {
     let manifest = dir.join("manifest.json");
     let payload_text = payload.to_string_lossy().to_string();
     let manifest_text = manifest.to_string_lossy().to_string();
-    meta::manifest(&[
+    frozen::manifest(&[
         "--files".to_string(),
         payload_text,
         "--out".to_string(),
         manifest_text.clone(),
     ])
     .map_err(|failure| failure.msg)?;
-    meta::manifest(&["--expect".to_string(), manifest_text.clone()])
+    frozen::manifest(&["--expect".to_string(), manifest_text.clone()])
         .map_err(|failure| failure.msg)?;
     fs::write(&payload, "{\"a\":2}\n").map_err(|e| e.to_string())?;
-    let drifted = meta::manifest(&["--expect".to_string(), manifest_text]);
+    let drifted = frozen::manifest(&["--expect".to_string(), manifest_text]);
     check(
         drifted.err().map(|failure| failure.code) == Some(2),
         "manifest drift exits 2",
@@ -490,7 +493,7 @@ fn holm_checks() -> Result<(), String> {
     ];
     for (ps, want) in cases {
         check(
-            meta::holm_bonferroni(ps).as_slice() == want,
+            frozen::holm_bonferroni(ps).as_slice() == want,
             "holm decision",
         )?;
     }
@@ -503,13 +506,6 @@ fn check(condition: bool, message: &str) -> Result<(), String> {
     } else {
         Err(message.to_string())
     }
-}
-
-fn nanos() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

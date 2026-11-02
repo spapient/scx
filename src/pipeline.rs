@@ -67,16 +67,8 @@ const ANCHOR_KEYS: &[&str] = &["structure", "anchors", "fill_floor"];
 
 /// 锚点字符串映射（与 [`AnchorKind::as_str`] 同源）。
 fn anchor_of(s: &str) -> Result<AnchorKind, String> {
-    match s {
-        "json" => Ok(AnchorKind::Json),
-        "xml" => Ok(AnchorKind::Xml),
-        "idoc" => Ok(AnchorKind::Idoc),
-        "yaml" => Ok(AnchorKind::Yaml),
-        "markdown" | "md" => Ok(AnchorKind::Markdown),
-        other => Err(format!(
-            "pipeline: unknown anchor kind `{other}` (json/xml/idoc/yaml/markdown)"
-        )),
-    }
+    AnchorKind::parse(s)
+        .ok_or_else(|| format!("pipeline: unknown anchor kind `{s}` (json/xml/idoc/yaml/markdown)"))
 }
 
 fn reject_unknown(keys: &[&str], obj: &Json, path: &str, where_: &str) -> Result<(), String> {
@@ -444,6 +436,20 @@ mod tests {
         assert!(cfg.structure);
         assert_eq!(cfg.structure_anchors, vec![AnchorKind::Markdown]);
         assert_eq!(cfg.fill_floor, 0.0);
+    }
+
+    #[test]
+    fn markdown_anchor_aliases_share_one_parser() {
+        for name in ["md", "markdown"] {
+            let body = format!(r#"{{"anchor":{{"anchors":["{name}"]}}}}"#);
+            let cfg = {
+                let mut cfg = Config::default();
+                parse(&body).unwrap().apply(&mut cfg, &|_| false);
+                cfg
+            };
+            assert_eq!(cfg.structure_anchors, vec![AnchorKind::Markdown]);
+        }
+        assert!(parse(r#"{"anchor":{"anchors":["unknown"]}}"#).is_err());
     }
 
     #[test]

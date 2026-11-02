@@ -14,7 +14,7 @@
 
 use super::contain;
 use super::io::{self, J};
-use super::{arg_value as value, fail, has_flag as flag, Fail};
+use super::{arg_value as value, default_binary, fail, has_flag as flag, nanos, Fail};
 use scx::json::Json;
 #[cfg(feature = "memory")]
 use scx::memory::{rebuild, save, search, Input, Stats};
@@ -69,16 +69,6 @@ fn usage(message: impl Into<String>) -> Fail {
     }
 }
 
-fn default_binary() -> String {
-    for name in ["scx.exe", "scx"] {
-        let path = Path::new(ROOT).join("target/release").join(name);
-        if path.is_file() {
-            return path.to_string_lossy().to_string();
-        }
-    }
-    "target/release/scx".to_string()
-}
-
 // ---------------------------------------------------------------------------
 // metrics real
 // ---------------------------------------------------------------------------
@@ -113,9 +103,9 @@ fn real(args: &[String]) -> Result<(), Fail> {
                         continue;
                     };
                     let cut = data.get("cut_pct").and_then(Json::num).unwrap_or(0.0);
-                    let kept = data.get("kept").and_then(as_i64).unwrap_or(0);
-                    let seeds = data.get("seeds").and_then(as_i64).unwrap_or(0);
-                    let guarded = data.get("guarded").and_then(as_i64).unwrap_or(0);
+                    let kept = data.get("kept").and_then(io::as_i64).unwrap_or(0);
+                    let seeds = data.get("seeds").and_then(io::as_i64).unwrap_or(0);
+                    let guarded = data.get("guarded").and_then(io::as_i64).unwrap_or(0);
                     let risk = data.get("risk").and_then(Json::str).unwrap_or("");
                     println!(
                         "{base:12} {ctx:3} {gate:4} {sc:3} {cut:5.1}% {kept:6} {seeds:6} {guarded:5} {risk:>5}"
@@ -168,14 +158,6 @@ fn scx_json(
     None
 }
 
-fn as_i64(value: &Json) -> Option<i64> {
-    match value {
-        Json::Num(n) if n.fract() == 0.0 => Some(*n as i64),
-        Json::Str(s) => s.parse().ok(),
-        _ => None,
-    }
-}
-
 // ---------------------------------------------------------------------------
 // metrics perf
 // ---------------------------------------------------------------------------
@@ -188,7 +170,7 @@ const PERF_CORPORA: [(&str, usize); 3] = [
 const RATIOS: [(&str, &str); 3] = [("lossless", "1.0"), ("r0.3", "0.3"), ("r0.2", "0.2")];
 
 fn perf(_args: &[String]) -> Result<(), Fail> {
-    let binary = default_binary();
+    let binary = default_binary().unwrap_or_else(|| "target/release/scx".to_string());
     let dir = std::env::temp_dir().join(format!("scx-perf-{}-{}", std::process::id(), nanos()));
     fs::create_dir_all(&dir).map_err(|e| fail(format!("{}: {e}", dir.display())))?;
     let mut results: Vec<(String, PerfRow)> = Vec::new();
@@ -470,7 +452,7 @@ fn write_budget_csv(path: &str, rows: &[BudgetRow]) -> Result<(), Fail> {
 
 pub(crate) fn write_artifact(path: &str, text: &str) -> Result<(), Fail> {
     if let Some(name) = path.strip_prefix("result:") {
-        super::meta::write_result(name, text)
+        super::frozen::write_result(name, text)
     } else {
         io::write_text(path, text).map_err(fail)
     }
@@ -559,13 +541,6 @@ pub(crate) fn compress_text(
         }
     }
     Ok(text.to_string())
-}
-
-fn nanos() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
 }
 
 fn rebuild_folded(out: &str) -> String {
@@ -837,7 +812,7 @@ struct AblateRow {
 fn ablate(args: &[String]) -> Result<(), Fail> {
     let default_bin = value(args, "--bin")
         .map(str::to_string)
-        .unwrap_or_else(default_binary);
+        .unwrap_or_else(|| default_binary().unwrap_or_else(|| "target/release/scx".to_string()));
     let sem_bin = value(args, "--sem-bin")
         .map(str::to_string)
         .unwrap_or_else(|| format!("{ROOT}/target/ablate-sem/release/scx"));

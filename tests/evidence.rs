@@ -149,3 +149,17 @@ fn fail_open_keeps_evidence_row() {
         "fail-open 证据行整行保留\nbody={body}"
     );
 }
+
+#[test]
+fn evidence_text_parser_is_one_contract() {
+    assert_eq!(scx::Evidence::parse(" 12 "), Some(scx::Evidence::Line(12)));
+    assert_eq!(
+        scx::Evidence::parse(" conn_id=9f2a "),
+        Some(scx::Evidence::Substr("conn_id=9f2a".into()))
+    );
+    assert_eq!(
+        scx::Evidence::parse("0"),
+        Some(scx::Evidence::Substr("0".into()))
+    );
+    assert_eq!(scx::Evidence::parse("   "), None);
+}

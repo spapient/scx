@@ -6,9 +6,9 @@
 // 盲审协议分支线性；认知复杂度门禁针对压缩内核，不适用于迁移工具。
 #![allow(clippy::cognitive_complexity)]
 
+use super::frozen;
 use super::io;
-use super::meta;
-use super::{arg_value as value, fail, has_flag as flag, load_json, Fail};
+use super::{arg_value as value, case_tail, fail, has_flag as flag, load_json, Fail};
 use scx::json::Json;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -30,7 +30,7 @@ pub(crate) fn verify(args: &[String]) -> Result<(), Fail> {
     validate(args, &["--packet", "--sha256"], &[])?;
     let packet = require(args, "--packet")?;
     let expected = value(args, "--sha256");
-    let actual = meta::sha256_file(packet, false)?;
+    let actual = frozen::sha256_file(packet, false)?;
     if let Some(expected) = expected {
         if actual.to_lowercase() != expected.to_lowercase() {
             return Err(fail(format!(
@@ -166,38 +166,8 @@ fn read_packet(path: &str) -> Result<Vec<HashMap<String, String>>, Fail> {
         .collect())
 }
 
-fn write_text(path: &str, text: &str) -> Result<(), Fail> {
-    let target = Path::new(path);
-    if let Some(parent) = target.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent).map_err(|e| fail(format!("{path}: {e}")))?;
-        }
-    }
-    let tmp = format!("{path}.tmp");
-    fs::write(&tmp, text).map_err(|e| fail(format!("{path}: {e}")))?;
-    fs::rename(&tmp, target).map_err(|e| fail(format!("{path}: {e}")))
-}
-
 fn dump_json(path: &str, value: &Json) -> Result<(), Fail> {
-    io::write_json_indent(path, &to_j(value), 1).map_err(fail)
-}
-
-fn to_j(value: &Json) -> io::J {
-    use io::J;
-    match value {
-        Json::Null => J::Null,
-        Json::Bool(flag) => J::Bool(*flag),
-        Json::Num(number) if number.fract() == 0.0 && number.abs() < 9e15 => J::Int(*number as i64),
-        Json::Num(number) => J::Num(*number),
-        Json::Str(text) => J::Str(text.clone()),
-        Json::Arr(items) => J::Arr(items.iter().map(to_j).collect()),
-        Json::Obj(entries) => J::Obj(
-            entries
-                .iter()
-                .map(|(key, value)| (key.clone(), to_j(value)))
-                .collect(),
-        ),
-    }
+    io::write_json_indent(path, &io::to_j(value), 1).map_err(fail)
 }
 
 fn sha256_text(text: &str) -> String {
@@ -216,10 +186,6 @@ fn clean(text: &str) -> String {
         .chars()
         .take(220)
         .collect()
-}
-
-fn tail_of(key: &str) -> &str {
-    key.rsplit('_').next().unwrap_or(key)
 }
 
 fn py_list(items: &[String]) -> String {
@@ -311,7 +277,7 @@ fn load_memory_cases(mem_dir: &str) -> Result<HashMap<String, Entry>, Fail> {
             .and_then(Json::str)
             .unwrap_or_default()
             .to_string();
-        by_tail.insert(tail_of(&id).to_string(), Entry { id, query, fix });
+        by_tail.insert(case_tail(&id).to_string(), Entry { id, query, fix });
     }
     Ok(by_tail)
 }
@@ -387,7 +353,7 @@ fn make(args: &[String]) -> Result<(), Fail> {
         ordered.sort_by_key(|key| sha256_text(&format!("{seed}:{case_index}:{key}")));
         let mut filled = Vec::new();
         for key in ordered {
-            let hit = memory.get(tail_of(key)).ok_or_else(|| {
+            let hit = memory.get(case_tail(key)).ok_or_else(|| {
                 fail(format!(
                     "blind: candidate {key} (case {case_index}) missing in memory"
                 ))
@@ -425,20 +391,20 @@ fn make(args: &[String]) -> Result<(), Fail> {
         })
         .collect();
     let head: Vec<String> = PACKET_HEAD.map(str::to_string).to_vec();
-    write_text(out, &tsv_text(&head, &packet_rows))?;
+    io::write_text(out, &tsv_text(&head, &packet_rows)).map_err(fail)?;
     let manifest = Json::Obj(vec![
         ("name".to_string(), Json::Str(name.to_string())),
         ("seed".to_string(), Json::Str(seed.to_string())),
         ("baseline".to_string(), Json::Str(resolve(baseline))),
         (
             "baseline_sha256".to_string(),
-            Json::Str(meta::sha256_file(baseline, false)?),
+            Json::Str(frozen::sha256_file(baseline, false)?),
         ),
         ("memory_dir".to_string(), Json::Str(resolve(mem_dir))),
         ("packet".to_string(), Json::Str(resolve(out))),
         (
             "packet_sha256".to_string(),
-            Json::Str(meta::sha256_file(out, false)?),
+            Json::Str(frozen::sha256_file(out, false)?),
         ),
         ("protocol".to_string(), Json::Str(GRADE_HELP.to_string())),
         ("cases".to_string(), Json::Arr(manifest_cases.clone())),
@@ -450,7 +416,7 @@ fn make(args: &[String]) -> Result<(), Fail> {
         ("judgments".to_string(), Json::Num(rows.len() as f64)),
     ]);
     dump_json(manifest_path, &manifest)?;
-    let packet_sha = meta::sha256_file(out, false)?;
+    let packet_sha = frozen::sha256_file(out, false)?;
     println!(
         "blind: cases={}/{} judgments={} packet={out}",
         manifest_cases.len(),
@@ -610,10 +576,10 @@ fn import(args: &[String]) -> Result<(), Fail> {
             .iter()
             .map(|(key, _)| (key.clone(), Json::Num(*grade_map.get(key).unwrap_or(&0.0))))
             .collect();
-        let target = tail_of(expected[0].str().unwrap_or(""));
+        let target = case_tail(expected[0].str().unwrap_or(""));
         let target_grade = rel_json
             .iter()
-            .find(|(key, _)| tail_of(key) == target)
+            .find(|(key, _)| case_tail(key) == target)
             .and_then(|(_, value)| value.num());
         let layer = case.get("layer").and_then(Json::str).unwrap_or("");
         if layer == "literal" && target_grade != Some(2.0) {
@@ -858,7 +824,7 @@ fn check(args: &[String]) -> Result<(), Fail> {
             failed = true;
         }
         if let Some(out) = out {
-            write_text(out, &body)?;
+            io::write_text(out, &body).map_err(fail)?;
         }
         println!("blind: materialized rows={} sha256={actual}", rows.len());
     }
@@ -1112,7 +1078,7 @@ fn review(args: &[String]) -> Result<(), Fail> {
             }
             if matches!(answer.as_str(), "2" | "1" | "0") {
                 rows[index][grade_index] = answer;
-                write_text(packet, &tsv_text(&head, &rows))?;
+                io::write_text(packet, &tsv_text(&head, &rows)).map_err(fail)?;
                 break;
             }
             if answer == "s" {
@@ -1153,7 +1119,7 @@ mod tests {
             "h".to_string(),
             "2".to_string(),
         ]];
-        write_text(&path, &tsv_text(&head, &rows)).unwrap();
+        io::write_text(&path, &tsv_text(&head, &rows)).unwrap();
         let (got_head, got_rows) = read_tsv(&path).unwrap();
         assert_eq!(got_head, head);
         assert_eq!(got_rows, rows);

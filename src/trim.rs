@@ -391,21 +391,25 @@ pub(crate) fn trim_line_into(
     prof.mark_agg("keep");
     // 低分 token 候选（未强制保留）：保留分数较高的前 keep_low 个。
     // 同分按原顺序（稳定）。
-    let low: Vec<usize> = (0..total).filter(|&i| !keep[i]).collect();
-    if low.is_empty() {
+    let mut order: Vec<usize> = (0..total).filter(|&i| !keep[i]).collect();
+    if order.is_empty() {
         out.clear();
         out.push_str(line.trim());
         return;
     }
-    let keep_low = ((low.len() as f64) * trim_ratio).ceil() as usize;
-    let mut order: Vec<usize> = low.clone();
-    order.sort_unstable_by(|&a, &b| {
-        let sa = score(&t, a);
-        let sb = score(&t, b);
+    let keep_low = ((order.len() as f64) * trim_ratio).ceil() as usize;
+    let rank = |a: &usize, b: &usize| {
+        let sa = score(&t, *a);
+        let sb = score(&t, *b);
         sb.partial_cmp(&sa)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.cmp(&b))
-    });
+            .then(a.cmp(b))
+    };
+    // 只需前 keep_low 个：线性选择替代整表排序；比较器含原始下标，
+    // 同分顺序与稳定排序一致，选中集合逐元素相同。
+    if keep_low > 0 && keep_low < order.len() {
+        order.select_nth_unstable_by(keep_low, rank);
+    }
     for &i in order.iter().take(keep_low) {
         keep[i] = true;
     }

@@ -7,7 +7,7 @@
 
 use super::io::{self, J};
 use super::rng::PyRng;
-use super::{fail, Fail};
+use super::{cjk, default_binary, fail, word_part, Fail};
 use scx::contain;
 use scx::json::Json;
 use std::collections::{BTreeMap, HashSet};
@@ -205,7 +205,7 @@ fn load_corpus(path: &str) -> Result<(Vec<Slice>, Vec<usize>), Fail> {
         let query = string(item, "query");
         let full_text = raw(item, "full_text");
         let note = string(item, "note");
-        let evidence = strings(item, "evidence");
+        let evidence = io::strings(item, "evidence");
         if ident.is_empty() || !seen.insert(ident.clone()) {
             return Err(fail(format!("contain: bad/duplicate slice id: {ident:?}")));
         }
@@ -267,17 +267,6 @@ pub(crate) fn raw(value: &Json, key: &str) -> String {
         .and_then(Json::str)
         .unwrap_or_default()
         .to_string()
-}
-
-fn strings(value: &Json, key: &str) -> Vec<String> {
-    match value.get(key) {
-        Some(Json::Arr(items)) => items
-            .iter()
-            .filter_map(Json::str)
-            .map(str::to_string)
-            .collect(),
-        _ => Vec::new(),
-    }
 }
 
 fn run_slice(
@@ -435,21 +424,13 @@ fn parse_stats(stderr: &str) -> Option<Stats> {
                 .and_then(Json::str)
                 .unwrap_or("")
                 .to_string(),
-            kept: value.get("kept").and_then(as_i64),
-            total: value.get("total").and_then(as_i64),
-            seeds: value.get("seeds").and_then(as_i64),
-            evidence: value.get("evidence").and_then(as_i64),
+            kept: value.get("kept").and_then(io::as_i64),
+            total: value.get("total").and_then(io::as_i64),
+            seeds: value.get("seeds").and_then(io::as_i64),
+            evidence: value.get("evidence").and_then(io::as_i64),
         });
     }
     None
-}
-
-pub(crate) fn as_i64(value: &Json) -> Option<i64> {
-    match value {
-        Json::Num(n) if n.fract() == 0.0 => Some(*n as i64),
-        Json::Str(s) => s.parse().ok(),
-        _ => None,
-    }
 }
 
 pub(crate) fn token_count(text: &str) -> usize {
@@ -472,14 +453,6 @@ pub(crate) fn token_count(text: &str) -> usize {
 
 fn word_start(byte: u8) -> bool {
     byte.is_ascii_alphanumeric()
-}
-
-fn word_part(byte: u8) -> bool {
-    word_start(byte) || matches!(byte, b'_' | b'.' | b'-')
-}
-
-fn cjk(c: char) -> bool {
-    ('\u{4e00}'..='\u{9fff}').contains(&c)
 }
 
 pub(crate) fn trunc(text: &str, budget: usize) -> String {
@@ -922,18 +895,6 @@ pub(crate) fn opt_json(value: Option<i64>) -> J {
 
 fn floats(values: &[f64]) -> J {
     J::Arr(values.iter().copied().map(J::Num).collect())
-}
-
-pub(crate) fn default_binary() -> Option<String> {
-    for name in ["scx.exe", "scx"] {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("target/release")
-            .join(name);
-        if path.is_file() {
-            return Some(path.to_string_lossy().to_string());
-        }
-    }
-    None
 }
 
 pub(crate) struct TempDir(PathBuf);

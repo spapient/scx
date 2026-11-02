@@ -9,7 +9,7 @@
 
 #[cfg(test)]
 use super::io;
-use super::{fail, Fail};
+use super::{fail, home, nanos, Fail};
 use scx::json::Json;
 use std::fs;
 use std::io::Write;
@@ -70,13 +70,6 @@ fn bin_dir() -> PathBuf {
     std::env::var_os("SCX_BIN_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| home().join(".local/bin"))
-}
-
-fn home() -> PathBuf {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_default()
 }
 
 fn require_scx() -> Result<(), Fail> {
@@ -409,9 +402,9 @@ fn perf() -> Result<(), Fail> {
             blocks.push(text);
         }
     }
-    if let Ok(names) = super::gen::dataset_names() {
+    if let Ok(names) = super::frozen::dataset_names() {
         for name in names {
-            if let Ok(records) = super::gen::dataset_records(&name) {
+            if let Ok(records) = super::frozen::dataset_records(&name) {
                 for row in records {
                     if row.len() >= 2 && !row[0].trim().is_empty() {
                         blocks.push(row[0].clone());
@@ -486,7 +479,9 @@ fn check_manifest(manifest: &Path, results: &Path) -> bool {
             let data = if results.is_dir() {
                 fs::read(results.join(name)).ok()
             } else {
-                super::meta::result_text(name).ok().map(String::into_bytes)
+                super::frozen::result_text(name)
+                    .ok()
+                    .map(String::into_bytes)
             };
             let Some(data) = data else {
                 println!("  frozen {name}: MISSING");
@@ -566,13 +561,6 @@ fn tail(text: &str, count: usize) -> String {
     chars[chars.len().saturating_sub(count)..].iter().collect()
 }
 
-fn nanos() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -614,21 +602,8 @@ mod tests {
 
     fn render(value: &Json) -> String {
         // 测试用极简 JSON 渲染：优先复用 tooling io 的缩进器。
-        fn to_j(value: &Json) -> io::J {
-            match value {
-                Json::Null => io::J::Null,
-                Json::Bool(b) => io::J::Bool(*b),
-                Json::Num(n) if n.fract() == 0.0 => io::J::Int(*n as i64),
-                Json::Num(n) => io::J::Num(*n),
-                Json::Str(s) => io::J::Str(s.clone()),
-                Json::Arr(items) => io::J::Arr(items.iter().map(to_j).collect()),
-                Json::Obj(entries) => {
-                    io::J::Obj(entries.iter().map(|(k, v)| (k.clone(), to_j(v))).collect())
-                }
-            }
-        }
         let temp = std::env::temp_dir().join(format!("ops-manifest-{}.json", nanos()));
-        io::write_json(&temp.to_string_lossy(), &to_j(value)).unwrap();
+        io::write_json(&temp.to_string_lossy(), &io::to_j(value)).unwrap();
         let text = fs::read_to_string(&temp).unwrap();
         let _ = fs::remove_file(temp);
         text.trim_end().to_string()

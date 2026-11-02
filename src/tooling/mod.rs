@@ -11,22 +11,20 @@ mod bench;
 mod blind;
 mod calibrate;
 mod contain;
+mod corpus;
 mod distill;
-mod extract;
 mod fidelity;
-mod fit;
-mod gen;
+mod frozen;
 mod io;
-mod meta;
-mod mlp;
+mod model;
 mod ops;
 mod quality;
 mod rng;
-mod seed;
 mod stats;
 
 use scx::json::Json;
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 /// `xtask` 进程入口；同一文件作为库模块编译时由 `allow(dead_code)` 消除未使用告警。
 #[allow(dead_code)]
@@ -74,10 +72,54 @@ fn has_flag(args: &[String], name: &str) -> bool {
     args.iter().any(|arg| arg == name)
 }
 
+/// 用户主目录；Windows 回退 `USERPROFILE`。缺失时返回空路径，由调用方决定如何报错。
+pub(crate) fn home() -> PathBuf {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .unwrap_or_default()
+}
+
+/// 默认 release 二进制路径；找不到已构建文件时返回 `None`，不做隐式构建。
+pub(crate) fn default_binary() -> Option<String> {
+    for name in ["scx.exe", "scx"] {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target/release")
+            .join(name);
+        if path.is_file() {
+            return Some(path.to_string_lossy().to_string());
+        }
+    }
+    None
+}
+
+/// 单调性不保证，仅用于临时文件名去重与计时展示。
+pub(crate) fn nanos() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0)
+}
+
+/// 记忆库 case id 的尾段（最后一个 `_` 之后），用于跨层匹配短 id。
+pub(crate) fn case_tail(key: &str) -> &str {
+    key.rsplit('_').next().unwrap_or(key)
+}
+
+/// 字节级 ASCII 词字符；CJK 等非 ASCII 字节由调用方单独处理。
+pub(crate) fn word_part(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-')
+}
+
+/// CJK 统一表意文字基本区；简繁与日文汉字共用该区间。
+pub(crate) fn cjk(c: char) -> bool {
+    ('\u{4e00}'..='\u{9fff}').contains(&c)
+}
+
 fn load_json(path: impl AsRef<std::path::Path>) -> Result<Json, Fail> {
     let path = path.as_ref().to_string_lossy();
     if let Some(name) = path.strip_prefix("result:") {
-        let text = meta::result_text(name)?;
+        let text = frozen::result_text(name)?;
         return scx::json::parse(&text).map_err(|e| fail(format!("{path}: {e}")));
     }
     scx::assets::read_json(&path).map_err(fail)
@@ -102,22 +144,22 @@ pub fn run(args: &[String]) -> i32 {
         Some("contain") => contain::run(&args[1..]),
         Some("fidelity") => fidelity::run(&args[1..]),
         Some("bench") => bench::run(&args[1..]),
-        Some("gen") => gen::run(&args[1..]),
+        Some("gen") => frozen::gen(&args[1..]),
         Some("ops") => ops::run(&args[1..]),
         Some("verify") => blind::verify(&args[1..]),
         Some("blind") => blind::run(&args[1..]),
-        Some("extract") => extract::run(&args[1..]),
+        Some("extract") => corpus::extract(&args[1..]),
         Some("calibrate") => calibrate::run(&args[1..]),
         Some("distill") => distill::run(&args[1..]),
-        Some("fit") => fit::run(&args[1..]),
-        Some("mlp") => mlp::run(&args[1..]),
+        Some("fit") => model::fit(&args[1..]),
+        Some("mlp") => model::mlp(&args[1..]),
         Some("audit") => quality::audit(),
         Some("a2") => quality::a2(),
-        Some("manifest") => meta::manifest(&args[1..]),
-        Some("report") => meta::report(&args[1..]),
-        Some("freeze") => meta::freeze(&args[1..]),
-        Some("subset") => meta::subset(&args[1..]),
-        Some("seed") => seed::run(&args[1..]),
+        Some("manifest") => frozen::manifest(&args[1..]),
+        Some("report") => frozen::report(&args[1..]),
+        Some("freeze") => frozen::freeze(&args[1..]),
+        Some("subset") => frozen::subset(&args[1..]),
+        Some("seed") => corpus::seed(&args[1..]),
         Some("selftest") => quality::selftest(),
         Some("-h" | "--help") => {
             print!("{}", usage());

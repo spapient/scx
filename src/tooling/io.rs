@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use scx::json::Json;
+
 type Csv = (Vec<String>, Vec<HashMap<String, String>>);
 
 /// 读取 CSV：返回表头与按表头映射的行。UTF-8 BOM 会被剥离（对应 Python
@@ -153,6 +155,50 @@ pub(crate) enum J {
     Str(String),
     Arr(Vec<J>),
     Obj(Vec<(String, J)>),
+}
+
+/// 可缩进 JSON 值转换：保留对象键序，整数型 `Num` 还原为整数。
+pub(crate) fn to_j(value: &Json) -> J {
+    match value {
+        Json::Null => J::Null,
+        Json::Bool(flag) => J::Bool(*flag),
+        Json::Num(number) => {
+            if number.fract() == 0.0 && number.abs() < 9e15 {
+                J::Int(*number as i64)
+            } else {
+                J::Num(*number)
+            }
+        }
+        Json::Str(text) => J::Str(text.clone()),
+        Json::Arr(items) => J::Arr(items.iter().map(to_j).collect()),
+        Json::Obj(entries) => J::Obj(
+            entries
+                .iter()
+                .map(|(key, value)| (key.clone(), to_j(value)))
+                .collect(),
+        ),
+    }
+}
+
+/// 读整数：接受整数型 JSON 数字或可解析的十进制字符串；其他类型返回 `None`。
+pub(crate) fn as_i64(value: &Json) -> Option<i64> {
+    match value {
+        Json::Num(number) if number.fract() == 0.0 => Some(*number as i64),
+        Json::Str(text) => text.parse().ok(),
+        _ => None,
+    }
+}
+
+/// 读字符串数组：非数组或缺键返回空表，非字符串元素忽略。
+pub(crate) fn strings(value: &Json, key: &str) -> Vec<String> {
+    match value.get(key) {
+        Some(Json::Arr(items)) => items
+            .iter()
+            .filter_map(Json::str)
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// 写 JSON：与 Python `json.dump(ensure_ascii=False, indent=1)` 对齐。
