@@ -42,20 +42,20 @@
 ```bash
 git clone https://github.com/spapient/scx.git
 cd scx
-./tools/ops.py --version
+cargo build --release --locked
+./target/release/scx --version
 ```
-
-Unix 入口会在二进制缺失或源码更新时自动执行 release 构建，然后转发参数。若文件系统丢失了执行位，使用 `python3 tools/ops.py --version`。
 
 Windows PowerShell：
 
 ```powershell
 git clone https://github.com/spapient/scx.git
 Set-Location scx
-python tools\ops.py --version
+cargo build --release --locked
+.\target\release\scx.exe --version
 ```
 
-也可以直接构建独立二进制：
+独立二进制构建即安装：
 
 ```bash
 # macOS / Linux / WSL
@@ -94,7 +94,7 @@ winget install Spapient.Scx    # 待 microsoft/winget-pkgs PR #466131 合并
 `scx` 内置 MCP stdio server（零第三方 crate、无条件编译进主二进制）。三条命令完成注册：
 
 ```bash
-./tools/ops.py install        # 或把 release 二进制放进 PATH（scx）
+cargo install --path .        # 或把 release 二进制放进 PATH（scx）
 scx setup                  # 一键注册到 Claude / Codex / Cursor
 scx mcp                    # 手动进入 stdio server 模式（agent 会以子进程方式拉起）
 ```
@@ -137,13 +137,12 @@ git clone https://github.com/spapient/scx.git \
 
 ### 一键安装
 
-`tools/ops.py install` 构建 release 二进制并软链到 `~/.local/bin/scx`（零第三方 crate，
-`--locked` 离线可构建；目标目录可用 `SCX_BIN_DIR` 覆盖）：
+`cargo install --path .` 构建 release 二进制并安装到 `~/.cargo/bin/scx`（零第三方 crate，
+`--locked` 离线可构建）：
 
 ```bash
 # macOS / Linux / WSL
-python3 tools/ops.py install                 # 构建 + 安装到 ~/.local/bin/scx
-export PATH="$HOME/.local/bin:$PATH"
+cargo install --path .                        # 构建 + 安装到 ~/.cargo/bin/scx
 ```
 
 ```powershell
@@ -153,20 +152,13 @@ Copy-Item target\release\scx.exe "$HOME\bin\scx.exe"
 $env:Path = "$HOME\bin;" + $env:Path
 ```
 
-或直接使用自举入口（无需安装，按需自动构建）：
-
-```bash
-./tools/ops.py --version            # macOS / Linux / WSL
-python tools\ops.py --version       # Windows
-```
-
 ### 安装自检
 
 Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技能存在但实际不可用”的常见原因：
 
 ```bash
-"${CODEX_HOME:-$HOME/.codex}/skills/scx/tools/ops.py" --version
-"$HOME/.claude/skills/scx/tools/ops.py" --version   # 安装到 Claude Code 时
+"${CODEX_HOME:-$HOME/.codex}/skills/scx/target/release/scx" --version
+"$HOME/.claude/skills/scx/target/release/scx" --version   # 安装到 Claude Code 时
 scx --version                                  # 已将入口加入 PATH 时
 ```
 
@@ -178,7 +170,7 @@ scx --version                                  # 已将入口加入 PATH 时
 
 ```bash
 some-noisy-command > /tmp/scx-input.log 2>&1
-./tools/ops.py \
+scx \
   --query "database timeout connection pool" \
   --ratio 0.35 \
   --lineno 1 \
@@ -239,25 +231,25 @@ compressed: kept=13/98 lines chars=4950->802 (83.8% cut) dup=84 seeds=4 evidence
 
 ```bash
 # 更紧的可选预算；证据及其 ±1 行邻域仍不会被挤掉
-./tools/ops.py --query "panic overflow index" --ratio 0.15 app.log
+scx --query "panic overflow index" --ratio 0.15 app.log
 
 # 针尖模式：不填充可选内容
-./tools/ops.py --query "panic overflow index" --context 0 app.log
+scx --query "panic overflow index" --context 0 app.log
 
 # 强制保留指定子串（可重复或使用 | 分隔；大小写不敏感）
-./tools/ops.py --query "deploy failed" --force "rollback" --force "Region=eu-west-1" app.log
+scx --query "deploy failed" --force "rollback" --force "Region=eu-west-1" app.log
 
 # 正则子集：re: 前缀进入有限正则（交替/字符类/量词，Thompson NFA，无回溯灾难）
-./tools/ops.py --query "oom crash" --force "re:ERROR|FATAL" --force "re:panic in|assert in" app.log
+scx --query "oom crash" --force "re:ERROR|FATAL" --force "re:panic in|assert in" app.log
 
 # 硬 token 上限：证据地板优先，超限如实报告 overflow:evidence/fill，绝不静默丢证据
-./tools/ops.py --query "db timeout" --max-tokens 2000 app.log
+scx --query "db timeout" --max-tokens 2000 app.log
 
 # 结构感知邻域：fence 代码块 / import/use 块 / 堆栈 at 链整体并入（默认关，显式开启）
-./tools/ops.py --query "conn broken" --structure 1 app.log
+scx --query "conn broken" --structure 1 app.log
 
 # 策略文件覆盖默认值：CLI 显式参数 > 文件 > DEFAULT
-./tools/ops.py --query "oom crash" --policy-file policy.toml app.log
+scx --query "oom crash" --policy-file policy.toml app.log
 ```
 
 ### 自动压缩命令输出（`scx wrap`）
@@ -389,7 +381,7 @@ scx --query "..." [OPTIONS] [file...]
 | `--judge <BASELINE.json>` | 交互式逐候选裁决 |
 | `--l1-hist` | 查看本地直答命中分布 |
 
-运行 `./tools/ops.py --help` 可查看当前构建支持的完整参数。
+运行 `scx --help` 可查看当前构建支持的完整参数。
 
 证据保留同场对照（contain5 合成语料：scx vs 头截断 vs 随机抽样基线，含证据
 存活率/压减率/延迟三指标，作者侧自测、非第三方盲审）见
@@ -402,7 +394,7 @@ scx --query "..." [OPTIONS] [file...]
 
 ```bash
 # 1. 在问题解决后沉淀证据与修复结论
-./tools/ops.py \
+scx \
   --query "db timeout connection pool" \
   --store 1 \
   --fix "increase pool size and restart the service" \
@@ -410,13 +402,13 @@ scx --query "..." [OPTIONS] [file...]
   app.log
 
 # 2. 再次遇到相似问题时只读召回
-./tools/ops.py \
+scx \
   --query "database connection pool exhausted" \
   --recall-only --recall 3 --recall-detail \
   --mem-dir .scx-memory
 
 # 3. 查看库状态
-./tools/ops.py --stats --mem-dir .scx-memory
+scx --stats --mem-dir .scx-memory
 ```
 
 默认工作流会在召回结果前加 `mem:` 前缀，使记忆内容与当前输入明确分离。每条 case 包含查询、证据行区间、原始证据和可选修复结论；`--fix` 内容是**候选答案**，相似症状不代表同一根因，使用前仍需验证。
@@ -508,7 +500,6 @@ fn main() {
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
 | `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
-| `tools/ops.py` | 运维六合一入口（run/install/setup/doctor/check/perf；委托 `xtask ops`） |
 | `src/bin/xtask.rs` | 开发/CI 评估工具（`feature = "eval"`）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现，与原 Python 输出逐字节对拍；不进发布二进制 |
 | `tools/scx.py` | 命令行契约 + 委托器（仅标准库；确定性命令全部委托 `xtask`，未构建时报错提示构建） |
 | `tools/bench.py` | 在线评测入口（`gsm8k`/`arch`/`code`/`kernel`/`long`/`fidelity`/`distill online`；离线命令委托 `xtask`） |

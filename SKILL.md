@@ -12,13 +12,13 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 
 ## 怎么用（两步）
 1. 大输出先落盘，不要让整段进入上下文：`<命令> > /tmp/out.txt 2>&1`
-2. 按当前问题关键词压缩，只把压缩结果读进来。入口为技能目录 `tools/scx`（Windows 为 `tools/scx.cmd`）；首次调用自动识别本机并构建，权限不足时用 `sh <技能目录>/tools/scx`。路径按安装位置替换：Claude 时为 `~/.claude/skills/scx`。
+2. 按当前问题关键词压缩，只把压缩结果读进来。入口为技能目录构建出的 scx 二进制（`target/release/scx`，Windows 为 `target\release\scx.exe`）；首次使用先 `cargo build --release --locked`（零依赖离线可构建）。路径按安装位置替换：Claude 时为 `~/.claude/skills/scx`。
 
 ```bash
-tools/scx --query "问题关键词" --ratio 0.35 /tmp/out.txt
+./target/release/scx --query "问题关键词" --ratio 0.35 /tmp/out.txt
 ```
 
-高频参数（完整参数与默认值以 README「CLI 参考」与 `tools/scx --help` 为准，不在本文档重复定义）：
+高频参数（完整参数与默认值以 README「CLI 参考」与 `scx --help` 为准，不在本文档重复定义）：
 - `--ratio`：可选内容预算（默认 0.35，范围 0.02..=1.0）；证据行与最小邻域不受预算限制。
 - `--context 0`：针尖模式，完全跳过可选填充，只保留证据行与省略标记；token 极紧时使用，日常默认 1。
 - `--force "子串A|子串B"`：强制保留匹配行（视为证据行），大小写不敏感，可重复；`re:` 前缀进入有限正则子集（交替/字符类/量词），例如 `--force "re:ERROR|FATAL"`。

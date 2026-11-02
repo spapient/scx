@@ -59,11 +59,11 @@ pub(crate) fn run(args: &[String]) -> Result<(), Fail> {
         .clone()
         .or_else(contain::default_binary)
         .ok_or_else(|| {
-            fail("seed: missing release binary; run `./tools/ops.py --version` first")
+            fail("seed: missing release binary; run `cargo build --release --locked` first")
         })?;
     if !Path::new(&binary).is_file() {
         return Err(fail(
-            "seed: missing release binary; run `./tools/ops.py --version` first",
+            "seed: missing release binary; run `cargo build --release --locked` first",
         ));
     }
     let mem_dir = prepare_mem_dir(&opts.mem_dir, opts.force).map_err(fail)?;

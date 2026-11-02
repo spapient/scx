@@ -56,11 +56,11 @@ jobs:
         run: cargo run --release --locked --example bench -- memory
       - name: CLI smoke (Unix)
         if: runner.os != 'Windows'
-        run: python3 tools/ops.py --version
+        run: ./target/release/scx --version
       - name: CLI smoke (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: python tools\ops.py --version
+        run: .\target\release\scx.exe --version
 
   quality:
     # Rebuild the Gauge corpus from the tracked incident JSON, then enforce
