@@ -1,2 +1,0 @@
-{"type":"assistant","message":{"content":[{"type":"tool_use","input":{"content":"hello from content"}}]}}
-{"type":"user","message":{"content":[{"type":"tool_result","content":"this result is deliberately much longer so session-b sorts first"}]}}

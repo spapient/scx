@@ -6,7 +6,7 @@ Date: 2026-10-23.
 > **Refactor note (2026-10-25).** The decision rule and corpus protocol in this
 > frozen preregistration are unchanged; only artifact paths/commands were
 > updated. Historical `eval-real/` files remain recoverable from git commit
-> `5ada90d`. Current equivalents: corpus `config/gauge.corpus.json`, seed command
+> `5ada90d`. Current equivalents: corpus `corpus:gauge`, seed command
 > `xtask seed ...`, baseline
 > `xtask baseline ...`, and statistics
 > `xtask stats ...`. The frozen input hashes below are
@@ -66,9 +66,9 @@ Pre-build integrity audit:
 
 Corpus files:
 
-- `config/gauge.corpus.json` (current normalized corpus; historical incident JSON
+- `corpus:gauge` (current normalized corpus; historical incident JSON
   SHA256 `E12FDD3C62E6E5C4B192BE423DC6F3070097DE033D41D0426E95E6E543765704`)
-- Seed via `xtask seed config/gauge.corpus.json ...`
+- Seed via `xtask seed corpus:gauge ...`
   (historical `seed-Gauge.ps1` SHA256
   `AA7D90BDA0251E8E1D34AE8E7B8834310481785690E3297B64F16DE830792BDC`)
 
@@ -140,7 +140,7 @@ Pre-freeze verification evidence:
 3. Run A/B with:
 
    ```bash
-   xtask seed config/gauge.corpus.json \
+   xtask seed corpus:gauge \
      --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
    xtask baseline --csv /tmp/scx-gauge.csv \
      --out /tmp/scx-gauge-mechanical.json \

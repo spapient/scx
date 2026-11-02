@@ -1,9 +1,0 @@
-[package]
-name = "xtask"
-version = "0.0.0"
-edition = "2021"
-rust-version = "1.82"
-publish = false
-
-[dependencies]
-scx = { path = "..", default-features = false, features = ["memory", "semantic"] }

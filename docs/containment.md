@@ -9,10 +9,10 @@
 ```bash
 # 0. 构建 release 二进制（零依赖，--locked）
 cargo build --release --locked
-cargo build --release --locked -p xtask
+cargo build --release --locked --features eval --bin xtask
 
 # 1. 跑 containment 评测（stdout 表格 + 聚合；--out 写逐片 detail JSON）
-./target/release/xtask contain config/contain5.corpus.json --out /tmp/contain5-detail.json
+./target/release/xtask contain corpus:contain5 --out /tmp/contain5-detail.json
 # 可选参数（默认即本次实测口径）：
 #   --ratio 0.35 --context 1 --binary target/release/scx
 ```
@@ -49,7 +49,7 @@ cargo build --release --locked -p xtask
 
 | 项 | 值 |
 |---|---|
-| 文件 | `config/contain5.corpus.json` |
+| 文件 | `corpus:contain5` |
 | 切片数 | 25（build 5 / stack 5 / diff 5 / log 5 / test 5） |
 | 总行数 | 1787 |
 | 必需证据行 | 70 |

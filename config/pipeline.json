@@ -1,21 +1,78 @@
 {
-  "comment": "SCX 压缩管线配置示例。三层优先级：CLI 显式参数 > pipeline.json > policy 常量（与 --policy-file 同语义，文件只填 CLI 未指定的字段）。缺省键保持内核默认。评测档位模板见 config/bench/profiles/（r02/r03/r04.json）。",
-  "plan": {
-    "ratio": 0.35,
-    "window": 2,
-    "context": 1
-  },
-  "trim": {
-    "enable": false,
-    "ratio": 0.5,
-    "op_keep": false,
-    "code_keep": false,
-    "num_line_keep": false,
-    "sym_line_keep": false
-  },
-  "anchor": {
-    "structure": false,
-    "anchors": [],
-    "fill_floor": 0.0
+  "comment": "SCX 压缩管线。default 为空表示采用编译期缺省；profiles 只声明覆盖项，未声明字段继承 default。使用 --pipeline <profile> 选择档位，--pipeline config/pipeline.json 使用 default。",
+  "default": {},
+  "profiles": {
+    "aggressive": {
+      "comment": "激进档位（cut ~66%，保持率 ~0.60-0.64）：更深裁剪，接近质量拐点。",
+      "trim": {
+        "enable": true,
+        "ratio": 0.2,
+        "op_keep": true,
+        "code_keep": true,
+        "num_line_keep": true,
+        "sym_line_keep": true
+      },
+      "anchor": {
+        "structure": true,
+        "anchors": [
+          "md"
+        ]
+      }
+    },
+    "balanced": {
+      "comment": "P6n 甜点位档位（cut ~59%，保持率 ~0.75）：架构文档/代码生成评测定稿 0.3 档配置。",
+      "trim": {
+        "enable": true,
+        "ratio": 0.3,
+        "op_keep": true,
+        "code_keep": true,
+        "num_line_keep": true,
+        "sym_line_keep": true
+      },
+      "anchor": {
+        "structure": true,
+        "anchors": [
+          "md"
+        ]
+      }
+    },
+    "conservative": {
+      "comment": "保守档位（cut ~52%，保持率 ~0.78）：轻度压缩，质量损失最小。",
+      "trim": {
+        "enable": true,
+        "ratio": 0.4,
+        "op_keep": true,
+        "code_keep": true,
+        "num_line_keep": true,
+        "sym_line_keep": true
+      },
+      "anchor": {
+        "structure": true,
+        "anchors": [
+          "md"
+        ]
+      }
+    },
+    "deep": {
+      "comment": "28% 深水区档位（cut ~28.2%，中文段/标识符保留 100%）：r=0.44 + zh-keep 语义保护，P9 深水区调参甜点位（fid 10 题采样）。",
+      "plan": {
+        "ratio": 0.44
+      },
+      "trim": {
+        "enable": true,
+        "ratio": 0.44,
+        "op_keep": true,
+        "code_keep": true,
+        "zh_keep": true,
+        "num_line_keep": true,
+        "sym_line_keep": true
+      },
+      "anchor": {
+        "structure": true,
+        "anchors": [
+          "md"
+        ]
+      }
+    }
   }
 }

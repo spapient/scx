@@ -1,23 +1,17 @@
-[workspace]
-members = ["xtask"]
-default-members = ["."]
-resolver = "2"
-
 [package]
 name = "scx"
 version = "0.11.0"
 edition = "2021"
 rust-version = "1.82"
+default-run = "scx"
 license = "MIT OR Apache-2.0"
 description = "Local query-aware evidence-selection compressor for agent contexts (seed-region gated optional layer, structural seed invariant, deterministic, offline, zero deps)"
 repository = "https://github.com/spapient/scx"
 homepage = "https://github.com/spapient/scx"
 keywords = ["logs", "compression", "context", "rag", "offline"]
 categories = ["command-line-utilities", "development-tools", "text-processing"]
-# 发布包白名单：仅含已跟踪文件（gitignore 风格，! 排除）。排除 config/bench
-# 评测语料/结果（≈47MB，超 crates.io 10MiB 上限）与未跟踪/被 gitignore 的
-# 本地产物（ci-* 统计、ci-mem 记忆库、__pycache__、本地草稿）——cargo 会把
-# 「被 include 匹配但未提交」的文件视为脏并拒绝发布，必须逐项排除。
+# 发布包白名单：仅含已跟踪文件（gitignore 风格，! 排除）。config 当前约 3.4MB，
+# 统一资产包随测试与评测入口分发；仅排除 CI 生成物、记忆库与其他本地产物。
 include = [
     "Cargo.toml",
     "README.md",
@@ -29,7 +23,6 @@ include = [
     "!docs/comparison-v051.md",
     "tests/**",
     "config/**",
-    "!config/bench/**",
     "!config/ci-*",
     "!config/*-mem/**",
     "!config/*-mem-*/**",
@@ -51,9 +44,17 @@ memory = []
 # 诊断计时（可选）：压缩主链分阶段耗时打印到 stderr；关闭时零代码零开销，
 # 输出与默认构建逐字节一致。仅用于性能定位，不参与任何结果路径。
 perf = []
+# 开发/CI 工具（xtask 二进制与 tests/tooling.rs）；不进发布路径。
+eval = ["memory", "semantic"]
+
 [[bin]]
 name = "scx"
 path = "src/main.rs"
+
+[[bin]]
+name = "xtask"
+path = "src/tooling/mod.rs"
+required-features = ["eval"]
 
 [profile.release]
 opt-level = 3

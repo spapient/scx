@@ -5,16 +5,28 @@
 #![cfg(feature = "semantic")]
 
 use std::fs;
+use std::sync::OnceLock;
 
 #[path = "mod.rs"]
 mod common;
 use common::run;
 
+const ASSETS: &str = include_str!("../config/tests/assets.json");
+
 fn sample_weights() -> String {
-    format!(
-        "{}/config/semantic/sample-weights.json",
-        env!("CARGO_MANIFEST_DIR")
-    )
+    static PATH: OnceLock<String> = OnceLock::new();
+    PATH.get_or_init(|| {
+        let value = scx::json::parse(ASSETS).expect("test assets JSON");
+        let text = value
+            .get("semantic")
+            .and_then(|value| value.get("sample_weights"))
+            .and_then(scx::json::Json::str)
+            .expect("semantic.sample_weights");
+        let path = std::env::temp_dir().join(format!("scx-sem-sample-{}.json", std::process::id()));
+        fs::write(&path, text).expect("write sample weights");
+        path.to_string_lossy().into_owned()
+    })
+    .clone()
 }
 
 fn corpus() -> String {

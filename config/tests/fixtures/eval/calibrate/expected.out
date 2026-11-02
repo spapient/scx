@@ -1,9 +1,0 @@
-样本数=6  比率（真值 / 启发式）分位数：
-  P50   = 0.982
-  P90   = 1.538
-  P95   = 1.538
-  P99   = 1.538
-  P100  = 1.622
-
-建议 BUDGET_SAFETY_FACTOR = 1.538  （P95；更保守可改用 P99 = 1.538）
-写入 src/terms.rs：`pub(crate) const BUDGET_SAFETY_FACTOR: f64 = 1.538;`

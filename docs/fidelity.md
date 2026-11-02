@@ -24,23 +24,23 @@ Gauge 演进路线 P1/P2 交付：在 contain5 的证据行保真骨架上，把
 
 ## 语料
 
-`config/fidelity.corpus.json`：40 slice，**8 kinds**（build / stack / diff /
+`corpus:fidelity`：40 slice，**8 kinds**（build / stack / diff /
 log / test 开发域 + db / network / hardware 第二故障域，各 5）。每 kind：
 4 个**大 slice**（45–59 行，触发 sieve 压缩路径）+ 1 个**小 slice**
 （3–14 行，走 passthrough:small 透传路径，对照组）。
 
-- 确定性生成：`cargo run --release --locked -p xtask -- gen fid`（seed=20261026，重跑逐字节
-  复现）；每 slice 含 `query` / `full_text` / `evidence`（逐字在原文中）/
-  `note`；provenance 与生成说明写入 corpus JSON。
+- 冻结资产：语料保存在 `config/evaluation.json` 的 `corpora.fidelity`，通过
+  `corpus:fidelity` 引用；每 slice 含 `query` / `full_text` / `evidence`
+  （逐字在原文中）/ `note`；provenance 与生成说明随资产冻结。
 - SHA256：`32194397471d91fff574123b44b857be8981eab68099793e606755773d09f997`。
 
 ## 复现
 
 ```bash
 cargo build --release --locked
-cargo build --release --locked -p xtask
-./target/release/xtask fidelity config/fidelity.corpus.json --out /tmp/fidelity-detail.json
-./target/release/xtask fidelity config/fidelity.corpus.json --gate
+cargo build --release --locked --features eval --bin xtask
+./target/release/xtask fidelity corpus:fidelity --out /tmp/fidelity-detail.json
+./target/release/xtask fidelity corpus:fidelity --gate
 ```
 
 `--gate` 冻结门禁（CI 强制执行）。实测数字统一以

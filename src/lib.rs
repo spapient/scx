@@ -17,6 +17,8 @@
 //! 压缩模式与风险等级以 `Mode` / `Risk` 枚举表达（`Display` 输出保持 v0.4.1
 //! 字符串格式：`passthrough:small` / `failopen:zero-signal` / `LOW` / `HIGH` 等）。
 
+extern crate self as scx;
+
 use std::fmt;
 pub mod cli;
 mod compress;
@@ -32,6 +34,9 @@ mod policy;
 pub mod terms;
 /// TOML 子集解析（`--policy-file` 与记忆库 `meta.toml` 共用；零第三方 crate）。
 pub mod toml;
+/// 开发/CI 工具（feature = "eval"）：xtask 二进制的实现，不进发布包。
+#[cfg(feature = "eval")]
+pub mod tooling;
 mod trim;
 
 /// CLI 与集成层模块（库内可用）：`args` 声明式参数解析、`input` 输入读取、
@@ -41,6 +46,8 @@ pub mod args;
 pub mod input;
 pub mod ops;
 
+#[cfg(feature = "memory")]
+pub mod assets;
 /// 记忆知识库（旁路，`memory` feature 默认启用）：I/O 侧模块，与纯函数
 /// `compress` 完全隔离；`--no-default-features` 时整模块 cfg 排除。
 #[cfg(feature = "memory")]

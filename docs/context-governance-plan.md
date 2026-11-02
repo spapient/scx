@@ -51,7 +51,7 @@
 **目标**：为每次压缩补一个轻量"信息留存"度量，弥合运行时与离线 fidelity 之间的空白。
 
 **现状**：`Outcome`（`src/lib.rs:195`）有 `kept/total/evidence`，无留存率；fidelity 的
-ev/ans 是离线深度评测（`config/fidelity.corpus.json` + `config/ci-fidelity.json`）。
+ev/ans 是离线深度评测（`corpus:fidelity` + `config/ci-fidelity.json`）。
 
 **方案（两级，确定性）**：
 
@@ -69,7 +69,7 @@ ev/ans 是离线深度评测（`config/fidelity.corpus.json` + `config/ci-fideli
 恒 1.0，与现状单桶行为逐字节一致）。
 
 **门禁**：
-- 默认代理 vs fidelity 全量在冻结语料（`config/fidelity.corpus.json`）上的相关性 **≥ 0.9**；
+- 默认代理 vs fidelity 全量在冻结语料（`corpus:fidelity`）上的相关性 **≥ 0.9**；
 - evidence 缺省时行为与现状逐字节一致（golden 32 零漂移）；
 - 显式 evidence 单测：构造证据列表断言 `ev_retention` 逐位正确。
 

@@ -12,7 +12,7 @@
 - 二进制：`target/release/scx` v0.5.1（release profile，`cargo build --release --locked`
   成功产物，2026-10-26 02:07 重新链接；测量期间工作区有并行会话的 src 重构，
   重构前后两版二进制在本语料上 scx 侧聚合指标逐位一致）
-- 参数：`--ratio 0.35 --context 1`；语料 `config/contain5.corpus.json`
+- 参数：`--ratio 0.35 --context 1`；语料 `corpus:contain5`
   （25 切片，SHA256 `a077c35eedcdf1faa766b0ded9cc25e3039b2728fab926a9d994baa2c369b681`，
   未改动）
 - 随机基线种子：`contain-rand-v1`（逐切片 `random.Random(f"{seed}:{slice_id}")`，
@@ -51,7 +51,7 @@
 
 ```bash
 cargo build --release --locked
-xtask contain config/contain5.corpus.json \
+xtask contain corpus:contain5 \
     --out docs/contain5-compare.json
 # 可选：--seed contain-rand-v1（默认）--timing-rounds 5（默认）
 ```

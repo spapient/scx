@@ -1,7 +1,0 @@
-annotate: cases=6 rel2=3 rel1=3
-  layer: literal=2
-  layer: paraphrase=2
-  layer: semantic=2
-  dropped: paraphrase=0 semantic=0 (self-check filtered)
-  skipped: paraphrase_no_synonym=0 semantic_no_root=0
-  out: baseline-auto.json

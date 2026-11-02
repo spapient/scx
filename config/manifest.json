@@ -1,0 +1,60 @@
+{
+  "note": "定稿评测结果冻结（不可变基线）。修改/重跑后必须重新冻结并提交；check_bench.sh 校验 sha256+行数。",
+  "files": {
+    "config/evaluation.json": "f028f2168a847f71d628562d85f93f7298225271139dbc0d9fca65cb767a09b8",
+    "config/datasets.json": "1033de4ad9902e2aea71b808e0dc581dded2688ad2b2f91c7233fc26921a02e3",
+    "config/fidelity-thresholds.json": "2e70b208c591a0004156ea5e37d0eec4084caf2b86bc69cea2501e3292211628",
+    "config/pipeline.json": "25e24655cc88a141f11f2df547781395848d840b8a89216cad26cb48a79d8d65",
+    "config/semantic.json": "a0c303e21a1315de33d90bde84864ed0cdb9993937ea181ed880d85602a65353"
+  },
+  "normalize": [],
+  "frozen": {
+    "ablation-combo.csv": {
+      "sha256": "6c88202827778cae88cfc554b90e8bdc95a3985d0229a2173fd7828653158beb",
+      "bytes": 2181,
+      "rows": 31
+    },
+    "ablation.csv": {
+      "sha256": "ed6864121b99e9255a4e5a039d03b65f0e1004feece5c1d9fe56f691fe2dd60c",
+      "bytes": 1297,
+      "rows": 19
+    },
+    "budget.csv": {
+      "sha256": "ca5e8a7fb132284a1051cbec95a5eb80b7d26cb7984ce21a5ffc545fddedbe31",
+      "bytes": 1279,
+      "rows": 14
+    },
+    "code-layers50.csv": {
+      "sha256": "6789878d678e797028a68bcbd0147d743091b3899cbce69b11a9ec61974536b5",
+      "bytes": 101288,
+      "rows": 720
+    },
+    "code-shape50.csv": {
+      "sha256": "d6b54a97916dbf66f87e58f1575ad7f5b30e768de6d16381fb6fbdb3693974e6",
+      "bytes": 70720,
+      "rows": 1019
+    },
+    "compressible-subset.json": {
+      "sha256": "a6ec513efc7906cfcdb45609dad4f7265b138aad19a07ff5f5b9af0b3a93de21",
+      "bytes": 1676,
+      "rows": 82
+    },
+    "compression-fidelity.json": {
+      "sha256": "771e0fcc9d0c10503046684bafe562b653fcd4e9fc300e32afd9e020170a5a02",
+      "bytes": 4236,
+      "rows": 52
+    },
+    "distill-cache.json": {
+      "sha256": "de7ab737f68c4c2a2866b2d34ea133972bdae37340e1d4c7c4982508df1fbbcf",
+      "bytes": 73909,
+      "rows": 1
+    },
+    "distill-log.csv": {
+      "sha256": "033134cb164d04647a54725fb1f771f01b3d5d4604c26b5dab5c56b9ea526213",
+      "bytes": 514,
+      "rows": 19
+    }
+  },
+  "schema": 1,
+  "frozen_at": "2026-10-29"
+}

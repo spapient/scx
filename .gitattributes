@@ -6,6 +6,4 @@
 *.toml text eol=lf
 Cargo.lock text eol=lf
 *.tsv text eol=lf whitespace=-blank-at-eol
-config/tests/golden/** text eol=lf
-config/tests/fixtures/eval/** text eol=lf
-config/tests/fixtures/bench/** text eol=lf
+config/tests/** text eol=lf

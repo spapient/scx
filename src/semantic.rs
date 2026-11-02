@@ -922,7 +922,7 @@ mod tests {
 
     #[test]
     fn shipped_weights_load_accept() {
-        let w = Weights::load("config/semantic/weights.json").expect("随仓权重可加载");
+        let w = Weights::load("config/semantic.json").expect("随仓权重可加载");
         assert_eq!(w.dim, FEATURE_NAMES.len());
         let terms = [
             "conn".to_string(),

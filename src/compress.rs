@@ -1812,8 +1812,7 @@ mod tests {
         // 纯噪声行（无 query 词形）不触发，预算约束下被大量裁剪。
         // 注意 fill 预算下限 BUDGET_MIN=200 tokens：文本必须显著大于 200 token
         // 才能让 ratio 预算真正约束保留量。
-        let w =
-            crate::semantic::Weights::load("config/semantic/weights.json").expect("随仓权重可加载");
+        let w = crate::semantic::Weights::load("config/semantic.json").expect("随仓权重可加载");
         let mut text = String::from("error: build failed at crate compile\n");
         for k in 0..20 {
             text.push_str(&format!(

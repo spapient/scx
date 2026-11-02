@@ -135,7 +135,7 @@ pub(crate) enum Kind {
     Semantic,
     /// 策略文件（`--policy-file <path>`：文本覆盖 DEFAULT，CLI 显式参数优先）。
     PolicyFile,
-    /// 管线配置（`--pipeline <path>`：JSON 声明式装配 plan/trim/anchor 阶段，
+    /// 管线配置（`--pipeline <path|profile>`：JSON 声明式装配 plan/trim/anchor 阶段，
     /// 优先级 CLI > pipeline.json > DEFAULT，语义同 `--policy-file`）。
     Pipeline,
     /// 显式证据声明（`--evidence`，可重复；正整数=行号，其他=子串）。
@@ -303,8 +303,8 @@ pub(crate) static FLAGS: &[Flag] = &[
         name: "--pipeline",
         once: true,
         kind: Kind::Pipeline,
-        what: "pipeline.json",
-        err_empty: "requires a pipeline json path",
+        what: "pipeline.json|profile",
+        err_empty: "requires a pipeline path or profile name",
         err_zero: "",
         min: 0,
     },
@@ -1430,8 +1430,9 @@ pub fn usage() -> String {
     s.push_str("                       max_tokens/structure; precedence CLI > file > DEFAULT\n");
     s.push_str("  --pipeline PATH      JSON pipeline config: plan/trim/anchor stage assembly\n");
     s.push_str(
-        "                       (config/bench/profiles/*.json); precedence CLI > file > DEFAULT\n",
+        "                       (config/pipeline.json, or named profile: aggressive/balanced/\n",
     );
+    s.push_str("                       conservative/deep); precedence CLI > file > DEFAULT\n");
     s.push_str(
         "  --embed-cmd CMD      pluggable similarity backend: sh -c CMD reads Q\\t<query> then\n",
     );
@@ -1957,7 +1958,12 @@ pub(crate) fn pipeline(
 ) -> Result<(), String> {
     once(&mut s.seen, f.name)?;
     let path = value(args, i, f.name, inline)?;
-    let p = crate::pipeline::Pipeline::load(&path).map_err(|e| format!("{}: {e}", f.name))?;
+    let p = if std::path::Path::new(&path).is_file() {
+        crate::pipeline::Pipeline::load(&path)
+    } else {
+        crate::pipeline::Pipeline::load_profile(&path)
+    }
+    .map_err(|e| format!("{}: {e}", f.name))?;
     // CLI 显式参数优先：文件只填 DEFAULT 层（CLI 未指定的字段）。
     let applied = p.apply(&mut s.config, &|flag| {
         s.seen.contains(flag) || s.sourced.contains(flag)

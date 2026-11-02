@@ -1,32 +1,32 @@
 # scx 评测工具
 
 可重建的评测语料、冻结标签、盲审包与语义权重位于 `config/`（纯数据目录）；评测
-入口为独立 workspace crate `xtask`（`cargo build --release --locked -p xtask`）。
+入口为同包 `xtask` 二进制（`cargo build --release --locked --features eval --bin xtask`），源码位于 `src/tooling/`。
 记忆库目录、verbose 日志、配对统计 CSV 等均为**生成物**，不进入版本库。
 
 在仓库根目录运行：
 
 ```bash
-cargo run --release --locked -p xtask -- --help
+cargo run --release --locked --features eval --bin xtask -- --help
 ```
 
-评测器为 Rust 实现（`xtask/` crate），负责语料播种、基线构造、盲审编排与统计；
+评测器为 Rust 实现（`src/tooling/`），负责语料播种、基线构造、盲审编排与统计；
 检索和证据门仍有且只有一份 Rust 实现，位于 `src/`。
 
 ## 目录
 
 | 路径 | 用途 |
 |---|---|
-| `xtask/` | 语料播种、基线构造、盲审、配对统计、包校验 |
-| `config/gauge.corpus.json` | Gauge：30 起公开事故，150 条存储 case |
-| `config/v2.corpus.json` | v2 开发集：30 起公开事故，150 条存储 case |
-| `config/real.corpus.json` | 真实事故集：11 起公开复盘，40 条 case |
-| `config/gauge.policy.labels.json` | 规则物化控制集，**不是人工标签** |
-| `config/gauge.ai.labels.json` | 384/384 AI 逐候选标签（`per-item-ai-v1`） |
-| `config/gauge.human.labels.json` | 384/384 人工逐候选标签（`per-item-human-v1`） |
-| `config/v2.labels.json` | v2 案例级标签，AI 预填后由两位审核者采纳 |
-| `config/real.labels.json` | real 案例级标签（`judge.by=fei+hao`） |
-| `config/gauge.blind40.packet.tsv` | 冻结盲审包：40 case / 384 候选 |
+| `src/tooling/` | 语料播种、基线构造、盲审、配对统计、包校验；`xtask` 仅在 `--features eval` 下构建 |
+| `corpus:gauge` | Gauge：30 起公开事故，150 条存储 case |
+| `corpus:v2` | v2 开发集：30 起公开事故，150 条存储 case |
+| `corpus:real` | 真实事故集：11 起公开复盘，40 条 case |
+| `labels:gauge-policy` | 规则物化控制集，**不是人工标签** |
+| `labels:gauge-ai` | 384/384 AI 逐候选标签（`per-item-ai-v1`） |
+| `labels:gauge-human` | 384/384 人工逐候选标签（`per-item-human-v1`） |
+| `labels:v2` | v2 案例级标签，AI 预填后由两位审核者采纳 |
+| `labels:real` | real 案例级标签（`judge.by=fei+hao`） |
+| `packet:gauge` | 冻结盲审包：40 case / 384 候选 |
 
 AI/人工 reviewer 填写后的 TSV 是 `packet + labels` 的派生视图，不再单独入库；
 `blind check --packet ... --out ...` 可无损重建并校验历史 SHA256。
@@ -93,7 +93,7 @@ real 40/40，case hash 后缀与冻结基线一致；日期前缀变化不影响
 ## 复现 Gauge
 
 ```bash
-xtask seed config/gauge.corpus.json \
+xtask seed corpus:gauge \
   --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
 xtask baseline --csv /tmp/scx-gauge.csv \
   --out /tmp/scx-gauge-mechanical.json \
@@ -139,7 +139,7 @@ top-k 内计 1，否则 0。实测口径：recall@1 二进制指标翻转样本�
 事故**（数字见 `docs/gauge-metrics.md`）。
 
 **标注一致性 κ（blind agree，核对性质）**：`blind agree --a
-config/gauge.ai.labels.json --b config/gauge.human.labels.json` 实测
+labels:gauge-ai --b labels:gauge-human` 实测
 common=384、raw=0.344、**κ=0.017**——AI 逐项盲审与人工盲审一致性极低。
 如实记录并解读：AI 盲审标签不能直接充当人工 gold；Gauge 机械 MRR 主
 指标（tier:hard Δ 与显著检验）完全基于机械 target 与 relevance 定义，
@@ -166,10 +166,10 @@ common=384、raw=0.344、**κ=0.017**——AI 逐项盲审与人工盲审一致�
 人工、AI 与 policy 门禁复用同一记忆库：
 
 ```bash
-scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+scx --eval labels:gauge-human --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge
-scx --eval config/gauge.ai.labels.json --gate-items --mem-dir /tmp/scx-gauge
-scx --eval config/gauge.policy.labels.json --gate-human --mem-dir /tmp/scx-gauge
+scx --eval labels:gauge-ai --gate-items --mem-dir /tmp/scx-gauge
+scx --eval labels:gauge-policy --gate-human --mem-dir /tmp/scx-gauge
 ```
 
 预期：human `PASS / exit 0`；AI 只通过 `--gate-items`，`--gate-human` 必须
@@ -183,10 +183,10 @@ scx --eval config/gauge.policy.labels.json --gate-human --mem-dir /tmp/scx-gauge
 都会被拒绝，避免静默漏算 hard 层。
 
 ```bash
-scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+scx --eval labels:gauge-human --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge > /tmp/scx-gauge-hao.txt
 xtask stats \
-  --baseline config/gauge.human.labels.json \
+  --baseline labels:gauge-human \
   --verbose /tmp/scx-gauge-hao.txt \
   --mem-dir /tmp/scx-gauge \
   --cluster-size 5 \
@@ -199,11 +199,11 @@ xtask stats \
 
 ```bash
 xtask blind make \
-  --baseline config/gauge.policy.labels.json --mem-dir /tmp/scx-gauge \
+  --baseline labels:gauge-policy --mem-dir /tmp/scx-gauge \
   --out /tmp/packet.tsv --manifest /tmp/manifest.json
 xtask blind progress --packet /tmp/packet.tsv
 xtask blind import \
-  --baseline config/gauge.policy.labels.json --packet /tmp/packet.tsv \
+  --baseline labels:gauge-policy --packet /tmp/packet.tsv \
   --out /tmp/human.json --judge <name> --date 2026-10-25T00:00:00Z
 xtask blind check --baseline /tmp/human.json
 xtask blind check --baseline /tmp/human.json \
@@ -228,13 +228,13 @@ CRLF 文件与 LF 文件等价；`verify` 仍校验冻结文件的原始字节�
 ## v2 与 real
 
 ```bash
-xtask seed config/v2.corpus.json \
+xtask seed corpus:v2 \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
-scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
+scx --eval labels:v2 --gate --mem-dir /tmp/scx-v2
 
-xtask seed config/real.corpus.json \
+xtask seed corpus:real \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
-scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
+scx --eval labels:real --gate-human --mem-dir /tmp/scx-real
 ```
 
 v2 参与调参，且标签由 AI 预填后人工采纳，因此不是独立 holdout。`real` 只有案例级
@@ -256,7 +256,7 @@ v2 参与调参，且标签由 AI 预填后人工采纳，因此不是独立 hol
 
 ```bash
 cargo build --release --locked
-xtask contain config/contain5.corpus.json --out /tmp/contain5-detail.json
+xtask contain corpus:contain5 --out /tmp/contain5-detail.json
 ```
 
 - 语料：`contain5.corpus.json`（25 切片，build/stack/diff/log/test 各 5，全 synthetic）。

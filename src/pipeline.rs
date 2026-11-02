@@ -1,4 +1,4 @@
-//! 压缩管线配置（`--pipeline <path>`）：JSON 声明式装配 plan/trim/anchor 阶段。
+//! 压缩管线配置（`--pipeline <path|profile>`）：JSON 声明式装配 plan/trim/anchor 阶段。
 //!
 //! 三层优先级：CLI 显式参数 > pipeline.json > policy 常量（与 `--policy-file`
 //! 同语义：文件只填 CLI 未显式指定的字段）。算子/策略只以配置声明存在，
@@ -190,10 +190,41 @@ fn validate_self(p: &Pipeline, path: &str) -> Result<(), String> {
 impl Pipeline {
     /// 读取并解析管线配置；任何越界/未知键/类型错误都 fail-loud 返回。
     pub fn load(path: &str) -> Result<Pipeline, String> {
-        let body = std::fs::read_to_string(path)
-            .map_err(|e| format!("pipeline: cannot read {path}: {e}"))?;
-        let root = crate::json::parse(&body).map_err(|e| format!("pipeline {path}: {e}"))?;
-        from_json(&root, path)
+        let root = read(path)?;
+        if root.get("plan").is_some() || root.get("trim").is_some() || root.get("anchor").is_some()
+        {
+            return from_json(&root, path);
+        }
+        let default = root
+            .get("default")
+            .ok_or_else(|| format!("pipeline {path}: missing default object"))?;
+        from_json(default, path)
+    }
+
+    /// 从仓库的 `config/pipeline.json` 选择命名档位。
+    pub fn load_profile(name: &str) -> Result<Pipeline, String> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/config/pipeline.json");
+        let root = read(path)?;
+        let profiles = root
+            .get("profiles")
+            .ok_or_else(|| format!("pipeline {path}: missing profiles object"))?;
+        let selected = profiles.get(name).ok_or_else(|| {
+            let names = match profiles {
+                Json::Obj(entries) => entries
+                    .iter()
+                    .map(|(key, _)| key.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                _ => String::new(),
+            };
+            format!("pipeline: unknown profile `{name}` (available: {names})")
+        })?;
+        let mut merged = root
+            .get("default")
+            .cloned()
+            .unwrap_or(Json::Obj(Vec::new()));
+        merge_json(&mut merged, selected);
+        from_json(&merged, &format!("profile:{name}"))
     }
     /// 应用到 `cfg`。`set(flag)` 返回 true 表示该键已被 CLI 显式设置（跳过，
     /// 保持 CLI 显式 > pipeline > DEFAULT 的三层优先级）。
@@ -205,6 +236,28 @@ impl Pipeline {
         applied.extend(apply_anchor(&self.anchor, cfg, set));
         applied
     }
+}
+
+/// 以 `overlay` 递归覆盖 `base` 的对象字段；数组与标量整体替换。
+fn merge_json(base: &mut Json, overlay: &Json) {
+    match (base, overlay) {
+        (Json::Obj(base_fields), Json::Obj(overlay_fields)) => {
+            for (key, value) in overlay_fields {
+                if let Some((_, current)) = base_fields.iter_mut().find(|(name, _)| name == key) {
+                    merge_json(current, value);
+                } else {
+                    base_fields.push((key.clone(), value.clone()));
+                }
+            }
+        }
+        (current, value) => *current = value.clone(),
+    }
+}
+
+fn read(path: &str) -> Result<Json, String> {
+    let body =
+        std::fs::read_to_string(path).map_err(|e| format!("pipeline: cannot read {path}: {e}"))?;
+    crate::json::parse(&body).map_err(|e| format!("pipeline {path}: {e}"))
 }
 
 /// 单个可选字段落位：CLI 未显式设置（`set` 为 false）才写入并记录来源。
@@ -435,5 +488,20 @@ mod tests {
         assert!(parse(r#"{"trim":{"enable":1}}"#).is_err());
         assert!(parse(r#"{"anchor":{"anchors":"md"}}"#).is_err());
         assert!(parse(r#"{"anchor":{"anchors":["bogus"]}}"#).is_err());
+    }
+
+    #[test]
+    fn named_profiles_resolve_from_single_bundle() {
+        assert!(Pipeline::load_profile("balanced").is_ok());
+        assert!(Pipeline::load_profile("deep").is_ok());
+        let shipped = concat!(env!("CARGO_MANIFEST_DIR"), "/config/pipeline.json");
+        let defaults = Pipeline::load(shipped).expect("shipped pipeline defaults load");
+        assert_eq!(defaults.plan.ratio, None);
+        assert_eq!(defaults.trim.enable, None);
+        let deep = Pipeline::load_profile("deep").unwrap();
+        assert_eq!(deep.plan.ratio, Some(0.44));
+        assert_eq!(deep.trim.zh_keep, Some(true));
+        let error = Pipeline::load_profile("missing").unwrap_err();
+        assert!(error.contains("available: aggressive, balanced, conservative, deep"));
     }
 }

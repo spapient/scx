@@ -13,7 +13,7 @@
 | `cargo package --locked` | ✅ | `Packaged 193 files, 4.5MiB (1.4MiB compressed)`，`Verifying scx v0.11.0` 编译通过 |
 | 包内许可证 | ✅ | `cargo package --list` 含 `LICENSE-MIT`、`LICENSE-APACHE`；不含 `LICENSE` |
 | 包内目录边界 | ✅ | `cargo package --list` 不含 `examples/` |
-| 开发工具边界 | ✅ | `cargo package --list` 不含 `xtask/`；`xtask` 为 `publish = false` 的独立 workspace crate |
+| 开发工具边界 | ✅ | `xtask` 由 `src/tooling/` 提供且 `required-features = ["eval"]`；发布二进制仅含 `scx` |
 | 归档内容 | ✅ | `tar -tzf target/package/scx-0.11.0.crate` 仅见 `LICENSE-APACHE`、`LICENSE-MIT` |
 | 压缩性能门 | ✅ | `xtask bench compress`: 默认 50k 中位 `6048 µs`，`gate: PASS (50k compress median < 50ms)` |
 | 记忆召回门 | ✅ | `xtask bench memory`: `recall p50=135 µs`，`gate: PASS (10k recall p50 < 5ms)` |
@@ -33,7 +33,7 @@
 - [ ] **用户明确授权**：`cargo publish`、打 tag、推送远程均需单独授权；默认不执行。
 - [ ] 工作树干净，且待发布 commit 已通过三平台 CI。
 - [ ] `cargo package --locked` 在干净树上通过，包内容与上表一致。
-- [ ] `cargo run --release --locked -p xtask -- selftest` 通过。
+- [ ] `cargo run --release --locked --features eval --bin xtask -- selftest` 通过。
 - [ ] 版本号、tag、README/SKILL 版本引用一致（当前 `0.11.0`）。
 - [ ] crates.io / GitHub Release / npm / Homebrew 的实际状态重新查询；不得引用
       `docs/install-plan.md` 的历史快照作为当前证据。

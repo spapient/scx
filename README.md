@@ -298,7 +298,7 @@ query + input
 | `--budget` | `0` | 硬 kept-token 占比上限（`0 < F ≤ 1`，`0`=关）；最终输出 token（保留行 + elide 省略标记）≤ F×输入；超预算行按保真优先级反向裁剪（证据/数字/结构最后裁）；与 SuperCompress 官方 mean cut 64.1% 同预算对照路径 |
 | `--structure` | `0` | `1` 时启用结构感知邻域：fence 代码块、`import`/`use`/`#include` 块、堆栈 `at` 链整体并入 |
 | `--policy-file` | 无 | 策略文本覆盖默认值（键白名单与下方 `--policy-file` 行一致：`ratio`/`budget`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`）；优先级 CLI 显式 > 文件 > DEFAULT |
-| `--pipeline` | 无 | JSON 管线配置（`config/pipeline.json` 或 `config/bench/profiles/*.json`）；plan/trim/anchor 三阶段声明式装配；未知键/越界 fail-loud；优先级 CLI 显式 > 文件 > DEFAULT |
+| `--pipeline` | 无 | JSON 管线配置（`config/pipeline.json`，或命名档位 `aggressive`/`balanced`/`conservative`/`deep`）；plan/trim/anchor 三阶段声明式装配；未知键/越界 fail-loud；优先级 CLI 显式 > 文件 > DEFAULT |
 
 ### 四条行为保证
 
@@ -342,7 +342,7 @@ scx --query "..." [OPTIONS] [file...]
 | `--budget <F>` | 硬 kept-token 占比上限（`0 < F ≤ 1`，`0`=关）；输出 token（保留行 + elide 省略标记）≤ F×输入 token；超预算按保真优先级反向裁剪（R_FILL<R_ANCHOR<R_NUM_LINE<R_EVIDENCE），证据/数字/结构最后裁 |
 | `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
 | `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`budget`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
-| `--pipeline <PATH>` | JSON 管线配置（plan/trim/anchor 三阶段声明式）；键白名单 `plan.ratio/window/context/limit`、`trim.enable/ratio/op_keep/code_keep/zh_keep/num_line_keep/sym_line_keep/list_keep`、`anchor.structure/anchors/fill_floor`；未知键/越界 fail-loud 报错；优先级 CLI 显式 > 文件 > DEFAULT；评测档位模板 `config/bench/profiles/{r02,r03,r04}.json` |
+| `--pipeline <PATH\|PROFILE>` | JSON 管线配置或命名档位（plan/trim/anchor 三阶段声明式）；键白名单 `plan.ratio/window/context/limit`、`trim.enable/ratio/op_keep/code_keep/zh_keep/num_line_keep/sym_line_keep/list_keep`、`anchor.structure/anchors/fill_floor`；未知键/越界 fail-loud 报错；优先级 CLI 显式 > 文件 > DEFAULT；`config/pipeline.json` 同时保存 default 与四个命名档位 |
 | `--fill-floor <F>` | 上下文/填充行最低分数门槛（默认 `0` = 现状）；`F>0` 时分数低于门槛的邻域与填充行被裁剪，压缩更深 |
 | `--trim <0\|1>` | 保留行内 token 级重要性裁剪（默认 `0` = 现状）；`1` 时数字/命中词/结构锚保留，停用词与低信息量 token 按 `--trim-ratio` 摘除；**CJK/中文逐字 token 化**——命中 query 的汉字完整保留（如"内存"成词不拆散）、虚词可摘、全角数字保留，中文行不再丢字 |
 | `--trim-ratio <F>` | `--trim 1` 时的低分 token 保留比例（默认 `0.5`；范围 `0.1..=1.0`） |
@@ -500,9 +500,9 @@ fn main() {
 | `src/main.rs`, `src/args.rs`, `src/input.rs` | CLI 入口、声明式参数表（`FLAGS`）、文件 I/O |
 | `src/mcp.rs` | stdio MCP server（无条件编译进主二进制，`scx mcp` 子命令入口；零第三方 crate） |
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
-| `xtask/` | 独立 workspace crate（`publish = false`，不进 `scx` 发布包）：`baseline`/`stats`/`contain`/`fidelity`/`bench`（real/perf/budget/ablate/compress/memory/minhash-mrr）、`gen`（cuda/js/layers/shape/bench/fid）与 `ops`（run/install/setup/doctor/check/perf）与 `audit`/`a2` 门禁与 `manifest`/`report`/`freeze`/`subset` 资产与 `seed`/`selftest`、`verify`/`blind`/`extract`/`calibrate`、`distill weights`/`fit`/`mlp` 的 Rust 实现；根包只保留 `scx` 单个 bin，禁止新增 `src/bin` |
-| `tests/golden.rs`, `config/tests/golden/manifest.toml` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例；`.err`/`.code` 仅非空/非零时落盘） |
-| `config/` | 可重建语料、冻结标签、盲审包与语义权重（`Gauge.*`/`contain5.*`/`real.*`/`v2.*`） |
+| `src/tooling/` | 同包 `xtask` 开发工具（`required-features = ["eval"]`，不进发布运行路径）：基线/统计、containment/fidelity、bench、gen、ops、门禁、manifest/freeze、seed/blind/calibrate、distill/fit/mlp；禁止新增 `src/bin` |
+| `tests/golden.rs`, `config/tests/assets.json` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例） |
+| `config/` | 9 个规范命名资产文件：评测资产包、数据集包、冻结结果包、唯一 manifest、测试夹具、pipeline/semantic/tokenizer；不含历史目录与备份 |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
 
 `src/memory/` 保持扁平、单一职责的布局：`mod.rs` 是唯一公开门面，存储
@@ -518,7 +518,7 @@ cargo test \
   --test golden update_baselines -- --ignored --nocapture
 ```
 
-用例参数在 `config/tests/golden/manifest.toml`，输入生成器与记忆库预置在 `tests/golden.rs`；新增用例两处都要登记。
+用例参数与期望输出在 `config/tests/assets.json`，输入生成器与记忆库预置在 `tests/golden.rs`；新增用例两处都要登记。
 
 ## 质量与证据
 
@@ -587,8 +587,8 @@ structure 结构并入）未在此快照内。
 ```bash
 export CARGO_TARGET_DIR="${TMPDIR:-/tmp}/scx-cargo-target"
 cargo test --locked --workspace --all-features
-cargo run --release --locked -p xtask -- bench compress
-cargo run --release --locked -p xtask -- bench memory
+cargo run --release --locked --features eval --bin xtask -- bench compress
+cargo run --release --locked --features eval --bin xtask -- bench memory
 ```
 
 ### 同类工具与可比性

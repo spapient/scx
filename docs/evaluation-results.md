@@ -43,7 +43,7 @@ provenance 缺失而失败。仓库内仍没有“独立 holdout + 双人逐条�
 
 ### 2.1 policy 控制集
 
-`config/gauge.policy.labels.json` 在同一 150 条查询上物化规则：同事故 `rel=2`，
+`labels:gauge-policy` 在同一 150 条查询上物化规则：同事故 `rel=2`，
 同场景桶 `rel=1`，其余 `rel=0`；分布 `2=650 / 1=115 / 0=665`，
 `judge.method=policy-materialized-v1`。
 
@@ -57,9 +57,9 @@ gate: FAIL
 
 ### 2.2 逐候选人工验收（hao，40/150）
 
-- 盲审包：`config/gauge.blind40.packet.tsv`，40 例 / 384 候选，SHA256
+- 盲审包：`packet:gauge`，40 例 / 384 候选，SHA256
   `b8eebf2fcb78d0fb745c9760b55dd34d832a9bb976b377f3dfb8c7cea264093f`。
-- 人工标签：`config/gauge.human.labels.json`，`judge.by=hao`，
+- 人工标签：`labels:gauge-human`，`judge.by=hao`，
   `method=per-item-human-v1`；rel 分布 `2=142 / 1=130 / 0=112`。
 - `--gate-human`：**PASS / exit 0**；literal 自匹配 0/14 违规；
   provenance 384/384、cases 40/40。
@@ -69,7 +69,7 @@ gate: FAIL
 - NDCG 差值的 semantic bootstrap：+0.0023，CI [-0.0131, 0.0161]；因此不能
   写“NDCG 显著优于 B”。
 
-AI 标签 `config/gauge.ai.labels.json`（`per-item-ai-v1`，384/384）只通过
+AI 标签 `labels:gauge-ai`（`per-item-ai-v1`，384/384）只通过
 `--gate-items`，`--gate-human` 必须失败。配置是在 hao 标签上校准的，不能把
 40/150 的结果外推成全量或独立 holdout。
 
@@ -77,11 +77,11 @@ AI 标签 `config/gauge.ai.labels.json`（`per-item-ai-v1`，384/384）只通过
 
 | 对象 | SHA256 |
 |---|---|
-| `config/gauge.corpus.json` | `B83A3A8C834A6494BDA76777BFD7500488CEDFE097C81D2AFA5E03049E543335` |
-| `config/gauge.policy.labels.json` | `EDF6C2083D77F7A39A2DB1DCC8C13614AD55E5D78A832BBC6F93B449E1BD6F33` |
-| `config/gauge.ai.labels.json` | `3114B9152835D604BD06F1B1D4E54A327B8857E9650E08111B04F452D965508A` |
-| `config/gauge.human.labels.json` | `C68573E0640EADD29C843F399C986ADB69194285A49AB1A5201D9D408A83498C` |
-| `config/gauge.blind40.packet.tsv` | `B8EEBF2FCB78D0FB745C9760B55DD34D832A9BB976B377F3DFB8C7CEA264093F` |
+| `corpus:gauge` | `B83A3A8C834A6494BDA76777BFD7500488CEDFE097C81D2AFA5E03049E543335` |
+| `labels:gauge-policy` | `EDF6C2083D77F7A39A2DB1DCC8C13614AD55E5D78A832BBC6F93B449E1BD6F33` |
+| `labels:gauge-ai` | `3114B9152835D604BD06F1B1D4E54A327B8857E9650E08111B04F452D965508A` |
+| `labels:gauge-human` | `C68573E0640EADD29C843F399C986ADB69194285A49AB1A5201D9D408A83498C` |
+| `packet:gauge` | `B8EEBF2FCB78D0FB745C9760B55DD34D832A9BB976B377F3DFB8C7CEA264093F` |
 | 派生 AI 填写版（packet + ai labels） | `6A5319C546FE68C20F3D4D7FFD38437B3736EA301E1319AFB3C374ECA9AC9B18` |
 | 派生人工填写版（packet + hao labels） | `1F6CD83576DD3872635C2317131F8CE7858301E7AFE88D490B8CE46E1B9240B5` |
 
@@ -91,9 +91,9 @@ AI 标签 `config/gauge.ai.labels.json`（`per-item-ai-v1`，384/384）只通过
 复现入口：
 
 ```bash
-xtask seed config/gauge.corpus.json \
+xtask seed corpus:gauge \
   --mem-dir /tmp/scx-gauge --csv /tmp/scx-gauge.csv --force
-scx --eval config/gauge.human.labels.json --gate-human --eval-verbose \
+scx --eval labels:gauge-human --gate-human --eval-verbose \
   --mem-dir /tmp/scx-gauge
 ```
 
@@ -103,7 +103,7 @@ CSV，确保并行只缩短准备时间，不改变 case 身份或输出顺序�
 ## 3. v2：开发集
 
 v2 有 30 起公开事故、150 条查询（60/60/30），最终标签
-`config/v2.labels.json` 为 `judge.by=fei+hao`，案例级签名；分布
+`labels:v2` 为 `judge.by=fei+hao`，案例级签名；分布
 `rel 2=432 / 1=312 / 0=77`。312 条弱相关由 AI 按具体故障机制预填，fei/hao
 两份审核全盘采纳；因缺少逐候选 `judge_items`，`--gate-human` 在
 `human per-item provenance` 处 0/821 FAIL。
@@ -118,16 +118,16 @@ v2 有 30 起公开事故、150 条查询（60/60/30），最终标签
 hard 数值达到门槛，但 v2 参与调参，不能写成独立确认。复现：
 
 ```bash
-xtask seed config/v2.corpus.json \
+xtask seed corpus:v2 \
   --mem-dir /tmp/scx-v2 --csv /tmp/scx-v2.csv --force
-scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
+scx --eval labels:v2 --gate --mem-dir /tmp/scx-v2
 ```
 
 ## 4. real：真实事故案例级证据
 
 40 条 case 来自 11 起公开复盘（literal 14 / paraphrase 13 / semantic 13）；
-逐条 URL 在 `config/real.corpus.json`，来源清单见下节。标签
-`config/real.labels.json` 为 `judge.by=fei+hao`，
+逐条 URL 在 `corpus:real`，来源清单见下节。标签
+`labels:real` 为 `judge.by=fei+hao`，
 分布 `2=147 / 1=151 / 0=46`；弱相关是场景桶规则物化，不是逐条盲审。
 
 当前默认配置：三层 r@5/r@10 与 MRR 均为 A=B；NDCG A>B 但 CI 重叠；
@@ -135,9 +135,9 @@ scx --eval config/v2.labels.json --gate --mem-dir /tmp/scx-v2
 不是指标回归。复现：
 
 ```bash
-xtask seed config/real.corpus.json \
+xtask seed corpus:real \
   --mem-dir /tmp/scx-real --csv /tmp/scx-real.csv --force
-scx --eval config/real.labels.json --gate-human --mem-dir /tmp/scx-real
+scx --eval labels:real --gate-human --mem-dir /tmp/scx-real
 ```
 
 ### 4.1 公开事故来源

@@ -40,7 +40,7 @@
 **顶级方案（业界做法：消融矩阵 + 单调性门禁）**：
 - 5 信号（semantic/fold/entropy/anchor/cluster）做**独立+成对**消融：只测 6 个关键配置（基线、5 个单开、+fold×entropy 组合），放弃全 2^5 笛卡尔——消融科学上只需要主效应 + 一个交互项。
 - 门禁断言升级为**单调性**：任一单开配置 cut 不劣于基线（信号必须只增不减），fidelity 用既有 A2 分档断言守住。
-- 产出 `config/bench/bench_p17_ablate.csv` 冻结进 manifest。
+- 产出 `result:ablation.csv`（`config/benchmark-results.json`）并冻结进 `config/manifest.json`。
 
 **收益**：每个开关从"默认关零影响"升级为"开启有证据的增益"，回答用户最初的追问「质量和性能达标吗」。
 **风险**：个别信号在个别语料上可能 cut 持平（不是负）——门禁按"不劣于"而非"严格提升"设阈，避免误杀。

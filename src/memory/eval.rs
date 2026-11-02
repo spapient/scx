@@ -317,7 +317,7 @@ fn inner(
     verbose: bool,
     gate_mode: Option<Gate>,
 ) -> std::io::Result<(Vec<String>, bool)> {
-    let txt = std::fs::read_to_string(path)?;
+    let txt = crate::assets::read_text(path).map_err(std::io::Error::other)?;
     let v = crate::memory::json::parse(&txt)
         .map_err(|e| std::io::Error::other(format!("eval: {e}")))?;
     let cases = baseline(&v).map_err(std::io::Error::other)?;

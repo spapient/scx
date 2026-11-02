@@ -1,13 +1,12 @@
 //! golden 差分门：与冻结基线逐字节对比（stdout / stderr / 退出码）。
 //!
-//! 用例清单在 `config/tests/golden/manifest.toml`（名称 + CLI 参数），输入由
-//! 本文件的生成器按名称产生；期望输出是 `config/tests/golden/expected/<name>.out`
-//! 与（非空时）`<name>.err`，退出码缺省为 0（仅非零时落 `<name>.code`）。
+//! 用例清单与期望输出统一存放在 `config/tests/assets.json`：`golden.manifest`
+//! 保存名称 + CLI 参数，`golden.expected` 保存 stdout / stderr / 退出码。
 //!
 //! 流程：
 //! 1) 首次或有意变更语义时重冻基线：
 //!    `cargo test --test golden update_baselines -- --ignored --nocapture`，
-//!    生成 config/tests/golden/expected/<case>.{out,err,code}。
+//!    重建 config/tests/assets.json 的 golden.expected。
 //! 2) 常规回归（CI 执行）：`cargo test --test golden`。
 //!
 //! 语义约束：本测试只对比当前实现与冻结基线的字节一致性，不判断对错；
@@ -15,14 +14,18 @@
 //! `YYYY-MM-DD_` 前缀是摄取当天的元数据，不属于输出语义，比较前统一归一化。
 
 #[cfg(feature = "memory")]
+use std::collections::{BTreeMap, HashMap};
+#[cfg(feature = "memory")]
 use std::io::Write;
 #[cfg(feature = "memory")]
-use std::path::{Path, PathBuf};
+use std::path::Path;
 #[cfg(feature = "memory")]
 use std::process::{Command, Stdio};
+#[cfg(feature = "memory")]
+use std::sync::OnceLock;
 
 #[cfg(feature = "memory")]
-const MANIFEST: &str = include_str!("../config/tests/golden/manifest.toml");
+const ASSETS: &str = include_str!("../config/tests/assets.json");
 
 #[cfg(feature = "memory")]
 const SEED_LOG: &str = "INFO start service\nERROR db timeout conn_id=9f2a pool exhausted\nat com.ingest.Pool.acquire(Pool.java:214)\nINFO end\n";
@@ -32,8 +35,50 @@ const SEED_DISK: &str =
     "INFO start\nWARN disk usage 97% mount /var\nERROR errno=28 no space left\n";
 
 #[cfg(feature = "memory")]
-fn expected_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("config/tests/golden/expected")
+struct Expected {
+    stdout: String,
+    stderr: String,
+    code: i32,
+}
+
+#[cfg(feature = "memory")]
+fn expected() -> &'static HashMap<String, Expected> {
+    static CASES: OnceLock<HashMap<String, Expected>> = OnceLock::new();
+    CASES.get_or_init(|| {
+        let value = scx::json::parse(ASSETS).expect("test assets JSON 非法");
+        let Some(scx::json::Json::Obj(entries)) =
+            value.get("golden").and_then(|value| value.get("expected"))
+        else {
+            panic!("golden.expected 必须是对象");
+        };
+        entries
+            .iter()
+            .map(|(name, value)| {
+                let stdout = value
+                    .get("stdout")
+                    .and_then(scx::json::Json::str)
+                    .unwrap_or_default()
+                    .to_string();
+                let stderr = value
+                    .get("stderr")
+                    .and_then(scx::json::Json::str)
+                    .unwrap_or_default()
+                    .to_string();
+                let code = value
+                    .get("code")
+                    .and_then(scx::json::Json::num)
+                    .unwrap_or(0.0) as i32;
+                (
+                    name.clone(),
+                    Expected {
+                        stdout,
+                        stderr,
+                        code,
+                    },
+                )
+            })
+            .collect()
+    })
 }
 
 #[cfg(feature = "memory")]
@@ -131,7 +176,13 @@ fn list(value: &str) -> Vec<String> {
 #[cfg(feature = "memory")]
 fn manifest() -> Vec<Case> {
     let mut out: Vec<Case> = Vec::new();
-    for entry in scx::toml::parse(MANIFEST.lines()) {
+    let value = scx::json::parse(ASSETS).expect("test assets JSON 非法");
+    let manifest = value
+        .get("golden")
+        .and_then(|value| value.get("manifest"))
+        .and_then(scx::json::Json::str)
+        .expect("golden.manifest");
+    for entry in scx::toml::parse(manifest.lines()) {
         if entry.section != "[case]" {
             continue;
         }
@@ -545,23 +596,21 @@ fn golden_gate() {
     for (name, args, input) in cases() {
         let argv: Vec<&str> = args.iter().map(String::as_str).collect();
         let (out, err, code) = run_scx(&argv, &input);
-        let dir = expected_dir();
-        let exp_out = std::fs::read_to_string(dir.join(format!("{name}.out"))).unwrap_or_else(|_| {
-            panic!("缺失基线 {name}.out —— 先运行: cargo test --test golden update_baselines -- --ignored")
+        let expected = expected();
+        let want = expected.get(&name).unwrap_or_else(|| {
+            panic!(
+                "缺失基线 {name} —— 先运行: cargo test --test golden update_baselines -- --ignored"
+            )
         });
-        let exp_err = std::fs::read_to_string(dir.join(format!("{name}.err"))).unwrap_or_default();
-        let exp_code = std::fs::read_to_string(dir.join(format!("{name}.code")))
-            .map(|s| s.trim().parse::<i32>().unwrap())
-            .unwrap_or(0);
-        assert_eq!(code, exp_code, "[{name}] 退出码漂移");
+        assert_eq!(code, want.code, "[{name}] 退出码漂移");
         assert_eq!(
             normalize_case_dates(&err),
-            normalize_case_dates(&exp_err),
+            normalize_case_dates(&want.stderr),
             "[{name}] stderr 漂移"
         );
         assert_eq!(
             normalize_case_dates(&out),
-            normalize_case_dates(&exp_out),
+            normalize_case_dates(&want.stdout),
             "[{name}] stdout 漂移"
         );
     }
@@ -584,24 +633,98 @@ fn case_date_normalization_is_scoped() {
 #[ignore]
 #[cfg(feature = "memory")]
 fn update_baselines() {
-    let dir = expected_dir();
-    std::fs::create_dir_all(&dir).unwrap();
+    let mut baselines = BTreeMap::new();
     for (name, args, input) in cases() {
         let argv: Vec<&str> = args.iter().map(String::as_str).collect();
         let (out, err, code) = run_scx(&argv, &input);
-        std::fs::write(dir.join(format!("{name}.out")), out.as_bytes()).unwrap();
-        let err_path = dir.join(format!("{name}.err"));
-        if err.is_empty() {
-            let _ = std::fs::remove_file(&err_path);
-        } else {
-            std::fs::write(&err_path, err.as_bytes()).unwrap();
-        }
-        let code_path = dir.join(format!("{name}.code"));
-        if code == 0 {
-            let _ = std::fs::remove_file(&code_path);
-        } else {
-            std::fs::write(&code_path, code.to_string().as_bytes()).unwrap();
-        }
+        baselines.insert(name.clone(), (out, err, code));
         println!("基线已写入: {name}");
     }
+    let entries = baselines
+        .iter()
+        .map(|(name, (out, err, code))| {
+            let mut fields = vec![("stdout".to_string(), scx::json::Json::Str(out.clone()))];
+            if !err.is_empty() {
+                fields.push(("stderr".to_string(), scx::json::Json::Str(err.clone())));
+            }
+            if *code != 0 {
+                fields.push(("code".to_string(), scx::json::Json::Num(*code as f64)));
+            }
+            (name.clone(), scx::json::Json::Obj(fields))
+        })
+        .collect();
+    let mut assets = scx::json::parse(ASSETS).expect("test assets JSON 非法");
+    let scx::json::Json::Obj(root) = &mut assets else {
+        panic!("test assets 顶层必须是对象");
+    };
+    let golden = root
+        .iter_mut()
+        .find(|(key, _)| key == "golden")
+        .map(|(_, value)| value)
+        .expect("golden");
+    let scx::json::Json::Obj(entries_obj) = golden else {
+        panic!("golden 必须是对象");
+    };
+    let expected = entries_obj
+        .iter_mut()
+        .find(|(key, _)| key == "expected")
+        .map(|(_, value)| value)
+        .expect("golden.expected");
+    *expected = scx::json::Json::Obj(entries);
+    std::fs::write(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("config/tests/assets.json"),
+        render_assets(&assets),
+    )
+    .unwrap();
+}
+
+#[cfg(feature = "memory")]
+fn render_assets(value: &scx::json::Json) -> String {
+    fn render(value: &scx::json::Json, depth: usize, out: &mut String) {
+        let pad = "  ".repeat(depth);
+        let next = "  ".repeat(depth + 1);
+        match value {
+            scx::json::Json::Null => out.push_str("null"),
+            scx::json::Json::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
+            scx::json::Json::Num(value) if value.fract() == 0.0 => {
+                out.push_str(&format!("{}", *value as i64));
+            }
+            scx::json::Json::Num(value) => out.push_str(&value.to_string()),
+            scx::json::Json::Str(value) => out.push_str(&scx::json::string(value)),
+            scx::json::Json::Arr(items) => {
+                out.push_str("[\n");
+                for (index, item) in items.iter().enumerate() {
+                    out.push_str(&next);
+                    render(item, depth + 1, out);
+                    out.push_str(if index + 1 == items.len() {
+                        "\n"
+                    } else {
+                        ",\n"
+                    });
+                }
+                out.push_str(&pad);
+                out.push(']');
+            }
+            scx::json::Json::Obj(entries) => {
+                out.push_str("{\n");
+                for (index, (key, item)) in entries.iter().enumerate() {
+                    out.push_str(&next);
+                    out.push_str(&scx::json::string(key));
+                    out.push_str(": ");
+                    render(item, depth + 1, out);
+                    out.push_str(if index + 1 == entries.len() {
+                        "\n"
+                    } else {
+                        ",\n"
+                    });
+                }
+                out.push_str(&pad);
+                out.push('}');
+            }
+        }
+    }
+    let mut out = String::new();
+    render(value, 0, &mut out);
+    out.push('\n');
+    out
 }
