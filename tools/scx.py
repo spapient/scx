@@ -3,8 +3,7 @@
 
 所有确定性/离线命令的实现已迁到 Rust `xtask`（feature=eval，见 src/evaltool）。
 本脚本只保留命令行契约（build_parser 用于 --help 与参数校验）并把参数原样
-转发给 `target/{release,debug}/xtask`。在线模型评测与在线蒸馏保留在
-tools/bench.py（Python），不在此脚本内。
+转发给 `target/{release,debug}/xtask`。
 
 构建：cargo build --features eval --bin xtask
 """
