@@ -23,7 +23,7 @@ fn run_owned(args: &[String]) -> Output {
 #[test]
 fn force_keeps_all_duplicate_matches() {
     let mut lines: Vec<String> = (0..200)
-        .map(|i| format!("INFO filler {} alpha beta", i))
+        .map(|i| format!("INFO filler {i} alpha beta"))
         .collect();
     for idx in [150usize, 151, 152, 153] {
         lines[idx] = "SPECIAL_FORCE_LINE".to_string();
@@ -49,7 +49,7 @@ fn force_keeps_all_duplicate_matches() {
 #[test]
 fn no_stats_returns_body_without_compressed_line() {
     let text: String = (0..100)
-        .map(|i| format!("INFO filler {} alpha beta gamma delta epsilon", i))
+        .map(|i| format!("INFO filler {i} alpha beta gamma delta epsilon"))
         .collect::<Vec<_>>()
         .join("\n");
     let path = write_temp("nostats", &text);
@@ -64,7 +64,7 @@ fn no_stats_returns_body_without_compressed_line() {
 #[test]
 fn kind_flag_routes_bucket_type() {
     let text: String = (0..200)
-        .map(|i| format!("INFO filler {} alpha beta", i))
+        .map(|i| format!("INFO filler {i} alpha beta"))
         .collect::<Vec<_>>()
         .join("\n");
     let path = write_temp("kind", &text);
@@ -104,7 +104,7 @@ fn kind_flag_routes_bucket_type() {
 #[test]
 fn stat_returns_one_statistics_line() {
     let text: String = (0..100)
-        .map(|i| format!("INFO filler {} alpha beta gamma delta epsilon", i))
+        .map(|i| format!("INFO filler {i} alpha beta gamma delta epsilon"))
         .collect::<Vec<_>>()
         .join("\n");
     let path = write_temp("stat", &text);
@@ -119,7 +119,7 @@ fn stat_returns_one_statistics_line() {
 #[test]
 fn invalid_option_and_no_kept_fallback_are_explicit() {
     let text: String = (0..100)
-        .map(|i| format!("INFO filler {} alpha beta gamma delta epsilon", i))
+        .map(|i| format!("INFO filler {i} alpha beta gamma delta epsilon"))
         .collect::<Vec<_>>()
         .join("\n");
     let path = write_temp("errors", &text);

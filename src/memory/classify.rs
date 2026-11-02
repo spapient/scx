@@ -737,24 +737,19 @@ mod bucket_tests {
     #[test]
     fn seeds_are_wide() {
         let c = seeds("数据库连接超时 conn_id");
-        assert!(c.contains(&"db".to_string()), "候选桶应含 db: {:?}", c);
+        assert!(c.contains(&"db".to_string()), "候选桶应含 db: {c:?}");
         let c2 = seeds("cargo build 磁盘满");
         assert!(c2.contains(&"build".to_string()) && c2.contains(&"disk".to_string()));
         let c3 = seeds("普通问题");
         assert!(c3.is_empty(), "无家族命中时空候选桶 = 全量扫（防漏召）");
         // 裸 "db" 必须命中 db 家族，保持桶判定对称并防漏召。
         let c4 = seeds("db timeout");
-        assert!(
-            c4.contains(&"db".to_string()),
-            "裸 db 应命中 db 桶: {:?}",
-            c4
-        );
+        assert!(c4.contains(&"db".to_string()), "裸 db 应命中 db 桶: {c4:?}");
         // 子串不得误判："kubectl" 含 "db" 子串，但不含独立 token "db"。
         let c5 = seeds("kubectl get pods");
         assert!(
             !c5.contains(&"db".to_string()),
-            "子串不得乱扩 db 桶: {:?}",
-            c5
+            "子串不得乱扩 db 桶: {c5:?}"
         );
         assert!(
             seeds("timeout").is_empty(),
@@ -768,8 +763,7 @@ mod bucket_tests {
         let c6 = seeds("primary failover during network partition");
         assert!(
             c6.contains(&"db".to_string()),
-            "主库 failover query 应候选 db 桶: {:?}",
-            c6
+            "主库 failover query 应候选 db 桶: {c6:?}"
         );
     }
 }

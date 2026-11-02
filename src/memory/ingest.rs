@@ -34,7 +34,7 @@ pub(crate) fn fingerprint(query: &str, text: &str) -> String {
     let mut t = String::new();
     crate::diff::normalize(text, &mut t);
     let h = store::parts(&[q.as_bytes(), b"\0", t.as_bytes()]);
-    format!("{:016x}", h)
+    format!("{h:016x}")
 }
 
 fn index(root: &str) -> PathBuf {

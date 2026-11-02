@@ -1089,9 +1089,9 @@ fn compress_bench(_args: &[String]) -> Result<(), Fail> {
     let lines: Vec<String> = (0..50_000)
         .map(|i| {
             if i % 100 == 0 {
-                format!("ERROR db timeout conn_id={} pool exhausted", i)
+                format!("ERROR db timeout conn_id={i} pool exhausted")
             } else {
-                format!("INFO heartbeat seq={} ok pool=3 latency=1ms", i)
+                format!("INFO heartbeat seq={i} ok pool=3 latency=1ms")
             }
         })
         .collect();
@@ -1244,9 +1244,9 @@ fn structure_text() -> String {
                 100 + i
             )),
             20 => v.push("```rust".to_string()),
-            21 => v.push(format!("let x = compute({});", i)),
+            21 => v.push(format!("let x = compute({i});")),
             22 => v.push("```".to_string()),
-            _ => v.push(format!("INFO heartbeat seq={} ok", i)),
+            _ => v.push(format!("INFO heartbeat seq={i} ok")),
         }
     }
     v.join("\n")

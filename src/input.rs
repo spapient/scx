@@ -35,13 +35,12 @@ pub(crate) fn sources(files: &[String], limit: u64) -> Result<String, String> {
         if !bytes.is_empty() && !bytes.ends_with(b"\n") {
             bytes.push(b'\n');
         }
-        let file =
-            std::fs::File::open(f).map_err(|e| format!("cannot read input: {}: {}", f, e))?;
+        let file = std::fs::File::open(f).map_err(|e| format!("cannot read input: {f}: {e}"))?;
         let remaining = limit.saturating_sub(total_bytes as u64);
         let before = bytes.len();
         file.take(remaining.saturating_add(1))
             .read_to_end(&mut bytes)
-            .map_err(|e| format!("cannot read input: {}: {}", f, e))?;
+            .map_err(|e| format!("cannot read input: {f}: {e}"))?;
         total_bytes = total_bytes.saturating_add(bytes.len() - before);
         if large(total_bytes, limit) {
             return Err(error(limit));
@@ -52,7 +51,7 @@ pub(crate) fn sources(files: &[String], limit: u64) -> Result<String, String> {
 
 pub(crate) fn stdin(limit: u64) -> Result<String, String> {
     let stdin = io::stdin();
-    let buf = read(stdin.lock(), limit).map_err(|e| format!("cannot read input: {}", e))?;
+    let buf = read(stdin.lock(), limit).map_err(|e| format!("cannot read input: {e}"))?;
     if large(buf.len(), limit) {
         return Err(error(limit));
     }
@@ -97,8 +96,8 @@ mod tests {
     fn file_limit_is_aggregate_across_inputs() {
         let dir = std::env::temp_dir();
         let pid = std::process::id();
-        let a = dir.join(format!("scx-cap-a-{}.txt", pid));
-        let b = dir.join(format!("scx-cap-b-{}.txt", pid));
+        let a = dir.join(format!("scx-cap-a-{pid}.txt"));
+        let b = dir.join(format!("scx-cap-b-{pid}.txt"));
         std::fs::write(&a, b"1234").unwrap();
         std::fs::write(&b, b"5678").unwrap();
         let files = vec![

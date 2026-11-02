@@ -233,7 +233,7 @@ fn spawn_vec(program: &str, query: &str, texts: &[&str]) -> Result<Vec<Vec<f32>>
             .split_whitespace()
             .map(|s| {
                 s.parse()
-                    .map_err(|e| format!("--embed-vec: bad float {:?}: {e}", s))
+                    .map_err(|e| format!("--embed-vec: bad float {s:?}: {e}"))
             })
             .collect::<Result<_, _>>()?;
         if v.is_empty() {

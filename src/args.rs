@@ -1553,13 +1553,12 @@ pub(crate) fn value(
     }
     *i += 1;
     if *i >= args.len() {
-        return Err(format!("{} requires a value", name));
+        return Err(format!("{name} requires a value"));
     }
     let v = &args[*i];
     if v == "--" || v.starts_with("--") {
         return Err(format!(
-            "{} requires a value (use {}=VALUE for values starting with --)",
-            name, name
+            "{name} requires a value (use {name}=VALUE for values starting with --)"
         ));
     }
     Ok(v.clone())
@@ -1569,7 +1568,7 @@ pub(crate) fn boolean(value: &str, name: &str) -> Result<bool, String> {
     match value {
         "0" => Ok(false),
         "1" => Ok(true),
-        _ => Err(format!("{} expects 0 or 1", name)),
+        _ => Err(format!("{name} expects 0 or 1")),
     }
 }
 
@@ -2646,7 +2645,7 @@ pub(crate) fn one(s: &mut ParseState, args: &[String], i: &mut usize) -> Result<
     let (name, inline) = split(raw);
     match find(name) {
         Some(f) => flag(s, f, inline, args, i),
-        None if option(raw) => Err(format!("unknown option: {}", raw)),
+        None if option(raw) => Err(format!("unknown option: {raw}")),
         None => {
             s.files.push(raw.clone());
             Ok(())

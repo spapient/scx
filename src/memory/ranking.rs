@@ -354,8 +354,7 @@ mod tests {
         assert!(
             ext.iter()
                 .any(|t| t == "errno" || t == "conn_id" || t == "pool"),
-            "PRF 应扩出库内判别词: {:?}",
-            ext
+            "PRF 应扩出库内判别词: {ext:?}"
         );
         // 扩展词不得含 query 已含词（pool 若已在 query 中则不再重复）。
         let _ = fs::remove_dir_all(&root);

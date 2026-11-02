@@ -32,7 +32,7 @@ fn invariant_seeds_kept() {
 fn sieve_kept_lno_aligns_with_output_lines() {
     // 保留行原始行号（1-based）与输出行一一对应、严格递增。
     let mut lines: Vec<String> = (0..200)
-        .map(|i| format!("pad alpha beta line {}", i))
+        .map(|i| format!("pad alpha beta line {i}"))
         .collect();
     lines[50] = "ERROR db timeout conn_id=9f2a".to_string();
     lines[51] = "Root cause: pool exhausted".to_string();
@@ -59,7 +59,7 @@ fn sieve_kept_lno_aligns_with_output_lines() {
 fn passthrough_kept_lno_empty() {
     // passthrough/fail-open 不产生证据行号（记忆库只对筛选结果提取原始证据）。
     let text: String = (0..50)
-        .map(|i| format!("line {} with padding text alpha beta gamma", i))
+        .map(|i| format!("line {i} with padding text alpha beta gamma"))
         .collect::<Vec<_>>()
         .join("\n");
     let o = compress(&text, "绝对不存在的词zz", &cfg());
@@ -71,7 +71,7 @@ fn passthrough_kept_lno_empty() {
 #[test]
 fn zero_signal_failopen() {
     let text: String = (0..200)
-        .map(|i| format!("line {} with padding text alpha beta gamma", i))
+        .map(|i| format!("line {i} with padding text alpha beta gamma"))
         .collect::<Vec<_>>()
         .join("\n");
     let o = compress(&text, "绝对不存在的词zz", &cfg());
@@ -82,7 +82,7 @@ fn zero_signal_failopen() {
 #[test]
 fn warn_mass_not_guarded_in_needle() {
     let mut lines: Vec<String> = (0..300)
-        .map(|i| format!("WARN queue depth={} consumer_lag=2s pool=3", i))
+        .map(|i| format!("WARN queue depth={i} consumer_lag=2s pool=3"))
         .collect();
     lines[150] = "ERROR db timeout at 12:01 pool exhausted (conn_id=9f2a)".to_string();
     lines[151] = "Root cause: connection pool size 4 < peak concurrency 11".to_string();
@@ -105,7 +105,7 @@ fn warn_mass_not_guarded_in_needle() {
 #[test]
 fn marker_guard_keeps_incident_marker_in_needle() {
     let mut lines: Vec<String> = (0..300)
-        .map(|i| format!("INFO heartbeat seq={} ok pool=3 latency=1ms", i))
+        .map(|i| format!("INFO heartbeat seq={i} ok pool=3 latency=1ms"))
         .collect();
     lines[150] = "ERROR db timeout at 12:01 pool exhausted (conn_id=9f2a)".to_string();
     lines[151] = "at com.ingest.Pool.acquire(Pool.java:214)".to_string();
@@ -195,7 +195,7 @@ fn crlf_equivalence() {
     let lf = char::from(10u8).to_string();
     let crlf_sep = String::from(char::from(13u8)) + lf.as_str();
     let base: String = (0..200)
-        .map(|i| format!("line {} alpha kvwrite beta gamma delta", i))
+        .map(|i| format!("line {i} alpha kvwrite beta gamma delta"))
         .collect::<Vec<_>>()
         .join(lf.as_str());
     let crlf = base.replace(lf.as_str(), crlf_sep.as_str());
@@ -211,14 +211,14 @@ fn crlf_equivalence() {
 fn passthrough_modes() {
     let lf = char::from(10u8).to_string();
     let small: String = (0..10)
-        .map(|i| format!("line {}", i))
+        .map(|i| format!("line {i}"))
         .collect::<Vec<_>>()
         .join(lf.as_str());
     let o = compress(&small, "line", &cfg());
     assert_eq!(o.mode, Mode::PassSmall);
     assert_eq!(o.text, small);
     let mut lines = vec!["x".repeat(150000)];
-    lines.extend((0..60).map(|i| format!("filler error kvwrite line {}", i)));
+    lines.extend((0..60).map(|i| format!("filler error kvwrite line {i}")));
     let text = lines.join(lf.as_str());
     let o2 = compress(&text, "kvwrite", &cfg());
     assert_eq!(o2.mode, Mode::PassLongline);
@@ -228,7 +228,7 @@ fn passthrough_modes() {
 #[test]
 fn cjk_error_words_guard_and_class() {
     let mut lines: Vec<String> = (0..300)
-        .map(|i| format!("INFO 心跳 seq={} 状态=正常 latency=1ms", i))
+        .map(|i| format!("INFO 心跳 seq={i} 状态=正常 latency=1ms"))
         .collect();
     lines[150] = "错误：数据库连接超时 (conn_id=9f2a)".to_string();
     lines[151] = "错误：磁盘已满 errno=28".to_string();
@@ -264,7 +264,7 @@ fn deterministic_output() {
 #[test]
 fn force_duplicates_are_all_kept() {
     let mut lines: Vec<String> = (0..200)
-        .map(|i| format!("INFO filler {} alpha beta", i))
+        .map(|i| format!("INFO filler {i} alpha beta"))
         .collect();
     for idx in [150usize, 151, 152, 153] {
         lines[idx] = "SPECIAL_FORCE_LINE".to_string();
@@ -393,7 +393,7 @@ fn runaway_token_is_dropped() {
 #[test]
 fn crlf_failopen_preserves_original() {
     let lines: Vec<String> = (0..200)
-        .map(|i| format!("line {} alpha beta gamma delta", i))
+        .map(|i| format!("line {i} alpha beta gamma delta"))
         .collect();
     let text = lines.join("\r\n");
     let o = compress(&text, "zzzznomatch", &cfg());
@@ -430,7 +430,7 @@ fn lineno_prefixes_kept_lines() {
         ..Config::default()
     };
     let s: String = (0..10)
-        .map(|i| format!("line {}", i))
+        .map(|i| format!("line {i}"))
         .collect::<Vec<_>>()
         .join("\n");
     let o2 = compress(&s, "line", &small);
@@ -463,7 +463,7 @@ fn max_tokens_overflow_evidence_keeps_evidence() {
 fn max_tokens_overflow_fill_after_guard() {
     // 证据地板未超限，但风险守卫追加证据性错误行后总估算超限：OverflowFill。
     let mut lines: Vec<String> = (0..200)
-        .map(|i| format!("pad alpha line {} beta gamma", i))
+        .map(|i| format!("pad alpha line {i} beta gamma"))
         .collect();
     lines[5] = "conn 9f2a broken".to_string();
     lines[6] = "error alpha pipe burst 7a1c now".to_string();

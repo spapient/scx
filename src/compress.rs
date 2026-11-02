@@ -1222,7 +1222,7 @@ mod tests {
             let force: Vec<bool> = (0..lines.len()).map(|_| next() % 13 == 0).collect();
             let got = dedup(&lines, &mask, 2, &err, &force, false);
             let want = naive_dedup(&lines, &mask, 2, &err, &force, false);
-            assert_eq!(got, want, "dedup mismatch on {:?}", raw);
+            assert_eq!(got, want, "dedup mismatch on {raw:?}");
         }
     }
 

@@ -1399,8 +1399,8 @@ mod tests {
         let tin = o.tokens_in;
         let tout = crate::terms::estimate(&o.text);
         let j2 = render(&o);
-        assert!(j2.contains(&format!("\"tokens_in\":{:.0}", tin)));
-        assert!(j2.contains(&format!("\"tokens_out\":{:.0}", tout)));
+        assert!(j2.contains(&format!("\"tokens_in\":{tin:.0}")));
+        assert!(j2.contains(&format!("\"tokens_out\":{tout:.0}")));
         assert!(j2.contains(&format!("\"token_cut_pct\":{:.1}", token_cut(tin, tout))));
     }
 

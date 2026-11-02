@@ -207,7 +207,7 @@ pub(crate) fn stats(root: &str) -> io::Result<Vec<String>> {
             t.quality_sum / n as f64
         }
     ));
-    lines.push(format!("  conflicts: {}", conflicts));
+    lines.push(format!("  conflicts: {conflicts}"));
     lines.push(format!("  disk: {:.1} KiB", t.disk as f64 / 1024.0));
     Ok(lines)
 }

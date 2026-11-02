@@ -530,7 +530,7 @@ mod tests {
             let qt = memory(q);
             let dt = memory(d);
             let common: Vec<&String> = qt.iter().filter(|t| dt.contains(t)).collect();
-            assert!(!common.is_empty(), "{} vs {}: no shared term", q, d);
+            assert!(!common.is_empty(), "{q} vs {d}: no shared term");
             if common.iter().any(|t| t.chars().count() >= 3) {
                 strong += 1;
             }

@@ -47,7 +47,7 @@ fn number(n: f64, out: &mut String) {
     if n.fract() == 0.0 && n.is_finite() && n.abs() < 1e15 {
         out.push_str(&format!("{}", n as i64));
     } else {
-        out.push_str(&format!("{}", n));
+        out.push_str(&format!("{n}"));
     }
 }
 
@@ -207,7 +207,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 Some(b) if (b as char).is_ascii_control() => {
-                    return Err(format!("unescaped control byte 0x{:02x}", b));
+                    return Err(format!("unescaped control byte 0x{b:02x}"));
                 }
                 Some(b) => raw.push(b),
                 None => return Err("unterminated string".to_string()),
@@ -225,7 +225,7 @@ impl<'a> Parser<'a> {
         let txt = std::str::from_utf8(&self.bytes[start..self.pos]).map_err(|_| "bad number")?;
         txt.parse::<f64>()
             .map(Val::Num)
-            .map_err(|_| format!("bad number {:?}", txt))
+            .map_err(|_| format!("bad number {txt:?}"))
     }
     fn arr(&mut self) -> Result<Val, String> {
         self.expect(b'[')?;

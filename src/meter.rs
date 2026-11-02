@@ -498,12 +498,7 @@ fn render_total(tin: f64, tout: f64, calls: usize) -> String {
     let saved = (tin - tout).max(0.0);
     let ratio = if tin > 0.0 { tout / tin } else { 1.0 };
     format!(
-        "\"tokens_in\":{:.2},\"tokens_out\":{:.2},\"tokens_saved\":{:.2},\"ratio\":{:.4},\"calls\":{},\"est_cost_saved_usd\":null",
-        tin,
-        tout,
-        saved,
-        ratio,
-        calls
+        "\"tokens_in\":{tin:.2},\"tokens_out\":{tout:.2},\"tokens_saved\":{saved:.2},\"ratio\":{ratio:.4},\"calls\":{calls},\"est_cost_saved_usd\":null"
     )
 }
 

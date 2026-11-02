@@ -471,7 +471,7 @@ mod tests {
             out.to_lowercase().contains("janet"),
             "命中词必须保留: {out}"
         );
-        assert!(out.len() < line.len(), "应有裁剪: {} -> {}", line, out);
+        assert!(out.len() < line.len(), "应有裁剪: {line} -> {out}");
     }
 
     #[test]
@@ -527,12 +527,7 @@ mod tests {
         assert!(!out.contains("内 存"), "CJK 字间不得插空格: {out}");
         assert!(out.contains('0'), "数字必须保留: {out}");
         assert!(out.contains('5'), "数字必须保留: {out}");
-        assert!(
-            out.len() < line.len(),
-            "中文行应有裁剪: {} -> {}",
-            line,
-            out
-        );
+        assert!(out.len() < line.len(), "中文行应有裁剪: {line} -> {out}");
     }
 
     #[test]
