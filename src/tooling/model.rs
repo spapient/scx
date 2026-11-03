@@ -429,7 +429,7 @@ pub(crate) fn mlp(args: &[String]) -> Result<(), Fail> {
         .map(str::to_string)
         .unwrap_or_else(|| "/tmp/mlp_cv.json".to_string());
     let cache = load(&cache_path)?;
-    let corpora = build_corpora()?;
+    let corpora = build_corpora();
     let (x, y) = dataset(&cache, &corpora);
     if x.is_empty() {
         println!("无样本（缓存为空或仅合成语料）");
@@ -532,7 +532,7 @@ pub(crate) fn mlp(args: &[String]) -> Result<(), Fail> {
     Ok(())
 }
 
-fn build_corpora() -> Result<HashMap<String, String>, Fail> {
+fn build_corpora() -> HashMap<String, String> {
     let mut corpora = HashMap::new();
     corpora.insert("code".to_string(), super::bench::corpus_code());
     corpora.insert("log".to_string(), super::bench::corpus_log());
@@ -568,7 +568,7 @@ fn build_corpora() -> Result<HashMap<String, String>, Fail> {
             corpora.insert(format!("code_{lang}"), text);
         }
     }
-    Ok(corpora)
+    corpora
 }
 
 fn code_fence(questions: &[&str]) -> String {

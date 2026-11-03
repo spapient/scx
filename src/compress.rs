@@ -1611,7 +1611,7 @@ mod tests {
         );
         assert_eq!(kc, 5, "全量守卫保留所有错误行");
 
-        let mut k_region = keep.clone();
+        let mut k_region = keep;
         let mut kc2 = 0;
         guard(
             &mut k_region,

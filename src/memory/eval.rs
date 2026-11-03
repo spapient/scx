@@ -333,7 +333,7 @@ fn inner(
         let chan_d = plain.rrf(&c.query, 10);
         acc.fold(c, (a, b, chan_c, chan_d), l1_base, l1_margin, verbose);
     }
-    report(&cases, &acc, verbose, gate_mode)
+    Ok(report(&cases, &acc, verbose, gate_mode))
 }
 
 /// 四通道命中集合（A 完整管线 / B 朴素 BM25 / C minhash 语义 / D RRF 融合）。
@@ -431,7 +431,7 @@ fn report(
     acc: &Acc,
     verbose: bool,
     gate_mode: Option<Gate>,
-) -> std::io::Result<(Vec<String>, bool)> {
+) -> (Vec<String>, bool) {
     let mut out = Vec::with_capacity(acc.layers.len() + 2);
     // 报告 NDCG 判别强度——multi-rel 条目（expected>1 或 rel 多值）
     // 使 NDCG 非二值；single-rel 条目 NDCG 接近二值（单相关时评估严格性有限）。
@@ -494,7 +494,7 @@ fn report(
             out.push(format!("  D: {}", hits(chan_d, &cases[i])));
         }
     }
-    Ok((out, gate_failed))
+    (out, gate_failed)
 }
 
 /// 按门禁模式选择检查器。

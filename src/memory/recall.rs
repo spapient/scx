@@ -215,7 +215,7 @@ fn pipeline(
         qf_strength,
         qf_exact_only,
         &hits,
-    )? {
+    ) {
         return Ok(merged);
     }
     Ok(hits)
@@ -260,11 +260,11 @@ fn prf(
     qf_strength: f64,
     qf_exact_only: bool,
     hits: &[Hit],
-) -> std::io::Result<Option<Vec<Hit>>> {
+) -> Option<Vec<Hit>> {
     if !low_conf {
-        return Ok(None);
+        return None;
     }
-    Ok(extend(root, query, ctx, qf_strength, qf_exact_only, hits))
+    extend(root, query, ctx, qf_strength, qf_exact_only, hits)
 }
 
 /// 低置信退桶：首轮 top1 sim 低于 `bucket_bypass_sim` 时，词面证据不足，
@@ -483,7 +483,7 @@ fn scores(root: &str, plan: &Plan, ctx: &Ctx<'_>) -> std::io::Result<Vec<Hit>> {
 
     // 候选 docs + df + 统计量：倒排/线性两条路径都用全库口径；桶过滤只裁候选。
     let (docs, df, n, avgdl): (Docs, Vec<usize>, f64, f64) = match idx {
-        Some(i) => candidates(i, qterms, use_buckets, cand, allow_other, q_ent_list)?,
+        Some(i) => candidates(i, qterms, use_buckets, cand, allow_other, q_ent_list),
         None => scan(
             root,
             qterms,
@@ -647,7 +647,7 @@ fn candidates(
     cand: &[String],
     allow_other: bool,
     q_ent_list: &[String],
-) -> std::io::Result<(Docs, Vec<usize>, f64, f64)> {
+) -> (Docs, Vec<usize>, f64, f64) {
     let cand_di = index::candidates(idx, qterms);
     let mut chosen: Vec<(usize, usize)> = Vec::with_capacity(cand_di.len());
     for di in cand_di {
@@ -687,12 +687,12 @@ fn candidates(
         })
         .collect();
     if docs.is_empty() {
-        return Ok((Vec::new(), Vec::new(), 0.0, 0.0));
+        return (Vec::new(), Vec::new(), 0.0, 0.0);
     }
     let n = idx.n_docs as f64;
     let avgdl = idx.total_len as f64 / n;
     let df: Vec<usize> = qterms.iter().map(|t| index::df(idx, t)).collect();
-    Ok((docs, df, n, avgdl))
+    (docs, df, n, avgdl)
 }
 
 /// 实体边一跳并入候选：跳过已在 chosen 中的 doc；共享实体数记录为 edge_shared。

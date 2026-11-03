@@ -145,7 +145,7 @@ pub fn retire(root: &str, id: &str, reason: &str) -> std::io::Result<Case> {
     let mut c = store::load(root, id)?;
     if c.life != "retired" {
         c.life = "retired".to_string();
-        c.retire_reason = sanitize(reason).to_string();
+        c.retire_reason = sanitize(reason);
         c.updated_at = store::stamp();
         store::save(root, &c)?;
     }

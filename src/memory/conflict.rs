@@ -239,7 +239,7 @@ mod tests {
         meta::ensure(&root).unwrap();
         let meta = meta::load(&root).unwrap();
         // 同事故近重复文本（措辞略异）：sim 应 ≥ conflict_sim(0.8)。
-        let mut near = c.clone();
+        let mut near = c;
         near.query = "database connection timeout".to_string();
         near.text =
             "db timeout conn pool exhausted\nroot cause: pool exhausted\nfix: raise pool size"
@@ -280,7 +280,7 @@ mod tests {
         })
         .unwrap();
         let c_b = store::load(&root, &id_b).unwrap();
-        let mut c_b_mut = c_b.clone();
+        let mut c_b_mut = c_b;
         // save(id_b) 已走 ingest→insert→detect→arbitrate 自动互链。
         assert!(
             c_b_mut.related.contains(&id_a),
@@ -296,7 +296,7 @@ mod tests {
         );
         // 幂等：重复仲裁不新增。
         let peers = vec![Conflict {
-            id: id_a.clone(),
+            id: id_a,
             sim: 0.9,
             evidence: 0,
             quality: 0.0,

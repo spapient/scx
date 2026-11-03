@@ -393,7 +393,7 @@ pub(crate) fn set(root: &str, key: &str, val: f64) -> std::io::Result<()> {
         }
     } else {
         lines.push("[params]".to_string());
-        lines.push(key_line.clone());
+        lines.push(key_line);
     }
     let mut body = lines.join("\n");
     body.push('\n');
