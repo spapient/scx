@@ -52,6 +52,11 @@ name = "scx-tooling"
 path = "src/tooling/mod.rs"
 required-features = ["eval"]
 
+# Enforce the repository's no-unsafe policy for every package target, including
+# binaries, integration tests, examples, and future targets—not only lib.rs.
+[lints.rust]
+unsafe_code = "forbid"
+
 [profile.release]
 opt-level = 3
 lto = true
