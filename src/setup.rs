@@ -1,20 +1,3 @@
-//! scx setup：一键注册到 Claude / Codex / Cursor 的 MCP 配置。
-//!
-//! 行为契约：
-//! - 注册名统一小写 `scx`，命令为当前二进制绝对路径 + 子命令 `mcp`（stdio）。
-//! - Claude / Codex 优先调用官方 CLI（`claude mcp add` / `codex mcp add`），
-//!   CLI 不可用或失败时兜底直接写配置文件。
-//! - 幂等：已存在 `scx` 条目则更新 command/args，绝不重复追加。
-//! - 写前备份原配置到 `<path>.scx.bak`（每次覆盖最新一份，可回滚）。
-//! - 写后自检：spawn 自身 `mcp` 做 tools/list 握手并打印验证结果。
-//! - 零第三方 crate、零网络：全部 std 实现；配置文件路径以 `$HOME` 为准。
-//!
-//! 配置写入目标：
-//! - Claude：`claude mcp add` 优先；兜底 `~/.claude.json` 顶层 `mcpServers`。
-//! - Codex：`codex mcp add` 优先；兜底 `~/.codex/config.toml` `[mcp_servers.scx]`。
-//! - Cursor：`~/.cursor/mcp.json`（`mcpServers` 顶层）；若当前目录存在
-//!   `.cursor/mcp.json` 则优先写项目配置。
-
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -67,7 +50,7 @@ fn print_usage() {
          Register the scx MCP stdio server into agent configs (idempotent).\n\
          --claude / --codex / --cursor  limit registration to that agent.\n\
          --project-cursor                write Cursor config to ./.cursor/mcp.json\n\
-                                        (default: ~/.cursor/mcp.json).\n\
+                                         (default: ~/.cursor/mcp.json).\n\
          Config files are backed up to <path>.scx.bak before writing;\n\
          a tools/list handshake runs after each successful registration.",
     );
@@ -100,10 +83,24 @@ fn exe_path() -> Result<PathBuf, String> {
 }
 
 fn home_dir() -> Result<PathBuf, String> {
-    match env::var("HOME") {
-        Ok(h) if !h.is_empty() => Ok(PathBuf::from(h)),
-        _ => Err("HOME is not set".to_string()),
+    for key in ["HOME", "USERPROFILE"] {
+        if let Ok(value) = env::var(key) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Ok(PathBuf::from(trimmed));
+            }
+        }
     }
+    if cfg!(windows) {
+        let drive = env::var("HOMEDRIVE").ok();
+        let path = env::var("HOMEPATH").ok();
+        if let Some(drive) = drive.filter(|d| !d.trim().is_empty()) {
+            if let Some(path) = path.filter(|p| !p.trim().is_empty()) {
+                return Ok(PathBuf::from(format!("{drive}{path}")));
+            }
+        }
+    }
+    Err("HOME or USERPROFILE is not set".to_string())
 }
 
 // ---------- Claude ----------
@@ -217,14 +214,11 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
     );
-    let section = "[mcp_servers.scx]";
+    let args = "args = [\"mcp\"]";
     let mut text = existing.unwrap_or_default();
-    // 只认真实的段头行：`# [mcp_servers.scx]` 之类的注释行曾被 contains 误判为
-    // 已注册，导致 update_toml_command 找不到段而最终静默不注册。
     let has_section = text.lines().any(|l| header(l.trim()));
     if has_section {
-        // 已注册：原位更新 command 行（args 恒为 ["mcp"]，无需重写）。
-        let updated = update_toml_command(&text, &command);
+        let updated = update_toml_section(&text, &command, args);
         if updated != text {
             backup(path)?;
             write_atomic(path, &updated)?;
@@ -233,11 +227,11 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
         if !text.is_empty() && !text.ends_with('\n') {
             text.push('\n');
         }
-        text.push_str(section);
-        text.push('\n');
+        text.push_str("[mcp_servers.scx]\n");
         text.push_str(&command);
         text.push('\n');
-        text.push_str("args = [\"mcp\"]\n");
+        text.push_str(args);
+        text.push('\n');
         backup(path)?;
         write_atomic(path, &text)?;
     }
@@ -253,33 +247,75 @@ fn header(t: &str) -> bool {
     })
 }
 
-/// 段内更新 command 行（保持文件其余内容逐字节不变）。
-fn update_toml_command(text: &str, command: &str) -> String {
+fn starts_key(s: &str, key: &str) -> bool {
+    let trimmed = s.trim();
+    trimmed.starts_with(key)
+        && trimmed[key.len()..].trim_start().starts_with('=')
+}
+
+/// 仅更新 `[mcp_servers.scx]` 段：保证 `command` 和 `args` 关键字段存在且正确，
+/// 且不会在带注释的段头或重复表中再次追加同名段。
+fn update_toml_section(text: &str, command: &str, args: &str) -> String {
     let mut out = String::new();
     let mut in_scx = false;
+    let mut seen_command = false;
+    let mut seen_args = false;
+
+    fn flush_missing(
+        out: &mut String,
+        seen_command: &mut bool,
+        seen_args: &mut bool,
+        command: &str,
+        args: &str,
+    ) {
+        if !*seen_command {
+            out.push_str(command);
+            out.push('\n');
+            *seen_command = true;
+        }
+        if !*seen_args {
+            out.push_str(args);
+            out.push('\n');
+            *seen_args = true;
+        }
+    }
+
     for line in text.lines() {
-        let t = line.trim();
-        if header(t) {
+        let trimmed = line.trim();
+        if header(trimmed) {
+            if in_scx {
+                flush_missing(&mut out, &mut seen_command, &mut seen_args, command, args);
+            }
             in_scx = true;
+            seen_command = false;
+            seen_args = false;
             out.push_str(line);
             out.push('\n');
             continue;
         }
-        if in_scx && t.starts_with('[') && t.ends_with(']') {
+        if in_scx && trimmed.starts_with('[') && trimmed.ends_with(']') {
+            flush_missing(&mut out, &mut seen_command, &mut seen_args, command, args);
             in_scx = false;
         }
-        // command 键：允许任意空白后跟 `=`（`command =` / `command=` / `command  =`），
-        // 注释行（`#` 开头）因 trim 后带 `#` 前缀不会误判。
-        if in_scx && t.starts_with("command") {
-            let rest = &t["command".len()..];
-            if rest.trim_start().starts_with('=') {
+        if in_scx {
+            if starts_key(trimmed, "command") {
                 out.push_str(command);
                 out.push('\n');
+                seen_command = true;
+                continue;
+            }
+            if starts_key(trimmed, "args") {
+                out.push_str(args);
+                out.push('\n');
+                seen_args = true;
                 continue;
             }
         }
         out.push_str(line);
         out.push('\n');
+    }
+    if in_scx {
+        flush_missing(&mut out, &mut seen_command, &mut seen_args, command, args);
     }
     out
 }
@@ -475,7 +511,7 @@ pub fn handshake(exe: &Path) -> Result<String, String> {
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
     let _ = stdin.write_all(
-        b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"scx-setup\",\"version\":\"0\"}}}\n",
+        b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"scx-setup\",\"version\":\"0\"}}}\n"[0..],
     );
     let _ = stdin.flush();
     reader
@@ -544,7 +580,7 @@ mod tests {
         // `command =` / `command=` / `command  =` 都应原位替换；注释里的
         // `[mcp_servers.scx]` 或 `command =` 不误判。
         let text = "[mcp_servers.scx]\ncommand = \"/old/bin\"\nargs = [\"mcp\"]\n# [mcp_servers.scx]\n# command = should-not-change\n";
-        let out = update_toml_command(text, "command = \"/new/bin\"");
+        let out = update_toml_section(text, "command = \"/new/bin\"", "args = [\"mcp\"]");
         assert!(
             out.contains("command = \"/new/bin\""),
             "command = 应替换: {out}"
@@ -558,11 +594,31 @@ mod tests {
 
         // 多空格 `command   =` 也应匹配。
         let multi = "[mcp_servers.scx]\ncommand   = \"/old\"\n";
-        let out2 = update_toml_command(multi, "command = \"/new\"");
+        let out2 = update_toml_section(multi, "command = \"/new\"", "args = [\"mcp\"]");
         assert!(
             out2.contains("command = \"/new\""),
             "多空格 command 应替换: {out2}"
         );
+        assert!(
+            out2.contains("args = [\"mcp\"]"),
+            "缺失 args 应补回: {out2}"
+        );
+    }
+
+    #[test]
+    fn toml_reg_adds_missing_keys_in_existing_section() {
+        let dir = env::temp_dir().join(format!("scx-setup-missing-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.toml");
+        fs::write(&cfg, "[mcp_servers.scx]\n# command intentionally missing\n").unwrap();
+        toml_reg(&cfg, Path::new("/new/bin")).unwrap();
+        let text = fs::read_to_string(&cfg).unwrap();
+        assert!(text.contains("[mcp_servers.scx]"));
+        assert!(text.contains("command = \"/new/bin\""));
+        assert!(text.contains("args = [\"mcp\"]"));
+        assert_eq!(text.matches("[mcp_servers.scx]").count(), 1);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[cfg(unix)]
