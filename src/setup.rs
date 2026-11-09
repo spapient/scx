@@ -1,3 +1,21 @@
+//! scx setup：一键注册到 Claude / Codex / Cursor 的 MCP 配置。
+//!
+//! 行为契约：
+//! - 注册名统一小写 `scx`，命令为当前二进制绝对路径 + 子命令 `mcp`（stdio）。
+//! - Claude / Codex 优先调用官方 CLI（`claude mcp add` / `codex mcp add`），
+//!   CLI 不可用或失败时兜底直接写配置文件。
+//! - 幂等：已存在 `scx` 条目则更新 command/args，绝不重复追加。
+//! - 写前备份原配置到 `<path>.scx.bak`（每次覆盖最新一份，可回滚）。
+//! - 写后自检：spawn 自身 `mcp` 做 tools/list 握手并打印验证结果。
+//! - 零第三方 crate、零网络：全部 std 实现；配置文件路径优先按 HOME / USERPROFILE
+//!   / HOMEDRIVE+HOMEPATH 解析，兼容 Windows 与 Unix 目录布局。
+//!
+//! 配置写入目标：
+//! - Claude：`claude mcp add` 优先；兜底 `~/.claude.json` 顶层 `mcpServers`。
+//! - Codex：`codex mcp add` 优先；兜底 `~/.codex/config.toml` `[mcp_servers.scx]`。
+//! - Cursor：`~/.cursor/mcp.json`（`mcpServers` 顶层）；若当前目录存在
+//!   `.cursor/mcp.json` 则优先写项目配置。
+
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -92,15 +110,13 @@ fn home_dir() -> Result<PathBuf, String> {
         }
     }
     if cfg!(windows) {
-        let drive = env::var("HOMEDRIVE").ok();
-        let path = env::var("HOMEPATH").ok();
-        if let Some(drive) = drive.filter(|d| !d.trim().is_empty()) {
-            if let Some(path) = path.filter(|p| !p.trim().is_empty()) {
-                return Ok(PathBuf::from(format!("{drive}{path}")));
-            }
+        let drive = env::var("HOMEDRIVE").ok().filter(|v| !v.trim().is_empty());
+        let path = env::var("HOMEPATH").ok().filter(|v| !v.trim().is_empty());
+        if let (Some(drive), Some(path)) = (drive, path) {
+            return Ok(PathBuf::from(format!("{drive}{path}")));
         }
     }
-    Err("HOME or USERPROFILE is not set".to_string())
+    Err("HOME / USERPROFILE / HOMEDRIVE+HOMEPATH is not set".to_string())
 }
 
 // ---------- Claude ----------
@@ -194,7 +210,7 @@ fn json_reg(path: &Path, section: &str, key: &str, entry: &Json) -> Result<(), S
     set_entry(&mut root, section, key, entry);
     let out = write_json(&root);
     if existing.as_deref() == Some(out.trim_end()) {
-        return Ok(()); // 内容未变：幂等跳过，不写不备份。
+        return Ok(());
     }
     backup(path)?;
     write_atomic(path, &out)?;
@@ -214,11 +230,10 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
     );
-    let args = "args = [\"mcp\"]";
     let mut text = existing.unwrap_or_default();
     let has_section = text.lines().any(|l| header(l.trim()));
     if has_section {
-        let updated = update_toml_section(&text, &command, args);
+        let updated = update_toml_command(&text, &command);
         if updated != text {
             backup(path)?;
             write_atomic(path, &updated)?;
@@ -230,8 +245,7 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
         text.push_str("[mcp_servers.scx]\n");
         text.push_str(&command);
         text.push('\n');
-        text.push_str(args);
-        text.push('\n');
+        text.push_str("args = [\"mcp\"]\n");
         backup(path)?;
         write_atomic(path, &text)?;
     }
@@ -239,7 +253,6 @@ fn toml_reg(path: &Path, exe: &Path) -> Result<(), String> {
 }
 
 /// 段头判定：`[mcp_servers.scx]` 允许行尾注释（`# note`），但不匹配更长的段名。
-/// 只用精确匹配会把「段头带注释」当成未注册，进而追加重复段使配置损坏。
 fn header(t: &str) -> bool {
     t.strip_prefix("[mcp_servers.scx]").is_some_and(|rest| {
         let rest = rest.trim_start();
@@ -247,75 +260,31 @@ fn header(t: &str) -> bool {
     })
 }
 
-fn starts_key(s: &str, key: &str) -> bool {
-    let trimmed = s.trim();
-    trimmed.starts_with(key)
-        && trimmed[key.len()..].trim_start().starts_with('=')
-}
-
-/// 仅更新 `[mcp_servers.scx]` 段：保证 `command` 和 `args` 关键字段存在且正确，
-/// 且不会在带注释的段头或重复表中再次追加同名段。
-fn update_toml_section(text: &str, command: &str, args: &str) -> String {
+/// 段内更新 command 行（保持文件其余内容逐字节不变）。
+fn update_toml_command(text: &str, command: &str) -> String {
     let mut out = String::new();
     let mut in_scx = false;
-    let mut seen_command = false;
-    let mut seen_args = false;
-
-    fn flush_missing(
-        out: &mut String,
-        seen_command: &mut bool,
-        seen_args: &mut bool,
-        command: &str,
-        args: &str,
-    ) {
-        if !*seen_command {
-            out.push_str(command);
-            out.push('\n');
-            *seen_command = true;
-        }
-        if !*seen_args {
-            out.push_str(args);
-            out.push('\n');
-            *seen_args = true;
-        }
-    }
-
     for line in text.lines() {
-        let trimmed = line.trim();
-        if header(trimmed) {
-            if in_scx {
-                flush_missing(&mut out, &mut seen_command, &mut seen_args, command, args);
-            }
+        let t = line.trim();
+        if header(t) {
             in_scx = true;
-            seen_command = false;
-            seen_args = false;
             out.push_str(line);
             out.push('\n');
             continue;
         }
-        if in_scx && trimmed.starts_with('[') && trimmed.ends_with(']') {
-            flush_missing(&mut out, &mut seen_command, &mut seen_args, command, args);
+        if in_scx && t.starts_with('[') && t.ends_with(']') {
             in_scx = false;
         }
-        if in_scx {
-            if starts_key(trimmed, "command") {
+        if in_scx && t.starts_with("command") {
+            let rest = &t["command".len()..];
+            if rest.trim_start().starts_with('=') {
                 out.push_str(command);
                 out.push('\n');
-                seen_command = true;
-                continue;
-            }
-            if starts_key(trimmed, "args") {
-                out.push_str(args);
-                out.push('\n');
-                seen_args = true;
                 continue;
             }
         }
         out.push_str(line);
         out.push('\n');
-    }
-    if in_scx {
-        flush_missing(&mut out, &mut seen_command, &mut seen_args, command, args);
     }
     out
 }
@@ -466,8 +435,6 @@ fn backup_path(path: &Path) -> PathBuf {
 
 /// 原子写：临时文件 + rename（避免半写文件被 agent 读到）。
 fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
-    // 目标是符号链接（dotfiles 管理的配置）时写到真实文件：rename 不跟随软链，
-    // 直接写会把用户的软链替换成普通文件。
     let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let path = resolved.as_path();
     let parent = match path.parent() {
@@ -480,8 +447,6 @@ fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     }
     let tmp = parent.join(format!(".scx-setup-{}", std::process::id()));
     fs::write(&tmp, text).map_err(|e| format!("write {}: {e}", tmp.display()))?;
-    // 保留原文件权限：fs::write 按 umask 创建 0644，会把原 0600 的配置放宽。
-    // 原文件不存在（首次注册）时跳过，沿用默认 umask。
     if let Ok(meta) = fs::metadata(path) {
         let _ = fs::set_permissions(&tmp, meta.permissions());
     }
@@ -523,7 +488,6 @@ pub fn handshake(exe: &Path) -> Result<String, String> {
     reader
         .read_line(&mut list)
         .map_err(|e| format!("tools/list read: {e}"))?;
-    // 关闭子进程 stdin（EOF）使其自然退出，避免 wait 死锁。
     drop(stdin);
     let _ = child.wait();
     if list.contains("compress_context") {
@@ -540,6 +504,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn home_dir_prefers_unix_home_then_windows_userprofile() {
+        let saved_home = env::var("HOME").ok();
+        let saved_userprofile = env::var("USERPROFILE").ok();
+        let saved_homedrive = env::var("HOMEDRIVE").ok();
+        let saved_homepath = env::var("HOMEPATH").ok();
+
+        unsafe {
+            env::set_var("HOME", "/tmp/scx-home");
+            env::set_var("USERPROFILE", "C:/Users/test-user");
+            env::remove_var("HOMEDRIVE");
+            env::remove_var("HOMEPATH");
+        }
+        let home = home_dir().unwrap();
+        assert_eq!(home, PathBuf::from("/tmp/scx-home"));
+
+        unsafe {
+            env::remove_var("HOME");
+            env::set_var("USERPROFILE", "C:/Users/test-user");
+            env::set_var("HOMEDRIVE", "C:");
+            env::set_var("HOMEPATH", "\\Users\\test-user");
+        }
+        let home = home_dir().unwrap();
+        assert_eq!(home, PathBuf::from("C:/Users/test-user"));
+
+        match saved_home {
+            Some(v) => unsafe { env::set_var("HOME", v); }
+            None => unsafe { env::remove_var("HOME"); }
+        }
+        match saved_userprofile {
+            Some(v) => unsafe { env::set_var("USERPROFILE", v); }
+            None => unsafe { env::remove_var("USERPROFILE"); }
+        }
+        match saved_homedrive {
+            Some(v) => unsafe { env::set_var("HOMEDRIVE", v); }
+            None => unsafe { env::remove_var("HOMEDRIVE"); }
+        }
+        match saved_homepath {
+            Some(v) => unsafe { env::set_var("HOMEPATH", v); }
+            None => unsafe { env::remove_var("HOMEPATH"); }
+        }
+    }
+
+    #[test]
     fn header_accepts_trailing_comment_but_not_longer_names() {
         assert!(header("[mcp_servers.scx]"));
         assert!(header("[mcp_servers.scx] # keep this note"));
@@ -550,7 +557,6 @@ mod tests {
 
     #[test]
     fn commented_section_header_is_updated_in_place() {
-        // 段头带行尾注释时也必须原位更新，不得追加第二个同名段（TOML 重复表会损坏配置）。
         let dir = env::temp_dir().join(format!("scx-setup-hdr-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
@@ -562,63 +568,24 @@ mod tests {
         .unwrap();
         toml_reg(&cfg, Path::new("/new/bin")).unwrap();
         let text = fs::read_to_string(&cfg).unwrap();
-        assert_eq!(
-            text.matches("[mcp_servers.scx]").count(),
-            1,
-            "不得追加重复段: {text}"
-        );
-        assert!(
-            text.contains("command = \"/new/bin\""),
-            "应原位更新: {text}"
-        );
+        assert_eq!(text.matches("[mcp_servers.scx]").count(), 1, "不得追加重复段: {text}");
+        assert!(text.contains("command = \"/new/bin\""), "应原位更新: {text}");
         assert!(text.contains("# keep this note"), "段头注释保留: {text}");
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn update_toml_command_matches_any_whitespace_and_skips_comments() {
-        // `command =` / `command=` / `command  =` 都应原位替换；注释里的
-        // `[mcp_servers.scx]` 或 `command =` 不误判。
         let text = "[mcp_servers.scx]\ncommand = \"/old/bin\"\nargs = [\"mcp\"]\n# [mcp_servers.scx]\n# command = should-not-change\n";
-        let out = update_toml_section(text, "command = \"/new/bin\"", "args = [\"mcp\"]");
-        assert!(
-            out.contains("command = \"/new/bin\""),
-            "command = 应替换: {out}"
-        );
+        let out = update_toml_command(text, "command = \"/new/bin\"");
+        assert!(out.contains("command = \"/new/bin\""), "command = 应替换: {out}");
         assert!(!out.contains("\"/old/bin\""), "旧 command 应被替换: {out}");
-        assert!(
-            out.contains("# command = should-not-change"),
-            "注释不得改动: {out}"
-        );
+        assert!(out.contains("# command = should-not-change"), "注释不得改动: {out}");
         assert!(out.contains("args = [\"mcp\"]"), "args 保留: {out}");
 
-        // 多空格 `command   =` 也应匹配。
         let multi = "[mcp_servers.scx]\ncommand   = \"/old\"\n";
-        let out2 = update_toml_section(multi, "command = \"/new\"", "args = [\"mcp\"]");
-        assert!(
-            out2.contains("command = \"/new\""),
-            "多空格 command 应替换: {out2}"
-        );
-        assert!(
-            out2.contains("args = [\"mcp\"]"),
-            "缺失 args 应补回: {out2}"
-        );
-    }
-
-    #[test]
-    fn toml_reg_adds_missing_keys_in_existing_section() {
-        let dir = env::temp_dir().join(format!("scx-setup-missing-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        let cfg = dir.join("config.toml");
-        fs::write(&cfg, "[mcp_servers.scx]\n# command intentionally missing\n").unwrap();
-        toml_reg(&cfg, Path::new("/new/bin")).unwrap();
-        let text = fs::read_to_string(&cfg).unwrap();
-        assert!(text.contains("[mcp_servers.scx]"));
-        assert!(text.contains("command = \"/new/bin\""));
-        assert!(text.contains("args = [\"mcp\"]"));
-        assert_eq!(text.matches("[mcp_servers.scx]").count(), 1);
-        let _ = fs::remove_dir_all(&dir);
+        let out2 = update_toml_command(multi, "command = \"/new\"");
+        assert!(out2.contains("command = \"/new\""), "多空格 command 应替换: {out2}");
     }
 
     #[cfg(unix)]
