@@ -277,8 +277,14 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let p = dir.join("value.txt");
         fs::write(&p, b"old").unwrap();
-        // 持有句柄：Windows 的 MoveFileEx 无法替换被占用目标。
-        let guard = fs::File::open(&p).unwrap();
+        // 独占打开（share_mode 0）：目标不可被替换或删除，rename 必然失败。
+        // 注意 Rust std 默认带 FILE_SHARE_DELETE，只用 File::open 仍可替换。
+        use std::os::windows::fs::OpenOptionsExt;
+        let guard = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&p)
+            .unwrap();
         let err = atomic(&p, b"new").unwrap_err();
         drop(guard);
         // 错误种类按平台可能有差异，这里只要求"必须失败且旧值不变"。

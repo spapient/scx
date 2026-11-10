@@ -32,6 +32,7 @@ include = [
     "config/semantic.json",
     "config/semantic-pw.json",
     "config/gate.json",
+    "config/gold-eval.json",
     "config/evaluation.json",
 ]
 

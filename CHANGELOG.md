@@ -8,11 +8,33 @@
 
 ## [未发布]
 
-### 计划
+### 新增
 
-- 发布资产密码学签名与验证指引（对应 OpenSSF silver `signed_releases`）
-- CI 增加静态应用安全测试（SAST）与软件物料清单（SBOM）产出
-- 补充架构与威胁模型文档，完善治理文件
+- `scripts/sbom.py`：零依赖 SPDX 2.3 生成器，命名空间由 `Cargo.lock` 内容哈希派生、
+  创建时间固定，输出可复现（两次运行逐字节一致）。
+- CI 新增 `security` / `coverage` / `sbom` 三个作业：库目标上强制
+  `unwrap_used` / `panic` / `todo` / `unimplemented` 为零、禁止未文档化 unsafe、
+  断言 `Cargo.lock` 仅 1 个 package；覆盖率门禁 80%；SBOM 随每次构建产出。
+- `tests/robust.rs`：确定性伪随机（xorshift64*）驱动的健壮性测试，
+  2000 例畸形输入对拍 + 极端尺寸 + 非法配置归一化 + 输出逐字节确定性。
+- `.github/workflows/release.yml`：标签触发三平台构建、生成 `SHA256SUMS.txt`、
+  用 cosign keyless 签名（OIDC 身份来自工作流，签名入 Rekor 透明日志），
+  验证流程见 `docs/release-signing.md`。
+- 治理与文档：`GOVERNANCE.md`、`CODE_OF_CONDUCT.md`、`docs/architecture.md`、
+  `docs/threat-model.md`。
+
+### 修复
+
+- **打包漏带权重文件**：`Cargo.toml` 的 `include` 白名单缺少 `config/gate.json`
+  与 `config/semantic-pw.json`，打包后的 crate 内相关测试必然失败。
+  真实用户在 `cargo install` 后也无法从包内取得这两个文件。
+- **原子写失败测试依赖 Unix 语义**：原实现靠"目录去掉写权限"制造失败，
+  Windows 上目录只读属性不阻止创建文件，测试在 CI windows 作业恒红。
+  现按平台注入真实失败（Unix 用权限、Windows 用目标文件占用）。
+- **生产线程 join 不再裸 unwrap**：`compress/plan.rs` 与 `compress/render.rs`
+  的 `join().unwrap()` 改为 `unwrap_or_else(resume_unwind)`，语义等价且可被
+  安全 lint 约束。
+- golden 基线重冻：`eval/budget-expected.csv` 更新到当前确定性输出。
 
 ## [0.12.2] - 2026-11-10
 
