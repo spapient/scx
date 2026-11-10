@@ -11,6 +11,25 @@
 
 `main` 受分支保护：不接受直接推送，至少需要一次维护者评审（CODEOWNERS）和通过的 CI。维护者自己的紧急变更仍应通过 PR 留痕，除非仓库处于不可用状态。
 
+## 开发者原创声明（DCO）
+
+本项目采用 [Developer Certificate of Origin 1.1](https://developercertificate.org/)，
+不要求签署独立的企业贡献协议（CLA）。
+
+每次提交必须在提交信息末尾添加签名行，声明你有权按项目许可证提交该内容：
+
+```
+Signed-off-by: 你的姓名 <你的邮箱>
+```
+
+可用 `git commit -s` 自动添加。签名行中的姓名与邮箱须与提交作者一致。
+缺少签名行的提交会被要求补签后重新推送。
+
+## 行为准则
+
+参与本项目须遵守 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+项目决策方式、角色职责与访问连续性安排见 [GOVERNANCE.md](GOVERNANCE.md)。
+
 ## 本地验证
 
 构建缓存放在仓库外，避免技能扫描把 `target/` 当成仓库内容：

@@ -61,7 +61,10 @@ fn tally_par(
                 sum
             }));
         }
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
     });
     (tok, sums.iter().sum())
 }

@@ -192,7 +192,10 @@ fn compute_trimmed(
                 local
             }));
         }
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
     });
     for row in rows {
         for (idx, s) in row {

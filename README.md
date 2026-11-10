@@ -12,7 +12,7 @@
 >
 > Keep the lines that matter; leave the rest behind. Verbatim output, offline by default, zero dependencies.
 
-[快速开始](#快速开始) · [工作原理](#工作原理) · [CLI 参考](#cli-参考) · [本地记忆库](#本地记忆库) · [记忆治理](#记忆治理memory-governance) · [质量与证据](#质量与证据) · [贡献与安全](#贡献与安全)
+[快速开始](#快速开始) · [工作原理](#工作原理) · [CLI 参考](#cli-参考) · [本地记忆库](#本地记忆库) · [记忆治理](#记忆治理memory-governance) · [质量与证据](#质量与证据) · [贡献与安全](#贡献与安全) · [治理与文档](#治理与文档) · [变更日志](CHANGELOG.md)
 
 ## 为什么选择 scx
 
@@ -667,6 +667,20 @@ cargo build --release --locked
 `main` 受分支保护：常规变更需要 PR、通过的 CI 和维护者评审，直接推送会被拒绝；管理员绕过只用于仓库恢复。不要把真实凭据、客户数据或未公开事故材料放入 issue、日志或测试夹具。
 
 安全漏洞请使用 [GitHub 私密漏洞报告](https://github.com/spapient/scx/security/advisories/new)，不要先开公开 issue。边界说明见 [SECURITY.md](SECURITY.md)。
+
+## 治理与文档
+
+项目由志愿者维护，决策方式、角色职责与访问连续性安排见 [GOVERNANCE.md](GOVERNANCE.md)；
+参与讨论须遵守 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)；版本变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | 模块分层、数据流、特性矩阵、设计约束 |
+| [docs/threat-model.md](docs/threat-model.md) | 威胁模型、信任边界、安全论证与已知缺口 |
+| [docs/benchmarks.md](docs/benchmarks.md) | 基准方法与结果 |
+| [docs/memory.md](docs/memory.md) | 记忆库设计与治理 |
+| [docs/plan.md](docs/plan.md) | 路线图与阶段状态 |
+| [SECURITY.md](SECURITY.md) | 漏洞报告与安全边界 |
 
 ## 许可证
 

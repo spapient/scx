@@ -1,0 +1,139 @@
+name: Release
+
+# 标签推送时构建三平台产物，生成校验和，用 Sigstore cosign 做无密钥签名
+# （OIDC 身份来自本工作流），并把签名与校验和一并挂到 Release。
+#
+# 设计取舍：不依赖任何第三方 action（除已固定 SHA 的 checkout 与 rust-toolchain），
+# 资产上传与签名全部走预装的 gh / cosign，避免供应链面扩大。
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "已存在且已推送的标签，例如 v0.12.3"
+        required: true
+
+permissions:
+  contents: write
+  id-token: write # cosign keyless 需要 OIDC 令牌
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  prepare:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --generate-notes --verify-tag
+
+  build:
+    needs: prepare
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            bin: scx
+            asset: scx-linux-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin: scx
+            asset: scx-darwin-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: scx.exe
+            asset: scx-win32-x64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Stage asset (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${{ matrix.asset }}"
+          chmod +x "dist/${{ matrix.asset }}"
+          shasum -a 256 "dist/${{ matrix.asset }}" | awk '{print $1}' > "dist/${{ matrix.asset }}.sha256"
+      - name: Stage asset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${{ matrix.asset }}"
+          (Get-FileHash "dist/${{ matrix.asset }}" -Algorithm SHA256).Hash.ToLower() | Set-Content "dist/${{ matrix.asset }}.sha256"
+      - name: Smoke test (Unix)
+        if: runner.os != 'Windows'
+        run: ./dist/${{ matrix.asset }} --version
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: .\dist\${{ matrix.asset }} --version
+      - name: Upload asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "$TAG" "dist/${{ matrix.asset }}" --clobber
+          echo "上传 ${{ matrix.asset }} 完成"
+
+  sign:
+    needs: build
+    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --dir dist --pattern 'scx-*' --clobber
+          ls -la dist
+      - name: Install cosign
+        run: |
+          go install github.com/sigstore/cosign/v2/cmd/cosign@v2.4.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Generate SHA256SUMS
+        run: |
+          cd dist
+          rm -f SHA256SUMS.txt
+          for f in scx-darwin-arm64 scx-linux-x64 scx-win32-x64.exe; do
+            sha256sum "$f" >> SHA256SUMS.txt
+          done
+          sort -k2 SHA256SUMS.txt -o SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Sign assets and checksums (keyless)
+        run: |
+          cd dist
+          for f in scx-darwin-arm64 scx-linux-x64 scx-win32-x64.exe SHA256SUMS.txt; do
+            cosign sign-blob --yes --bundle "$f.bundle" "$f"
+          done
+          ls -la *.bundle
+      - name: Upload signatures and checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd dist
+          gh release upload "$TAG" SHA256SUMS.txt --clobber
+          for f in *.bundle; do
+            gh release upload "$TAG" "$f" --clobber
+          done
+          echo "签名与校验和已上传"
