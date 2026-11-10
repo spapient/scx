@@ -497,6 +497,15 @@ pub(crate) fn list(root: &str) -> std::io::Result<Vec<String>> {
     Ok(ids)
 }
 
+/// 库内 case 条目的廉价计数（只数目录项，不逐条 stat）。
+///
+/// `list()` 对每个条目做 `file_type()` + `exists()` 两次系统调用，1 万条量级
+/// 约 20ms；需要在"是否值得访问全库"这类前置判断上只用这个计数。
+pub(crate) fn count(root: &str) -> std::io::Result<usize> {
+    let dir = Path::new(root).join("cases");
+    Ok(fs::read_dir(dir)?.flatten().count())
+}
+
 /// 库总字节数（cases + meta + index）。用于写入前的软配额检查。
 pub(crate) fn bytes(root: &str) -> std::io::Result<u64> {
     let root = Path::new(root);

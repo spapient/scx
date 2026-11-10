@@ -70,15 +70,16 @@ pub(crate) fn fuse(
     if base[0].sim >= meta.param("confidence_high_sim") {
         return Ok(None);
     }
-    let ids = store::list(root)?;
-    if ids.is_empty() {
+    // 规模守卫：融合每查询要读全库正文并算 MinHash，库一大（10k 级）单次
+    // recall 会从亚毫秒退化到秒级（`bench memory` 的 5ms 门禁）。这里用只数
+    // 目录项的廉价计数（`store::count`）判断，绝不先 `list()`（1 万条要多付
+    // 约 20ms 的逐条 stat）—— 保留小库（真实记忆库规模）的收益，大库不付代价。
+    let max_docs = meta.param("fuse_adapt_max_docs");
+    if max_docs > 0.0 && store::count(root)? as f64 > max_docs {
         return Ok(None);
     }
-    // 规模守卫：融合每查询要读全库正文并算 MinHash，库一大（10k 级）单次
-    // recall 会从亚毫秒退化到秒级（`bench memory` 的 5ms 门禁）。超过上限
-    // 直接不融合 —— 保留小库（真实记忆库规模）的收益，不为大库付代价。
-    let max_docs = meta.param("fuse_adapt_max_docs");
-    if max_docs > 0.0 && ids.len() as f64 > max_docs {
+    let ids = store::list(root)?;
+    if ids.is_empty() {
         return Ok(None);
     }
     let cases: Vec<store::Case> = ids
