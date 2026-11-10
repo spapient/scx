@@ -74,6 +74,13 @@ pub(crate) fn fuse(
     if ids.is_empty() {
         return Ok(None);
     }
+    // 规模守卫：融合每查询要读全库正文并算 MinHash，库一大（10k 级）单次
+    // recall 会从亚毫秒退化到秒级（`bench memory` 的 5ms 门禁）。超过上限
+    // 直接不融合 —— 保留小库（真实记忆库规模）的收益，不为大库付代价。
+    let max_docs = meta.param("fuse_adapt_max_docs");
+    if max_docs > 0.0 && ids.len() as f64 > max_docs {
+        return Ok(None);
+    }
     let cases: Vec<store::Case> = ids
         .iter()
         .map(|id| store::load(root, id))

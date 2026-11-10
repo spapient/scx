@@ -101,6 +101,9 @@ pub(crate) const DEFAULT_PARAMS: &[(&str, f64)] = &[
     ("fuse_adapt", 1.0),
     ("fuse_adapt_max_w", 0.5),
     ("fuse_adapt_min_peak", 0.10),
+    // fuse_adapt_max_docs —— 库规模上限（超过则不融合）。融合每查询需读全库
+    // 正文并算 MinHash，10k 级库会把 recall 从亚毫秒打到秒级。
+    ("fuse_adapt_max_docs", 1024.0),
     // fuse_adapt_lock —— 锁定的头部名次数：base 前 N 位由生产管线的
     //                    rerank/字段/L1 直答决定，融合不得改动。
     ("fuse_adapt_lock", 1.0),
