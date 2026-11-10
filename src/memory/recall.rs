@@ -207,7 +207,7 @@ fn pipeline(
     // 扩展轮严格补漏，不覆盖首轮顺序（见下方合并逻辑）。
     let prf_low_conf =
         meta.param("prf_enable") > 0.0 && hits.first().is_some_and(|h| h.sim < high_sim);
-    if let Some(merged) = prf(
+    let hits = match prf(
         prf_low_conf,
         root,
         query,
@@ -216,7 +216,15 @@ fn pipeline(
         qf_exact_only,
         &hits,
     ) {
-        return Ok(merged);
+        Some(merged) => merged,
+        None => hits,
+    };
+    // 证据自适应融合（EAR）：在 rerank/PRF 的结果上按"归一化分数优势"再融合
+    // MinHash 路 —— 谁的优势更突出就由谁主导，不丢失生产管线的重排收益。
+    if meta.param("fuse_adapt") > 0.0 {
+        if let Some(fused) = super::adapt::fuse(root, query, &hits, k, meta)? {
+            return Ok(fused);
+        }
     }
     Ok(hits)
 }

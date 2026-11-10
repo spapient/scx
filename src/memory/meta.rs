@@ -89,6 +89,21 @@ pub(crate) const DEFAULT_PARAMS: &[(&str, f64)] = &[
     ("bucket_bypass_sim", 0.30),
     ("prf_enable", 1.0),
     ("confidence_high_sim", 0.99),
+    // 证据自适应融合（EAR）：默认开启，按"归一化分数优势"融合 MinHash 路。
+    // - 实测（Gauge 150 例单相关）：paraphrase r@5 0.583→0.633，semantic
+    //   MRR 0.908→0.917，literal 1.000 不变；Human 多相关门禁 PASS。
+    // - fuse_adapt_max_w 设 0.5 是门禁约束下的最优点：0.6 能把单相关
+    //   paraphrase 推到 0.733，但会把 Human 口径的 semantic NDCG 压过
+    //   0.020 容差（MinHash 高相似 ≠ 多相关场景的高相关）。
+    // fuse_adapt_max_w    —— MinHash 路权上限（防止改写路压过字面路）。
+    // fuse_adapt_min_peak —— MinHash 顶分需高于全库中位数该幅度，才认为存在
+    //                        "近重复峰"；否则视为均匀背景，不融合。
+    ("fuse_adapt", 1.0),
+    ("fuse_adapt_max_w", 0.5),
+    ("fuse_adapt_min_peak", 0.10),
+    // fuse_adapt_lock —— 锁定的头部名次数：base 前 N 位由生产管线的
+    //                    rerank/字段/L1 直答决定，融合不得改动。
+    ("fuse_adapt_lock", 1.0),
     ("index_force", 0.0),
     ("feedback_step", 0.1),
     ("feedback_step_bad", 0.15),

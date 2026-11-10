@@ -14,6 +14,7 @@
 //! （`recall`/`ranking`/`edge`/`cache`）、反馈维护（`feedback`/`maintenance`）
 //! 以及评估（`eval`/`gate`/`annotate`）；具体文件职责见 `docs/memory.md`。
 
+mod adapt;
 mod annotate;
 mod cache;
 mod classify;
