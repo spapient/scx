@@ -11,6 +11,14 @@
 
 `main` 受分支保护：不接受直接推送，至少需要一次维护者评审（CODEOWNERS）和通过的 CI。维护者自己的紧急变更仍应通过 PR 留痕，除非仓库处于不可用状态。
 
+## 响应时限
+
+- **bug 报告与增强建议**：7 个工作日内首次回复。无法处理时也会回复并说明原因，不会静默关闭。
+- **PR**：7 个工作日内给出评审意见或合并结论。
+- 超时未回复可在原 issue/PR 下 ping `@spapient`，或按 [SECURITY.md](SECURITY.md) 的渠道升级安全相关问题。
+
+所有公开讨论（issue、PR、评审意见）保留在 GitHub 上，便于检索与追溯。
+
 ## 开发者原创声明（DCO）
 
 本项目采用 [Developer Certificate of Origin 1.1](https://developercertificate.org/)，
