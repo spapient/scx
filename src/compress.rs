@@ -237,6 +237,8 @@ struct Report<'a> {
 /// 单次结果的可变字段；与 `Report` 的只读元信息分离，避免 13 参数闭包。
 struct OutcomeFields {
     kept: usize,
+    hit_kept: usize,
+    hit_total: usize,
     chars_b: usize,
     cut: f64,
     dup: usize,
@@ -253,6 +255,11 @@ struct OutcomeFields {
 impl Report<'_> {
     fn make(&self, text: String, f: OutcomeFields) -> Outcome {
         let ev = ev_retention(self.evidence, &f.numbers, &text, f.kept, self.total);
+        let hit = if f.hit_total == 0 {
+            1.0
+        } else {
+            f.hit_kept as f64 / f.hit_total as f64
+        };
         let tokens_out = crate::terms::estimate(&text);
         Outcome {
             text,
@@ -280,6 +287,8 @@ impl Report<'_> {
             budget_used_pct: 0.0,
             ev_retention: ev,
             ev_total: self.evidence.len(),
+            hit_retention: hit,
+            hit_total: f.hit_total,
             buckets: vec![crate::BucketStat {
                 kind: self.kind,
                 tokens_in: self.tokens_in,
@@ -297,6 +306,8 @@ impl Report<'_> {
             text.to_string(),
             OutcomeFields {
                 kept: self.total,
+                hit_kept: 0,
+                hit_total: 0,
                 chars_b: self.input,
                 cut: 0.0,
                 dup: 0,
@@ -317,6 +328,8 @@ impl Report<'_> {
             text.to_string(),
             OutcomeFields {
                 kept: self.total,
+                hit_kept: 0,
+                hit_total: 0,
                 chars_b: self.input,
                 cut: 0.0,
                 dup: folds,
@@ -344,6 +357,8 @@ impl Report<'_> {
             text.to_string(),
             OutcomeFields {
                 kept: self.total,
+                hit_kept: 0,
+                hit_total: 0,
                 chars_b: self.input,
                 cut: 0.0,
                 dup: folds,
@@ -701,12 +716,22 @@ fn assemble(input: AssembleIn<'_>, prof: &mut crate::perf::T) -> Outcome {
         fallback,
     } = input;
     let (out_text, numbers) = render(lines, &selection.keep, cfg, &selection.raw, terms);
+    let hit_total = analysis.seeds.hits.iter().filter(|&&h| h > 0).count();
+    let hit_kept = analysis
+        .seeds
+        .hits
+        .iter()
+        .zip(&selection.keep)
+        .filter(|(&h, &k)| h > 0 && k)
+        .count();
     prof.mark("render");
     let (chars_b, cut) = cut(&out_text, chars_a);
     let mut outcome = report.make(
         out_text,
         OutcomeFields {
             kept: selection.kept,
+            hit_kept,
+            hit_total,
             chars_b,
             cut,
             dup: analysis.folds,
@@ -1003,6 +1028,8 @@ pub fn compress_bucketed(
         text: out_text,
         numbers: Vec::new(),
         kept,
+        hit_retention: 1.0,
+        hit_total: 0,
         total,
         input: cin,
         output: cout,

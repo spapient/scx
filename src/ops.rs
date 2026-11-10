@@ -586,6 +586,8 @@ pub fn render(r: &Outcome) -> String {
     // 声明证据总条数（P12.6）：与 ev_retention 配合给出真实保留/丢失口径，
     // 替代 v0.6.4 用 seeds 冒充证据数。
     out.push_str(&format!(",\"ev_total\":{}", r.ev_total));
+    out.push_str(&format!(",\"hit_retention\":{:.4}", r.hit_retention));
+    out.push_str(&format!(",\"hit_total\":{}", r.hit_total));
     // 分桶统计（默认单桶；compress_bucketed 时逐桶填充）。
     let global_out = tokens_out;
     out.push_str(",\"buckets\":[");

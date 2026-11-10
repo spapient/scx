@@ -743,6 +743,12 @@ pub struct Outcome {
     /// `ev_retention` 供报告卡给出真实"保留/丢失"口径，替代 v0.6.4 误用
     /// `seeds` 当证据数的假"全部保留"（P12.6 修复）。
     pub ev_total: usize,
+    /// 查询命中行的保留率（0..=1）：命中行 kept / 命中行总数；无命中恒 1.0。
+    /// 与 `ev_retention`（只统计显式 `--evidence`）并列，消除“查询命中的证据
+    /// 不进指标”造成的低留存误读。`--json` 消费，默认统计行不输出。
+    pub hit_retention: f64,
+    /// 查询命中行总数（`seeds.hits > 0` 的行数）；无命中为 0。
+    pub hit_total: usize,
     /// 分桶统计（默认单桶 = 整输入视作 ToolOutput）；`compress_bucketed` 时逐桶填充。
     /// `--json` 消费，默认统计行不输出。
     pub buckets: Vec<BucketStat>,

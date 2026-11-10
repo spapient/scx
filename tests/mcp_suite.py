@@ -383,6 +383,50 @@ def main() -> int:
 
     gate.check("中文问题+英文日志按错误行回退", lang_fallback)
 
+    def py_trace():
+        rows = ["2026-11-10 INFO batch step %d ok" % i for i in range(50)]
+        rows[30:35] = [
+            'Traceback (most recent call last):',
+            '  File "train.py", line 118, in <module>',
+            '    loss = step(model, batch)',
+            'ValueError: shapes (32,768) and (256,768) not aligned',
+            '2026-11-10 INFO abort',
+        ]
+        p = payload(c2.tool("compress_context", {"query": "报错在哪 原因", "text": "\n".join(rows)}))
+        expect(p["mode"].startswith(("sieve", "sieve:risk")), "Python traceback 未压缩：%s" % p["mode"])
+        expect(p["cut_pct"] > 40, "Python cut 过低：%s" % p["cut_pct"])
+        expect("shapes (32,768)" in p["text"], "Python 异常行丢失")
+        return "cut=%.1f%%" % p["cut_pct"]
+
+    gate.check("Python traceback 保留异常行", py_trace)
+
+    def java_stack():
+        rows = ["2026-11-10 INFO pool step %d" % i for i in range(50)]
+        rows[30:35] = [
+            'Exception in thread "main" java.lang.RuntimeException: db down',
+            '  at com.a.Pool.acquire(Pool.java:214)',
+            '  at com.a.Pool.get(Pool.java:88)',
+            'Caused by: java.sql.SQLException: conn refused conn=9f2a',
+            '  at com.c.Conn.open(Conn.java:9)',
+        ]
+        p = payload(c2.tool("compress_context", {"query": "为什么失败", "text": "\n".join(rows)}))
+        expect(p["mode"].startswith(("sieve", "sieve:risk")), "Java 栈未压缩：%s" % p["mode"])
+        expect(p["cut_pct"] > 40, "Java cut 过低：%s" % p["cut_pct"])
+        expect("conn=9f2a" in p["text"], "Java 根因行丢失")
+        return "cut=%.1f%%" % p["cut_pct"]
+
+    gate.check("Java 栈保留根因行", java_stack)
+
+    def hit_metric():
+        p = payload(c2.tool("compress_context", {"query": "item_77", "text": code}))
+        expect(p["hit_total"] > 0, "查询命中行数为 0")
+        expect(0.0 <= p["hit_retention"] <= 1.0, "hit_retention 越界：%s" % p["hit_retention"])
+        q = payload(c2.tool("compress_context", {"query": "zzz_nomatch", "text": code}))
+        expect(q["hit_total"] == 0 and q["hit_retention"] == 1.0, "无命中时口径错误")
+        return "hit=%s/%s" % (p["hit_retention"], p["hit_total"])
+
+    gate.check("命中留存口径", hit_metric)
+
     def crlf():
         crlf = code.replace("\n", "\r\n")
         p = payload(c2.tool("compress_context", {"query": "q", "text": crlf, "evidence": [3]}))

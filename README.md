@@ -334,8 +334,12 @@ query + input
 | `overflow:fill` | `--max-tokens` 上限：预算填充后仍超限，按硬上限裁剪并报告 |
 
 查询词与输入存在词面重叠时效果最佳。跨语言时（中文问题 + 英文日志/代码）若内容含
-`ERROR`/`FAILED`/`panicked` 等错误标记，按错误行召回（`sieve:risk-fallback`）；否则
-`scx` 不生成 embedding，按原文返回，不承诺解决完全无共享词的语义检索。
+`ERROR`/`FAILED`/`panicked`/`Traceback`/Java 栈帧等错误标记，按错误行召回
+（`sieve:risk-fallback`）；否则按原文返回，不承诺解决完全无共享词的语义检索。
+
+`--json` 同时给出两套证据口径：`ev_retention`/`ev_total` 只统计显式 `--evidence`，
+`hit_retention`/`hit_total` 统计查询命中行（无命中恒 1.0）——前者衡量“声明证据有没有丢”，
+后者衡量“问题指向的行有没有留”。
 
 ## CLI 参考
 
