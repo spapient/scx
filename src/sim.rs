@@ -54,10 +54,10 @@ pub fn compute(cmd: Option<&str>, query: &str, texts: &[&str]) -> Result<Vec<f64
             .take()
             .ok_or_else(|| "--embed-cmd: provider stdin unavailable".to_string())?;
         let safe_query = sanitize(query);
-        writeln!(stdin, "Q\t{safe_query}").map_err(|e| format!("--embed-cmd write: {e}"))?;
+        writeln!(stdin, "Q\t{safe_query}").map_err(write_err)?;
         for t in texts {
             let safe = sanitize(t);
-            writeln!(stdin, "L\t{safe}").map_err(|e| format!("--embed-cmd write: {e}"))?;
+            writeln!(stdin, "L\t{safe}").map_err(write_err)?;
         }
     } // stdin 在此关闭，子进程读到 EOF。
 
@@ -92,6 +92,21 @@ pub fn compute(cmd: Option<&str>, query: &str, texts: &[&str]) -> Result<Vec<f64
         return Err(format!("--embed-cmd: provider exited with {status}"));
     }
     Ok(sims)
+}
+
+/// 写 stdin 失败时的统一错误文案。
+///
+/// provider 协议是"读完 stdin 到 EOF 再输出分数"。若 provider 不读输入就退出，
+/// 内核的读端会关闭，父进程写入得到 EPIPE。这属于 provider 实现违约，
+/// 错误文案必须点明原因，否则现场只看到一个裸 "Broken pipe" 无从排查。
+fn write_err(e: std::io::Error) -> String {
+    if e.kind() == std::io::ErrorKind::BrokenPipe {
+        "--embed-cmd write: provider 未读取输入即退出（broken pipe）；\
+         provider 必须读完 stdin 到 EOF 后再输出分数"
+            .to_string()
+    } else {
+        format!("--embed-cmd write: {e}")
+    }
 }
 
 /// 按平台选择 shell；`program` 由调用方提供，语义与平台原生 shell 一致。
@@ -416,11 +431,13 @@ mod tests {
 
     #[test]
     fn subprocess_scores_are_parsed_in_order() {
-        // 模拟 provider：读入后输出固定两个分数（批式，先读后写）。
+        // 符合 provider 协议：先把 stdin 读空到 EOF，再输出固定两个分数。
+        // 旧写法用 `printf` 直接输出、不读 stdin，父进程写入会撞 EPIPE，
+        // 属于竞态型 flaky：本地写快就过，CI 上 provider 先退出就红。
         let cmd = if cfg!(windows) {
-            "echo 0.25& echo 0.75"
+            "more > NUL & echo 0.25& echo 0.75"
         } else {
-            "printf '0.25\\n0.75\\n'"
+            "cat >/dev/null; printf '0.25\\n0.75\\n'"
         };
         let got = compute(Some(cmd), "query", &["line a", "line b"]).unwrap();
         assert_eq!(got.len(), 2);
@@ -429,11 +446,30 @@ mod tests {
     }
 
     #[test]
+    fn provider_ignoring_stdin_never_panics() {
+        // provider 不读输入就输出并退出时，写入可能撞 EPIPE。
+        // 竞态决定结果可能是 Ok 或 Err，但绝不允许 panic，
+        // 且 Err 必须点明是 provider 违约而不是裸 broken pipe。
+        let cmd = if cfg!(windows) {
+            "echo 0.25& echo 0.75"
+        } else {
+            "printf '0.25\\n0.75\\n'"
+        };
+        match compute(Some(cmd), "query", &["line a", "line b"]) {
+            Ok(v) => assert_eq!(v.len(), 2),
+            Err(e) => assert!(
+                e.contains("provider 未读取输入即退出") || e.contains("--embed-cmd"),
+                "错误须可诊断: {e}"
+            ),
+        }
+    }
+
+    #[test]
     fn short_output_is_rejected() {
         let cmd = if cfg!(windows) {
-            "echo 0.5"
+            "more > NUL & echo 0.5"
         } else {
-            "printf '0.5\\n'"
+            "cat >/dev/null; printf '0.5\\n'"
         }; // 只输出 1 个，但请求 2 个
         assert!(compute(Some(cmd), "q", &["a", "b"]).is_err());
     }

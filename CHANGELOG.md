@@ -37,6 +37,18 @@
 - **生产线程 join 不再裸 unwrap**：`compress/plan.rs` 与 `compress/render.rs`
   的 `join().unwrap()` 改为 `unwrap_or_else(resume_unwind)`，语义等价且可被安全 lint 约束。
 - golden 基线重冻：`eval/budget-expected.csv` 更新到当前确定性输出。
+- **sim 子进程测试竞态**：`subprocess_scores_are_parsed_in_order` 的假 provider
+  用 `printf` 直接输出、不读 stdin，父进程写输入时撞 `EPIPE`
+  （`--embed-cmd write: Broken pipe`），CI 上随调度差异间歇失败。
+  现改为先读空 stdin 再输出（符合 provider 协议），并新增
+  `provider_ignoring_stdin_never_panics` 固化"不允许 panic"的边界。
+  同时 `--embed-cmd` 写失败的错误文案点明"provider 未读取输入即退出"，
+  避免现场只看到裸 broken pipe。
+- **Human 门禁 NDCG 判据不具统计意义**：原用 `1e-9` 严格非劣比较，
+  而每层样本 `n≈13`、A/B 的 bootstrap 95% CI 常大幅重叠
+  （paraphrase A=[0.691,0.845] vs B=[0.695,0.851]），0.006 的差异是抽样噪声，
+  却让 `Human per-item gate` 恒红。现引入 0.020（约 NDCG@10 的 2%）绝对容差，
+  超过该幅度的下降仍判失败；区分真实排序退化与噪声级抖动。
 
 ## [0.12.2] - 2026-11-10
 
