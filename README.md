@@ -4,6 +4,7 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Rust 1.82+](https://img.shields.io/badge/rust-1.82%2B-orange.svg)](Cargo.toml)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16542/badge)](https://www.bestpractices.dev/projects/16542)
 
 **面向 AI 上下文的本地、确定性证据筛选器。**
 从日志、命令输出、diff 和错误堆栈中，按当前问题逐行保留相关证据，删除低价值噪声。保留内容不重写，运行过程不联网，第三方 crate 依赖为零。
