@@ -20,6 +20,133 @@ struct Usage {
     output: u64,
     round: u64,
     ledger: crate::meter::Ledger,
+    /// 账本落盘文件；`None` = 纯内存（写失败时静默降级，不阻断主链路）。
+    file: Option<String>,
+}
+
+impl Usage {
+    /// 启动态：账本路径取 `SCX_LEDGER_FILE`，否则 `<SCX_MEM_DIR|~/.scx-memory>/ledger.jsonl`。
+    /// 已有文件则恢复快照与轮次，使统计跨进程累积，而不是每次重启清零。
+    fn open() -> Usage {
+        let path = ledger_path();
+        let mut u = Usage::default();
+        if let Ok(ledger) = crate::meter::Ledger::load_jsonl(&path) {
+            u.round = ledger.snaps.len() as u64;
+            u.ledger = ledger;
+        }
+        u.file = Some(path);
+        u
+    }
+
+    /// 记账并落盘（追加一行）。写失败静默：账本是旁路，不能拖垮压缩。
+    fn record(&mut self, snap: crate::meter::Snapshot) {
+        if let Some(path) = self.file.as_deref() {
+            let _ = append(path, &crate::meter::render(&snap));
+        }
+        self.round += 1;
+        self.ledger.push(snap);
+    }
+}
+
+/// 记忆库根目录：`SCX_MEM_DIR` > `~/.scx-memory`。
+fn mem_dir() -> String {
+    if let Ok(d) = std::env::var("SCX_MEM_DIR") {
+        if !d.trim().is_empty() {
+            return d;
+        }
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    if home.is_empty() {
+        ".scx-memory".to_string()
+    } else {
+        format!("{home}/.scx-memory")
+    }
+}
+
+/// 账本文件路径：`SCX_LEDGER_FILE` > `<记忆库根>/ledger.jsonl`。
+fn ledger_path() -> String {
+    if let Ok(p) = std::env::var("SCX_LEDGER_FILE") {
+        if !p.trim().is_empty() {
+            return p;
+        }
+    }
+    format!("{}/ledger.jsonl", mem_dir())
+}
+
+/// 追加一行到账本文件（父目录按需创建）。
+fn append(path: &str, line: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    if let Some(dir) = std::path::Path::new(path).parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    f.write_all(line.as_bytes())?;
+    f.write_all(b"\n")
+}
+
+/// 从原始输入按 1-based 行号取证据行（与 CLI `--store` 同一口径）。
+fn evidence_of(text: &str, lno: &[usize]) -> Vec<String> {
+    if lno.is_empty() {
+        return Vec::new();
+    }
+    let normalized;
+    let text = if text.contains('\r') {
+        normalized = text.replace("\r\n", "\n");
+        normalized.as_str()
+    } else {
+        text
+    };
+    let mut lines: Vec<&str> = text.split('\n').collect();
+    if lines.last().is_some_and(|l| l.is_empty()) {
+        lines.pop();
+    }
+    lno.iter()
+        .map(|&n| {
+            lines
+                .get(n.saturating_sub(1))
+                .copied()
+                .unwrap_or("")
+                .to_string()
+        })
+        .collect()
+}
+
+/// `store: true` 时把压缩结果写入记忆库（与 CLI `--store` 同一摄取入口）。
+/// 失败只回错误字段，不影响压缩结果返回。
+#[cfg(feature = "memory")]
+fn store_case(args: &Json, query: &str, text: &str, outcome: &crate::Outcome) -> String {
+    let root = args
+        .get("mem_dir")
+        .and_then(Json::str)
+        .map(str::to_string)
+        .unwrap_or_else(mem_dir);
+    let stats = crate::memory::Stats {
+        kept: outcome.kept,
+        total: outcome.total,
+        cut: outcome.cut,
+        risk: outcome.risk.to_string(),
+    };
+    let evidence = evidence_of(text, &outcome.numbers);
+    let mut input = crate::memory::Input::new(&root, query, &outcome.text, &stats);
+    input.evidence_lno = &outcome.numbers;
+    input.evidence = &evidence;
+    match crate::memory::save(input) {
+        Ok((_added, id)) => format!("{{\"ok\":true,\"case\":{}}}", crate::json::string(&id)),
+        Err(e) => format!(
+            "{{\"ok\":false,\"error\":{}}}",
+            crate::json::string(&e.to_string())
+        ),
+    }
+}
+
+#[cfg(not(feature = "memory"))]
+fn store_case(_args: &Json, _query: &str, _text: &str, _outcome: &crate::Outcome) -> String {
+    "{\"ok\":false,\"error\":\"memory feature disabled\"}".to_string()
 }
 
 /// 工具定义（tools/list 静态表）：名称、描述、JSON Schema。
@@ -28,8 +155,8 @@ struct Usage {
 const TOOLS: &[(&str, &str, &str)] = &[
     (
         "compress_context",
-        "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1), scoped (bool or 0/1), strict (bool or 0/1), kind (str: static-contract/system-definition/session-message/tool-output/auto)",
-        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"},\"scoped\":{\"type\":\"boolean\"},\"strict\":{\"type\":\"boolean\"},\"kind\":{\"type\":\"string\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\"]}}},\"required\":[\"query\",\"text\"]}",
+        "query-aware extractive compression of a text blob. args: query (str), text (str), optional ratio (0..=1 fraction of optional-content budget) / context / window / max_tokens (num), structure (bool or 0/1), scoped (bool or 0/1), strict (bool or 0/1), kind (str: static-contract/system-definition/session-message/tool-output/auto), store (bool: also persist the result into the local memory bank, same ingest as CLI --store), mem_dir (str: memory root override)",
+        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"},\"ratio\":{\"type\":\"number\"},\"context\":{\"type\":\"number\"},\"window\":{\"type\":\"number\"},\"max_tokens\":{\"type\":\"number\"},\"structure\":{\"type\":\"boolean\"},\"scoped\":{\"type\":\"boolean\"},\"strict\":{\"type\":\"boolean\"},\"kind\":{\"type\":\"string\"},\"store\":{\"type\":\"boolean\"},\"mem_dir\":{\"type\":\"string\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":[\"string\",\"number\"]}}},\"required\":[\"query\",\"text\"]}",
     ),
     (
         "context_snapshot",
@@ -58,13 +185,13 @@ const TOOLS: &[(&str, &str, &str)] = &[
     ),
     (
         "vec",
-        "encode texts to raw vectors (f32 components). args: texts (array of str). provider command read from env SCX_EMBED_VEC; returns one vector per text in order",
-        "{\"type\":\"object\",\"properties\":{\"texts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"texts\"]}",
+        "encode texts to raw vectors (f32 components). args: texts (array of str), optional provider (str: encoder command; default built-in lexical encoder, env SCX_EMBED_VEC also honored); returns one vector per text in order",
+        "{\"type\":\"object\",\"properties\":{\"texts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"provider\":{\"type\":\"string\"}},\"required\":[\"texts\"]}",
     ),
     (
         "vec_sim",
-        "cosine similarity of a query against candidate texts (normalized in scx, deterministic). args: query (str), texts (array of str), optional cache (str dir). provider from env SCX_EMBED_VEC",
-        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"texts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"cache\":{\"type\":\"string\"}},\"required\":[\"query\",\"texts\"]}",
+        "cosine similarity of a query against candidate texts (normalized in scx, deterministic). args: query (str), texts (array of str), optional cache (str dir) / provider (str: encoder command; default built-in lexical encoder, env SCX_EMBED_VEC also honored)",
+        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"texts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"cache\":{\"type\":\"string\"},\"provider\":{\"type\":\"string\"}},\"required\":[\"query\",\"texts\"]}",
     ),
 ];
 
@@ -220,6 +347,12 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
     usage.compressed += 1;
     usage.input += text.len() as u64;
     usage.output += outcome.text.len() as u64;
+    usage.record(crate::meter::measure_of(
+        usage.round,
+        cfg.kind,
+        &text,
+        &outcome,
+    ));
     let st = crate::stat::Stat::from_outcome(&outcome);
     let card = st.card(&outcome, &query);
     let json = crate::ops::render(&outcome);
@@ -227,11 +360,20 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
     // JSON 转述、效果卡不可见；合并为一块后任意客户端对话均原样显示效果卡，模型仍可读 JSON。
     // 修复：render 仅输出元数据 JSON，不含压缩正文；把 outcome.text 作为 "text"
     // 字段嵌入 JSON，使 MCP 调用方能拿到压缩产物（契约不变：效果卡在上、机器 JSON 在下）。
+    let stored = if flag(args, "store") {
+        store_case(args, &query, &text, &outcome)
+    } else {
+        "null".to_string()
+    };
     let mut body = json;
     body.pop();
-    body.push_str(",\"text\":\"");
+    body.push_str(",\"kind\":\"");
+    body.push_str(cfg.kind.as_str());
+    body.push_str("\",\"text\":\"");
     body.push_str(&crate::json::escape(&outcome.text));
-    body.push_str("\"}");
+    body.push_str("\",\"stored\":");
+    body.push_str(&stored);
+    body.push('}');
     let combined = format!("{card}\n{body}");
     result(id, &combined)
 }
@@ -312,13 +454,25 @@ fn summary(id: Option<Json>, usage: &Usage) -> String {
     )
 }
 
-/// 向量 provider 命令：MCP 进程无 CLI 入参，从环境变量取（与 `--embed-vec` 同语义）。
-fn provider() -> Result<String, String> {
+/// 内置编码器维度（零配置默认后端；外部 provider 的维度由对方决定）。
+const DIM: usize = 256;
+
+/// 向量后端：显式 `provider` 参数 > 环境变量 `SCX_EMBED_VEC` > 内置词法编码器。
+enum Backend {
+    Cmd(String),
+    Builtin,
+}
+
+/// 后端选择与标签（`builtin` 表示零配置路径，无需模型即可用）。
+fn backend(args: &Json) -> (Backend, &'static str) {
+    if let Some(cmd) = args.get("provider").and_then(Json::str) {
+        if !cmd.trim().is_empty() {
+            return (Backend::Cmd(cmd.to_string()), "cmd");
+        }
+    }
     match std::env::var("SCX_EMBED_VEC") {
-        Ok(cmd) if !cmd.trim().is_empty() => Ok(cmd),
-        _ => Err(
-            "vec provider not configured: set env SCX_EMBED_VEC to an encoder command".to_string(),
-        ),
+        Ok(cmd) if !cmd.trim().is_empty() => (Backend::Cmd(cmd), "cmd"),
+        _ => (Backend::Builtin, "builtin"),
     }
 }
 
@@ -344,11 +498,14 @@ fn vec(id: Option<Json>, args: Option<&Json>) -> String {
         return error(id, -32602, "vec: missing arguments");
     };
     let body: Result<String, String> = (|| {
-        let cmd = provider()?;
         let texts = str_array(a, "texts")?;
         let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
-        let rows = crate::sim::encode(&cmd, &refs)?;
-        Ok(render_vectors(&rows))
+        let (be, tag) = backend(a);
+        let rows = match be {
+            Backend::Cmd(cmd) => crate::sim::encode(&cmd, &refs)?,
+            Backend::Builtin => refs.iter().map(|t| crate::sim::hash(t, DIM)).collect(),
+        };
+        Ok(render_vectors(&rows, tag))
     })();
     match body {
         Ok(text) => result(id, &text),
@@ -362,7 +519,6 @@ fn vec_sim(id: Option<Json>, args: Option<&Json>) -> String {
         return error(id, -32602, "vec_sim: missing arguments");
     };
     let body: Result<String, String> = (|| {
-        let cmd = provider()?;
         let query = a
             .get("query")
             .and_then(Json::str)
@@ -370,9 +526,20 @@ fn vec_sim(id: Option<Json>, args: Option<&Json>) -> String {
             .ok_or("missing query")?;
         let texts = str_array(a, "texts")?;
         let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
-        let cache = a.get("cache").and_then(Json::str).map(std::path::Path::new);
-        let sims = crate::sim::compute_vec(Some(&cmd), cache, query, &refs)?;
-        Ok(render_numbers(&sims))
+        let (be, tag) = backend(a);
+        let sims = match be {
+            Backend::Cmd(cmd) => {
+                let cache = a.get("cache").and_then(Json::str).map(std::path::Path::new);
+                crate::sim::compute_vec(Some(&cmd), cache, query, &refs)?
+            }
+            Backend::Builtin => {
+                let q = crate::sim::hash(query, DIM);
+                refs.iter()
+                    .map(|t| crate::sim::cos(&q, &crate::sim::hash(t, DIM)))
+                    .collect()
+            }
+        };
+        Ok(render_numbers(&sims, tag))
     })();
     match body {
         Ok(text) => result(id, &text),
@@ -381,7 +548,7 @@ fn vec_sim(id: Option<Json>, args: Option<&Json>) -> String {
 }
 
 /// 向量序列化为 JSON 二维数组（f32 原样数值，空格分隔由 JSON 承载）。
-fn render_vectors(rows: &[Vec<f32>]) -> String {
+fn render_vectors(rows: &[Vec<f32>], tag: &str) -> String {
     let inner: Vec<String> = rows
         .iter()
         .map(|v| {
@@ -389,13 +556,13 @@ fn render_vectors(rows: &[Vec<f32>]) -> String {
             format!("[{}]", cells.join(","))
         })
         .collect();
-    format!("{{\"vectors\":[{}]}}", inner.join(","))
+    format!("{{\"backend\":\"{tag}\",\"vectors\":[{}]}}", inner.join(","))
 }
 
 /// 一维数值序列化为 JSON 数组。
-fn render_numbers(values: &[f64]) -> String {
+fn render_numbers(values: &[f64], tag: &str) -> String {
     let cells: Vec<String> = values.iter().map(|x| format!("{x}")).collect();
-    format!("{{\"sim\":[{}]}}", cells.join(","))
+    format!("{{\"backend\":\"{tag}\",\"sim\":[{}]}}", cells.join(","))
 }
 
 /// 计量（不压缩）：计数 token，写入账本并返回快照 JSON。
@@ -414,9 +581,8 @@ fn snapshot(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
         .and_then(|s| s.parse().ok())
         .unwrap_or(crate::ContentType::ToolOutput);
     let snap = crate::meter::snapshot(usage.round, kind, text);
-    usage.round += 1;
     let json = crate::meter::render(&snap);
-    usage.ledger.push(snap);
+    usage.record(snap);
     result(id, &json)
 }
 
@@ -455,7 +621,7 @@ fn ledger_summary(id: Option<Json>, usage: &Usage) -> String {
 pub fn serve() -> i32 {
     let stdin = io::stdin();
     let stdout = io::stdout();
-    let mut usage = Usage::default();
+    let mut usage = Usage::open();
     let mut reader = stdin.lock();
     let mut writer = stdout.lock();
     loop {
@@ -546,6 +712,16 @@ use std::io::{self, BufRead, Write};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compress_json_exposes_kind_and_store() {
+        // 机器 JSON 必须自描述 kind 与 stored，客户端才能判断走了哪个桶、有没有落库。
+        let mut usage = Usage::default();
+        let msg = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"compress_context","arguments":{"query":"q","text":"fn a(b: u8) -> u8 { b }\nfn c(d: u8) -> u8 { d }"}}}"#;
+        let resp = handle(msg, &mut usage).expect("有 id 的请求必须回复");
+        assert!(resp.contains("\\\"kind\\\":\\\"tool-output\\\""), "缺少 kind: {resp}");
+        assert!(resp.contains("\\\"stored\\\":null"), "缺少 stored: {resp}");
+    }
 
     #[test]
     fn docs_list_every_advertised_tool() {

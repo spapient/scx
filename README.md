@@ -124,9 +124,18 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | scx mcp
 ```
 
-`serverInfo.name` 为 `scx`，工具为 `compress_context` / `context_snapshot` /
+`serverInfo.name` 为 `scx {version}`，工具为 `compress_context` / `context_snapshot` /
 `context_diff` / `ledger_summary` / `connect_account` / `usage_summary` /
-`vec` / `vec_sim`（向量编码与余弦，provider 由环境变量 `SCX_EMBED_VEC` 提供）。
+`vec` / `vec_sim`。
+
+跨进程账本与零配置向量：
+
+- 账本文件 `SCX_LEDGER_FILE` > `<记忆库根>/ledger.jsonl`；记忆库根 `SCX_MEM_DIR` > `~/.scx-memory`。
+  每次 `compress_context` / `context_snapshot` 追加一行，进程重启后 `ledger_summary` 仍能读回历史。
+- `compress_context` 传 `store:true` 把结果写入记忆库（与 CLI `--store` 同一入口），`mem_dir` 可覆盖根目录；
+  机器 JSON 自带 `kind` 与 `stored` 字段。
+- `vec` / `vec_sim` 默认走内置零依赖词法编码器（256 维、确定性、无模型即可用），传 `provider`
+  或设置 `SCX_EMBED_VEC` 可接入外部模型编码器；`vec_sim` 的 `cache` 目录会持久化候选向量。
 
 ### 作为 Codex 技能安装
 

@@ -119,6 +119,59 @@ fn sanitize(s: &str) -> String {
     }
 }
 
+/// 内置词法编码器：词 + 字符 n-gram 的确定性哈希投影（零依赖、无模型、跨平台一致）。
+///
+/// 未配置外部 provider 时由 MCP 层直接调用，使 `vec`/`vec_sim` 在无模型环境下
+/// 也有真实可用的向量与余弦；语义精度由外部模型 provider 提供，本函数只保证
+/// 功能可用、结果确定、分量已 L2 归一化。
+pub fn hash(text: &str, dim: usize) -> Vec<f32> {
+    let n = dim.max(8);
+    let mut v = vec![0.0f64; n];
+    let mut add = |feat: &str, w: f64| {
+        let h = sha256(feat.as_bytes());
+        let idx = u32::from_le_bytes([h[0], h[1], h[2], h[3]]) as usize % n;
+        let sign = if h[4] & 1 == 0 { 1.0 } else { -1.0 };
+        v[idx] += sign * w;
+    };
+    let lower = text.to_lowercase();
+    let mut seen = 0usize;
+    for word in lower.split(|c: char| !c.is_alphanumeric() && c != '_') {
+        if word.is_empty() {
+            continue;
+        }
+        add(&format!("w:{word}"), 1.0);
+        let cs: Vec<char> = word.chars().collect();
+        for c in &cs {
+            add(&format!("c:{c}"), 0.5);
+            seen += 1;
+        }
+        for pair in cs.windows(2) {
+            add(&format!("b:{}{}", pair[0], pair[1]), 0.7);
+        }
+        for tri in cs.windows(3) {
+            add(&format!("t:{}{}{}", tri[0], tri[1], tri[2]), 0.4);
+        }
+    }
+    if seen == 0 {
+        add("s:empty", 1.0);
+    }
+    let norm = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if norm > 0.0 {
+        for x in &mut v {
+            *x /= norm;
+        }
+    }
+    v.into_iter().map(|x| x as f32).collect()
+}
+
+/// 两向量的余弦相似度（各自归一化后点积；维度不等返回 0，防御异常 provider）。
+pub fn cos(a: &[f32], b: &[f32]) -> f64 {
+    if a.is_empty() || a.len() != b.len() {
+        return 0.0;
+    }
+    dot(&normalize(a), &normalize(b))
+}
+
 /// 向量后端：`query` 与每个候选文本的余弦相似度（scx 内归一化 + 点积，f64 确定性）。
 ///
 /// `cmd: None` → 全 0。`cache: Some(dir)` 时启用候选向量持久化：text 向量按
@@ -148,13 +201,8 @@ pub fn compute_vec(
         None => None,
     };
 
-    // query 向量：每次在线编码（query 与候选不同，不可缓存）。
-    let qv = spawn_vec(program, query, &[])?
-        .into_iter()
-        .next()
-        .ok_or("--embed-vec: provider returned no query vector")?;
-
-    // 候选向量：先读缓存，未命中者批量编码一次并写回。
+    // 候选向量：先读缓存；未命中者与 query 合并为一次批编码。
+    // 每次调用只起一个 provider 进程（一次模型加载），旧实现起两次。
     let mut tv: Vec<Vec<f32>> = Vec::with_capacity(texts.len());
     let mut miss: Vec<(usize, String, &str)> = Vec::new();
     for (i, t) in texts.iter().enumerate() {
@@ -168,23 +216,25 @@ pub fn compute_vec(
             }
         }
     }
-    if !miss.is_empty() {
-        let miss_texts: Vec<&str> = miss.iter().map(|(_, _, t)| *t).collect();
-        let out = spawn_vec(program, query, &miss_texts)?;
-        if out.len() != 1 + miss.len() {
-            return Err(format!(
-                "--embed-vec: provider returned {} vectors for {} texts",
-                out.len() - 1,
-                miss.len()
-            ));
-        }
-        for (j, (i, key, _)) in miss.iter().enumerate() {
-            let v = &out[j + 1];
-            tv[*i] = v.clone();
-            if let Some(d) = &dir {
-                write_vec(&cache_path(d, key), v)
-                    .map_err(|e| format!("--embed-cache write: {e}"))?;
-            }
+    let miss_texts: Vec<&str> = miss.iter().map(|(_, _, t)| *t).collect();
+    let out = spawn_vec(program, query, &miss_texts)?;
+    let qv = out
+        .first()
+        .cloned()
+        .ok_or("--embed-vec: provider returned no query vector")?;
+    if out.len() != 1 + miss.len() {
+        return Err(format!(
+            "--embed-vec: provider returned {} vectors for {} texts",
+            out.len() - 1,
+            miss.len()
+        ));
+    }
+    for (j, (i, key, _)) in miss.iter().enumerate() {
+        let v = &out[j + 1];
+        tv[*i] = v.clone();
+        if let Some(d) = &dir {
+            write_vec(&cache_path(d, key), v)
+                .map_err(|e| format!("--embed-cache write: {e}"))?;
         }
     }
 
@@ -330,6 +380,25 @@ fn dot(a: &[f64], b: &[f64]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hash_is_dim_normalized_and_deterministic() {
+        let a = hash("Rust 内存安全 bounds check", 256);
+        assert_eq!(a.len(), 256);
+        let norm: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-3, "norm={norm}");
+        assert_eq!(a, hash("Rust 内存安全 bounds check", 256), "同文本须同向量");
+        assert_ne!(a, hash("unrelated weather report", 256));
+    }
+
+    #[test]
+    fn cos_of_identical_is_one_and_unrelated_is_low() {
+        let a = hash("Rust 内存安全", 64);
+        assert!((cos(&a, &a) - 1.0).abs() < 1e-5);
+        let b = hash("今天天气很好", 64);
+        assert!(cos(&a, &b) < 0.8, "无关文本余弦过高: {}", cos(&a, &b));
+        assert_eq!(cos(&a, &[1.0]), 0.0, "维度不等须返回 0");
+    }
 
     #[test]
     fn no_backend_returns_zeros() {

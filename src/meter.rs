@@ -355,6 +355,50 @@ pub fn snapshot(round: u64, kind: ContentType, text: &str) -> Snapshot {
     }
 }
 
+/// 已压缩结果的快照：从内核 [`crate::Outcome`] 直接组装（不重复压缩）。
+/// `tokens_in/out` 沿用 `terms::estimate` 同一口径；id 额外并入轮次，
+/// 保证同一输入被重复压缩时各自留痕、互不覆盖。
+pub fn measure_of(round: u64, kind: ContentType, text: &str, out: &crate::Outcome) -> Snapshot {
+    let tin = out.tokens_in;
+    // passthrough / fail-open 时内核不保证 `tokens` 有值：回落到输出文本实测，
+    // 否则账本会把"未压缩"记成 100% 节省。
+    // 文本未变化时直接复用 `tin`，避免整数与小数口径差把 ratio 记成 >1。
+    let tout = if out.text == text {
+        tin
+    } else if out.tokens > 0.0 {
+        out.tokens
+    } else {
+        count(&out.text) as f64
+    };
+    let payload_sha256 = crate::hash::hex(&crate::hash::sha256(text.as_bytes()));
+    let config_fingerprint = crate::hash::hex(&crate::hash::sha256(crate::VERSION.as_bytes()));
+    let id = snap_id(&payload_sha256, &format!("{config_fingerprint}{round}"));
+    let (hi_in, hi_out) = if high_value(kind) {
+        (tin, tout)
+    } else {
+        (0.0, 0.0)
+    };
+    Snapshot {
+        id,
+        round,
+        payload_sha256,
+        config_fingerprint,
+        buckets: vec![BucketStat {
+            kind,
+            tokens_in: tin,
+            tokens_out: tout,
+            kept: out.kept,
+            total: out.total,
+            mode: out.mode,
+        }],
+        tokens_in: tin,
+        tokens_out: tout,
+        quotas: Vec::new(),
+        metrics: compute_metrics(tin, tout, hi_in, hi_out),
+        budget: compute_budget(None, tout),
+    }
+}
+
 fn compute_metrics(tin: f64, tout: f64, hi_in: f64, hi_out: f64) -> Metrics {
     let hi_share_in = div_or(hi_in, tin, 0.0);
     let hi_share_out = div_or(hi_out, tout, 0.0);
@@ -445,8 +489,7 @@ pub fn render(s: &Snapshot) -> String {
 
 /// 账本聚合：按 kind（字典序）汇总 token 与调用次数，输出确定性 JSON。
 /// `est_cost_saved_usd` 默认 null（价格表未配置时绝不编造成本）。
-pub fn summarize(ledger: &Ledger) -> String {
-    let by_kind = aggregate(ledger);
+pub fn summarize(ledger: &Ledger) -> String {    let by_kind = aggregate(ledger);
     let tin: f64 = ledger.snaps.iter().map(|s| s.tokens_in).sum();
     let tout: f64 = ledger.snaps.iter().map(|s| s.tokens_out).sum();
     let mut out = String::from("{\"by_kind\":[");
@@ -458,7 +501,7 @@ pub fn summarize(ledger: &Ledger) -> String {
     }
     out.push_str("],\"total\":{");
     out.push_str(&render_total(tin, tout, ledger.snaps.len()));
-    out.push('}');
+    out.push_str("}}");
     out
 }
 
@@ -727,6 +770,18 @@ pub fn run_ledger(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn summarize_emits_valid_json_with_root_braces() {
+        // 回归：根级 `}` 曾漏写，导致客户端 json 解析直接失败。
+        let mut ledger = Ledger::default();
+        ledger.push(snapshot(0, crate::ContentType::ToolOutput, "alpha beta"));
+        ledger.push(snapshot(1, crate::ContentType::ToolOutput, "alpha"));
+        let out = summarize(&ledger);
+        let v = crate::json::parse(&out).expect("summarize 必须是合法 JSON");
+        assert!(v.get("by_kind").is_some(), "缺 by_kind: {out}");
+        assert!(v.get("total").is_some(), "缺 total: {out}");
+    }
 
     fn text() -> String {
         let mut lines: Vec<String> = (0..200)

@@ -2843,12 +2843,19 @@ golden 零漂移不受影响：输出逐位一致是算法保证（每行独立�
 - 对拍：CPU(f64) vs GPU(f32) 随机矩阵居中分数最大绝对误差 < 1e-3（9 位精度实测 0），400 行压缩选线与 CPU 完全一致；任何失败非零退出 → Rust 自动回落 CPU。feature-gate 默认关、`SCX_GPU_BIN` 显式启用，发布包仅含源码不含二进制。
 
 **MCP 向量（`src/mcp.rs`）**
-- 静态表新增 `vec`（编码原始向量）与 `vec_sim`（带缓存余弦），provider 经环境变量 `SCX_EMBED_VEC` 提供，未配置时返回清晰错误；同步 README/SKILL.md（`docs_list_every_advertised_tool` 强制）。
+- 静态表新增 `vec`（编码原始向量）与 `vec_sim`（带缓存余弦）：provider 取 `args.provider` > `SCX_EMBED_VEC` > 内置零依赖词法编码器（未配置也可用，返回 `backend` 字段标明来源）；同步 README/SKILL.md（`docs_list_every_advertised_tool` 强制）。
 - 修复缺口②：`ops::embed_sims` 向量路径优先，`compute_vec` 现可喂压缩 `config.sims`，与 embed-cmd 对齐。
 
 **验证与状态**
 - 全量测试：lib 457 过、各集成测试全过；`config/semantic.json` 变更后同步重冻 `config/manifest.json`（`manifest: PASS`）。
 - 最终 release（feature=semantic）三处安装（target / `~/.local/share` / `~/.cargo/bin`）sha256 一致：`5b776081…bab9c3546`。
+
+**MCP 接线修复 + 真实进程门禁（0.12.0）**
+- 账本接线：`Usage::open/record/append` 把每次 `compress_context`/`context_snapshot` 追加到 `SCX_LEDGER_FILE` > `<mem_dir>/ledger.jsonl`，重启后 `ledger_summary` 读回历史（此前纯内存，重启即归零）。
+- 记忆落库：`compress_context` 新增 `store`（同 CLI `--store`）与 `mem_dir`；`evidence_lno`/`evidence` 成对下发，修复 `length mismatch`。
+- 向量：新增 `sim::hash`（词+字/双字/三字 sha256 投影、L2 归一化）与 `sim::cos`，`Backend::{Cmd,Builtin}` 优先级 `args.provider` > `SCX_EMBED_VEC` > 内置；`compute_vec` 合并为单次批编码（起 1 个 provider 进程，缓存命中只编码 query）。
+- 记账口径：`summarize` 漏根 `}` 导致返回坏 JSON；`measure_of` 在 fail-open/passthrough 下按 `count` 回落使 ratio 记成 1.0005；均已修复并加回归单测。
+- 门禁：`tests/mcp_suite.py` 拉起真实 stdio 进程，6 面 41 检查（协议/压缩/账本/向量/压力并发/退出码），零 mock；`tests/vec_stub.py` 为行协议桩 provider。
 
 | 阶段 | 状态 | 门禁 |
 |---|---|---|

@@ -29,7 +29,7 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 - `--risk-gate`（默认开）：风险审计为 HIGH 时额外保护失败级错误行与事故标记行（统计行 `guarded=1`）。
 - `--scoped 1`（默认关）：HIGH 风险守卫只保护证据邻域内的错误/标记行，远处无关错误行照常裁剪；大日志上可显著提高压减率。
 - `--json` / `--stat` / `--no-stats`：统计输出形态（`--json` 含 dropped 区间明细与 max_tokens/tok_est 字段）。
-- `scx mcp`：进入 MCP stdio server 模式（initialize/tools/list/tools/call；`serverInfo.name=scx`，工具 `compress_context`/`context_snapshot`/`context_diff`/`ledger_summary`/`connect_account`/`usage_summary`/`vec`/`vec_sim`；后两者的向量 provider 由环境变量 `SCX_EMBED_VEC` 提供）——供 Claude/Codex/Cursor 以子进程拉起。
+- `scx mcp`：进入 MCP stdio server 模式（initialize/tools/list/tools/call；`serverInfo.name="scx {version}"`，工具 `compress_context`/`context_snapshot`/`context_diff`/`ledger_summary`/`connect_account`/`usage_summary`/`vec`/`vec_sim`）。账本跨进程：`SCX_LEDGER_FILE` > `<记忆库根>/ledger.jsonl`（记忆库根 `SCX_MEM_DIR` > `~/.scx-memory`），每次压缩/快照追加一行，重启不清零。`compress_context` 支持 `store:true` 落库（与 CLI `--store` 同一入口，`mem_dir` 可覆盖根）且机器 JSON 自带 `kind`；`vec`/`vec_sim` 默认用内置零依赖词法编码器（256 维、确定性、无模型即可用），传 `provider` 或设 `SCX_EMBED_VEC` 切换到外部编码器——供 Claude/Codex/Cursor/豆包以子进程拉起。
 - `scx setup [--claude|--codex|--cursor] [--project-cursor]`：一键注册 MCP 配置到三种 agent（注册名统一小写 `scx`；幂等、写前备份 `<path>.scx.bak`、写后 tools/list 自检；Claude/Codex 优先官方 CLI、兜底写配置文件）。
 
 约束：单次输入上限 64 MiB（多文件合计）；未提供 `--query` 时必须至少一个非空 `--force`；小输入（<40 行且 <400 token 估算）自动 passthrough。
