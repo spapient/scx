@@ -239,6 +239,8 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
+    /// Unix：目录去掉写权限后 `create_new` 失败，旧值必须原样保留。
+    #[cfg(unix)]
     #[test]
     fn atomic_failure_preserves_previous_value() {
         let root = root("atomic_fail");
@@ -258,6 +260,30 @@ mod tests {
         fs::set_permissions(&dir, perms).unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(), "old");
         // 故障恢复后同一路径可继续原子写。
+        atomic(&p, b"new").unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "new");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// Windows：目标文件被打开期间不允许替换，天然可注入一次 rename 失败。
+    ///
+    /// 目录的只读属性在 Windows 上并不阻止在其中创建文件，因此不能沿用
+    /// Unix 的权限注入方式（那样 `atomic` 会成功，测试反而失真）。
+    #[cfg(windows)]
+    #[test]
+    fn atomic_failure_preserves_previous_value() {
+        let root = root("atomic_fail");
+        let dir = Path::new(&root).join("locked");
+        fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("value.txt");
+        fs::write(&p, b"old").unwrap();
+        // 持有句柄：Windows 的 MoveFileEx 无法替换被占用目标。
+        let guard = fs::File::open(&p).unwrap();
+        let err = atomic(&p, b"new").unwrap_err();
+        drop(guard);
+        // 错误种类按平台可能有差异，这里只要求"必须失败且旧值不变"。
+        let _ = err.kind();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "old");
         atomic(&p, b"new").unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(), "new");
         let _ = fs::remove_dir_all(&root);

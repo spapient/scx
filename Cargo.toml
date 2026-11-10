@@ -30,6 +30,8 @@ include = [
     "config/fidelity-thresholds.json",
     "config/pipeline.json",
     "config/semantic.json",
+    "config/semantic-pw.json",
+    "config/gate.json",
     "config/evaluation.json",
 ]
 
