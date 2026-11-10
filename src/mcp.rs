@@ -90,6 +90,7 @@ fn append(path: &str, line: &str) -> std::io::Result<()> {
 }
 
 /// 从原始输入按 1-based 行号取证据行（与 CLI `--store` 同一口径）。
+#[cfg(feature = "memory")]
 fn evidence_of(text: &str, lno: &[usize]) -> Vec<String> {
     if lno.is_empty() {
         return Vec::new();
@@ -343,6 +344,9 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
     let mut cfg = crate::Config::default();
     apply(&mut cfg, args);
     apply_kind(&mut cfg, args, &text);
+    // 未显式指定权重时默认加载随仓语义模型，与 CLI 同口径（feature=semantic）。
+    #[cfg(feature = "semantic")]
+    cfg.ensure_semantic();
     let outcome = crate::compress(&text, &query, &cfg);
     usage.compressed += 1;
     usage.input += text.len() as u64;
@@ -556,7 +560,10 @@ fn render_vectors(rows: &[Vec<f32>], tag: &str) -> String {
             format!("[{}]", cells.join(","))
         })
         .collect();
-    format!("{{\"backend\":\"{tag}\",\"vectors\":[{}]}}", inner.join(","))
+    format!(
+        "{{\"backend\":\"{tag}\",\"vectors\":[{}]}}",
+        inner.join(",")
+    )
 }
 
 /// 一维数值序列化为 JSON 数组。
@@ -719,8 +726,36 @@ mod tests {
         let mut usage = Usage::default();
         let msg = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"compress_context","arguments":{"query":"q","text":"fn a(b: u8) -> u8 { b }\nfn c(d: u8) -> u8 { d }"}}}"#;
         let resp = handle(msg, &mut usage).expect("有 id 的请求必须回复");
-        assert!(resp.contains("\\\"kind\\\":\\\"tool-output\\\""), "缺少 kind: {resp}");
+        assert!(
+            resp.contains("\\\"kind\\\":\\\"tool-output\\\""),
+            "缺少 kind: {resp}"
+        );
         assert!(resp.contains("\\\"stored\\\":null"), "缺少 stored: {resp}");
+    }
+
+    #[test]
+    fn vec_without_provider_uses_builtin_encoder() {
+        // 无 SCX_EMBED_VEC / provider 时不得报错，须回落内置词法编码器。
+        let mut usage = Usage::default();
+        let msg = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"vec","arguments":{"texts":["Rust 内存安全","Rust 内存安全"]}}}"#;
+        let resp = handle(msg, &mut usage).expect("vec 须回复");
+        assert!(
+            resp.contains("\\\"backend\\\":\\\"builtin\\\""),
+            "未走内置后端: {resp}"
+        );
+        assert!(resp.contains("\\\"vectors\\\""), "缺少向量: {resp}");
+    }
+
+    #[test]
+    fn vec_sim_without_provider_returns_finite_cosines() {
+        let mut usage = Usage::default();
+        let msg = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"vec_sim","arguments":{"query":"Rust 内存安全","texts":["Rust 内存安全","无关天气"]}}}"#;
+        let resp = handle(msg, &mut usage).expect("vec_sim 须回复");
+        assert!(
+            resp.contains("\\\"backend\\\":\\\"builtin\\\""),
+            "未走内置后端: {resp}"
+        );
+        assert!(resp.contains("\\\"sim\\\""), "缺少分数: {resp}");
     }
 
     #[test]

@@ -411,6 +411,19 @@ impl Config {
     pub const MIN_WINDOW: i64 = 1;
     pub const MAX_WINDOW: i64 = 8;
 
+    /// 未显式指定权重时自动加载随仓默认语义模型（CLI 与 MCP 同口径）。
+    ///
+    /// 仅在 `semantic` 为 `None` 时生效，显式 `--semantic` 不被覆盖；
+    /// 加载失败保持 `None`（压缩仍可运行，不引入硬失败），属最佳努力装配。
+    #[cfg(feature = "semantic")]
+    pub fn ensure_semantic(&mut self) {
+        if self.semantic.is_none() {
+            if let Ok(w) = semantic::Weights::load_default() {
+                self.semantic = Some(w);
+            }
+        }
+    }
+
     /// 返回一份边界已规范化的配置。
     ///
     /// CLI / policy / pipeline 已经做过严格校验；但 `Config` 的字段是公开的，
@@ -850,3 +863,26 @@ pub(crate) fn prefix(out: &mut String, n: usize) {
 #[cfg(test)]
 #[path = "../tests/mod.rs"]
 mod testsupport;
+
+#[cfg(all(test, feature = "semantic"))]
+mod default_semantic_tests {
+    use super::Config;
+
+    #[test]
+    fn ensure_semantic_loads_default_when_absent() {
+        let mut cfg = Config::default();
+        assert!(cfg.semantic.is_none(), "默认 Config 不应预载权重");
+        cfg.ensure_semantic();
+        assert!(cfg.semantic.is_some(), "未显式指定时须自动加载默认权重");
+    }
+
+    #[test]
+    fn ensure_semantic_does_not_replace_explicit() {
+        let mut cfg = Config {
+            semantic: Some(crate::semantic::Weights::load_default().unwrap()),
+            ..Config::default()
+        };
+        cfg.ensure_semantic();
+        assert!(cfg.semantic.is_some(), "显式权重不得被覆盖");
+    }
+}

@@ -16,6 +16,7 @@ fn run(args: &[&str]) -> Output {
     Command::new(bin()).args(args).output().unwrap()
 }
 
+#[cfg(feature = "memory")]
 fn run_owned(args: &[String]) -> Output {
     Command::new(bin()).args(args).output().unwrap()
 }
@@ -156,6 +157,7 @@ fn invalid_option_and_no_kept_fallback_are_explicit() {
     let _ = fs::remove_file(long_path);
 }
 
+#[cfg(feature = "memory")]
 #[test]
 fn recall_only_does_not_create_a_missing_memory_directory() {
     let root = std::env::temp_dir().join(format!(
@@ -177,6 +179,7 @@ fn recall_only_does_not_create_a_missing_memory_directory() {
     assert!(!root.exists(), "--recall-only must stay read-only");
 }
 
+#[cfg(feature = "memory")]
 #[test]
 fn recall_failure_is_reported_without_failing_compression() {
     let root = std::env::temp_dir().join(format!(
@@ -210,6 +213,7 @@ fn recall_failure_is_reported_without_failing_compression() {
     let _ = fs::remove_file(input);
 }
 
+#[cfg(feature = "memory")]
 #[test]
 fn recall_cache_never_truncates_a_larger_k() {
     let root = std::env::temp_dir().join(format!(
@@ -277,6 +281,7 @@ fn recall_cache_never_truncates_a_larger_k() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[cfg(feature = "memory")]
 #[test]
 fn corrupt_recall_snapshot_does_not_fail_compression() {
     let root = std::env::temp_dir().join(format!(
@@ -351,6 +356,7 @@ fn corrupt_recall_snapshot_does_not_fail_compression() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[cfg(feature = "memory")]
 #[test]
 fn oversize_fix_file_is_rejected_before_storage() {
     let root = std::env::temp_dir().join(format!(
@@ -386,6 +392,7 @@ fn oversize_fix_file_is_rejected_before_storage() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[cfg(feature = "memory")]
 #[test]
 fn storage_quota_rejects_before_writing_a_case() {
     let root = std::env::temp_dir().join(format!(
@@ -422,6 +429,7 @@ fn storage_quota_rejects_before_writing_a_case() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[cfg(feature = "memory")]
 #[test]
 fn concurrent_store_processes_keep_all_cases_and_meta_updates() {
     let root = std::env::temp_dir().join(format!(

@@ -2935,3 +2935,82 @@ golden 零漂移不受影响：输出逐位一致是算法保证（每行独立�
 
 
 
+
+## 部署缺陷修复 + 默认语义/向量落地（0.12.0）
+
+- 根因：所有安装副本（~/.cargo、~/.local、Homebrew Cellar、target/release）均未带
+  `--features semantic` 编译，`--semantic` 报 unknown option，真实运行时语义模型加载不了；
+  此前仅用 `cargo run --features semantic` 验证临时构建，未核验安装二进制，属假通过。
+- 默认自动加载：新增 `semantic::DEFAULT_PATH`（编译期绝对路径）与 `Weights::load_default`，
+  `Config::ensure_semantic` 在 semantic=None 时最佳努力加载随仓 scx-sem-3；CLI（args::finish）
+  与 MCP（compress_context）同口径调用，显式 `--semantic` 不被覆盖。
+- 向量默认内部路径：MCP vec/vec_sim 后端选择 显式 provider > SCX_EMBED_VEC > 内置
+  `sim::hash`/`sim::cos`，无 provider 不报错，返回 backend=builtin。
+- 验证：带特性 422 项 lib 测试全过（含新增默认加载/内置向量回归），fmt 干净，
+  clippy 两构建零告警；真实 MCP stdin 端到端 vec/vec_sim 均 builtin；安装二进制已同步。
+- 遗留（既有、非本次引入）：集成测试 amber_failopen_keeps_all_evidence 因 risk_seed
+  风险回退返回 SieveRiskFallback 而非 FailOpenZeroSignal，无/带 semantic 均失败，待专项校准。
+
+## 既有缺陷专项校准（amber_failopen + golden_gate，0.12.0）
+
+- 根因厘清：fail-open 仅在「零词面命中且全文无任何错误/警告标记」时成立（plan 既定
+  契约）；原测试误用含 ERROR/WARN 的 LOG_01，且小输入会先落 passthrough:small。
+- 测试修正：amber_failopen 改用 45 行（越 SMALL_LINES）无错误标记的中性切片，断言
+  FailOpenZeroSignal 且原样返回；新增 amber_risk_fallback 钉住含错误标记 → sieve:risk-fallback
+  且证据全保留的另一面。
+- golden 双基线架构：semantic 特性会确定性改变保留决策（如 structure_fence 多保 1 行），
+  单基线无法跨特性强等。assets.json 增 `semantic_expected`，golden 经 `baseline_key()`
+  按 cfg 选择；update_baselines 按特性写入对应集合，两基线各 37 case。
+- 全绿：默认构建与 --features semantic 构建全量测试均 0 失败（lib 390/422 等），
+  fmt 干净，两构建 clippy 零告警；release 带 semantic 重编并同步两处安装副本。
+
+## 独立全矩阵审计（多专家复核，0.12.0）
+
+- 构建矩阵（RUSTFLAGS="-D warnings"）：默认、--features semantic、--no-default-features、
+  --features eval 四种配置全部通过；cargo fmt --check 干净；clippy --all-targets 两构建零告警。
+- 审计新修两处：① mcp::evidence_of 补 `#[cfg(feature="memory")]`，修 no-default-features
+  下 dead-code 构建失败；② 测试改用结构体更新语法，消除 field_reassign_with_default。
+- 红线复核：Cargo.lock 仅 scx 一个包（零第三方 crate）；实际 unsafe 块/fn 为 0（17 处
+  字样均为 forbid 属性/文档）；无 llm.u 引用；同输入两次运行逐字节一致（确定性）。
+- 全量测试两构建均 0 失败；release 带 semantic 重编并同步两处安装副本，真实 MCP
+  vec/vec_sim 端到端均 builtin 不报错。
+
+## 全维度测试战役（0.12.0，真机证据）
+
+- 质量门：audit（生产裸 unwrap=0）、a2（保真断言全过）、selftest PASS；manifest
+  --expect PASS（8 files frozen）。
+- 模型：xval K=5 linear 0.9475 / piece 0.9950（mean delta +0.0475）；gold linear
+  AP 0.6579 / piece AP 0.6682（机器参考，非人工）。
+- 性能基准 bench perf：corpus_p1m 72.9–74.8 MB/s、p10m 142.6–144.3 MB/s、p30m
+  152.2–161.5 MB/s（3 次取 min）。
+- 压缩基准 bench compress：50k 行中位 3364 us（gate <50ms PASS），各路径
+  2457–4908 us。
+- 消融 bench ablate：3 语料 × 6 配置 18 行，与冻结基准一致（零漂移）。
+- 记忆基准 bench memory：10k case 召回 p50=69 us（gate <5ms PASS），top1 sim=1。
+- 功能：MCP 多工具调用 0 错误，vec/vec_sim builtin；回归 cargo test 两构建 0 失败。
+- 端到端拉通：压缩→--store 落库→--recall 取回存储 case，隔离目录验证通过。
+
+## 0.12.1 发布修复（语义默认 + 权重内嵌，2026-11-10）
+
+- 背景：今晨已发布的 0.12.0 为旧构建（default 仅 memory、不含语义，无内嵌权重），
+  crates.io 版本不可覆盖。
+- 修复：① Cargo.toml default 改为 ["memory","semantic"]；② semantic.rs 新增
+  EMBEDDED_JSON = include_str!("../config/semantic.json")，load_default 解析内嵌
+  内容（不再依赖构建机源码路径）；新增自包含/同步测试；③ 集成测试补 memory 特性门。
+- 四构建 -D warnings 全过，clippy --all-targets 三构建零告警，cargo test 默认与
+  no-default-features 均 0 失败；cargo package --locked 干净通过。
+- 已 cargo publish 0.12.1（crates.io max_stable=0.12.1）；cargo install scx --force
+  真机安装到 ~/.cargo/bin，默认即带语义（evidence=6、terms=3）、复制到中性目录自包含
+  运行、MCP vec_sim 返回 builtin。
+- 待办：npm / Homebrew / GitHub 三渠道凭证失效（gh token invalid、无 npm 登录、
+  无系统 node），需用户重新认证后再发；旧 0.12.0 是否 yank 待用户决定。
+
+## 0.12.2 效果卡修复（统计信息缺失/失真，2026-11-10）
+
+- 缺陷：stat::sieve_family 漏判 Mode::SieveRiskFallback，导致风险回退压缩时效果卡
+  走透传分支，误报“一字未动/原样保留”，与真实输出（19/363、94.1% cut）矛盾。
+- 修复：sieve_family 补 SieveRiskFallback；新增回归测试；tests/cli.rs 的 run_owned
+  随 memory 特性门控，消除无特性 dead-code。
+- 全矩阵：默认/no-default 测试 0 失败，clippy 三构建零告警；cargo package 干净。
+- 已发布 crates.io 0.12.2（网络重试后成功），cargo install --force 真机安装，
+  效果卡与机器统计行逐口径一致（19 行、847 字符、-94.1%、风险低）。

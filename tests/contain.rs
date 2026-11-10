@@ -71,17 +71,39 @@ fn red_guard_evidence_never_lost_under_hard_cap() {
 #[test]
 fn amber_failopen_keeps_all_evidence() {
     // 黄：无信号切片 fail-open 原样返回 → 证据自然全保留（只删不改不变量）。
+    // 口径：行数须越过小输入直通阈值（policy::SMALL_LINES），且零词面命中、
+    // 全文不含任何错误/警告标记（见 diff::flags 词表），才落到 FailOpenZeroSignal；
+    // 含错误标记的切片走 sieve:risk-fallback（见 LOG_01）。
+    let neutral: String = (0..45)
+        .map(|k| format!("INFO app job-{k} completed 200 GET /api/v1/items in {k}ms\n"))
+        .collect();
     let no_sig = Slice {
         id: "failopen-probe",
         query: "zzzznonexistentword",
-        full_text: LOG_01.full_text,
-        evidence: LOG_01.evidence,
+        full_text: Box::leak(neutral.into_boxed_str()),
+        evidence: &[],
     };
     let r = run(&no_sig, &cfg());
     assert_eq!(r.mode, Mode::FailOpenZeroSignal);
     assert_eq!(r.evidence_kept, r.evidence_total);
     assert_eq!(r.kept, r.total, "failopen 原样保留");
     assert_eq!(r.input, r.output);
+}
+
+#[test]
+fn amber_risk_fallback_seeds_error_markers_without_query_hit() {
+    // 同口径另一面：零词面命中但全文含错误标记 → 不 fail-open，错误行提升为种子，
+    // 模式记为 sieve:risk-fallback 且证据全保留（plan 文档既定契约）。
+    let no_hit = Slice {
+        id: "risk-fallback-probe",
+        query: "zzzznonexistentword",
+        full_text: LOG_01.full_text,
+        evidence: LOG_01.evidence,
+    };
+    let r = run(&no_hit, &cfg());
+    assert_eq!(r.mode, Mode::SieveRiskFallback);
+    assert_eq!(r.evidence_kept, r.evidence_total);
+    assert!(r.cut > 0.0, "风险回退应压缩非错误填充行");
 }
 
 #[test]

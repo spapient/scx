@@ -3,6 +3,7 @@
 //! 目的不是断言“全部成功”，而是证明**无死锁**：所有进程必须在有限时间内结束
 //! （锁超时上限 10s），且终态库仍可被 `--stats` / `--recall` 读取。
 //! 与 `src/memory/lock.rs` 的线程级单测互补（跨进程 + 锁序 + rebuild 竞争）。
+#![cfg(feature = "memory")]
 
 use std::fs;
 use std::path::PathBuf;

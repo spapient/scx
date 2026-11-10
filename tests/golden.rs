@@ -42,14 +42,25 @@ struct Expected {
 }
 
 #[cfg(feature = "memory")]
+fn baseline_key() -> &'static str {
+    // 语义特性会确定性改变保留决策，须与默认构建分别冻结，避免单基线跨特性强等。
+    if cfg!(feature = "semantic") {
+        "semantic_expected"
+    } else {
+        "expected"
+    }
+}
+
+#[cfg(feature = "memory")]
 fn expected() -> &'static HashMap<String, Expected> {
     static CASES: OnceLock<HashMap<String, Expected>> = OnceLock::new();
     CASES.get_or_init(|| {
         let value = scx::json::parse(ASSETS).expect("test assets JSON 非法");
-        let Some(scx::json::Json::Obj(entries)) =
-            value.get("golden").and_then(|value| value.get("expected"))
+        let Some(scx::json::Json::Obj(entries)) = value
+            .get("golden")
+            .and_then(|value| value.get(baseline_key()))
         else {
-            panic!("golden.expected 必须是对象");
+            panic!("golden.{} 必须是对象", baseline_key())
         };
         entries
             .iter()
@@ -665,12 +676,11 @@ fn update_baselines() {
     let scx::json::Json::Obj(entries_obj) = golden else {
         panic!("golden 必须是对象");
     };
-    let expected = entries_obj
-        .iter_mut()
-        .find(|(key, _)| key == "expected")
-        .map(|(_, value)| value)
-        .expect("golden.expected");
-    *expected = scx::json::Json::Obj(entries);
+    let key = baseline_key();
+    match entries_obj.iter_mut().find(|(name, _)| name == key) {
+        Some((_, value)) => *value = scx::json::Json::Obj(entries),
+        None => entries_obj.push((key.to_string(), scx::json::Json::Obj(entries))),
+    }
     std::fs::write(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("config/tests/assets.json"),
         render_assets(&assets),

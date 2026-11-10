@@ -1,6 +1,6 @@
 [package]
 name = "scx"
-version = "0.12.0"
+version = "0.12.2"
 edition = "2021"
 rust-version = "1.82"
 default-run = "scx"
@@ -36,9 +36,9 @@ include = [
 [dependencies]
 
 [features]
-default = ["memory"]
-# 可选语义增强打分器（手写 std 点积/sigmoid + 自描述权重文件，零第三方 crate；
-# 关闭时模块 cfg 排除，默认路径与 v0.4.1 逐字节一致）。
+default = ["memory", "semantic"]
+# 语义增强打分器（手写 std 点积/sigmoid + 自描述权重，编译期 include_str! 内嵌，
+# 零第三方 crate；现为默认启用，保证任意安装方式都真正带语义）。
 semantic = []
 # 本地记忆库/证据存储（默认启用；`--no-default-features` 构建最小内核，
 # 压缩路径不依赖 memory，脱敏降级为无 Secret 模式）。

@@ -489,7 +489,8 @@ pub fn render(s: &Snapshot) -> String {
 
 /// 账本聚合：按 kind（字典序）汇总 token 与调用次数，输出确定性 JSON。
 /// `est_cost_saved_usd` 默认 null（价格表未配置时绝不编造成本）。
-pub fn summarize(ledger: &Ledger) -> String {    let by_kind = aggregate(ledger);
+pub fn summarize(ledger: &Ledger) -> String {
+    let by_kind = aggregate(ledger);
     let tin: f64 = ledger.snaps.iter().map(|s| s.tokens_in).sum();
     let tout: f64 = ledger.snaps.iter().map(|s| s.tokens_out).sum();
     let mut out = String::from("{\"by_kind\":[");

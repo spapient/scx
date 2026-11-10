@@ -173,7 +173,7 @@ Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技
 scx --version                                  # 已将入口加入 PATH 时
 ```
 
-三条命令都应输出版本号（当前为 `scx 0.12.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
+三条命令都应输出版本号（当前为 `scx 0.12.2`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
 
 只对实际安装过的入口执行上述检查；未安装的路径报“不存在”不代表工具本身异常。
 
@@ -649,7 +649,7 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。
 - **输入有上限**：CLI 单次输入总计 64 MiB；`scx wrap`/`scx hook` 对子进程或 stdin 输出同样应用该上限（`wrap` 超限报错，`hook` 透传）；更大的输入需要分段。
 - **外部相似度后端依赖平台 shell**：Unix 使用 `sh -c`，Windows 使用 `cmd /C` 执行 `--embed-cmd` 指定的命令。
-- **pre-1.0 状态**：当前版本 `0.12.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
+- **pre-1.0 状态**：当前版本 `0.12.2`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
 
 ## 贡献与安全
 

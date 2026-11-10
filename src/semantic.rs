@@ -295,7 +295,19 @@ fn verify_v3(
     Ok(())
 }
 
+/// 随仓默认权重路径（编译期绝对路径，显式 `--semantic` 参考用）。
+pub const DEFAULT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/config/semantic.json");
+
+/// 编译期内嵌的默认权重内容：随二进制自包含分发，任何安装路径都能加载，
+/// 不依赖构建机源码目录，保证预编译产物在用户机器上真正可用。
+pub const EMBEDDED_JSON: &str = include_str!("../config/semantic.json");
+
 impl Weights {
+    /// 解析内嵌默认权重；schema/特征/权重/哈希任一不符即返回错误。
+    pub fn load_default() -> Result<Weights, String> {
+        Self::parse_default(EMBEDDED_JSON)
+    }
+
     /// 加载并校验权重文件；schema/特征/权重/哈希任一不符即拒绝。
     pub fn load(path: &str) -> Result<Weights, String> {
         let v = read(path)?;
@@ -305,6 +317,20 @@ impl Weights {
             "scx-sem-3" => load_v3(path, &v),
             s => Err(format!(
                 "{path}: unsupported schema \"{s}\" (want \"scx-sem-1/2/3\")"
+            )),
+        }
+    }
+
+    /// 解析内嵌权重内容（不读文件）；路径仅用于错误标注。
+    fn parse_default(txt: &str) -> Result<Weights, String> {
+        let v = crate::json::parse(txt).map_err(|e| format!("embedded: {e}"))?;
+        let label = "embedded:scx-sem";
+        match schema(label, &v)?.as_str() {
+            "scx-sem-1" => load_v1(label, &v),
+            "scx-sem-2" => load_v2(label, &v),
+            "scx-sem-3" => load_v3(label, &v),
+            s => Err(format!(
+                "{label}: unsupported schema \"{s}\" (want \"scx-sem-1/2/3\")"
             )),
         }
     }
@@ -884,6 +910,23 @@ mod tests {
         assert_eq!(
             hex(&sha256(b"abc")),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn embedded_weights_are_self_contained_and_in_sync() {
+        // 内嵌内容必须能独立解析，不依赖任何外部文件路径。
+        let w = Weights::load_default().expect("内嵌默认权重必须可加载");
+        assert_eq!(w.schema, 3, "内嵌默认应为 scx-sem-3");
+        // 内嵌内容与随仓文件逐字节一致，防止两者漂移。
+        let on_disk = fs::read_to_string(DEFAULT_PATH).expect("随仓权重文件可读");
+        assert_eq!(
+            EMBEDDED_JSON, on_disk,
+            "内嵌权重须与 config/semantic.json 一致"
+        );
+        assert_eq!(
+            hex(&sha256(EMBEDDED_JSON.as_bytes())),
+            "966a13dc43e159355671f728e7d62c98c27e5f3c5247d63c6833f0102f28c6f7"
         );
     }
 

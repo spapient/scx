@@ -2595,6 +2595,9 @@ pub(crate) fn finish(s: ParseState) -> Opts {
         s.recall
     };
     let mut config = s.config;
+    // 未显式 --semantic 时默认加载随仓权重（feature=semantic；MCP 同口径）。
+    #[cfg(feature = "semantic")]
+    config.ensure_semantic();
     // 仅 CLI 显式 `--max-tokens` 覆盖（优先级 CLI > 文件 > DEFAULT）；
     // 未显式时保留 `--policy-file` 写入的值，避免 None 覆盖文件设置。
     if s.seen.contains("--max-tokens") {

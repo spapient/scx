@@ -32,7 +32,10 @@ pub(crate) fn sep(n: u64) -> String {
 
 /// 发生筛选的模式族。
 fn sieve_family(m: Mode) -> bool {
-    matches!(m, Mode::Sieve | Mode::OverflowEvidence | Mode::OverflowFill)
+    matches!(
+        m,
+        Mode::Sieve | Mode::SieveRiskFallback | Mode::OverflowEvidence | Mode::OverflowFill
+    )
 }
 
 /// 模式对应的稳定原因码（机器字段，不随 UI 文案变化）。
@@ -336,5 +339,13 @@ mod tests {
         assert_eq!(token_cut(0.0, 999.0), 0.0);
         assert!((token_cut(100.0, 50.0) - 50.0).abs() < 1e-9);
         assert!((token_cut(200.0, 180.0) - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn risk_fallback_renders_sieve_stats_not_passthrough() {
+        // 回归：风险回退仍是 sieve 压缩，效果卡必须显示真实裁剪，不能报“一字未动”。
+        assert!(sieve_family(Mode::SieveRiskFallback));
+        assert!(sieve_family(Mode::Sieve));
+        assert!(!sieve_family(Mode::PassSmall));
     }
 }

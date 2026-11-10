@@ -238,8 +238,7 @@ pub fn compute_vec(
         let v = &out[j + 1];
         tv[*i] = v.clone();
         if let Some(d) = &dir {
-            write_vec(&cache_path(d, key), v)
-                .map_err(|e| format!("--embed-cache write: {e}"))?;
+            write_vec(&cache_path(d, key), v).map_err(|e| format!("--embed-cache write: {e}"))?;
         }
     }
 
