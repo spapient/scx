@@ -32,6 +32,8 @@
   Gauge 实测（150 例，单相关）：paraphrase r@5 **0.583→0.633**、MRR 0.249→0.256，
   semantic MRR **0.908→0.917**，literal 1.000 不变；机械门与 Human 多相关门禁双 PASS，
   MRR hard Δ **+0.0866**（perm p 0.0002）。单次查询开销 +5.1 ms（150 例 4.91s→5.68s）。
+  库规模超过 `fuse_adapt_max_docs`（1024）时自动不融合 —— 融合每查询需读全库正文
+  并算 MinHash，10k 级库会把 recall 打到秒级；守卫后 10k 库 gate 仍 PASS（p50 72 µs）。
 
 ### 修复
 
