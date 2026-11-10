@@ -22,6 +22,16 @@
   验证流程见 `docs/release-signing.md`。
 - 治理与文档：`GOVERNANCE.md`、`CODE_OF_CONDUCT.md`、`docs/architecture.md`、
   `docs/threat-model.md`。
+- **证据自适应融合（EAR, `src/memory/adapt.rs`）**：生产检索管线 `recall::pipeline`
+  此前完全不含 MinHash 语义路（融合能力只挂在离线 `search_fused`），改写类查询
+  因此召回洼地。现按「归一化分数优势」融合两路：
+  `s(i) = (1-w)·score(i)/score(top1) + w·mh(i)/mh(top1)`，`w` 由
+  `fuse_adapt_max_w`（0.5）封顶、`fuse_adapt_min_peak`（0.10）判定是否存在近重复峰，
+  `fuse_adapt_lock` 位头部保持管线原序。救回候选受「同场景桶 + `active`」约束，
+  不越过桶过滤与生命周期过滤。
+  Gauge 实测（150 例，单相关）：paraphrase r@5 **0.583→0.633**、MRR 0.249→0.256，
+  semantic MRR **0.908→0.917**，literal 1.000 不变；机械门与 Human 多相关门禁双 PASS，
+  MRR hard Δ **+0.0866**（perm p 0.0002）。单次查询开销 +5.1 ms（150 例 4.91s→5.68s）。
 
 ### 修复
 
