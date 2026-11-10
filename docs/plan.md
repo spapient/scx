@@ -2856,6 +2856,7 @@ golden 零漂移不受影响：输出逐位一致是算法保证（每行独立�
 - 向量：新增 `sim::hash`（词+字/双字/三字 sha256 投影、L2 归一化）与 `sim::cos`，`Backend::{Cmd,Builtin}` 优先级 `args.provider` > `SCX_EMBED_VEC` > 内置；`compute_vec` 合并为单次批编码（起 1 个 provider 进程，缓存命中只编码 query）。
 - 记账口径：`summarize` 漏根 `}` 导致返回坏 JSON；`measure_of` 在 fail-open/passthrough 下按 `count` 回落使 ratio 记成 1.0005；均已修复并加回归单测。
 - 门禁：`tests/mcp_suite.py` 拉起真实 stdio 进程，6 面 41 检查（协议/压缩/账本/向量/压力并发/退出码），零 mock；`tests/vec_stub.py` 为行协议桩 provider。
+- 跨语言零命中回退：实测「中文问题 + 英文日志」恒为 `failopen:zero-signal`（0% 压缩）。`risk_seed` 在零词面命中且内容含错误标记时把错误行提升为召回种子，模式记为 `sieve:risk-fallback`；同一 cargo 日志 0%→84.5%，`FAILED`/`panicked`/`left: 0.71` 全保留。无错误标记的文本仍按原文返回。
 
 | 阶段 | 状态 | 门禁 |
 |---|---|---|

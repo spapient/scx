@@ -124,6 +124,22 @@ fn sanitize(s: &str) -> String {
 /// 未配置外部 provider 时由 MCP 层直接调用，使 `vec`/`vec_sim` 在无模型环境下
 /// 也有真实可用的向量与余弦；语义精度由外部模型 provider 提供，本函数只保证
 /// 功能可用、结果确定、分量已 L2 归一化。
+/// 单词特征发射：整词 + 单字/双字/三字 n-gram；返回字符数供空文本判定。
+fn add_word(add: &mut impl FnMut(&str, f64), word: &str) -> usize {
+    add(&format!("w:{word}"), 1.0);
+    let cs: Vec<char> = word.chars().collect();
+    for c in &cs {
+        add(&format!("c:{c}"), 0.5);
+    }
+    for pair in cs.windows(2) {
+        add(&format!("b:{}{}", pair[0], pair[1]), 0.7);
+    }
+    for tri in cs.windows(3) {
+        add(&format!("t:{}{}{}", tri[0], tri[1], tri[2]), 0.4);
+    }
+    cs.len()
+}
+
 pub fn hash(text: &str, dim: usize) -> Vec<f32> {
     let n = dim.max(8);
     let mut v = vec![0.0f64; n];
@@ -139,18 +155,7 @@ pub fn hash(text: &str, dim: usize) -> Vec<f32> {
         if word.is_empty() {
             continue;
         }
-        add(&format!("w:{word}"), 1.0);
-        let cs: Vec<char> = word.chars().collect();
-        for c in &cs {
-            add(&format!("c:{c}"), 0.5);
-            seen += 1;
-        }
-        for pair in cs.windows(2) {
-            add(&format!("b:{}{}", pair[0], pair[1]), 0.7);
-        }
-        for tri in cs.windows(3) {
-            add(&format!("t:{}{}{}", tri[0], tri[1], tri[2]), 0.4);
-        }
+        seen += add_word(&mut add, word);
     }
     if seen == 0 {
         add("s:empty", 1.0);

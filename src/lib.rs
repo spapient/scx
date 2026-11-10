@@ -588,6 +588,9 @@ pub enum Mode {
     PassTooManyLines,
     /// 无查询信号 fail-open（零命中且无 `--force` 命中），返回输入原文。
     FailOpenZeroSignal,
+    /// 零词面命中但内容含错误标记（典型：中文问英文日志）：按错误行召回，
+    /// 不再整段直通；`--risk-gate 0` 可关闭。
+    SieveRiskFallback,
     /// 预算过紧未选出任何行，回退原文。
     PassNoKept,
     /// 正常筛选（sieve）。
@@ -608,6 +611,7 @@ impl Mode {
             Mode::PassLongline => "passthrough:longline",
             Mode::PassTooManyLines => "passthrough:too-many-lines",
             Mode::FailOpenZeroSignal => "failopen:zero-signal",
+            Mode::SieveRiskFallback => "sieve:risk-fallback",
             Mode::PassNoKept => "passthrough:no-kept",
             Mode::Sieve => "sieve",
             Mode::OverflowEvidence => "overflow:evidence",

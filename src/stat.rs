@@ -44,6 +44,7 @@ fn reason_code(m: Mode) -> &'static str {
         Mode::PassTooManyLines => "too-many-lines",
         Mode::PassNoKept => "no-kept",
         Mode::FailOpenZeroSignal => "zero-signal",
+        Mode::SieveRiskFallback => "risk-fallback",
         Mode::OverflowEvidence => "overflow-evidence",
         Mode::OverflowFill => "overflow-fill",
     }
@@ -271,6 +272,7 @@ fn title(m: Mode) -> (&'static str, &'static str) {
         Mode::PassTooManyLines => ("行数超限透传", "行数过多，原样保留避免内存放大"),
         Mode::PassNoKept => ("预算过紧回退", "未选出有效行，原文保留"),
         Mode::FailOpenZeroSignal => ("无命中保护", "零丢失"),
+        Mode::SieveRiskFallback => ("风险回退筛选", "问题与内容无词面交集，按错误标记召回"),
         Mode::OverflowEvidence => ("证据优先保底", "超过 token 上限，证据全保留"),
         Mode::OverflowFill => ("上限裁剪", "超上限，保留证据并裁剪可选内容"),
     }

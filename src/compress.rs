@@ -420,6 +420,23 @@ fn analyze(
     }
 }
 
+/// 零词面命中且内容含错误标记时，把错误行提升为召回种子；返回是否启用回退。
+fn risk_seed(analysis: &mut Analysis, total: usize, gate: bool) -> bool {
+    if !gate || !failopen(analysis.seeds.hit_lines, analysis.seeds.force_any) {
+        return false;
+    }
+    for (i, err) in analysis.masks.errs.iter().enumerate() {
+        if *err {
+            analysis.seeds.seed[i] = true;
+        }
+    }
+    if !analysis.seeds.seed.iter().any(|&s| s) {
+        return false;
+    }
+    analysis.seeds_total = (0..total).filter(|&i| analysis.seeds.seed[i]).count();
+    true
+}
+
 /// 排序阶段产物：结构区域、基础分与增强分。
 struct Ranked {
     regions: Region,
@@ -667,6 +684,8 @@ struct AssembleIn<'a> {
     ranked: &'a Ranked,
     selection: &'a Selection,
     chars_a: usize,
+    /// 零命中风险回退：模式记为 `sieve:risk-fallback`，统计卡如实标注。
+    fallback: bool,
 }
 
 fn assemble(input: AssembleIn<'_>, prof: &mut crate::perf::T) -> Outcome {
@@ -679,6 +698,7 @@ fn assemble(input: AssembleIn<'_>, prof: &mut crate::perf::T) -> Outcome {
         ranked,
         selection,
         chars_a,
+        fallback,
     } = input;
     let (out_text, numbers) = render(lines, &selection.keep, cfg, &selection.raw, terms);
     prof.mark("render");
@@ -695,7 +715,11 @@ fn assemble(input: AssembleIn<'_>, prof: &mut crate::perf::T) -> Outcome {
             guarded: selection.guarded,
             regions: ranked.regions.count,
             numbers,
-            mode: selection.overflow.unwrap_or(Mode::Sieve),
+            mode: selection.overflow.unwrap_or(if fallback {
+                Mode::SieveRiskFallback
+            } else {
+                Mode::Sieve
+            }),
             tokens: selection.final_tok,
             dropped: runs(&selection.keep, &analysis.dup, selection.overflow.is_some()),
         },
@@ -752,7 +776,9 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         prof.finish("compress");
         return report.passthrough(text, mode);
     }
-    let analysis = analyze(
+    // 零词面命中但内容含错误标记（中文问英文日志的典型形态）：按错误行召回，
+    // 不再整段直通；风险守卫仍负责证据保全。
+    let mut analysis = analyze(
         &lines,
         &anchor_terms,
         &force_pats,
@@ -761,8 +787,9 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
         cfg,
         &mut prof,
     );
-    // 无信号 fail-open：零命中且无 --force 命中 => 原样保留。
-    if failopen(analysis.seeds.hit_lines, analysis.seeds.force_any) {
+    let fallback = risk_seed(&mut analysis, total, cfg.gate);
+    // 无信号 fail-open：零命中、无 --force 命中且没有可依托的错误行 => 原样保留。
+    if !fallback && failopen(analysis.seeds.hit_lines, analysis.seeds.force_any) {
         prof.finish("compress");
         return report.fail_open(text, analysis.folds, analysis.seeds_total);
     }
@@ -808,6 +835,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             ranked: &ranked,
             selection: &selection,
             chars_a,
+            fallback,
         },
         &mut prof,
     )

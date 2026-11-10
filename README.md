@@ -328,11 +328,14 @@ query + input
 | `passthrough:small` | 输入同时少于 40 行且少于约 400 token，直接返回原文 |
 | `passthrough:longline` | 输入包含超长行（单行 > 10 万字节且 > 10 万字符）无法安全切块，直接返回原文 |
 | `passthrough:no-kept` | 预算或 `--context 0` 下没有可保留行，返回原文 |
-| `failopen:zero-signal` | 查询没有命中，返回原文 |
+| `failopen:zero-signal` | 查询没有命中且内容不含错误标记，返回原文 |
+| `sieve:risk-fallback` | 查询与内容无词面交集（如中文问英文日志）但存在错误标记：按错误行召回，`--risk-gate 0` 可关 |
 | `overflow:evidence` | `--max-tokens` 下限：证据行 + 最小邻域本身已超限，保留全部证据并如实报告 |
 | `overflow:fill` | `--max-tokens` 上限：预算填充后仍超限，按硬上限裁剪并报告 |
 
-查询词与输入存在词面重叠时效果最佳。`scx` 不生成 embedding，也不承诺解决完全无共享词的语义检索问题。
+查询词与输入存在词面重叠时效果最佳。跨语言时（中文问题 + 英文日志/代码）若内容含
+`ERROR`/`FAILED`/`panicked` 等错误标记，按错误行召回（`sieve:risk-fallback`）；否则
+`scx` 不生成 embedding，按原文返回，不承诺解决完全无共享词的语义检索。
 
 ## CLI 参考
 

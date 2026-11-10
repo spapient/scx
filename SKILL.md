@@ -52,7 +52,8 @@ description: 本地查询感知上下文压缩器（Rust，跨平台自举，v0.
 - 只读压缩结果；需要更多细节时提高 `--ratio` 或用 `--force` 重跑，不要为确认把原文再全量读一遍。
 - 筛选结果只删不写；`...` 仅表示省略区间。
 - 已验证修复后必须 `--store 1 --fix "..."` 回写——L1 直答依赖 fix 覆盖；不带 `--fix` 的 warning 不得静默忽略。
-- 查询无命中时按原文处理（`mode=failopen:zero-signal`），不自行改写。
+- 查询无命中时：内容含错误标记则按错误行召回（`mode=sieve:risk-fallback`），
+  否则按原文处理（`mode=failopen:zero-signal`），不自行改写。
 
 ## 构建与来源（自举，零同步）
 Rust 零依赖、离线构建、无平台分支；已复检 macOS arm64 / macOS x86_64 / Linux x86_64。架构：筛选引擎是纯函数库（`scx::compress`，零 I/O），CLI 仅是外壳（`scx::ops` 编排），记忆库独立为 `scx::memory` 模块；MCP server 无条件编译进主二进制（`scx mcp`），可选 feature 仅 `semantic`（手写打分器 + SHA256 权重校验），均不引入第三方 crate；任何程序可直接复用库。详细命令见 README.md。

@@ -372,6 +372,17 @@ def main() -> int:
 
     gate.check("中文压缩保证据", chinese)
 
+    def lang_fallback():
+        rows = ["2026-11-10 INFO req id=%d status=200 took=%dms" % (i, i % 40) for i in range(80)]
+        rows[37] = "2026-11-10 ERROR db timeout conn_id=9f2a retry=3"
+        p = payload(c2.tool("compress_context", {"query": "哪个请求超时了 原因", "text": "\n".join(rows)}))
+        expect(p["mode"].startswith("sieve:risk-fallback"), "零词面命中未回退：%s" % p["mode"])
+        expect(p["cut_pct"] > 50, "回退后仍未压缩：%s" % p["cut_pct"])
+        expect("conn_id=9f2a" in p["text"], "回退丢了 ERROR 行")
+        return "%s cut=%.1f%%" % (p["mode"], p["cut_pct"])
+
+    gate.check("中文问题+英文日志按错误行回退", lang_fallback)
+
     def crlf():
         crlf = code.replace("\n", "\r\n")
         p = payload(c2.tool("compress_context", {"query": "q", "text": crlf, "evidence": [3]}))

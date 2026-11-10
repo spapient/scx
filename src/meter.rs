@@ -718,6 +718,7 @@ fn mode_of(s: &str) -> Option<crate::Mode> {
         "passthrough:longline" => PassLongline,
         "passthrough:too-many-lines" => PassTooManyLines,
         "failopen:zero-signal" => FailOpenZeroSignal,
+        "sieve:risk-fallback" => SieveRiskFallback,
         "passthrough:no-kept" => PassNoKept,
         "sieve" => Sieve,
         "overflow:evidence" => OverflowEvidence,
