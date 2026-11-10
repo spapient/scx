@@ -267,3 +267,60 @@ jobs:
           cd "$tmp"/scx-*
           cargo build --release --locked
           cargo test --locked --workspace --all-features
+
+  security:
+    # 静态安全门禁：在库目标上把 "不得静默 panic / 不得留未实现分支" 钉成硬错误。
+    # indexing_slicing 与 expect_used 因与既有实现风格冲突，暂列为记录项（见
+    # docs/threat-model.md 的已知缺口），不作为阻断项。
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: clippy
+      - name: Forbid unsafe panic paths in library
+        run: >
+          cargo clippy --locked --lib --all-features --
+          -D clippy::unwrap_used -D clippy::panic -D clippy::todo -D clippy::unimplemented
+      - name: Forbid unsafe attribute usage
+        run: >
+          cargo clippy --locked --lib --all-features --
+          -D clippy::undocumented_unsafe_blocks
+      - name: Dependency surface must be empty
+        run: |
+          count=$(grep -c '^\[\[package\]\]' Cargo.lock)
+          if [ "$count" -ne 1 ]; then
+            echo "Cargo.lock 含有 $count 个 package，零依赖约束被破坏"
+            exit 1
+          fi
+
+  coverage:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: llvm-tools-preview
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked --version 0.9.1
+      - name: Enforce line coverage >= 80%
+        run: cargo llvm-cov --locked --workspace --summary-only --fail-under-lines 80
+
+  sbom:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Generate SPDX 2.3 SBOM
+        run: |
+          python3 scripts/sbom.py --lock Cargo.lock --out sbom/scx.spdx.json
+          cat sbom/scx.spdx.json
+          sha256sum sbom/scx.spdx.json
