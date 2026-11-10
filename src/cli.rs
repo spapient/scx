@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 use crate::{compress_bucketed, ContentType};
+use std::io::Read;
 use std::process::Command;
 
 /// 主入口：解析 `--` 分隔的压缩选项与命令，执行后压缩输出。返回进程退出码。
@@ -46,8 +47,8 @@ pub fn wrap_run(args: &[String]) -> i32 {
 
     // 执行命令，合并 stdout+stderr（命令的 stderr 也是排障证据，一并参与筛选）。
     // stdin 必须继承：`echo x | scx wrap -- cat` 的输入要交给被包装命令
-    // （`Command::output()` 会把 stdin 置空，故手动 spawn + wait_with_output）。
-    let child = match Command::new(&cmd[0])
+    // （`Command::output()` 会把 stdin 置空，故手动 spawn + 管道读取）。
+    let mut child = match Command::new(&cmd[0])
         .args(&cmd[1..])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::piped())
@@ -60,15 +61,50 @@ pub fn wrap_run(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let output = match child.wait_with_output() {
-        Ok(o) => o,
-        Err(e) => {
+    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        eprintln!("scx wrap: cannot capture {} output pipes", cmd[0]);
+        return 1;
+    };
+    // 两个管道必须并发读取，否则任一管道写满都会让子进程阻塞；每路先按
+    // 64 MiB 上限读取，合并后再做总上限检查（与 CLI/MCP 输入契约一致）。
+    let limit = crate::input::MAX_INPUT_BYTES;
+    let (out, err) = std::thread::scope(|scope| {
+        let out = scope.spawn(move || read_capped(stdout, limit));
+        let err = scope.spawn(move || read_capped(stderr, limit));
+        (
+            out.join().expect("stdout reader"),
+            err.join().expect("stderr reader"),
+        )
+    });
+    let (out, err) = match (out, err) {
+        (Ok(out), Ok(err)) => (out, err),
+        (Err(e), _) | (_, Err(e)) => {
+            let _ = child.kill();
+            let _ = child.wait();
             eprintln!("scx wrap: cannot read {} output: {e}", cmd[0]);
             return 1;
         }
     };
-    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-    text.push_str(&String::from_utf8_lossy(&output.stderr));
+    if out.len() as u64 + err.len() as u64 > limit {
+        let _ = child.kill();
+        let _ = child.wait();
+        eprintln!(
+            "scx wrap: combined output exceeds the {} MiB limit; split the command output first",
+            limit / (1024 * 1024)
+        );
+        return 1;
+    }
+    let status = match child.wait() {
+        Ok(status) => status,
+        Err(e) => {
+            eprintln!("scx wrap: cannot wait for {}: {e}", cmd[0]);
+            return 1;
+        }
+    };
+    let mut text = String::from_utf8_lossy(&out).into_owned();
+    text.push_str(&String::from_utf8_lossy(&err));
 
     // 压缩（小输入 passthrough、无信号 fail-open 均由内核保证）。
     let outcome = crate::compress(&text, &query, &config);
@@ -78,10 +114,19 @@ pub fn wrap_run(args: &[String]) -> i32 {
     if !outcome.text.is_empty() && !outcome.text.ends_with('\n') {
         let _ = crate::ops::out_text("\n");
     }
-    eprintln!("{}", crate::ops::recall_report(&outcome, &query));
+    let st = crate::stat::Stat::from_outcome(&outcome);
+    eprintln!("{}", st.card(&outcome, &query));
 
     // 退出码沿用被包装命令；信号终止按 shell 惯例映射为 128+信号值。
-    exit_code(output.status)
+    exit_code(status)
+}
+
+/// 读取单个管道至多 `limit + 1` 字节：多出 1 字节用于让调用方检测超限，
+/// 不在超限后继续无界分配。
+fn read_capped<R: Read>(reader: R, limit: u64) -> std::io::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    reader.take(limit.saturating_add(1)).read_to_end(&mut buf)?;
+    Ok(buf)
 }
 
 /// 解析 `--` 前的压缩选项（有限的声明式集合，与 args 表解耦）。
@@ -161,6 +206,16 @@ mod wrap_tests {
         assert!(parse_opts(&["--bogus".to_string()]).is_err());
         assert!(parse_opts(&["--query".to_string()]).is_err());
         assert!(parse_opts(&["--preserve".to_string(), "bogus".to_string()]).is_err());
+    }
+
+    #[test]
+    fn read_capped_reads_at_most_limit_plus_one() {
+        let buf = read_capped(std::io::Cursor::new(b"123456789"), 8).unwrap();
+        assert_eq!(buf, b"123456789");
+        assert!(buf.len() as u64 > 8, "多读 1 字节用于检测超限");
+
+        let buf = read_capped(std::io::Cursor::new(b"12345678"), 8).unwrap();
+        assert_eq!(buf, b"12345678");
     }
 }
 

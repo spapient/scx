@@ -91,6 +91,7 @@ struct RowCtx<'a> {
     forces: &'a [Force],
     words: usize,
     precise: bool,
+    word_boundary: bool,
 }
 
 /// 逐行输出槽：掩码行、错误/标记/守卫/固定行标记。
@@ -100,6 +101,27 @@ struct RowOut<'a> {
     marked: &'a mut [bool],
     guards: &'a mut [bool],
     pinned: &'a mut [bool],
+}
+
+/// 锚词命中：默认子串匹配；开启词边界后只在非 ASCII 字母数字边界处命中。
+fn term_hit(ll: &str, t: &str, word_boundary: bool) -> bool {
+    if !word_boundary {
+        return ll.contains(t);
+    }
+    let mut from = 0;
+    while let Some(at) = ll[from..].find(t) {
+        let start = from + at;
+        let end = start + t.len();
+        let before = ll[..start].chars().next_back();
+        let after = ll[end..].chars().next();
+        if !before.is_some_and(|c| c.is_ascii_alphanumeric())
+            && !after.is_some_and(|c| c.is_ascii_alphanumeric())
+        {
+            return true;
+        }
+        from = end;
+    }
+    false
 }
 
 /// 逐行计算一行的小写掩码与标记（掩码、错误/守卫/标记/固定行）。
@@ -118,7 +140,7 @@ fn mask_row(i: usize, line: &str, ctx: &RowCtx<'_>, low: &mut String, out: &mut 
     });
     let base = i * ctx.words;
     for (k, t) in ctx.terms.iter().enumerate() {
-        if ll.contains(t.as_str()) {
+        if term_hit(ll, t.as_str(), ctx.word_boundary) {
             out.mask[base + k / 64] |= 1u64 << (k % 64);
         }
     }
@@ -131,6 +153,7 @@ pub(crate) fn masks(
     small_tok: f64,
     do_tok: bool,
     precise: bool,
+    word_boundary: bool,
 ) -> Mask {
     let total = lines.len();
     let words = terms.len().div_ceil(64).max(1);
@@ -142,9 +165,13 @@ pub(crate) fn masks(
     // 每行 token 估算表：供填充与记账复用（此前同一批行会被 estimate 2–3 次）。
     // do_tok=false（小输入/针尖档）时为空表，调用方回退现算。
     // 并行分块：行间逐行独立（含 tally），分块写不重叠区间，输出保序零漂移。
-    // 12 线程：在 18 逻辑核上实测优于 6/8/16（masks 与 dedup 同档），
-    // 留出 1/3 核给系统与能效调度；固定线程数保证跨机输出可复现。
-    let n_t = if total >= PAR_MIN { 12 } else { 1 };
+    // 线程数统一走 par::count（available_parallelism，上限 32）；结果由分块
+    // 保序保证与线程数无关，跨机逐字节一致。
+    let n_t = if total >= PAR_MIN {
+        crate::par::count()
+    } else {
+        1
+    };
     let chunk = total.div_ceil(n_t);
     let (tok, total_tok) = if n_t > 1 {
         tally_par(lines, total, small_tok, do_tok, n_t, chunk)
@@ -158,6 +185,7 @@ pub(crate) fn masks(
             forces,
             words,
             precise,
+            word_boundary,
         };
         let mut out = RowOut {
             mask: &mut mask,
@@ -181,6 +209,7 @@ pub(crate) fn masks(
             forces,
             words,
             precise,
+            word_boundary,
         };
         std::thread::scope(|s| {
             let n_p = mask_parts.len().min(errs_parts.len());
@@ -241,9 +270,15 @@ pub(crate) fn masks(
 // 128 位指纹 + 长度下不同归一化串碰撞概率 ~2^-128，确定性不受影响。
 // ---------------------------------------------------------------------------
 
-/// 指纹通道 A 种子（与 `compress::hash::Hasher` 同源），通道 B 独立种子。
-const FINGER_A: u64 = 0x517c_c1b7_2722_0a95;
-const FINGER_B: u64 = 0x9e37_79b9_7f4a_7c15;
+/// 指纹通道 A 种子（与 `hash::Hasher` 共用），通道 B 独立种子。
+pub(super) const SEED_A: u64 = 0x517c_c1b7_2722_0a95;
+pub(super) const SEED_B: u64 = 0x9e37_79b9_7f4a_7c15;
+
+/// 乘法滚动核心单步：rotate-xor-mul。所有同源散列（Hasher/Finger）只此一处。
+#[inline]
+pub(super) fn step(h: u64, seed: u64, word: u64) -> u64 {
+    (h.rotate_left(5) ^ word).wrapping_mul(seed)
+}
 
 /// 滚动双通道指纹：字节级复刻 `hash::Hasher::write` 的 8 字节分块语义。
 #[derive(Clone, Copy)]
@@ -274,8 +309,8 @@ impl Finger {
     #[inline]
     fn flush(&mut self) {
         let w = u64::from_ne_bytes(self.buf);
-        self.a = (self.a.rotate_left(5) ^ w).wrapping_mul(FINGER_A);
-        self.b = (self.b.rotate_left(5) ^ w).wrapping_mul(FINGER_B);
+        self.a = step(self.a, SEED_A, w);
+        self.b = step(self.b, SEED_B, w);
         self.n = 0;
     }
     /// 收尾（含不足 8 字节的剩余，与 `Hasher::write` 补齐语义一致）。
@@ -284,8 +319,8 @@ impl Finger {
             let mut last = [0u8; 8];
             last[..self.n].copy_from_slice(&self.buf[..self.n]);
             let w = u64::from_ne_bytes(last);
-            self.a = (self.a.rotate_left(5) ^ w).wrapping_mul(FINGER_A);
-            self.b = (self.b.rotate_left(5) ^ w).wrapping_mul(FINGER_B);
+            self.a = step(self.a, SEED_A, w);
+            self.b = step(self.b, SEED_B, w);
         }
         (self.a, self.b)
     }
@@ -1224,7 +1259,7 @@ pub(crate) fn entropy_signal(cfg: &Config, lines: &[&str], dup: &[bool], scores:
 }
 
 /// 行信息密度加分 ∈ [0, 1)：字符分布熵归一化 × 重复降权。
-fn ent_bonus(line: &str) -> f64 {
+pub(crate) fn ent_bonus(line: &str) -> f64 {
     let mut cnt = [0u32; 128];
     let mut n = 0usize;
     for &b in line.as_bytes() {
@@ -1404,5 +1439,19 @@ mod tests {
         );
         // 受 boost_cap 约束。
         assert!(boost.iter().all(|v| *v <= tbl.boost_cap));
+    }
+
+    #[test]
+    fn term_hit_respects_word_boundary() {
+        // 默认子串：跨词命中。
+        assert!(term_hit("catbird", "cat", false));
+        // 词边界：跨词不命中，独立词命中。
+        assert!(!term_hit("catbird", "cat", true));
+        assert!(term_hit("cat bird", "cat", true));
+        assert!(term_hit("cat.bird", "cat", true));
+        assert!(term_hit("(cat)", "cat", true));
+        // 行首/行尾边界。
+        assert!(term_hit("cat", "cat", true));
+        assert!(!term_hit("cat1", "cat", true));
     }
 }

@@ -59,9 +59,16 @@ fn feat_index(name: &str) -> Option<usize> {
 pub struct Weights {
     /// 每个权重对应的 canonical 特征下标（v1 为 0..dim 前缀）。
     idx: Vec<usize>,
+    /// 每列线性系数 β0（v1/v2 即全部权重；v3 为逐段线性的线性段系数）。
     w: Vec<f64>,
     /// canonical 特征总数（`feats` 全量长度）。
     pub dim: usize,
+    /// schema 代次：1/2 为纯线性，3 为逐段线性（阈值表）。
+    schema: u8,
+    /// v3 每列铰链阈值 knot（与 idx 对齐；空数组即该列退化为线性）。
+    knots: Vec<Vec<f64>>,
+    /// v3 每列铰链系数（与 knots 逐位对齐，作用于 `max(0, x−knot)`）。
+    hinge: Vec<Vec<f64>>,
 }
 
 fn read(path: &str) -> Result<Json, String> {
@@ -164,6 +171,9 @@ fn load_v1(path: &str, v: &Json) -> Result<Weights, String> {
         idx: (0..d).collect(),
         w: ws,
         dim: d,
+        schema: 1,
+        knots: Vec::new(),
+        hinge: Vec::new(),
     })
 }
 
@@ -180,7 +190,109 @@ fn load_v2(path: &str, v: &Json) -> Result<Weights, String> {
         idx,
         w: ws,
         dim: FEATURE_NAMES.len(),
+        schema: 2,
+        knots: Vec::new(),
+        hinge: Vec::new(),
     })
+}
+
+/// v3 嵌套数值数组：要求内层全为有限数字，否则拒绝（NaN/inf 破坏确定性）。
+fn num_matrix(path: &str, v: &Json, key: &str) -> Result<Vec<Vec<f64>>, String> {
+    let rows = match v.get(key) {
+        Some(Json::Arr(items)) => items,
+        _ => return Err(format!("{path}: missing {key} matrix")),
+    };
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let Json::Arr(cells) = row else {
+            return Err(format!("{path}: {key} expects array of arrays"));
+        };
+        let mut nums = Vec::with_capacity(cells.len());
+        for cell in cells {
+            let n = cell
+                .num()
+                .ok_or_else(|| format!("{path}: {key} non-numeric cell"))?;
+            if !n.is_finite() {
+                return Err(format!("{path}: {key} non-finite cell {n}"));
+            }
+            nums.push(n);
+        }
+        out.push(nums);
+    }
+    Ok(out)
+}
+
+/// v3 逐段线性：每列 `coef[i] = [β0, β1..βK]`，长度须为 `knots[i].len()+1`。
+fn load_v3(path: &str, v: &Json) -> Result<Weights, String> {
+    let names = features(path, v)?;
+    let knots = num_matrix(path, v, "knots")?;
+    let coef = num_matrix(path, v, "coef")?;
+    if knots.len() != names.len() || coef.len() != names.len() {
+        return Err(format!(
+            "{path}: knots/coef rows must match features.len={}",
+            names.len()
+        ));
+    }
+    let mut idx = Vec::with_capacity(names.len());
+    let mut w = Vec::with_capacity(names.len());
+    let mut hinge = Vec::with_capacity(names.len());
+    for (i, name) in names.iter().enumerate() {
+        let k = feat_index(name).ok_or_else(|| format!("{path}: unknown feature \"{name}\""))?;
+        if coef[i].len() != knots[i].len() + 1 {
+            return Err(format!(
+                "{path}: feature \"{name}\" coef.len={} but knots.len={} (want knots+1)",
+                coef[i].len(),
+                knots[i].len()
+            ));
+        }
+        idx.push(k);
+        w.push(coef[i][0]);
+        hinge.push(coef[i][1..].to_vec());
+    }
+    verify_v3(path, v, &names, &knots, &coef)?;
+    Ok(Weights {
+        idx,
+        w,
+        dim: FEATURE_NAMES.len(),
+        schema: 3,
+        knots,
+        hinge,
+    })
+}
+
+/// v3 规范编码：逐列「特征名+\n ‖ β0 大端 ‖ 逐(knot 大端 ‖ 铰链系数大端)」。
+fn encode_v3(names: &[String], knots: &[Vec<f64>], coef: &[Vec<f64>]) -> Vec<u8> {
+    let mut h = Vec::new();
+    for (i, name) in names.iter().enumerate() {
+        h.extend_from_slice(name.as_bytes());
+        h.push(b'\n');
+        h.extend_from_slice(&coef[i][0].to_be_bytes());
+        for (k, kn) in knots[i].iter().enumerate() {
+            h.extend_from_slice(&kn.to_be_bytes());
+            h.extend_from_slice(&coef[i][k + 1].to_be_bytes());
+        }
+    }
+    h
+}
+
+fn verify_v3(
+    path: &str,
+    v: &Json,
+    names: &[String],
+    knots: &[Vec<f64>],
+    coef: &[Vec<f64>],
+) -> Result<(), String> {
+    let want = v
+        .get("sha256")
+        .and_then(Json::str)
+        .ok_or_else(|| format!("{path}: missing sha256"))?;
+    let got = hex(&sha256(&encode_v3(names, knots, coef)));
+    if got != want.to_ascii_lowercase() {
+        return Err(format!(
+            "{path}: sha256 mismatch (file {want}, computed {got})"
+        ));
+    }
+    Ok(())
 }
 
 impl Weights {
@@ -190,8 +302,9 @@ impl Weights {
         match schema(path, &v)?.as_str() {
             "scx-sem-1" => load_v1(path, &v),
             "scx-sem-2" => load_v2(path, &v),
+            "scx-sem-3" => load_v3(path, &v),
             s => Err(format!(
-                "{path}: unsupported schema \"{s}\" (want \"scx-sem-1\" or \"scx-sem-2\")"
+                "{path}: unsupported schema \"{s}\" (want \"scx-sem-1/2/3\")"
             )),
         }
     }
@@ -207,12 +320,27 @@ impl Weights {
         sigmoid(dot)
     }
 
-    /// 原始 logit（w·x，有符号、无界）：命名式投影点积。
+    /// 权重向量（canonical 顺序，与 `feats` 对齐）：供 GPU 矩阵请求携带。
+    pub fn weight(&self) -> &[f64] {
+        &self.w
+    }
+
+    /// 原始 logit（有符号、无界）：命名式投影点积 + v3 逐段线性铰链项。
     pub fn logit_line(&self, line: &str, terms: &[String], i: usize, total: usize) -> f64 {
         let x = feats(line, terms, i, total, self.dim);
         let mut dot = 0.0;
-        for (k, wi) in self.idx.iter().zip(self.w.iter()) {
-            dot += wi * x[*k];
+        for (col, k) in self.idx.iter().enumerate() {
+            let v = x[*k];
+            dot += self.w[col] * v;
+            // v3：铰链基 max(0, v−knot)，逐段线性拟合非线性/饱和效应。
+            if self.schema == 3 {
+                for (kn, hc) in self.knots[col].iter().zip(self.hinge[col].iter()) {
+                    let d = v - *kn;
+                    if d > 0.0 {
+                        dot += *hc * d;
+                    }
+                }
+            }
         }
         dot
     }
@@ -852,6 +980,9 @@ mod tests {
             idx: vec![0, 1],
             w: vec![1.0, 1.0],
             dim: 2,
+            schema: 2,
+            knots: Vec::new(),
+            hinge: Vec::new(),
         };
         let x = vec![1.0, 2.0];
         assert_eq!(w.score(&x), w.score(&x));
@@ -862,6 +993,9 @@ mod tests {
             idx: vec![0],
             w: vec![1e3],
             dim: 1,
+            schema: 2,
+            knots: Vec::new(),
+            hinge: Vec::new(),
         };
         let s_big = big.score(&[1.0]);
         assert!(s_big.is_finite() && (0.0..=1.0).contains(&s_big));
@@ -869,6 +1003,9 @@ mod tests {
             idx: vec![0],
             w: vec![-1e3],
             dim: 1,
+            schema: 2,
+            knots: Vec::new(),
+            hinge: Vec::new(),
         };
         let s_neg = neg.score(&[1.0]);
         assert!(s_neg.is_finite() && (0.0..=1.0).contains(&s_neg));
@@ -881,6 +1018,9 @@ mod tests {
             idx: vec![1],
             w: vec![2.0],
             dim: 16,
+            schema: 2,
+            knots: Vec::new(),
+            hinge: Vec::new(),
         };
         let terms = ["x".to_string()];
         assert!(
@@ -896,6 +1036,9 @@ mod tests {
             idx: vec![15],
             w: vec![-1.0],
             dim: 16,
+            schema: 2,
+            knots: Vec::new(),
+            hinge: Vec::new(),
         };
         let d = down.centered_line("plain filler line", &["q".to_string()], 0, 10);
         assert!(d < 0.0, "负偏置应降权: {d}");
@@ -941,6 +1084,34 @@ mod tests {
             let s = w.score_line(ln, &terms, i, 4);
             assert!((0.0..1.0).contains(&s), "{ln}: score={s}");
         }
+    }
+
+    #[test]
+    fn piecewise_loads_and_hinge_activates() {
+        // 随仓 scx-sem-3 可加载（sha 校验通过），且逐段打分仍在 (0,1)、确定。
+        let w = Weights::load("config/semantic-pw.json").expect("逐段权重可加载");
+        assert_eq!(w.schema, 3);
+        let terms = ["build".to_string(), "error".to_string()];
+        let a = w.score_line("build error failed", &terms, 0, 10);
+        let b = w.score_line("build error failed", &terms, 0, 10);
+        assert_eq!(a, b, "确定性：两次打分逐位一致");
+        assert!((0.0..1.0).contains(&a));
+
+        // 构造单列铰链模型：β0=0，knot=0.5，铰链系数=2 → logit=2·max(0,x−0.5)。
+        let pw = Weights {
+            idx: vec![0],
+            w: vec![0.0],
+            dim: FEATURE_NAMES.len(),
+            schema: 3,
+            knots: vec![vec![0.5]],
+            hinge: vec![vec![2.0]],
+        };
+        // overlap 特征：单 query 命中比例，命中=1.0 → 铰链段 2·(1−0.5)=1。
+        let hit = pw.logit_line("build", &["build".to_string()], 0, 4);
+        assert!((hit - 1.0).abs() < 1e-12, "hinge logit={hit}");
+        // 无命中 overlap=0 → 低于 knot，铰链不激活，logit=0。
+        let miss = pw.logit_line("xxxx", &["build".to_string()], 1, 4);
+        assert!(miss.abs() < 1e-12, "below-knot logit={miss}");
     }
 
     #[test]

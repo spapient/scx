@@ -363,6 +363,15 @@ pub(crate) static FLAGS: &[Flag] = &[
         min: 0,
     },
     Flag {
+        name: "--gate-file",
+        once: true,
+        kind: Kind::Value,
+        what: "gate.json",
+        err_empty: "requires a gate config path",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
         name: "--minhash-weight",
         once: true,
         kind: Kind::F64,
@@ -427,6 +436,15 @@ pub(crate) static FLAGS: &[Flag] = &[
     },
     Flag {
         name: "--auto-anchor",
+        once: true,
+        kind: Kind::Bool01,
+        what: "",
+        err_empty: "",
+        err_zero: "",
+        min: 0,
+    },
+    Flag {
+        name: "--word-boundary",
         once: true,
         kind: Kind::Bool01,
         what: "",
@@ -1394,7 +1412,7 @@ mod tests {
 
 pub fn usage() -> String {
     let mut s = format!(
-        "usage: scx --query \"...\" [--ratio {}] [--budget F] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--sem-weight F] [--sem-gate F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--recall-kind <kind>] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--revise <case-id>] [--retire <case-id> --retire-reason <text>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--fold 0|1] [--entropy 0|1] [--auto-anchor 0|1] [--cluster 0|1] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
+        "usage: scx --query \"...\" [--ratio {}] [--budget F] [--window {}] [--context {}] [--elide 1] [--risk-gate 1] [--scoped 1] [--strict 1] [--lineno 1] [--max-tokens N] [--structure 0|1] [--structure-anchors LIST] [--redact LIST] [--kind TYPE] [--store 1] [--fix \"修复结论\"] [--fix-file <path>] [--policy-file <path>] [--pipeline <path>] [--embed-cmd CMD] [--sim-weight F] [--sem-weight F] [--sem-gate F] [--minhash-weight F] [--recall K] [--recall-only] [--recall-detail] [--recall-kind <kind>] [--rate good|bad <case-id>] [--rebuild] [--gc] [--delete <case-id>] [--revise <case-id>] [--retire <case-id> --retire-reason <text>] [--eval <baseline.json>] [--eval-verbose] [--gate|--gate-human|--gate-items] [--l1-hist] [--stats] [--annotate] [--annotate-raw] [--annotate-out <path>] [--seed N] [--annotate-max N] [--judge <baseline.json>] [--judge-by <name>] [--mem-dir DIR] [--force SUBSTR|re:PATTERN]... [--evidence N|substr]... [--fill-floor F] [--trim 0|1] [--trim-ratio F] [--fold 0|1] [--entropy 0|1] [--auto-anchor 0|1] [--word-boundary 0|1] [--cluster 0|1] [--trim-op-keep 0|1] [--code-keep 0|1] [--num-line-keep 0|1] [--sym-line-keep 0|1] [--list-keep 0|1] [--json] [--stat|--no-stats] [file...]",
         Config::DEFAULT_RATIO,
         Config::DEFAULT_WINDOW,
         Config::DEFAULT_CONTEXT
@@ -1488,7 +1506,8 @@ pub fn usage() -> String {
         "  --entropy 0|1        add model-free info-density signal to scoring (default 0)\n",
     );
     s.push_str(
-        "  --auto-anchor 0|1    auto-add query word-form variants as hit anchors (default 0)\n",
+        "  --auto-anchor 0|1    auto-add query word-form variants as hit anchors (default 0)\n\
+  --word-boundary 0|1  match anchors only at ASCII word boundaries (default 0)\n",
     );
     s.push_str(
         "  --cluster 0|1        cluster-weight dense evidence rows in boost window (default 0)\n",
@@ -1743,6 +1762,9 @@ pub(crate) fn word(
         #[cfg(feature = "semantic")]
         "--sem-backend" => {
             s.config.sem_backend = crate::sem::Backend::parse(&v)?;
+        }
+        "--gate-file" => {
+            s.config.gate_file = Some(v);
         }
         _ => path(s, f, v),
     }
@@ -2210,6 +2232,7 @@ pub(crate) fn either(
         "--fold" => s.config.fold = b,
         "--entropy" => s.config.entropy = b,
         "--auto-anchor" => s.config.auto_anchor = b,
+        "--word-boundary" => s.config.word_boundary = b,
         "--cluster" => s.config.cluster = b,
         "--trim-op-keep" => s.config.trim_op_keep = b,
         "--code-keep" => s.config.code_keep = b,

@@ -1,0 +1,5 @@
+{
+  "schema": "scx-gold-eval-1",
+  "label_provenance": "machine-consensus (not human)",
+  "report": "linear AP=0.6579 | keep 0.35: prec=0.572 recall=0.395 | keep 0.50: prec=0.401 recall=0.395\npiece  AP=0.6682 | keep 0.35: prec=0.572 recall=0.395 | keep 0.50: prec=0.401 recall=0.395\n"
+}

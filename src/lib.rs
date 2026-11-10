@@ -25,6 +25,10 @@ mod compress;
 pub mod contain;
 pub mod diff;
 mod fold;
+/// 可选联合门（`scx-gate-1`，配置化、默认关、sha 绑定）。
+pub mod gate;
+/// 联合门离线蒸馏的生产信号访问器（复用 analyze+rank，训练/服务同源）。
+pub use compress::gate_rows;
 /// 阶段计时器（feature = "perf" 可选诊断；默认零代码）。
 mod perf;
 /// 压缩管线配置（`--pipeline <path>`）：JSON 声明式装配 plan/trim/anchor，
@@ -69,10 +73,14 @@ pub mod sem;
 pub mod hook;
 /// Token 计量与压缩效果审计（P3 治理层：分桶统计/效果指标/预算管控/快照追溯）。
 pub mod meter;
+/// 统一并行度：available_parallelism 与上限的单一口径。
+mod par;
 pub mod redact;
 pub mod regex;
 /// 可插拔相似度后端（`--embed-cmd`；默认无后端，见 `sim::compute`）。
 pub mod sim;
+/// 统一统计层：`scx-stat-1` 机器契约与人读卡片的单一来源。
+mod stat;
 
 pub use compress::{compress, compress_bucketed};
 #[doc(hidden)]
@@ -316,12 +324,17 @@ pub struct Config {
     /// 直接整行保留（独立于预算裁剪的语义锚通道）。默认关 = 空操作，
     /// 与现状逐字节一致。
     pub sem_gate: f64,
+    /// 联合门配置路径（`--gate-file`，默认 None = 关）。加载 `scx-gate-1`
+    /// 后，把语义/簇/锚点/基础分四个 per-operator 信号归一加权，超阈整行
+    /// 保留（替代只看语义单通道的 `--sem-gate`）。默认关 = 空操作，
+    /// 与现状逐字节一致；配置 sha256 绑定，加载失败即报错。
+    pub gate_file: Option<String>,
     /// 语义打分后端（`--sem-backend cpu|gpu`，默认 cpu；feature=semantic
     /// 下生效）。cpu = 确定性并行实现（逐位一致）；gpu = 可选加速通道，
     /// 调用自研内核（`SCX_GPU_BIN`），不可用自动回落 cpu。
     #[cfg(feature = "semantic")]
     pub sem_backend: sem::Backend,
-    /// 语义批量打分工作内存预算上限（`--max-mem`，MB，默认 64）。cpu/gpu
+    /// 语义批量打分工作内存预算上限（`--max-mem`，MB，默认 256）。cpu/gpu
     /// 后端均按此预算分块，控制峰值内存；默认路径（semantic 关）不受影响。
     pub max_mem: usize,
     /// 预计算的「query 与每行」相似度（`--embed-cmd` 时由 `ops` 层填充；
@@ -349,6 +362,10 @@ pub struct Config {
     /// 自动锚（`--auto-anchor 1`，默认 0 = 现状逐字节一致）。query 词形
     /// 变体自动加入命中锚，降低 --evidence 配置负担。
     pub auto_anchor: bool,
+    /// ASCII 词边界命中（`--word-boundary 1`，默认 0 = 现状子串匹配）。
+    /// 开启后锚词只在非字母数字边界处命中，消除短词跨词误召回；非 ASCII
+    /// 锚词不受影响，默认关保证 golden 零漂移。
+    pub word_boundary: bool,
     /// 证据簇密度加权（`--cluster 1`，默认 0 = 现状逐字节一致）。boost
     /// 窗口内证据行聚集处整簇加权，保留完整上下文块。
     pub cluster: bool,
@@ -393,6 +410,125 @@ impl Config {
     pub const DEFAULT_WINDOW: i64 = 2;
     pub const MIN_WINDOW: i64 = 1;
     pub const MAX_WINDOW: i64 = 8;
+
+    /// 返回一份边界已规范化的配置。
+    ///
+    /// CLI / policy / pipeline 已经做过严格校验；但 `Config` 的字段是公开的，
+    /// 直接调用 `compress` 的库用户仍可能传入 NaN、负数或越界值。`compress`
+    /// 在入口统一走本函数，保证内核永远看到有限、可解释的参数；非有限值回退
+    /// 到安全默认值，其余值收敛到文档区间。合法配置逐字段不变。
+    pub fn normalized(&self) -> Config {
+        let mut c = self.clone();
+        c.ratio = bounded(self.ratio, Self::MIN_RATIO, 1.0, Self::DEFAULT_RATIO);
+        c.budget = bounded(self.budget, 0.0, 1.0, 0.0);
+        c.context = bounded_int(self.context, 0, Self::MAX_CONTEXT);
+        c.window = bounded_int(self.window, Self::MIN_WINDOW, Self::MAX_WINDOW);
+        c.fill_floor = bounded(
+            self.fill_floor,
+            0.0,
+            policy::MAX_FILL_FLOOR,
+            policy::DEFAULT_FILL_FLOOR,
+        );
+        c.trim_ratio = bounded(
+            self.trim_ratio,
+            policy::MIN_TRIM_RATIO,
+            policy::MAX_TRIM_RATIO,
+            policy::DEFAULT_TRIM_RATIO,
+        );
+        c.sim_weight = weight(c.sim_weight);
+        c.sem_weight = weight(c.sem_weight);
+        c.sem_gate = non_negative(c.sem_gate);
+        c.max_mem = c.max_mem.max(1);
+        c
+    }
+
+    /// 严格校验配置；非法值返回带字段名的错误，不做静默修正。
+    ///
+    /// `compress` 本身保持无 `Result` 的兼容签名，因此入口使用
+    /// [`Config::normalized`] 做安全收敛；需要 fail-loud 的调用方可在构造后
+    /// 先调用本函数。
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.ratio.is_finite() || !(Self::MIN_RATIO..=1.0).contains(&self.ratio) {
+            return Err(format!(
+                "ratio must be a finite number in {}..=1.0",
+                Self::MIN_RATIO
+            ));
+        }
+        if !self.budget.is_finite() || self.budget < 0.0 || self.budget > 1.0 {
+            return Err("budget must be a finite number in 0..=1 (0 = off)".to_string());
+        }
+        if !(0..=Self::MAX_CONTEXT).contains(&self.context) {
+            return Err(format!("context must be in 0..={}", Self::MAX_CONTEXT));
+        }
+        if !(0..=Self::MAX_WINDOW).contains(&self.window) {
+            return Err(format!("window must be in 0..={}", Self::MAX_WINDOW));
+        }
+        if !self.fill_floor.is_finite()
+            || !(0.0..=policy::MAX_FILL_FLOOR).contains(&self.fill_floor)
+        {
+            return Err(format!(
+                "fill_floor must be a finite number in 0..={}",
+                policy::MAX_FILL_FLOOR
+            ));
+        }
+        if !self.trim_ratio.is_finite()
+            || !(policy::MIN_TRIM_RATIO..=policy::MAX_TRIM_RATIO).contains(&self.trim_ratio)
+        {
+            return Err(format!(
+                "trim_ratio must be a finite number in {}..={}",
+                policy::MIN_TRIM_RATIO,
+                policy::MAX_TRIM_RATIO
+            ));
+        }
+        for (name, value) in [
+            ("sim_weight", self.sim_weight),
+            ("sem_weight", self.sem_weight),
+            ("sem_gate", self.sem_gate),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(format!("{name} must be a finite number >= 0"));
+            }
+        }
+        if self.max_mem == 0 {
+            return Err("max_mem must be >= 1".to_string());
+        }
+        if let Some(path) = &self.gate_file {
+            gate::Gate::load(path)?;
+        }
+        Ok(())
+    }
+}
+
+/// 权重边界：非有限或负数回退默认 1.0；0 是合法的“关闭”值。
+fn weight(value: f64) -> f64 {
+    if value.is_finite() && value >= 0.0 {
+        value
+    } else {
+        1.0
+    }
+}
+
+/// 非有限值回退默认值，其余值收敛到闭区间。
+fn bounded(value: f64, min: f64, max: f64, fallback: f64) -> f64 {
+    if value.is_finite() {
+        value.clamp(min, max)
+    } else {
+        fallback
+    }
+}
+
+/// 整数配置的闭区间收敛（窗口 0 与 CLI 一致归一化为 1）。
+fn bounded_int(value: i64, min: i64, max: i64) -> i64 {
+    value.clamp(min, max)
+}
+
+/// 非负阈值：NaN/负值回退 0，避免语义门控静默失效或放大。
+fn non_negative(value: f64) -> f64 {
+    if value.is_finite() && value >= 0.0 {
+        value
+    } else {
+        0.0
+    }
 }
 
 impl Default for Config {
@@ -418,6 +554,7 @@ impl Default for Config {
             sim_weight: 1.0,
             sem_weight: 1.0,
             sem_gate: 0.0,
+            gate_file: None,
             sims: None,
             evidence: Vec::new(),
             structure_anchors: Vec::new(),
@@ -427,6 +564,7 @@ impl Default for Config {
             fold: policy::DEFAULT_FOLD,
             entropy: policy::DEFAULT_ENTROPY,
             auto_anchor: policy::DEFAULT_AUTO_ANCHOR,
+            word_boundary: policy::DEFAULT_WORD_BOUNDARY,
             cluster: policy::DEFAULT_CLUSTER,
             trim_ratio: policy::DEFAULT_TRIM_RATIO,
             trim_op_keep: policy::DEFAULT_TRIM_OP_KEEP,
@@ -573,6 +711,12 @@ pub struct Outcome {
     pub terms: usize,
     pub forced: usize,
     pub mode: Mode,
+    /// 保留行是否可能被重写（`--trim` / `--fold`）。
+    ///
+    /// `false` 表示默认的逐字保留契约成立；`true` 表示输出来自筛选后的
+    /// 行内裁剪或跨行折叠，不能把保留行当作原文逐字拷贝。passthrough /
+    /// fail-open / no-kept 返回原文时恒为 `false`。
+    pub rewritten: bool,
     /// 生效的 `--max-tokens` 上限（`None` = 未启用）。
     pub limit: Option<usize>,
     /// 输出文本的 token 估算（`terms::estimate` 口径）；passthrough/fail-open 不保证。

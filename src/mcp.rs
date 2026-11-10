@@ -56,6 +56,16 @@ const TOOLS: &[(&str, &str, &str)] = &[
         "process-lifetime counts: compressed calls, chars in/out",
         "{\"type\":\"object\",\"properties\":{}}",
     ),
+    (
+        "vec",
+        "encode texts to raw vectors (f32 components). args: texts (array of str). provider command read from env SCX_EMBED_VEC; returns one vector per text in order",
+        "{\"type\":\"object\",\"properties\":{\"texts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"texts\"]}",
+    ),
+    (
+        "vec_sim",
+        "cosine similarity of a query against candidate texts (normalized in scx, deterministic). args: query (str), texts (array of str), optional cache (str dir). provider from env SCX_EMBED_VEC",
+        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"},\"texts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"cache\":{\"type\":\"string\"}},\"required\":[\"query\",\"texts\"]}",
+    ),
 ];
 
 /// 单条消息的响应体（`None` = 无响应，如 notifications/initialized）。
@@ -135,6 +145,8 @@ fn call(id: Option<Json>, msg: &Json, usage: &mut Usage) -> Option<String> {
         "ledger_summary" => ledger_summary(id, usage),
         "connect_account" => account(id),
         "usage_summary" => summary(id, usage),
+        "vec" => vec(id, args),
+        "vec_sim" => vec_sim(id, args),
         _ => {
             // 无 id 即 notification：按 JSON-RPC 2.0 不得回复。
             id.as_ref()?;
@@ -208,7 +220,8 @@ fn compress(id: Option<Json>, args: Option<&Json>, usage: &mut Usage) -> String 
     usage.compressed += 1;
     usage.input += text.len() as u64;
     usage.output += outcome.text.len() as u64;
-    let card = crate::ops::recall_report(&outcome, &query);
+    let st = crate::stat::Stat::from_outcome(&outcome);
+    let card = st.card(&outcome, &query);
     let json = crate::ops::render(&outcome);
     // v0.6.6：单块 text（效果卡在上、机器 JSON 在下）。实测豆包对多 content 只渲染
     // JSON 转述、效果卡不可见；合并为一块后任意客户端对话均原样显示效果卡，模型仍可读 JSON。
@@ -241,6 +254,7 @@ fn apply(cfg: &mut crate::Config, args: &Json) {
     cfg.structure = flag(args, "structure");
     cfg.scoped = flag(args, "scoped");
     cfg.strict = flag(args, "strict");
+    cfg.word_boundary = flag(args, "word_boundary");
     evidence(cfg, args);
 }
 
@@ -296,6 +310,92 @@ fn summary(id: Option<Json>, usage: &Usage) -> String {
             usage.compressed, usage.input, usage.output
         ),
     )
+}
+
+/// 向量 provider 命令：MCP 进程无 CLI 入参，从环境变量取（与 `--embed-vec` 同语义）。
+fn provider() -> Result<String, String> {
+    match std::env::var("SCX_EMBED_VEC") {
+        Ok(cmd) if !cmd.trim().is_empty() => Ok(cmd),
+        _ => Err(
+            "vec provider not configured: set env SCX_EMBED_VEC to an encoder command".to_string(),
+        ),
+    }
+}
+
+/// 取字符串数组参数；非字符串元素跳过，缺失或为空返回错误。
+fn str_array(v: &Json, key: &str) -> Result<Vec<String>, String> {
+    let arr = match v.get(key) {
+        Some(Json::Arr(items)) => items
+            .iter()
+            .filter_map(|it| it.str().map(str::to_string))
+            .collect::<Vec<_>>(),
+        _ => Vec::new(),
+    };
+    if arr.is_empty() {
+        Err(format!("{key}: expected a non-empty array of strings"))
+    } else {
+        Ok(arr)
+    }
+}
+
+/// `vec`：编码文本为原始向量，按输入顺序返回（JSON 数组的数组）。
+fn vec(id: Option<Json>, args: Option<&Json>) -> String {
+    let Some(a) = args else {
+        return error(id, -32602, "vec: missing arguments");
+    };
+    let body: Result<String, String> = (|| {
+        let cmd = provider()?;
+        let texts = str_array(a, "texts")?;
+        let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+        let rows = crate::sim::encode(&cmd, &refs)?;
+        Ok(render_vectors(&rows))
+    })();
+    match body {
+        Ok(text) => result(id, &text),
+        Err(e) => error(id, -32602, &e),
+    }
+}
+
+/// `vec_sim`：query 与候选的余弦相似度，可选缓存目录。
+fn vec_sim(id: Option<Json>, args: Option<&Json>) -> String {
+    let Some(a) = args else {
+        return error(id, -32602, "vec_sim: missing arguments");
+    };
+    let body: Result<String, String> = (|| {
+        let cmd = provider()?;
+        let query = a
+            .get("query")
+            .and_then(Json::str)
+            .filter(|s| !s.is_empty())
+            .ok_or("missing query")?;
+        let texts = str_array(a, "texts")?;
+        let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+        let cache = a.get("cache").and_then(Json::str).map(std::path::Path::new);
+        let sims = crate::sim::compute_vec(Some(&cmd), cache, query, &refs)?;
+        Ok(render_numbers(&sims))
+    })();
+    match body {
+        Ok(text) => result(id, &text),
+        Err(e) => error(id, -32602, &e),
+    }
+}
+
+/// 向量序列化为 JSON 二维数组（f32 原样数值，空格分隔由 JSON 承载）。
+fn render_vectors(rows: &[Vec<f32>]) -> String {
+    let inner: Vec<String> = rows
+        .iter()
+        .map(|v| {
+            let cells: Vec<String> = v.iter().map(|x| format!("{x}")).collect();
+            format!("[{}]", cells.join(","))
+        })
+        .collect();
+    format!("{{\"vectors\":[{}]}}", inner.join(","))
+}
+
+/// 一维数值序列化为 JSON 数组。
+fn render_numbers(values: &[f64]) -> String {
+    let cells: Vec<String> = values.iter().map(|x| format!("{x}")).collect();
+    format!("{{\"sim\":[{}]}}", cells.join(","))
 }
 
 /// 计量（不压缩）：计数 token，写入账本并返回快照 JSON。
@@ -446,6 +546,18 @@ use std::io::{self, BufRead, Write};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn docs_list_every_advertised_tool() {
+        // tools/list 是公开契约；README/SKILL 的工具清单必须覆盖静态表，
+        // 防止新增工具后文档停留在旧的三项列表。
+        let readme = include_str!("../README.md");
+        let skill = include_str!("../SKILL.md");
+        for (name, _, _) in TOOLS {
+            assert!(readme.contains(name), "README 缺少 MCP 工具 {name}");
+            assert!(skill.contains(name), "SKILL.md 缺少 MCP 工具 {name}");
+        }
+    }
 
     #[test]
     fn notification_with_unknown_method_gets_no_reply() {

@@ -520,10 +520,14 @@ fn stats(r: &Outcome) -> String {
     // 实际序列化响应大小（P12.6，建议 4）：render() 的 UTF-8 字节数——
     // MCP/集成层消费的正是该 JSON 载荷，stat 报真实字节而非字符估算。
     let ser_b = render(r).len();
-    let base = format!(
+    let mut base = format!(
         "compressed: kept={}/{} lines chars={}->{} ({:.1}% cut) dup={} seeds={} evidence={} risk={} guarded={} regions={} window={} terms={} forced={} mode={} ser_b={}",
         r.kept, r.total, r.input, r.output, r.cut, r.dup, r.seeds, r.evidence, r.risk, r.guarded, r.regions, r.window, r.terms, r.forced, r.mode, ser_b
     );
+    // 重写模式显式标记：默认逐字路径保持原统计行不变（golden 零漂移）。
+    if r.rewritten {
+        base.push_str(" rewritten=1");
+    }
     // 硬上限溢出时追加可解析的记账字段；正常模式统计行格式保持不变（golden 零漂移）。
     match r.mode {
         Mode::OverflowEvidence | Mode::OverflowFill => format!(
@@ -555,8 +559,12 @@ pub fn render(r: &Outcome) -> String {
         ",\"tokens_in\":{:.0},\"tokens_out\":{:.0},\"token_cut_pct\":{:.1}",
         r.tokens_in,
         tokens_out,
-        token_cut(r.tokens_in, tokens_out)
+        crate::stat::token_cut(r.tokens_in, tokens_out)
     ));
+    // 仅重写模式附加，默认 JSON 保持向后兼容（golden 零漂移）。
+    if r.rewritten {
+        out.push_str(",\"rewritten\":true");
+    }
     // 删除区间（每段一条，1-based 闭区间 + 原因）；默认 stdout 统计行不输出。
     out.push_str(&format!(
         ",\"dropped\":[{}]",
@@ -654,198 +662,6 @@ fn redact_input(
     } else {
         crate::redact::redact(&text, kinds)
     }
-}
-
-/// token 缩减率（%）：输入估算为 0 时视为 0（passthrough/fail-open 恒为 0）。
-fn token_cut(tin: f64, tout: f64) -> f64 {
-    if tin <= 0.0 {
-        0.0
-    } else {
-        (tin - tout) * 100.0 / tin
-    }
-}
-
-/// 千分位格式化（u64，如 3318 -> "3,318"）。
-fn sep(n: u64) -> String {
-    let s = n.to_string();
-    let mut out = String::with_capacity(s.len() + s.len() / 3);
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
-/// 长文本截断（按字符数，超长加省略号）。
-fn clip(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        let head: String = s.chars().take(max).collect();
-        format!("{head}…")
-    }
-}
-
-/// 字段名补宽到 8 列（CJK 按 2 列），保证效果报告各行左对齐。
-fn pad_field(field: &str) -> String {
-    let w = field
-        .chars()
-        .map(|c| if crate::terms::full(c) { 2 } else { 1 })
-        .sum::<usize>();
-    format!("{field}{}", " ".repeat(8usize.saturating_sub(w)))
-}
-
-/// 效果报告行：`{icon} {field:8}  {value}`。
-fn row(icon: &str, field: &str, value: &str) -> String {
-    format!("{icon} {}  {value}\n", pad_field(field))
-}
-
-/// 风险等级中文（效果报告用）。
-/// 风险行文案：`guarded` 是 0/1 标志位（是否触发风险守卫），不是被守卫行数，
-/// 因此不得写成「N 条额外守护」。
-fn guard_note(risk: crate::Risk, guarded: u8) -> String {
-    let risk = risk_zh(risk);
-    if guarded > 0 {
-        format!("{risk} · 已启用额外守护")
-    } else {
-        risk.to_string()
-    }
-}
-
-fn risk_zh(r: crate::Risk) -> &'static str {
-    match r {
-        crate::Risk::Low => "低",
-        crate::Risk::Medium => "中",
-        crate::Risk::High => "高",
-    }
-}
-
-/// 模式中文标签与一句话说明（效果报告用）。
-fn title(m: Mode) -> (&'static str, &'static str) {
-    match m {
-        Mode::Sieve => ("sieve 智能筛选", "按问题逐行召回证据"),
-        Mode::PassSmall => ("小输入透传", "无需压缩"),
-        Mode::PassLongline => ("超长行透传", "单行过长，原样保留"),
-        Mode::PassTooManyLines => ("行数超限透传", "行数过多，原样保留避免内存放大"),
-        Mode::PassNoKept => ("预算过紧回退", "未选出有效行，原文保留"),
-        Mode::FailOpenZeroSignal => ("无命中保护", "零丢失"),
-        Mode::OverflowEvidence => ("证据优先保底", "超过 token 上限，证据全保留"),
-        Mode::OverflowFill => ("上限裁剪", "超上限，保留证据并裁剪可选内容"),
-    }
-}
-
-/// 压缩召回效果报告（v0.6.4）：stderr 人工可读块，stdout 契约零变化。
-/// 三模式各有结论卡；数字口径与 `render()` JSON 完全一致（`terms::estimate`）。
-pub fn recall_report(r: &Outcome, query: &str) -> String {
-    let mut s = String::from("✦ SCX 压缩召回 ✦\n\n");
-    s.push_str(&row("📌", "查询", &clip(query, 40)));
-    let (label, desc) = title(r.mode);
-    s.push_str(&row("⚙️", "模式", &format!("{label} · {desc}")));
-    match r.mode {
-        Mode::Sieve | Mode::OverflowEvidence | Mode::OverflowFill => {
-            let tin = r.tokens_in;
-            let tout = crate::terms::estimate(&r.text);
-            s.push_str(&row(
-                "📥",
-                "原始",
-                &format!(
-                    "{} 行 · {} 字符 · 约 {} token",
-                    sep(r.total as u64),
-                    sep(r.input as u64),
-                    sep(tin as u64)
-                ),
-            ));
-            s.push_str(&row(
-                "📤",
-                "压缩后",
-                &format!(
-                    "{} 行 · {} 字符 · 约 {} token",
-                    sep(r.kept as u64),
-                    sep(r.output as u64),
-                    sep(tout as u64)
-                ),
-            ));
-            let d_rows = r.total.saturating_sub(r.kept);
-            let d_chars = r.input.saturating_sub(r.output);
-            s.push_str(&row(
-                "💾",
-                "省下",
-                &format!(
-                    "{} 行 · {} 字符 · 约 {} token（-{:.1}%）",
-                    sep(d_rows as u64),
-                    sep(d_chars as u64),
-                    sep((tin - tout) as u64),
-                    token_cut(tin, tout)
-                ),
-            ));
-            // 证据召回如实口径（P12.6）：ev_retention × ev_total 得真实保留数；
-            // v0.6.4 误用 seeds 当证据数导致"全部保留"与正文丢失并存。
-            if r.ev_total > 0 {
-                let ev_kept = (r.ev_retention * r.ev_total as f64).round() as usize;
-                let ev_loss = r.ev_total.saturating_sub(ev_kept);
-                s.push_str(&row(
-                    "🎯",
-                    "证据召回",
-                    &format!("{} 条中 {ev_kept} 条保留 · {ev_loss} 丢失", r.ev_total),
-                ));
-            } else {
-                s.push_str(&row("🎯", "证据召回", "未声明证据"));
-            }
-            s.push_str(&row("🔁", "去重", &format!("{} 行重复内容已折叠", r.dup)));
-            s.push_str(&row(
-                "✂️",
-                "裁剪",
-                &format!("{} 段无关内容已移除", r.dropped.len()),
-            ));
-            s.push_str(&row("🛡️", "风险", &guard_note(r.risk, r.guarded)));
-        }
-        Mode::PassSmall | Mode::PassLongline | Mode::PassTooManyLines | Mode::PassNoKept => {
-            s.push_str(&row(
-                "📥",
-                "原始",
-                &format!("{} 行 · {} 字符", sep(r.total as u64), sep(r.input as u64)),
-            ));
-            s.push_str(&row("📤", "压缩后", "原样保留，一字未动"));
-            let save = match r.mode {
-                Mode::PassSmall => "0 —— 内容本就很少",
-                Mode::PassLongline => "0 —— 无损失保留原文",
-                Mode::PassTooManyLines => "0 —— 无损失保留原文",
-                _ => "0 —— 无损失保留原文",
-            };
-            let why = match r.mode {
-                Mode::PassSmall => format!(
-                    "内容很少（<{} 行且不足 {} token），压缩反而可能丢信息，自动跳过",
-                    crate::policy::SMALL_LINES,
-                    crate::policy::SMALL_TOK as u64
-                ),
-                Mode::PassLongline => "单行过长无法安全压缩，原样返回，不冒险删减".to_string(),
-                Mode::PassTooManyLines => format!(
-                    "行数超过 {}，筛选会按行数放大内存，原样返回避免内存耗尽",
-                    crate::policy::MAX_LINES
-                ),
-                _ => "预算过紧未选出有效行，宁可原样返回也不静默删减".to_string(),
-            };
-            s.push_str(&row("💾", "省下", save));
-            s.push_str(&row("💡", "说明", &why));
-        }
-        Mode::FailOpenZeroSignal => {
-            s.push_str(&row(
-                "📥",
-                "原始",
-                &format!("{} 行 · {} 字符", sep(r.total as u64), sep(r.input as u64)),
-            ));
-            s.push_str(&row("📤", "压缩后", "原样保留，一字未动"));
-            s.push_str(&row("💾", "省下", "0 —— 无相关内容可压缩"));
-            s.push_str(&row(
-                "💡",
-                "说明",
-                "没找到与问题相关的证据行，压缩会误删信息，完整返回",
-            ));
-        }
-    }
-    s
 }
 
 /// 输出召回段 `mem: ...`（旁路，绝不影响正文/统计/退出码）。
@@ -1061,13 +877,21 @@ fn annotate(job: &Annotate) -> Reply {
 /// 可插拔相似度后端：在 ops 层（I/O 层）预计算 query×每行的相似度，
 /// 作为数据传入纯核心 `compress`，不破坏其零 I/O 契约。默认 `None` 不触发。
 fn embed_sims(job: &Compress, text: &str) -> Result<Option<Vec<f64>>, Failure> {
-    let Some(cmd) = &job.embed_cmd else {
-        return Ok(None);
-    };
     let mut buf: Option<String> = None;
     let lines = compress::lines(text, &mut buf);
-    let sims = crate::sim::compute(Some(cmd), &job.query, &lines).map_err(Failure::message)?;
-    Ok(Some(sims))
+    // 向量路径优先：原始向量 + 持久化缓存，余弦在 scx 内 f64 确定性计算；
+    // 未配置 vec 时回退标量 provider；两者皆无返回 None（默认路径零 I/O）。
+    if let Some(cmd) = &job.embed_vec {
+        let cache = job.embed_cache.as_deref().map(std::path::Path::new);
+        let sims = crate::sim::compute_vec(Some(cmd), cache, &job.query, &lines)
+            .map_err(Failure::message)?;
+        return Ok(Some(sims));
+    }
+    if let Some(cmd) = &job.embed_cmd {
+        let sims = crate::sim::compute(Some(cmd), &job.query, &lines).map_err(Failure::message)?;
+        return Ok(Some(sims));
+    }
+    Ok(None)
 }
 
 fn filter(job: &Compress) -> Reply {
@@ -1109,7 +933,8 @@ fn filter(job: &Compress) -> Reply {
     }
     if !job.no_stats {
         write(writeln!(out, "{}", stats(&outcome)))?;
-        eprintln!("{}", recall_report(&outcome, &job.query));
+        let st = crate::stat::Stat::from_outcome(&outcome);
+        eprintln!("{}", st.card(&outcome, &job.query));
     }
     diagnostics(job, &outcome, &redact_hits);
     #[cfg(feature = "memory")]
@@ -1302,16 +1127,37 @@ mod tests {
         let legacy = render(&o);
         assert!(legacy.starts_with("{\"kept\":"));
         assert!(!legacy.contains("max_tokens"), "默认路径不得带 max_tokens");
+        assert!(!legacy.contains("rewritten"), "默认路径不得带 rewritten");
         let mut cfg2 = cfg;
         cfg2.limit = Some(100);
         let o2 = compress("a\nb\nc\n", "a", &cfg2);
         assert!(render(&o2).contains("\"max_tokens\":100"));
     }
 
-    /// 60 行合成日志 + 命中查询 → sieve 卡：标题/查询/模式/证据/风险齐备，
-    /// token 数字与估算口径一致。
     #[test]
-    fn recall_report_sieve_card_is_complete() {
+    fn rewrite_marked_in_json_and_stats_only_when_enabled() {
+        let text = (0..60)
+            .map(|i| format!("ERROR database timeout id={i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let cfg = crate::Config {
+            trim: true,
+            ..crate::Config::default()
+        };
+        let o = compress(&text, "database timeout", &cfg);
+        assert!(o.rewritten);
+        assert!(render(&o).contains("\"rewritten\":true"));
+        assert!(stats(&o).contains("rewritten=1"));
+
+        let plain = crate::Config::default();
+        let o = compress(&text, "database timeout", &plain);
+        assert!(!render(&o).contains("rewritten"));
+        assert!(!stats(&o).contains("rewritten"));
+    }
+
+    /// 60 行合成日志命中查询 → sieve 卡由统一统计层渲染（接线验证）。
+    #[test]
+    fn sieve_card_is_wired_to_stat() {
         let text = (0..60)
             .map(|i| {
                 if i % 5 == 0 {
@@ -1331,50 +1177,12 @@ mod tests {
             "database connection failed",
             &crate::Config::default(),
         );
-        assert_eq!(o.mode, Mode::Sieve, "60 行命中查询应走 sieve");
-        assert!(
-            (o.tokens_in - crate::terms::estimate(&text)).abs() < 1e-9,
-            "tokens_in 恒等于输入估算"
-        );
-        let rep = recall_report(&o, "database connection failed");
+        assert_eq!(o.mode, Mode::Sieve);
+        let st = crate::stat::Stat::from_outcome(&o);
+        let rep = st.card(&o, "database connection failed");
         assert!(rep.contains("✦ SCX 压缩召回 ✦"));
-        assert!(rep.contains("📌 查询"));
-        assert!(rep.contains("database connection failed"));
         assert!(rep.contains("sieve 智能筛选"));
-        assert!(rep.contains("📥 原始"));
-        assert!(rep.contains("📤 压缩后"));
-        assert!(rep.contains("💾 省下"));
-        assert!(rep.contains(&format!("约 {} token", o.tokens_in as u64)));
         assert!(rep.contains("证据召回"));
-        assert!(rep.contains("🛡️ 风险"));
-    }
-
-    /// 小输入（<40 行）→ passthrough 卡：说明行解释为什么不压缩。
-    #[test]
-    fn recall_report_passthrough_card_explains() {
-        let o = compress("a\nb\nc\nd\ne\nf\ng\n", "a", &crate::Config::default());
-        assert_eq!(o.mode, Mode::PassSmall);
-        let rep = recall_report(&o, "a");
-        assert!(rep.contains("✦ SCX 压缩召回 ✦"));
-        assert!(rep.contains("小输入透传"));
-        assert!(rep.contains("原样保留，一字未动"));
-        assert!(rep.contains("💡 说明"));
-        assert!(rep.contains("自动跳过"));
-    }
-
-    /// 查询零命中 → fail-open 卡：零丢失语义。
-    #[test]
-    fn recall_report_failopen_card_preserves() {
-        let text = (0..60)
-            .map(|i| format!("[12:00] INFO warmup entry {i}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let o = compress(&text, "zzz_no_such_term", &crate::Config::default());
-        assert_eq!(o.mode, Mode::FailOpenZeroSignal);
-        let rep = recall_report(&o, "zzz_no_such_term");
-        assert!(rep.contains("无命中保护"));
-        assert!(rep.contains("原样保留，一字未动"));
-        assert!(rep.contains("完整返回"));
     }
 
     /// render() v0.6.4 新字段：tokens_in/out/cut 全模式填充；passthrough cut=0。
@@ -1401,23 +1209,9 @@ mod tests {
         let j2 = render(&o);
         assert!(j2.contains(&format!("\"tokens_in\":{tin:.0}")));
         assert!(j2.contains(&format!("\"tokens_out\":{tout:.0}")));
-        assert!(j2.contains(&format!("\"token_cut_pct\":{:.1}", token_cut(tin, tout))));
-    }
-
-    /// token_cut 边界：输入 0 安全返回 0；正常削减百分比正确。
-    #[test]
-    fn guard_note_reports_flag_not_count() {
-        // guarded 是 0/1 标志位：不得渲染成「N 条额外守护」。
-        assert_eq!(guard_note(crate::Risk::High, 1), "高 · 已启用额外守护");
-        assert_eq!(guard_note(crate::Risk::High, 0), "高");
-        assert_eq!(guard_note(crate::Risk::Low, 0), "低");
-        assert!(!guard_note(crate::Risk::High, 1).contains("1 条"));
-    }
-
-    #[test]
-    fn token_cut_is_safe_and_exact() {
-        assert_eq!(token_cut(0.0, 999.0), 0.0);
-        assert!((token_cut(100.0, 50.0) - 50.0).abs() < 1e-9);
-        assert!((token_cut(200.0, 180.0) - 10.0).abs() < 1e-9);
+        assert!(j2.contains(&format!(
+            "\"token_cut_pct\":{:.1}",
+            crate::stat::token_cut(tin, tout)
+        )));
     }
 }

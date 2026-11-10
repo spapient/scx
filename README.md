@@ -124,7 +124,9 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | scx mcp
 ```
 
-`serverInfo.name` 为 `scx`，工具为 `compress_context` / `connect_account` / `usage_summary`。
+`serverInfo.name` 为 `scx`，工具为 `compress_context` / `context_snapshot` /
+`context_diff` / `ledger_summary` / `connect_account` / `usage_summary` /
+`vec` / `vec_sim`（向量编码与余弦，provider 由环境变量 `SCX_EMBED_VEC` 提供）。
 
 ### 作为 Codex 技能安装
 
@@ -162,7 +164,7 @@ Codex、Claude Code 与 PATH 入口应指向同一版本；副本漂移是“技
 scx --version                                  # 已将入口加入 PATH 时
 ```
 
-三条命令都应输出版本号（当前为 `scx 0.11.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
+三条命令都应输出版本号（当前为 `scx 0.12.0`）。若 Claude Code 入口报 `permission denied`，说明副本过旧或执行位丢失，请更新该副本后重试；版本相同但行为不一致时，用 `git -C <技能目录> rev-parse HEAD` 检查两份副本是否在同一提交。
 
 只对实际安装过的入口执行上述检查；未安装的路径报“不存在”不代表工具本身异常。
 
@@ -302,7 +304,9 @@ query + input
 
 ### 四条行为保证
 
-1. **只删不改**：筛选结果中的保留行来自输入原文；`...` 仅表示被省略的区间。
+1. **默认只删不改**：默认筛选结果中的保留行来自输入原文，`...` 仅表示被省略的区间。
+   `--trim 1`、`--fold 1` 及对应 pipeline 档位会改写或折叠保留行；此时 `--json`
+   会附加 `"rewritten":true`，统计行附加 `rewritten=1`。需要逐字证据时不要启用这些选项。
 2. **证据不变量**：证据行及其最小邻域先于预算确定，不会被 `--ratio` 淘汰。
 3. **确定性**：不使用随机数；排序平局也有稳定规则。
 4. **显式回退**：无内容可保留或无查询信号时返回原文，不返回静默空正文。
@@ -337,14 +341,14 @@ scx --query "..." [OPTIONS] [file...]
 | `file...` | 一个或多个输入文件；省略时读取 stdin；单次输入总计上限 64 MiB |
 | `... --stat` | 只输出统计行 |
 | `... --no-stats` | 只输出正文，不输出统计行 |
-| `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计；含 `dropped` 区间明细（`--max-tokens`/预算裁剪）与 `max_tokens`/`tok_est` 字段 |
+| `... --json` | 向 stderr 追加 `scxjson: {...}` 机器可读统计；含 `dropped` 区间明细（`--max-tokens`/预算裁剪）与 `max_tokens`/`tok_est` 字段；`--trim`/`--fold` 下附加 `"rewritten":true` |
 | `--max-tokens <N>` | 输出 token 硬上限；证据地板最高优先，超限报 `overflow:evidence`/`overflow:fill` |
 | `--budget <F>` | 硬 kept-token 占比上限（`0 < F ≤ 1`，`0`=关）；输出 token（保留行 + elide 省略标记）≤ F×输入 token；超预算按保真优先级反向裁剪（R_FILL<R_ANCHOR<R_NUM_LINE<R_EVIDENCE），证据/数字/结构最后裁 |
 | `--structure <0\|1>` | `1` 时启用结构感知邻域（fence/import/stack）；默认 `0`，关闭时输出与 v0.4.1 逐字节一致 |
 | `--policy-file <PATH>` | 策略文本覆盖默认值；键白名单 `ratio`/`budget`/`context`/`window`/`elide`/`risk_gate`/`scoped`/`strict`/`lineno`/`max_tokens`/`structure`/`fill_floor`/`trim`/`trim_ratio`/`trim_op_keep`/`code_keep`/`zh_keep`/`num_line_keep`/`sym_line_keep`/`list_keep`；非法文件报错含行号；优先级 CLI 显式 > 文件 > DEFAULT |
 | `--pipeline <PATH\|PROFILE>` | JSON 管线配置或命名档位（plan/trim/anchor 三阶段声明式）；键白名单 `plan.ratio/window/context/limit`、`trim.enable/ratio/op_keep/code_keep/zh_keep/num_line_keep/sym_line_keep/list_keep`、`anchor.structure/anchors/fill_floor`；未知键/越界 fail-loud 报错；优先级 CLI 显式 > 文件 > DEFAULT；`config/pipeline.json` 同时保存 default 与四个命名档位 |
 | `--fill-floor <F>` | 上下文/填充行最低分数门槛（默认 `0` = 现状）；`F>0` 时分数低于门槛的邻域与填充行被裁剪，压缩更深 |
-| `--trim <0\|1>` | 保留行内 token 级重要性裁剪（默认 `0` = 现状）；`1` 时数字/命中词/结构锚保留，停用词与低信息量 token 按 `--trim-ratio` 摘除；**CJK/中文逐字 token 化**——命中 query 的汉字完整保留（如"内存"成词不拆散）、虚词可摘、全角数字保留，中文行不再丢字 |
+| `--trim <0\|1>` | 保留行内 token 级重要性裁剪（默认 `0` = 现状）；`1` 时数字/命中词/结构锚保留，停用词与低信息量 token 按 `--trim-ratio` 摘除；**CJK/中文逐字 token 化**——命中 query 的汉字完整保留（如"内存"成词不拆散）、虚词可摘、全角数字保留，中文行不再丢字；输出标记 `rewritten=1` |
 | `--trim-ratio <F>` | `--trim 1` 时的低分 token 保留比例（默认 `0.5`；范围 `0.1..=1.0`） |
 | `--force <P>` | 强制保留匹配行；字面子串（大小写不敏感）；`re:` 前缀进入有限正则子集（`\|` 交替、`[...]` 字符类、`*` `+` `?` 量词，Thompson NFA，非法模式报错并提示支持子集） |
 | `--semantic <WEIGHTS>` | 可选神经重打分（需 `cargo build --features semantic` 构建）；权重文件自描述 JSON：v2 `{schema:"scx-sem-2",features,weights,sha256}`（命名式，特征可任意子集/顺序）或 v1 `{schema:"scx-sem-1",dim,weights,sha256}`（位置式，兼容）；SHA256 校验失败即拒绝运行；打分 `sigmoid(w·x)` 经居中化（`2·sigmoid−1`）做有符号叠加——正提升、负降权；不启用时默认路径逐字节不变 |
@@ -446,7 +450,8 @@ Memora **ΔFAMA=10.68**、AMA-Bench accuracy **0.512**（> bm25 0.5076）。
 
 ## Rust 库
 
-压缩引擎是纯函数，不访问文件、环境变量或网络。本仓库不提供 crates.io 发布，可从源码作为 path dependency 使用：
+压缩引擎是纯函数，不访问文件、环境变量或网络。已发布版本可从 crates.io
+安装；本地开发也可直接作为 path dependency 使用：
 
 ```toml
 [dependencies]
@@ -463,11 +468,14 @@ fn main() {
         lineno: true,
         ..Config::default()
     };
+    // 库调用方需要 fail-loud 时先严格校验；compress 入口本身会安全收敛边界值。
+    cfg.validate().expect("valid scx config");
 
     let out = compress(&log, "database timeout", &cfg);
     print!("{}", out.text);
 
     assert_eq!(out.seeds, out.evidence);
+    assert!(!out.rewritten, "默认路径保留逐字原文");
     eprintln!(
         "kept={} evidence={} mode={}",
         out.kept, out.evidence, out.mode
@@ -475,7 +483,9 @@ fn main() {
 }
 ```
 
-公开类型定义在 [`src/lib.rs`](src/lib.rs)，记忆库入口为 `scx::memory`。筛选引擎与记忆库、CLI I/O 相互隔离。
+公开类型定义在 [`src/lib.rs`](src/lib.rs)，记忆库入口为 `scx::memory`。
+`--trim`/`--fold` 会产生 `Outcome.rewritten = true`，此时保留行不再保证逐字；
+筛选引擎与记忆库、CLI I/O 相互隔离。
 
 ## 架构
 
@@ -502,7 +512,7 @@ fn main() {
 | `src/setup.rs` | `scx setup` 一键注册 MCP 配置（Claude/Codex/Cursor，幂等 + 写前备份 + tools/list 自检） |
 | `src/tooling/` | 同包 `scx-tooling` 开发工具（`required-features = ["eval"]`，不进发布运行路径）：基线/统计、containment/fidelity、bench、gen、ops、门禁、manifest/freeze、seed/blind/calibrate、distill/fit/mlp；禁止新增 `src/bin` |
 | `tests/golden.rs`, `config/tests/assets.json` | 用例清单（名称/参数）与 stdout、stderr、退出码的逐字节差分门（37 例） |
-| `config/` | 9 个规范命名资产文件：评测资产包、数据集包、冻结结果包、唯一 manifest、测试夹具、pipeline/semantic/tokenizer；不含历史目录与备份 |
+| `config/` | 9 个规范命名资产入口（7 个文件 + `tests/`、`tokenizer/` 目录）：评测资产包、数据集包、冻结结果包、唯一 manifest、测试夹具、pipeline/semantic/tokenizer；不含历史目录与备份 |
 | `docs/` | 设计、评测协议、锁序契约与证据报告 |
 
 `src/memory/` 保持扁平、单一职责的布局：`mod.rs` 是唯一公开门面，存储
@@ -621,9 +631,9 @@ scx 的可测目标是冻结语料上的检索 MRR、证据行保留、确定性
 - **token 为估算值**：按字符与 CJK 启发式估算，不是特定模型的 BPE 计数；`--max-tokens`/预算按「启发式 × 安全系数」取保守上界（宁高估勿超预算）。
 - **单机本地工具**：记忆库是本地目录，不是多租户服务或分布式数据库。
 - **非安全边界**：`--store` 的脱敏不能替代 DLP、凭据扫描或人工审查。
-- **输入有上限**：CLI 单次输入总计 64 MiB；更大的输入需要分段。
+- **输入有上限**：CLI 单次输入总计 64 MiB；`scx wrap`/`scx hook` 对子进程或 stdin 输出同样应用该上限（`wrap` 超限报错，`hook` 透传）；更大的输入需要分段。
 - **外部相似度后端依赖平台 shell**：Unix 使用 `sh -c`，Windows 使用 `cmd /C` 执行 `--embed-cmd` 指定的命令。
-- **pre-1.0 状态**：当前版本 `0.11.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
+- **pre-1.0 状态**：当前版本 `0.12.0`，CLI、case schema 和评估接口仍可能演进；生产集成应固定 commit。
 
 ## 贡献与安全
 

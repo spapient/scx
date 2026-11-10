@@ -236,7 +236,7 @@ jobs:
           cargo check --locked --all-targets --no-default-features
 
   package:
-    timeout-minutes: 15
+    timeout-minutes: 25
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -251,3 +251,19 @@ jobs:
           grep -qx 'LICENSE-APACHE' /tmp/scx-package-list.txt
           ! grep -qx 'LICENSE' /tmp/scx-package-list.txt
           ! grep -q '^examples/' /tmp/scx-package-list.txt
+          for f in \
+            config/tests/assets.json \
+            config/tokenizer/cl100k_base.tiktoken \
+            config/datasets.json \
+            config/benchmark-results.json \
+            config/manifest.json \
+            config/fidelity-thresholds.json; do
+            grep -qx "$f" /tmp/scx-package-list.txt
+          done
+      - name: Test packaged crate
+        run: |
+          tmp=$(mktemp -d)
+          tar -xzf target/package/scx-*.crate -C "$tmp"
+          cd "$tmp"/scx-*
+          cargo build --release --locked
+          cargo test --locked --workspace --all-features

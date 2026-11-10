@@ -4,7 +4,7 @@
 //! `--semantic <weights.json>` 加载权重后，对候选行批量打分。
 //! - **cpu（默认）**：流式分块 + `std::thread` 并行。每行特征/点积与
 //!   串行路径**逐位一致**（行间无依赖，并行只换吞吐不换数值）→ golden
-//!   零漂移。工作内存受 `--max-mem`（MB，默认 64）预算约束：按
+//!   零漂移。工作内存受 `--max-mem`（MB，默认 256）预算约束：按
 //!   `24 f64 特征 + 8B 分数`/行估算块内行数，超出则缩小块。
 //! - **gpu（可选加速，默认关）**：调用**自研**外部内核（`SCX_GPU_BIN`
 //!   指向可执行文件），JSON lines 协议批量打分——不是任何第三方推理引擎
@@ -12,11 +12,13 @@
 //!   （确定性路径不受影响）。
 //!
 //! # GPU 内核协议（自研，JSON lines，逐块请求）
-//! stdin 一行请求：`{"schema":"scx-sem-batch","sha256":"<weights sha>",
-//!   "terms":["..."],"lines":["..."]}`
-//! stdout 每行一个分数（f64，居中 `2·sigmoid(w·x)−1`，行序对应），随后
-//! 一行 `{"done":true,"n":N}`。校验：分数行数 == N == 请求行数、每个分数
-//! 有限 → 通过；任何不符/非 0 退出/超时 → 回落 cpu。
+//! stdin 一行请求：`{"schema":"scx-sem-mat","sha256":"<weights sha>",
+//!   "dim":24,"rows":N,"x":[flat 特征矩阵],"w":[权重]}`。特征由 Rust 侧
+//! [`crate::semantic::feats`] 统一计算（单一事实来源，避免双份特征漂移），
+//! 内核只承载矩阵×向量的并行线性代数。stdout 每行一个分数（f64，居中
+//! `2·sigmoid(w·x)−1`，行序对应），随后一行 `{"done":true,"n":N}`。
+//! 校验：分数行数 == N == 块行数、每个分数有限 → 通过；任何不符/非 0
+//! 退出/超时 → 回落 cpu。
 //!
 //! 确定性边界（文档承诺）：golden 冻结路径只用 cpu 后端；gpu 是显式
 //! 可选的加速通道，其输出与 cpu 逐位不同属预期（不进入冻结基线）。
@@ -76,8 +78,6 @@ pub fn centered_batch(
 const PER_LINE_BYTES: usize = 24 * 8 + 8 + 256;
 /// 块内最小行数（防空块；预算折算值恒 ≥2299，仅 total 极小时生效）。
 const CHUNK_MIN: usize = 64;
-/// 单块并行线程上限（可用核数之上的安全顶，防 spawn 爆炸）。
-const N_THREADS_CAP: usize = 32;
 
 /// 按内存预算折算每块行数：`max_mem` MB → 字节 → 行数，直接作为块上限。
 /// 预算即块大小（64MB → 147168 行、128MB → 294337、256MB → 588674），
@@ -102,10 +102,7 @@ fn cpu_batch(
         return out;
     }
     let chunk = chunk_lines(total, max_mem_mb);
-    let n_threads = std::thread::available_parallelism()
-        .map(|v| v.get())
-        .unwrap_or(1)
-        .min(N_THREADS_CAP);
+    let n_threads = crate::par::count();
     for base in (0..total).step_by(chunk) {
         let end = (base + chunk).min(total);
         let seg = (end - base).div_ceil(n_threads);
@@ -180,33 +177,54 @@ fn gpu_batch(
     let chunk = chunk_lines(total, max_mem_mb);
     for base in (0..total).step_by(chunk) {
         let end = (base + chunk).min(total);
-        let req = batch_request(&sha, terms, lines, base, end);
+        let req = matrix_request(&sha, w, terms, lines, base, end, total);
         gpu_roundtrip(&bin, &req, base, end, total, dup, &mut out)?;
     }
     Ok(out)
 }
 
-/// 组装一块的 JSON lines 请求（schema/权重指纹/terms/lines）。
-fn batch_request(sha: &str, terms: &[String], lines: &[&str], base: usize, end: usize) -> String {
+/// 组装一块的矩阵请求（scx-sem-mat）：Rust 侧统一算特征，内核只做线性代数。
+/// 特征用全局行号（base+local）与整体 total，位置相关维与 CPU 路径同口径。
+fn matrix_request(
+    sha: &str,
+    w: &Weights,
+    terms: &[String],
+    lines: &[&str],
+    base: usize,
+    end: usize,
+    total: usize,
+) -> String {
+    let dim = w.dim;
+    let mut flat: Vec<f64> = Vec::with_capacity((end - base) * dim);
+    for local in 0..end - base {
+        let global = base + local;
+        flat.extend_from_slice(&crate::semantic::feats(
+            lines[global],
+            terms,
+            global,
+            total,
+            dim,
+        ));
+    }
     let mut req = String::new();
-    req.push_str("{\"schema\":\"scx-sem-batch\",\"sha256\":");
+    req.push_str("{\"schema\":\"scx-sem-mat\",\"sha256\":");
     req.push_str(&json_str(sha));
-    req.push_str(",\"terms\":[");
-    for (k, t) in terms.iter().enumerate() {
+    req.push_str(&format!(",\"dim\":{dim},\"rows\":{},\"x\":[", end - base));
+    append_numbers(&mut req, &flat);
+    req.push_str("],\"w\":[");
+    append_numbers(&mut req, w.weight());
+    req.push_str("]}\n");
+    req
+}
+
+/// 浮点数组追加（逗号分隔，最小数值表示；f64 往返由内核侧解析保证）。
+fn append_numbers(req: &mut String, values: &[f64]) {
+    for (k, v) in values.iter().enumerate() {
         if k > 0 {
             req.push(',');
         }
-        req.push_str(&json_str(t));
+        req.push_str(&format!("{v}"));
     }
-    req.push_str("],\"lines\":[");
-    for (j, line) in lines[base..end].iter().enumerate() {
-        if j > 0 {
-            req.push(',');
-        }
-        req.push_str(&json_str(line));
-    }
-    req.push_str("]}\n");
-    req
 }
 
 /// 单块 spawn → 写请求 → 读分数行 + done 确认 → 校验行数/有限性 → wait。

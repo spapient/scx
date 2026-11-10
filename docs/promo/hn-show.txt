@@ -1,0 +1,28 @@
+Show HN: scx – zero-dependency, query-aware context compressor for logs and agent workflows
+
+https://github.com/spapient/scx
+
+I built a Rust CLI that shrinks logs, command output, diffs and stack traces before you feed them to an LLM – and it does it by selecting whole lines, never rewriting them.
+
+The constraint that makes it different: evidence first. You give it the current question (--query), it keeps the matching evidence lines plus a minimal neighborhood unconditionally, then spends the remaining budget (--ratio) on filler lines only. Output is a verbatim subset of the input with original line numbers. No model, no embeddings, no network, zero third-party crates (even the JSON parser and the regex subset are hand-written, Thompson NFA).
+
+Some numbers from my own runs (author-side measurements, not a third-party benchmark):
+
+- 50k-line mixed log compression: median 11.7–12.0 ms (Apple M5 Pro)
+- 1.87M chars / 52k lines: lossless ~50 ms at 61.5% cut; --ratio 0.3 → 75.4%, 0.2 → 77.9%
+- Evidence containment (synthetic 70 evidence lines across logs/stacks/diffs): 70/70 = 100% retained at default ratio 0.35, ~82% char reduction; truncation baseline keeps 0/70
+- Hard-layer MRR@10 vs. a plain lexical baseline: +0.0669 (paired bootstrap 95% CI [0.0238, 0.1176], p=0.0020)
+
+It ships a stdio MCP server in the same binary (zero deps), and `scx setup` registers it into Claude / Codex / Cursor idempotently. So agents can compress their own tool output before it goes into context.
+
+Install:
+
+    cargo install scx
+    brew tap spapient/scx && brew install scx
+    npx -y @spapient/scx
+
+0.11.0 is out on crates.io, GitHub Releases (macOS/Linux/Windows), Homebrew and npm. ~49k lines of Rust, 554 tests, 37 golden cases byte-for-byte stable.
+
+Honest limitations: lexical matching – queries with zero shared terms fail open to the original text; compression ratio has an evidence floor by design; not idempotent (re-compressing already-compressed output keeps cutting, so always re-compress from the original).
+
+I'd love feedback on the core contract (keep evidence, delete whole lines, never rewrite) and whether it fits real agent workflows.

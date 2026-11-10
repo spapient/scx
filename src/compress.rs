@@ -24,18 +24,19 @@ use score::*;
 mod hash {
     use std::hash::{BuildHasherDefault, Hasher as Digest};
 
-    /// rustc 内部 FxHasher 的等价实现（乘法散列，零依赖）。
+    use super::plan::{step, SEED_A};
+
+    /// rustc 内部 FxHasher 的等价实现（乘法散列，零依赖）；滚动核心与
+    /// `plan::Finger` 共用 `plan::step`，种子同源。
     #[derive(Default)]
     pub(crate) struct Hasher {
         hash: u64,
     }
 
-    const SEED: u64 = 0x517c_c1b7_2722_0a95;
-
     impl Hasher {
         #[inline]
         fn add(&mut self, word: u64) {
-            self.hash = (self.hash.rotate_left(5) ^ word).wrapping_mul(SEED);
+            self.hash = step(self.hash, SEED_A, word);
         }
     }
 
@@ -271,6 +272,7 @@ impl Report<'_> {
             terms: self.terms,
             forced: self.force_count,
             mode: f.mode,
+            rewritten: false,
             limit: self.limit,
             tokens: f.tokens,
             tokens_in: self.tokens_in,
@@ -378,7 +380,15 @@ fn analyze(
 ) -> Analysis {
     let total = lines.len();
     let do_tok = total >= crate::policy::SMALL_LINES && context != 0;
-    let masks = masks(lines, terms, forces, small_tok, do_tok, cfg.strict);
+    let masks = masks(
+        lines,
+        terms,
+        forces,
+        small_tok,
+        do_tok,
+        cfg.strict,
+        cfg.word_boundary,
+    );
     prof.mark("masks");
     let (dup, folds) = dedup(
         lines,
@@ -415,7 +425,6 @@ struct Ranked {
     regions: Region,
     scores: Vec<f64>,
     boost: Vec<f64>,
-    #[cfg(feature = "semantic")]
     sem_scores: Option<Vec<f64>>,
 }
 
@@ -456,7 +465,6 @@ fn rank(
         regions,
         scores,
         boost,
-        #[cfg(feature = "semantic")]
         sem_scores,
     }
 }
@@ -482,6 +490,8 @@ struct ChoiceIn<'a> {
     ratio: f64,
     context: i64,
     budget_limit: Option<f64>,
+    /// 装配处加载一次的联合门（默认 None = 关），热路径不重复读盘。
+    gate: Option<crate::gate::Gate>,
 }
 
 /// 保留标记阶段的产物：证据/锚点/策略行已落地，尚未做预算与风险守卫。
@@ -521,6 +531,17 @@ fn mark_keep(input: &ChoiceIn<'_>, prof: &mut crate::perf::T) -> Marks {
         cfg,
         ranked.sem_scores.as_deref(),
     );
+    if let Some(gate) = input.gate.as_ref() {
+        joint_anchors(
+            gate,
+            dup,
+            &mut keep,
+            &mut kept,
+            &analysis.seeds.hits,
+            lines,
+            ranked,
+        );
+    }
 
     let mut raw = vec![false; total];
     if cfg.code_keep
@@ -679,6 +700,7 @@ fn assemble(input: AssembleIn<'_>, prof: &mut crate::perf::T) -> Outcome {
             dropped: runs(&selection.keep, &analysis.dup, selection.overflow.is_some()),
         },
     );
+    outcome.rewritten = cfg.trim || cfg.fold;
     outcome.budget_used_pct = selection.budget_used_pct;
     outcome.explain = explain(&selection.reason, &analysis.dup);
     prof.finish("compress");
@@ -686,6 +708,15 @@ fn assemble(input: AssembleIn<'_>, prof: &mut crate::perf::T) -> Outcome {
 }
 
 pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
+    // 库调用方可能绕过 CLI/policy 的校验；仅在配置非法时克隆并收敛边界，
+    // 合法路径（绝大多数 CLI/默认调用）保持零额外分配。
+    let normalized;
+    let cfg = if cfg.validate().is_ok() {
+        cfg
+    } else {
+        normalized = cfg.normalized();
+        &normalized
+    };
     let mut prof = crate::perf::T::start();
     let (ratio, context, window) = config(cfg);
     // --max-tokens 保守上界：可选填充预算按「用户上限 ÷ 安全系数」计；
@@ -737,6 +768,12 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
     }
     let ranked = rank(cfg, &lines, &uniq_terms, &analysis, window as usize);
     prof.mark("spans+scores");
+    // 联合门在装配处加载一次（配置已在 validate 校验），热路径不重复读盘。
+    let gate = cfg
+        .gate_file
+        .as_ref()
+        .map(|p| crate::gate::Gate::load(p))
+        .and_then(Result::ok);
     let selection = choose(
         ChoiceIn {
             cfg,
@@ -746,6 +783,7 @@ pub fn compress(text: &str, query: &str, cfg: &Config) -> Outcome {
             ratio,
             context,
             budget_limit,
+            gate,
         },
         &mut prof,
     );
@@ -800,16 +838,109 @@ fn sem_anchors(
     }
 }
 
+/// 联合门锚（#67 --gate-file，默认 None = 关）：把语义/簇/锚点/基础分四个
+/// per-operator 信号按 [`crate::gate::CHANNELS`] 顺序组装，归一加权后超阈
+/// 整行保留。配置已在 `Config::validate` 加载并 sha 校验，这里只做判定。
+fn joint_anchors(
+    gate: &crate::gate::Gate,
+    dup: &[bool],
+    keep: &mut [bool],
+    kept: &mut usize,
+    hits: &[usize],
+    lines: &[&str],
+    ranked: &Ranked,
+) {
+    let total = keep.len();
+    for i in 0..total {
+        if dup[i] || keep[i] {
+            continue;
+        }
+        let sem = ranked
+            .sem_scores
+            .as_ref()
+            .and_then(|v| v.get(i))
+            .copied()
+            .unwrap_or(0.0);
+        let anchor = hits[i] as f64;
+        let raw = [
+            sem,
+            ranked.boost[i],
+            anchor,
+            ent_bonus(lines[i]),
+            ranked.scores[i],
+            sem * anchor,
+            anchor * ranked.scores[i],
+        ];
+        if gate.admit(&raw) {
+            keep[i] = true;
+            *kept += 1;
+        }
+    }
+}
+
+/// 跑生产 analyze+rank，返回逐行 per-operator 原始信号，保证训练/服务同源。
+pub fn gate_rows(text: &str, query: &str, cfg: &Config) -> Vec<crate::gate::Signal> {
+    let mut prof = crate::perf::T::start();
+    let (_, context, window) = config(cfg);
+    let mut nl_buf = None;
+    let lines = lines(text, &mut nl_buf);
+    let uniq_terms = terms(query);
+    let anchor_terms = anchor_terms(cfg, &uniq_terms);
+    let force_pats = forces(&cfg.forces);
+    let small_tok = survey(&lines, lines.len());
+    let analysis = analyze(
+        &lines,
+        &anchor_terms,
+        &force_pats,
+        small_tok,
+        context,
+        cfg,
+        &mut prof,
+    );
+    let ranked = rank(cfg, &lines, &uniq_terms, &analysis, window as usize);
+    (0..lines.len())
+        .map(|i| {
+            let sem = ranked
+                .sem_scores
+                .as_ref()
+                .and_then(|v| v.get(i))
+                .copied()
+                .unwrap_or(0.0);
+            let anchor = analysis.seeds.hits[i] as f64;
+            crate::gate::Signal {
+                dup: analysis.dup[i],
+                raw: [
+                    sem,
+                    ranked.boost[i],
+                    anchor,
+                    ent_bonus(lines[i]),
+                    ranked.scores[i],
+                    sem * anchor,
+                    anchor * ranked.scores[i],
+                ],
+            }
+        })
+        .collect()
+}
+
 pub fn compress_bucketed(
     parts: &[(crate::ContentType, &str)],
     query: &str,
     cfg: &Config,
 ) -> Outcome {
+    let normalized;
+    let cfg = if cfg.validate().is_ok() {
+        cfg
+    } else {
+        normalized = cfg.normalized();
+        &normalized
+    };
     let mut out_text = String::new();
     let mut buckets = Vec::with_capacity(parts.len());
     let (mut tin, mut tout) = (0.0, 0.0);
     let (mut cin, mut cout) = (0usize, 0usize);
     let (mut kept, mut total) = (0usize, 0usize);
+    let mut rewritten = false;
     for (kind, text) in parts {
         let mut c = cfg.clone();
         c.ratio = kind.default_ratio();
@@ -829,6 +960,7 @@ pub fn compress_bucketed(
         cout += o.output;
         kept += o.kept;
         total += o.total;
+        rewritten |= o.rewritten;
         out_text.push_str(&o.text);
         if !o.text.is_empty() && !o.text.ends_with('\n') {
             out_text.push('\n');
@@ -857,6 +989,7 @@ pub fn compress_bucketed(
         terms: 0,
         forced: 0,
         mode: Mode::Sieve,
+        rewritten,
         limit: cfg.limit,
         tokens: tout,
         tokens_in: tin,
@@ -1039,6 +1172,67 @@ mod tests {
             }
         }
         (dup, n)
+    }
+
+    #[test]
+    fn normalized_config_sanitizes_direct_library_values() {
+        let cfg = Config {
+            ratio: f64::NAN,
+            budget: f64::NAN,
+            fill_floor: f64::NAN,
+            trim_ratio: 99.0,
+            context: 99,
+            window: -3,
+            max_mem: 0,
+            ..Config::default()
+        };
+        assert!(cfg.validate().is_err());
+
+        let n = cfg.normalized();
+        assert_eq!(n.ratio, Config::DEFAULT_RATIO);
+        assert_eq!(n.budget, 0.0);
+        assert_eq!(n.fill_floor, crate::policy::DEFAULT_FILL_FLOOR);
+        assert_eq!(n.trim_ratio, crate::policy::MAX_TRIM_RATIO);
+        assert_eq!(n.context, Config::MAX_CONTEXT);
+        assert_eq!(n.window, Config::MIN_WINDOW);
+        assert_eq!(n.max_mem, 1);
+        assert!(n.validate().is_ok(), "规范化后的配置必须可严格校验");
+    }
+
+    #[test]
+    fn rewritten_flag_tracks_trim_and_fold_only_after_sieve() {
+        let text = (0..60)
+            .map(|i| {
+                if i % 5 == 0 {
+                    format!("ERROR database timeout id={i}")
+                } else {
+                    format!("info request completed id={i}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let plain = compress(&text, "database timeout", &Config::default());
+        assert!(!plain.rewritten, "默认路径必须声明逐字保留");
+
+        let trimmed = Config {
+            trim: true,
+            ..Config::default()
+        };
+        let out = compress(&text, "database timeout", &trimmed);
+        assert!(out.rewritten, "--trim 筛选必须声明改写");
+
+        let folded = Config {
+            fold: true,
+            ..Config::default()
+        };
+        let out = compress(&text, "database timeout", &folded);
+        assert!(out.rewritten, "--fold 筛选必须声明改写");
+
+        // 小输入直接 passthrough 时仍返回原文，不能误报为已改写。
+        let out = compress("ERROR database timeout\n", "database timeout", &trimmed);
+        assert_eq!(out.mode, Mode::PassSmall);
+        assert!(!out.rewritten);
     }
 
     #[test]

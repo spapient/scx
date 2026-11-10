@@ -199,6 +199,44 @@ pub(crate) fn mark_code_fence(
     }
 }
 
+/// 行谓词锚点的统一骨架：逐行按谓词判定，命中则 keep+reason；
+/// `raw = Some` 时同时标记 raw（且已 keep 的行仍更新 reason/raw），
+/// `raw = None` 时跳过已 keep 行。
+/// 行谓词锚点的输出槽：keep/reason 必填，raw 可选。
+struct MarkOut<'a> {
+    keep: &'a mut [bool],
+    kept: &'a mut usize,
+    reason: &'a mut [u8],
+    raw: Option<&'a mut [bool]>,
+}
+
+/// 行谓词锚点统一骨架：逐行按谓词判定，命中则 keep+reason；
+/// `raw = Some` 时同时标记 raw（且已 keep 的行仍更新 reason/raw），
+/// `raw = None` 时跳过已 keep 行。
+fn mark_by_predicate(
+    lines: &[&str],
+    dup: &[bool],
+    out: &mut MarkOut<'_>,
+    code: u8,
+    pred: impl Fn(&str) -> bool,
+) {
+    for (i, line) in lines.iter().enumerate() {
+        if dup[i] || (out.raw.is_none() && out.keep[i]) {
+            continue;
+        }
+        if pred(line.trim()) {
+            if !out.keep[i] {
+                out.keep[i] = true;
+                *out.kept += 1;
+            }
+            out.reason[i] = code;
+            if let Some(raw) = out.raw.as_deref_mut() {
+                raw[i] = true;
+            }
+        }
+    }
+}
+
 pub(crate) fn mark_num_lines(
     lines: &[&str],
     dup: &[bool],
@@ -206,16 +244,15 @@ pub(crate) fn mark_num_lines(
     kept: &mut usize,
     reason: &mut [u8],
 ) {
-    for (i, line) in lines.iter().enumerate() {
-        if keep[i] || dup[i] {
-            continue;
-        }
-        if line.bytes().any(|b| b.is_ascii_digit()) {
-            keep[i] = true;
-            reason[i] = R_NUM_LINE;
-            *kept += 1;
-        }
-    }
+    let mut out = MarkOut {
+        keep,
+        kept,
+        reason,
+        raw: None,
+    };
+    mark_by_predicate(lines, dup, &mut out, R_NUM_LINE, |t| {
+        t.bytes().any(|b| b.is_ascii_digit())
+    });
 }
 
 pub(crate) fn sym_line(t: &str) -> bool {
@@ -255,21 +292,14 @@ pub(crate) fn mark_sym_lines(
     reason: &mut [u8],
     raw: &mut [bool],
 ) {
-    for (i, line) in lines.iter().enumerate() {
-        if dup[i] {
-            continue;
-        }
-        // 签名行常含 query 命中词（如函数名）已被 keep——此时仍需设置 raw，
-        // 否则已保留的签名行仍会被行内 trim 摘掉 `&`/`->`/`:`。
-        if sym_line(line.trim()) {
-            if !keep[i] {
-                keep[i] = true;
-                *kept += 1;
-            }
-            reason[i] = R_SYM_LINE;
-            raw[i] = true;
-        }
-    }
+    // 已保留的签名行仍需设置 raw，否则行内 trim 会摘掉 `&`/`->`/`:`。
+    let mut out = MarkOut {
+        keep,
+        kept,
+        reason,
+        raw: Some(raw),
+    };
+    mark_by_predicate(lines, dup, &mut out, R_SYM_LINE, sym_line);
 }
 
 pub(crate) fn eligible(sel: &Select, cfg: &Fill, keep: &[bool], i: usize) -> bool {
@@ -579,19 +609,13 @@ pub(crate) fn mark_zh_lines(
     reason: &mut [u8],
     raw: &mut [bool],
 ) {
-    for (i, line) in lines.iter().enumerate() {
-        if dup[i] {
-            continue;
-        }
-        if zh_line(line.trim()) {
-            if !keep[i] {
-                keep[i] = true;
-                *kept += 1;
-            }
-            reason[i] = R_ZH_LINE;
-            raw[i] = true;
-        }
-    }
+    let mut out = MarkOut {
+        keep,
+        kept,
+        reason,
+        raw: Some(raw),
+    };
+    mark_by_predicate(lines, dup, &mut out, R_ZH_LINE, zh_line);
 }
 
 /// 是否为列表行（markdown/文本列表，`--list-keep` 使用）。
@@ -659,19 +683,13 @@ pub(crate) fn mark_list_lines(
     reason: &mut [u8],
     raw: &mut [bool],
 ) {
-    for (i, line) in lines.iter().enumerate() {
-        if dup[i] {
-            continue;
-        }
-        if list_line(line.trim()) {
-            if !keep[i] {
-                keep[i] = true;
-                *kept += 1;
-            }
-            reason[i] = R_LIST_LINE;
-            raw[i] = true;
-        }
-    }
+    let mut out = MarkOut {
+        keep,
+        kept,
+        reason,
+        raw: Some(raw),
+    };
+    mark_by_predicate(lines, dup, &mut out, R_LIST_LINE, list_line);
 }
 
 /// 证据行整行保留并标记 raw（--evidence）——Substr 命中的行与 Line 号命中的

@@ -21,6 +21,8 @@ pub const DEFAULT_FOLD: bool = false;
 pub const DEFAULT_ENTROPY: bool = false;
 /// 自动锚默认关（`--auto-anchor 1` 显式开启）。
 pub const DEFAULT_AUTO_ANCHOR: bool = false;
+/// ASCII 词边界默认关（`--word-boundary 1` 显式开启，默认子串匹配）。
+pub const DEFAULT_WORD_BOUNDARY: bool = false;
 /// 证据簇密度加权默认关（`--cluster 1` 显式开启）。
 pub const DEFAULT_CLUSTER: bool = false;
 /// 行内 token 保留比例（`--trim-ratio`，默认 0.5 = 每行最多摘一半 token）。

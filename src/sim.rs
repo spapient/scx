@@ -192,6 +192,20 @@ pub fn compute_vec(
     Ok(tv.iter().map(|v| dot(&qn, &normalize(v))).collect())
 }
 
+/// 编码：每个文本返回一个原始向量（provider 协议首行复用，顺序与输入一致）。
+/// 供 MCP 等集成层取向量；归一化/余弦由调用方按需处理。
+pub fn encode(cmd: &str, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
+    let program = cmd.trim();
+    if program.is_empty() {
+        return Err("--embed-vec requires a non-empty command".to_string());
+    }
+    if texts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let (head, rest) = texts.split_at(1);
+    spawn_vec(program, head[0], rest)
+}
+
 /// 启动向量 provider：stdin 写 `Q\t<query>` 与 `L\t<text>` 行，stdout 每个输入
 /// 行一个向量（空格分隔 dim 个 f32，首行为 query 向量、随后为 text 向量）。
 fn spawn_vec(program: &str, query: &str, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {

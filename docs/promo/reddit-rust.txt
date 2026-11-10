@@ -1,0 +1,25 @@
+Title: scx – zero-dependency Rust context compressor (evidence-first line selection, ~52k LOC)
+
+https://github.com/spapient/scx
+
+I've been working on a Rust project for a few months that solves a narrow problem: when an agent or a human needs to feed a big log / command output / stack trace into an LLM context window, keep the lines that matter and drop the noise – without rewriting a single kept line.
+
+Design choices that might be interesting to r/rust folks:
+
+- **Zero third-party crates, on purpose.** Even the JSON parser (used by the MCP server and --json stats), the TOML subset (policy files), the SHA-256 (optional semantic scoring weights) and the regex subset (--force re:..., Thompson NFA, no backtracking) are hand-written in-tree. The whole thing builds with --locked offline.
+- **The core is a pure function.** compress() touches no files, no env vars, no network. CLI I/O and the memory store are isolated from the sieve engine.
+- **Deterministic contract.** Same input + query + config → same output, byte for byte. 37 golden tests diff stdout/stderr/exit code exactly; that's a hard gate for every change.
+- **Evidence before budget.** Query-matched lines and a ±context neighborhood are retained unconditionally; --ratio / --max-tokens / --budget only constrain the filler. Overflow reports honestly (overflow:evidence / overflow:fill), never silently drops evidence.
+- **MCP stdio server compiled into the same binary.** `scx setup` registers into Claude/Codex/Cursor idempotently (with pre-write backup and a tools/list handshake after). Works for agents compressing their own tool responses.
+
+Numbers (author-side, on Apple M5 Pro, not a third-party benchmark):
+- 50k-line log compression: median 11.7–12.0 ms
+- 1.87M chars / 52k lines: lossless ~50 ms, 61.5% cut; ratio 0.3 → 75.4%; 0.2 → 77.9%
+- Evidence containment: 70/70 evidence lines kept at ratio 0.35 (~82% char reduction); head-truncation baseline keeps 0/70
+- Hard MRR@10 vs lexical baseline: +0.0669 (CI [0.0238, 0.1176], p=0.0020)
+
+Repo is ~49k LOC Rust / 96 files, 554 tests, 37 golden cases. 0.11.0 released on crates.io, GitHub Releases, Homebrew and npm this week.
+
+Known limits, stated plainly: lexical overlap drives relevance (zero shared terms → fail open); it has an evidence floor so compression ratio isn't a hard promise; not idempotent – always re-compress from the original text.
+
+Happy to talk about the architecture (src/compress/{plan,score,render}.rs split, the locking protocol in src/memory/) or the evaluation methodology (containment protocol + preregistered blind eval) in comments.

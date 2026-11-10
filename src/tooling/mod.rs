@@ -15,12 +15,14 @@ mod corpus;
 mod distill;
 mod fidelity;
 mod frozen;
+mod gate;
 mod io;
 mod model;
 mod ops;
 mod quality;
 mod rng;
 mod stats;
+mod train;
 
 use scx::json::Json;
 use std::collections::HashSet;
@@ -153,6 +155,10 @@ pub fn run(args: &[String]) -> i32 {
         Some("distill") => distill::run(&args[1..]),
         Some("fit") => model::fit(&args[1..]),
         Some("mlp") => model::mlp(&args[1..]),
+        Some("train") => train::run(&args[1..]),
+        Some("xval") => train::run_xval(&args[1..]),
+        Some("gold") => train::run_gold(&args[1..]),
+        Some("gate") => gate::run(&args[1..]),
         Some("audit") => quality::audit(),
         Some("a2") => quality::a2(),
         Some("manifest") => frozen::manifest(&args[1..]),
@@ -207,6 +213,9 @@ commands:
   distill   offline weight coordinate ascent (distill weights)
   fit       weak-label linear weight fit (scx-sem-1)
   mlp       linear/MLP cross-validation on distill cache
+  train     weak-label consistency clean + 24-feature fit (scx-sem-2)
+  xval      deterministic K-fold cross-validation (linear vs piece AP)
+  gold      offline machine-consensus reference eval (keep 0.35/0.5)
   audit     production unwrap/panic audit gate
   a2        A2 round-trip fidelity thresholds
   manifest  freeze/verify evaluation-input hashes

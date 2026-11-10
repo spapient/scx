@@ -1,6 +1,6 @@
 [package]
 name = "scx"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2021"
 rust-version = "1.82"
 default-run = "scx"
@@ -10,8 +10,8 @@ repository = "https://github.com/spapient/scx"
 homepage = "https://github.com/spapient/scx"
 keywords = ["logs", "compression", "context", "rag", "offline"]
 categories = ["command-line-utilities", "development-tools", "text-processing"]
-# 发布包白名单：仅含已跟踪文件（gitignore 风格，! 排除）。config 当前约 3.4MB，
-# 统一资产包随测试与评测入口分发；仅排除 CI 生成物、记忆库与其他本地产物。
+# 发布包白名单（gitignore 风格，! 排除）：仅含已跟踪的源码、文档、测试及其
+# 运行所需冻结资产；不随包分发 CI 生成物、记忆库等本地产物。
 include = [
     "Cargo.toml",
     "README.md",
@@ -20,8 +20,14 @@ include = [
     "SKILL.md",
     "src/**",
     "docs/**",
-    "!docs/comparison-v051.md",
+    "!docs/promo/**",
     "tests/**",
+    "config/tests/**",
+    "config/tokenizer/**",
+    "config/datasets.json",
+    "config/benchmark-results.json",
+    "config/manifest.json",
+    "config/fidelity-thresholds.json",
     "config/pipeline.json",
     "config/semantic.json",
     "config/evaluation.json",
@@ -61,4 +67,6 @@ unsafe_code = "forbid"
 opt-level = 3
 lto = true
 codegen-units = 1
-debug = 1
+panic = "abort"
+strip = true
+debug = 0

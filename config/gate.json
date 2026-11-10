@@ -1,0 +1,43 @@
+{
+  "schema": "scx-gate-1",
+  "threshold": -0.790733,
+  "bias": -1.024249,
+  "channels": [
+    {
+      "name": "sem",
+      "scale": 0.9556,
+      "weight": 1.938124
+    },
+    {
+      "name": "cluster",
+      "scale": 2.926557,
+      "weight": 0.0
+    },
+    {
+      "name": "anchor",
+      "scale": 1.0,
+      "weight": 1.108575
+    },
+    {
+      "name": "entropy",
+      "scale": 0.006419,
+      "weight": 1.735789
+    },
+    {
+      "name": "score",
+      "scale": 11.627955,
+      "weight": 1.656653
+    },
+    {
+      "name": "sem_anchor",
+      "scale": 0.585871,
+      "weight": 0.531797
+    },
+    {
+      "name": "anchor_score",
+      "scale": 11.627955,
+      "weight": 0.93357
+    }
+  ],
+  "sha256": "01152a11ce622a175f6090fce6a75ed9d21d6519de270adcfe10f320cdf6f2d7"
+}

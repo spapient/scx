@@ -240,6 +240,49 @@ mod tests {
     }
 
     #[test]
+    fn atomic_failure_preserves_previous_value() {
+        let root = root("atomic_fail");
+        let dir = Path::new(&root).join("locked");
+        fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("value.txt");
+        fs::write(&p, b"old").unwrap();
+        // 移除目录写权限，让 create_new 失败；模拟崩溃/磁盘故障写入中断。
+        let mut perms = fs::metadata(&dir).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&dir, perms).unwrap();
+        let err = atomic(&p, b"new").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+        let mut perms = fs::metadata(&dir).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        fs::set_permissions(&dir, perms).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "old");
+        // 故障恢复后同一路径可继续原子写。
+        atomic(&p, b"new").unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "new");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn leftover_temp_file_does_not_shadow_the_target() {
+        let root = root("atomic_leftover");
+        let p = Path::new(&root).join("value.txt");
+        fs::create_dir_all(&root).unwrap();
+        // 模拟进程在 write 与 rename 之间崩溃：遗留唯一临时文件。
+        let tmp = p.with_file_name("value.txt.tmp.123.7");
+        fs::write(&tmp, b"partial").unwrap();
+        fs::write(&p, b"old").unwrap();
+        atomic(&p, b"new").unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "new");
+        assert_eq!(
+            fs::read_to_string(&tmp).unwrap(),
+            "partial",
+            "不相关临时文件不得被覆盖"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn lock_serializes_and_releases() {
         let root = root("lock");
         fs::create_dir_all(&root).unwrap();

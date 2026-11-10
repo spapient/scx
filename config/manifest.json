@@ -1,11 +1,14 @@
 {
-  "note": "定稿评测结果冻结（不可变基线）。修改/重跑后必须重新冻结并提交；check_bench.sh 校验 sha256+行数。",
+  "note": "定稿评测结果冻结（不可变基线）。修改/重跑后必须重新冻结并提交；`scx-tooling manifest --expect config/manifest.json` 校验 sha256+行数，CI 同轨执行。",
   "files": {
     "config/evaluation.json": "f028f2168a847f71d628562d85f93f7298225271139dbc0d9fca65cb767a09b8",
     "config/datasets.json": "1033de4ad9902e2aea71b808e0dc581dded2688ad2b2f91c7233fc26921a02e3",
     "config/fidelity-thresholds.json": "2e70b208c591a0004156ea5e37d0eec4084caf2b86bc69cea2501e3292211628",
     "config/pipeline.json": "25e24655cc88a141f11f2df547781395848d840b8a89216cad26cb48a79d8d65",
-    "config/semantic.json": "a0c303e21a1315de33d90bde84864ed0cdb9993937ea181ed880d85602a65353"
+    "config/semantic.json": "966a13dc43e159355671f728e7d62c98c27e5f3c5247d63c6833f0102f28c6f7",
+    "config/semantic-pw.json": "966a13dc43e159355671f728e7d62c98c27e5f3c5247d63c6833f0102f28c6f7",
+    "config/gate.json": "e2bc175674725efdf37de678afa2b31a01fca8802f5712000efc7daeaf5773c7",
+    "config/gold-eval.json": "c3acdb3e7731f51b60cd005c1a5377364c66482f634d9ab672b49f694a23eb6b"
   },
   "normalize": [],
   "frozen": {
